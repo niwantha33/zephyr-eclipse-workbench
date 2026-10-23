@@ -7,6 +7,7 @@ import tempfile
 import hashlib
 import xml.etree.ElementTree as ET
 import zipfile
+import json
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -40,6 +41,15 @@ for p in bundles:
             if 'tools/inventory.py' not in z.namelist():
                 raise SystemExit('Tools inventory helper missing.')
             compile(z.read('tools/inventory.py'), 'tools/inventory.py', 'exec')
+            compile(z.read('tools/setup.py'), 'tools/setup.py', 'exec')
+            lock = json.loads(z.read('tools/setup-lock.json'))
+            if lock['profile'] != 'first-build-win-x64' or any(p['review'] != 'approved-build-use' for p in lock['packages']):
+                raise SystemExit('Setup profile or package review is incomplete.')
+            if not z.read('tools/setup-licences.txt').strip():
+                raise SystemExit('Setup licence records missing.')
+            for name in ('SetupWizard', 'SetupStartup', 'ZephyrProjectBuilder'):
+                if 'io/github/niwantha33/zew/ui/' + name + '.class' not in z.namelist():
+                    raise SystemExit('Beginner setup class missing: ' + name)
             if 'io/github/niwantha33/zew/ui/ToolsDialog.class' not in z.namelist():
                 raise SystemExit('Tools manager dialog missing.')
             plugin = ET.fromstring(z.read('plugin.xml'))

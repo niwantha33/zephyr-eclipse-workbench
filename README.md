@@ -41,6 +41,7 @@ The reported command-line build is not evidence that this plug-in works.
 - [Build, install locally and use the development slice](docs/DEVELOPMENT.md)
 - [Set up workbench updates once](docs/UPDATE_CHANNEL.md)
 - [Detect and reuse tools with Tools Manager](docs/TOOLS_MANAGER.md)
+- [Beginner setup and verified first build](docs/BEGINNER_SETUP.md)
 - [First build evidence and limitations](docs/BUILD_REPORT.md)
 - [Guided tools/project/update workflow](docs/GUIDED_WORKFLOW.md)
 - [Step-by-step roadmap](docs/ROADMAP.md)

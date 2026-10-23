@@ -18,6 +18,14 @@ The developer build resolved transitive dependencies. This inventory is not a co
 
 ## Candidate register
 
+The 0.1.5 first-build profile records exact package/artifact sizes, hashes,
+licence-file paths/digests and external-build-use decisions in
+`plugins/io.github.niwantha33.zew.ui/tools/setup-lock.json`. Its readable review is
+`tools/setup-licences.txt` in the same bundle. Scope is restricted to this pinned
+Windows x64 profile; general tool/firmware redistribution and other board profiles
+remain subject to review. No Python/Git/SDK executables or wheels are bundled in
+the p2 site. Windows OS/runtime requirements remain a platform boundary.
+
 | Component | Role | Intended integration | Review state |
 |---|---|---|---|
 | Eclipse Platform, CDT, Embedded CDT | Host IDE and C/C++ tooling | Pinned p2 target and feature dependencies | Pending exact component/version and licence review |
@@ -63,3 +71,4 @@ Do not create a placeholder .gitmodules file. Add it with the first actual revie
 ## Original repository licence
 
 Original code/documentation/templates are Apache-2.0 unless specifically marked otherwise. Upstream code copied into this repository retains its own notices and licence. Record provenance when copying or adapting material.
+

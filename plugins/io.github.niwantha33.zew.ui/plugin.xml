@@ -2,11 +2,16 @@
 <?eclipse version="3.4"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <plugin>
+  <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.SetupStartup"/></extension>
+  <extension point="org.eclipse.core.resources.builders" id="zephyrBuilder" name="Zephyr Project Builder">
+    <builder hasNature="false"><run class="io.github.niwantha33.zew.ui.ZephyrProjectBuilder"/></builder>
+  </extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.UpdateStartup"/></extension>
   <extension point="org.eclipse.ui.preferencePages">
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="io.github.niwantha33.zew.setup" name="Set Up Zephyr" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tools" name="Install / Manage Zephyr Tools" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.about" name="About Zephyr Workbench" categoryId="io.github.niwantha33.zew.commands"/>
     <category id="io.github.niwantha33.zew.commands" name="Zephyr Workbench"/>
@@ -19,6 +24,7 @@
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
   </extension>
   <extension point="org.eclipse.ui.handlers">
+    <handler commandId="io.github.niwantha33.zew.setup" class="io.github.niwantha33.zew.ui.SetupHandler"/>
     <handler commandId="io.github.niwantha33.zew.tools" class="io.github.niwantha33.zew.ui.ToolsHandler"/>
     <handler commandId="io.github.niwantha33.zew.about" class="io.github.niwantha33.zew.ui.VersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.checkUpdates" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
@@ -32,6 +38,7 @@
   <extension point="org.eclipse.ui.menus">
     <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
       <menu id="io.github.niwantha33.zew.menu" label="Zephyr">
+        <command commandId="io.github.niwantha33.zew.setup" label="Set Up Zephyr..." style="push"/>
         <command commandId="io.github.niwantha33.zew.tools" label="Install / Manage Zephyr Tools..." style="push"/>
         <separator name="tools" visible="true"/>
         <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>

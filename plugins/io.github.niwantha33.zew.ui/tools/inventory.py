@@ -168,6 +168,25 @@ def scan_sdk(selected, recommended):
 
 def check_requirements(source):
     """Evaluate declared base build requirements locally, including markers/includes."""
+    managed_lock = Path(sys.prefix).parent / 'installer/setup-lock.json'
+    if (Path(sys.prefix) / '.zew-managed-python').is_file() and managed_lock.is_file():
+        import json
+        try:
+            lock = json.loads(managed_lock.read_text(encoding='utf-8'))
+            missing = []
+            for package in lock['packages']:
+                try:
+                    if metadata.version(package['name']) != package['version']:
+                        missing.append(package['name'] + ' version differs')
+                except metadata.PackageNotFoundError:
+                    missing.append(package['name'])
+            row('Python build packages', 'Managed first-build profile only',
+                '; '.join(missing) if missing else 'Pinned versions satisfied',
+                'Missing / incompatible' if missing else 'Ready', managed_lock,
+                'Additional board/runner features require their own setup profile')
+        except (ValueError, KeyError, OSError) as error:
+            row('Python build packages', 'Managed first-build profile', str(error), 'Not verified', managed_lock, 'Retry Set Up Zephyr')
+        return
     try:
         from packaging.requirements import Requirement
     except ImportError:
@@ -230,18 +249,23 @@ def inventory(args):
         # Compare manifest revisions locally. No repository fetching occurs.
         code, text = execute([sys.executable, '-m', 'west', 'list', '--format', '{abspath}'], workspace)
         absent = [p for p in text.splitlines() if not Path(p).is_dir()] if code == 0 else []
-        row('West modules', 'Manifest project directories',
-            str(len(absent)) + ' missing' if code == 0 else 'West listing failed',
-            'Present; revisions not audited' if code == 0 and not absent else 'Not ready', workspace,
-            '; '.join(absent[:8]) if absent else 'No source/module updates performed; revisions and blobs not audited')
+        if (Path(sys.prefix) / '.zew-managed-python').is_file():
+            row('West modules', 'First-build profile: no external modules', 'Intentionally excluded',
+                'Not required for first build', workspace, 'Additional board profiles need separate module setup')
+        else:
+            row('West modules', 'Manifest project directories',
+                str(len(absent)) + ' missing' if code == 0 else 'West listing failed',
+                'Present; revisions not audited' if code == 0 and not absent else 'Not ready', workspace,
+                '; '.join(absent[:8]) if absent else 'No source/module updates performed; revisions and blobs not audited')
     else:
         row('Zephyr source', 'Selected workspace', '', 'Missing', workspace, reason)
     minimum = required_version(source, 'cmake/modules/python.cmake', r'set\(PYTHON_MINIMUM_REQUIRED\s+([\d.]+)', (3, 12, 0))
     row('Python', '>=' + '.'.join(map(str, minimum)), sys.version.split()[0],
         'Ready' if sys.version_info[:3] >= minimum else 'Incompatible', sys.executable, 'Selected interpreter')
-    isolated = sys.prefix != sys.base_prefix
+    managed = (Path(sys.prefix) / '.zew-managed-python').is_file()
+    isolated = sys.prefix != sys.base_prefix or managed
     incomplete = (Path(sys.prefix) / '.zew-incomplete').exists()
-    row('Python environment', 'Isolated virtual environment', 'venv' if isolated else 'System interpreter',
+    row('Python environment', 'Isolated environment', 'Managed portable runtime' if managed else 'venv' if isolated else 'System interpreter',
         'Incomplete' if incomplete else 'Ready' if isolated else 'Create isolated environment', sys.prefix,
         'Reuse existing environment' if isolated else 'Create an environment in a new empty directory')
     try:

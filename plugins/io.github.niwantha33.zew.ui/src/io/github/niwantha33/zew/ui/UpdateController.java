@@ -100,7 +100,7 @@ public final class UpdateController {
     }
 
     private static boolean activeWork() {
-        if (WorkbenchHandler.isOperationActive() || ToolsDialog.isOperationActive()) return true;
+        if (WorkbenchHandler.isOperationActive() || ToolsDialog.isOperationActive() || SetupWizard.isOperationActive()) return true;
         if (Job.getJobManager().find(ResourcesPlugin.FAMILY_MANUAL_BUILD).length > 0
                 || Job.getJobManager().find(ResourcesPlugin.FAMILY_AUTO_BUILD).length > 0) return true;
         for (var launch : DebugPlugin.getDefault().getLaunchManager().getLaunches()) if (!launch.isTerminated()) return true;

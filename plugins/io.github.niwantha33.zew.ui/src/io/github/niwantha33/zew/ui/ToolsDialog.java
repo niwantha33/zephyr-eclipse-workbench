@@ -191,7 +191,7 @@ public final class ToolsDialog extends TitleAreaDialog {
     }
     @FunctionalInterface private interface Operation { void run(IProgressMonitor monitor) throws Exception; }
     private void start(String name, Operation action) {
-        if (WorkbenchHandler.isOperationActive() || CURRENT.get() != null) { setErrorMessage("Finish the current build/tools operation first."); return; }
+        if (WorkbenchHandler.isOperationActive() || SetupWizard.isOperationActive() || CURRENT.get() != null) { setErrorMessage("Finish the current build/tools operation first."); return; }
         var job = new Job(name) {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 monitor.beginTask(name, IProgressMonitor.UNKNOWN);

@@ -1,0 +1,1566 @@
+{
+  "schema": 1,
+  "profile": "first-build-win-x64",
+  "python": "3.13.7",
+  "zephyr": "4.4.0",
+  "zephyr_commit": "684c9e8f32e4373a21098559f748f06915f950c9",
+  "sdk": "1.0.1",
+  "board": "qemu_x86/atom",
+  "toolchain": "x86_64-zephyr-elf",
+  "packages": [
+    {
+      "name": "attrs",
+      "version": "26.1.0",
+      "file": "attrs-26.1.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl",
+      "size": 67548,
+      "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "attrs-26.1.0.dist-info/licenses/LICENSE",
+          "sha256": "882115c95dfc2af1eeb6714f8ec6d5cbcabf667caff8729f42420da63f714e9f"
+        }
+      ],
+      "source": "https://pypi.org/project/attrs/26.1.0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "backports-zstd",
+      "version": "1.8.0",
+      "file": "backports_zstd-1.8.0-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/12/0e/5c5a916cea73b455850083ccf76078de655face3dfe4126848570c57a6dd/backports_zstd-1.8.0-cp313-cp313-win_amd64.whl",
+      "size": 330247,
+      "sha256": "b583990d554cc6f6141c5c43b6db3c7da87a214253e08339d917ee3baa3021b6",
+      "license": "PSF-2.0",
+      "license_files": [
+        {
+          "path": "backports_zstd-1.8.0.dist-info/licenses/LICENSE.txt",
+          "sha256": "b0e25a78cffb43f4d92de8b61ccfa1f1f98ecbc22330b54b5251e7b6ba010231"
+        },
+        {
+          "path": "backports_zstd-1.8.0.dist-info/licenses/LICENSE_zstd.txt",
+          "sha256": "836cbda972f74261a12b706adaa7c73daea536ea9640c9a0dcb77b68105be051"
+        }
+      ],
+      "source": "https://pypi.org/project/backports-zstd/1.8.0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "brotli",
+      "version": "1.2.1",
+      "file": "brotli-1.2.1-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/96/c2/0c7abb25013043d4bcf7dd768d343bf7dee6ce99ac8c172f7ee4aef1c772/brotli-1.2.1-cp313-cp313-win_amd64.whl",
+      "size": 371072,
+      "sha256": "e6c4fa55eab6b5684b33239597876a18a35ce1280b63ab960164032afbb8783f",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "brotli-1.2.1.dist-info/licenses/LICENSE",
+          "sha256": "60ae0f13e76cc2eaaa108677eefa4ce16b647f6bbe8cf0a1ac9429d82eca7248"
+        }
+      ],
+      "source": "https://pypi.org/project/brotli/1.2.1/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "cmake",
+      "version": "3.31.10",
+      "file": "cmake-3.31.10-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/84/4b/e433ab430c580ec8e3d54cb2ec5c7ea76ae0b1e6ef2c2998c854f21d7780/cmake-3.31.10-py3-none-win_amd64.whl",
+      "size": 36630429,
+      "sha256": "f1ea1fe826355560e8976c3d5794d9357444209bc0e0d56676c71e6a571fd474",
+      "license": "Apache Software License; BSD License",
+      "license_files": [
+        {
+          "path": "cmake/data/doc/cmake/cmcppdap/NOTICE",
+          "sha256": "47bc4ee3ca11c006ac8b38d90d97455d18c0a0c3eafdf7f98c3623e4dada1f19"
+        },
+        {
+          "path": "cmake/data/doc/cmake/cmcurl/COPYING",
+          "sha256": "1b3254d53d27ef613e4e1b85789f7a441dc431e26c8bec6f4ba8e68f401d1eda"
+        },
+        {
+          "path": "cmake/data/doc/cmake/cmlibarchive/COPYING",
+          "sha256": "63fc0527f0f414cac078daaba199f872760372dd3fcb1f902f12fbcada51f98b"
+        },
+        {
+          "path": "cmake/data/doc/cmake/cmliblzma/COPYING",
+          "sha256": "ac024c350183a8253934be0145ae0fa1c567ab5b7d5a8e45bd644978e3651ea8"
+        },
+        {
+          "path": "cmake/data/doc/cmake/cmlibrhash/COPYING",
+          "sha256": "62fd8327a27a4170361e097fbbfafaf68cdacadfdcad993ca251238112947a8f"
+        },
+        {
+          "path": "cmake/data/doc/cmake/cmlibuv/LICENSE",
+          "sha256": "d1e1ff2c19bae35cd337d7333a5cebf7ba3ab3d0d4250c76b8bd0cf12c081b43"
+        },
+        {
+          "path": "cmake/data/doc/cmake/cmnghttp2/COPYING",
+          "sha256": "296913fdae167d19f8c463622b7d4ce4012781b9a13d9dcf21a2c7541a96dc39"
+        },
+        {
+          "path": "cmake/data/doc/cmake/cmzstd/LICENSE",
+          "sha256": "d3baadc2e1dd7a7e0b483633e6b39743c16a16f28d696baff507fcd451f3d4ad"
+        },
+        {
+          "path": "cmake/data/share/cmake-3.31/Licenses/LGPLv3.txt",
+          "sha256": "ea7d049c7705dc13afc202dd18e1827f3484f8212fd3fa7b82fc4a0c363432c9"
+        },
+        {
+          "path": "cmake/data/share/cmake-3.31/Templates/CPack.GenericLicense.txt",
+          "sha256": "ac6898818b6dab01c9d551d15fa9d3ed7ba94958ef43bd52917a041fbc1f5605"
+        },
+        {
+          "path": "cmake-3.31.10.dist-info/licenses/AUTHORS.rst",
+          "sha256": "4ce871f5cd1c5ff8cd20c9a71fa7cbd39431b17d2b7e12c8203a532acb5c53ea"
+        },
+        {
+          "path": "cmake-3.31.10.dist-info/licenses/LICENSE_Apache_20",
+          "sha256": "dc1f5d2d43c5531dfe0acaf4e950ea5dbe3e61e1850cf0e983bda7efc10d6693"
+        },
+        {
+          "path": "cmake-3.31.10.dist-info/licenses/LICENSE_BSD_3",
+          "sha256": "326954839d654d6d73bafac054e8c66153321410934ef91bf50e4255269135ef"
+        }
+      ],
+      "source": "https://pypi.org/project/cmake/3.31.10/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "colorama",
+      "version": "0.4.6",
+      "file": "colorama-0.4.6-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl",
+      "size": 25335,
+      "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+      "license": "BSD License",
+      "license_files": [
+        {
+          "path": "colorama-0.4.6.dist-info/licenses/LICENSE.txt",
+          "sha256": "cac35c02686e5d04a5a7140bfb3b36e73aed496656e891102e428886d7930318"
+        }
+      ],
+      "source": "https://pypi.org/project/colorama/0.4.6/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "docopt",
+      "version": "0.6.2",
+      "file": "docopt-0.6.2.tar.gz",
+      "url": "https://files.pythonhosted.org/packages/a2/55/8f8cab2afd404cf578136ef2cc5dfb50baa1761b68c9da1fb1e4eed343c9/docopt-0.6.2.tar.gz",
+      "size": 25901,
+      "sha256": "49b3a825280bd66b3aa83585ef59c4a8c82f2c8a522dbe754a8bc8d08c85c491",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "docopt-0.6.2/LICENSE-MIT",
+          "sha256": "3d5df78f592ff2433c3c6ce4984091b7f497059ddb8c6b08a061ba48e37b67f2"
+        }
+      ],
+      "source": "https://pypi.org/project/docopt/0.6.2/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream source download and local wheel build",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "inflate64",
+      "version": "1.0.4",
+      "file": "inflate64-1.0.4-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/e7/4f/5784ee1eb8260f2310e24ef2883f1f494f9332bcfde4ed14ee780372149e/inflate64-1.0.4-cp313-cp313-win_amd64.whl",
+      "size": 35578,
+      "sha256": "3983f53b590ff7d0ba243f664ce852aca882482f30f7a8eab33e10d769336d0c",
+      "license": "GNU Lesser General Public License v2 or later (LGPLv2+)",
+      "license_files": [
+        {
+          "path": "inflate64-1.0.4.dist-info/licenses/COPYING",
+          "sha256": "1e7e6bae5a5bde32f1ae5a7c37a082d1ab03cf89354f7f936ac40be9e39a6531"
+        }
+      ],
+      "source": "https://pypi.org/project/inflate64/1.0.4/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "jsonschema",
+      "version": "4.25.1",
+      "file": "jsonschema-4.25.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/bf/9c/8c95d856233c1f82500c2450b8c68576b4cf1c871db3afac5c34ff84e6fd/jsonschema-4.25.1-py3-none-any.whl",
+      "size": 90040,
+      "sha256": "3fba0169e345c7175110351d456342c364814cfcf3b964ba4587f22915230a63",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "jsonschema-4.25.1.dist-info/licenses/COPYING",
+          "sha256": "4f92a015a13c4d1a040bef018aa13430b4f1bc73b41b16bb846c346766de7439"
+        }
+      ],
+      "source": "https://pypi.org/project/jsonschema/4.25.1/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "file": "jsonschema_specifications-2025.9.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl",
+      "size": 18437,
+      "sha256": "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "jsonschema_specifications-2025.9.1.dist-info/licenses/COPYING",
+          "sha256": "42dcd63495f87b4eb7c7757afa379bb55a53f94afd7a5f657d9adf57236e515c"
+        }
+      ],
+      "source": "https://pypi.org/project/jsonschema-specifications/2025.9.1/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "multivolumefile",
+      "version": "0.2.3",
+      "file": "multivolumefile-0.2.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/22/31/ec5f46fd4c83185b806aa9c736e228cb780f13990a9cf4da0beb70025fcc/multivolumefile-0.2.3-py3-none-any.whl",
+      "size": 17037,
+      "sha256": "237f4353b60af1703087cf7725755a1f6fcaeeea48421e1896940cd1c920d678",
+      "license": "GNU Lesser General Public License v2 or later (LGPLv2+)",
+      "license_files": [
+        {
+          "path": "multivolumefile-0.2.3.dist-info/LICENSE",
+          "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551"
+        }
+      ],
+      "source": "https://pypi.org/project/multivolumefile/0.2.3/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "ninja",
+      "version": "1.13.2",
+      "file": "ninja-1.13.2-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/3f/dd/3766b5f4d32e8a9b97d195496b0b01fbbe2e1a41669dab0cd6492a6ce199/ninja-1.13.2-py3-none-win_amd64.whl",
+      "size": 311798,
+      "sha256": "1293f4078278b70d0ee4b6cc8f3a9e030656c9b2f59909970343c4fe76070118",
+      "license": "Apache-2.0",
+      "license_files": [
+        {
+          "path": "ninja-1.13.2.dist-info/licenses/LICENSE_Apache_20",
+          "sha256": "dc1f5d2d43c5531dfe0acaf4e950ea5dbe3e61e1850cf0e983bda7efc10d6693"
+        }
+      ],
+      "source": "https://pypi.org/project/ninja/1.13.2/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "packaging",
+      "version": "25.0",
+      "file": "packaging-25.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/20/12/38679034af332785aac8774540895e234f4d07f7545804097de4b666afd8/packaging-25.0-py3-none-any.whl",
+      "size": 66469,
+      "sha256": "29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484",
+      "license": "Apache Software License; BSD License",
+      "license_files": [
+        {
+          "path": "packaging/licenses/__init__.py",
+          "sha256": "56c2b8a36ec225759f4e2f2bdb26c99ac06809d8699c15ae36bb2468254a3fb5"
+        },
+        {
+          "path": "packaging/licenses/_spdx.py",
+          "sha256": "a009b5ced3c5c25b2608a7bb94002cbff38839f4b57160eef5b34191ebbeda7b"
+        },
+        {
+          "path": "packaging-25.0.dist-info/licenses/LICENSE",
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        },
+        {
+          "path": "packaging-25.0.dist-info/licenses/LICENSE.APACHE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "packaging-25.0.dist-info/licenses/LICENSE.BSD",
+          "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        }
+      ],
+      "source": "https://pypi.org/project/packaging/25.0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "pip",
+      "version": "25.2",
+      "file": "pip-25.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/b7/3f/945ef7ab14dc4f9d7f40288d2df998d1837ee0888ec3659c813487572faa/pip-25.2-py3-none-any.whl",
+      "size": 1752557,
+      "sha256": "6d67a2b4e7f14d8b31b8b52648866fa717f45a1eb70e83002f4331d07e953717",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "pip/_vendor/packaging/licenses/__init__.py",
+          "sha256": "ddbc7e82bca8e2c46fe4bb2bc00a68bb2eb9548b37bba8ab48e449cc02e4af35"
+        },
+        {
+          "path": "pip/_vendor/packaging/licenses/_spdx.py",
+          "sha256": "a009b5ced3c5c25b2608a7bb94002cbff38839f4b57160eef5b34191ebbeda7b"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/AUTHORS.txt",
+          "sha256": "8a811f3069248b37137083ddbe387e918ca63b513d23d76fcc78cb525292e66f"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/LICENSE.txt",
+          "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt",
+          "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/certifi/LICENSE",
+          "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/dependency_groups/LICENSE.txt",
+          "sha256": "1ab36e3e2a4ba8631625384f87e9e091db1faed034c5b23325b3239abf2cc525"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt",
+          "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/distro/LICENSE",
+          "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
+          "sha256": "a59f0b0ef3635874109a4461ca44ff7a70d50696e814767bfaf721d4c9b0db0f"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/msgpack/COPYING",
+          "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE",
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD",
+          "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE",
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE",
+          "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/pygments/LICENSE",
+          "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE",
+          "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/requests/LICENSE",
+          "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE",
+          "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/rich/LICENSE",
+          "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE",
+          "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE-HEADER",
+          "sha256": "97ce9330905a172dde870ee0361d89beb95ba3bd0f4545796aa91a8c01a43531"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE",
+          "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/truststore/LICENSE",
+          "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
+        },
+        {
+          "path": "pip-25.2.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt",
+          "sha256": "c37bf186e27cf9dbe9619e55edfe3cea7b30091ceb3da63c7dacbe0e6d77907b"
+        }
+      ],
+      "source": "https://pypi.org/project/pip/25.2/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "psutil",
+      "version": "7.2.2",
+      "file": "psutil-7.2.2-cp37-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/b4/90/e2159492b5426be0c1fef7acba807a03511f97c5f86b3caeda6ad92351a7/psutil-7.2.2-cp37-abi3-win_amd64.whl",
+      "size": 137737,
+      "sha256": "eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988",
+      "license": "BSD-3-Clause",
+      "license_files": [
+        {
+          "path": "psutil-7.2.2.dist-info/LICENSE",
+          "sha256": "c7adc4d5d1337a548b967421f1fbe258b93033a0417708fd6f4e38f8ecbceb80"
+        }
+      ],
+      "source": "https://pypi.org/project/psutil/7.2.2/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "py7zr",
+      "version": "1.1.4",
+      "file": "py7zr-1.1.4-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/96/bd/72bace0bf4025af8ab4bf972394fab466d4b565cdbea805281fbee9a8dbc/py7zr-1.1.4-py3-none-any.whl",
+      "size": 75484,
+      "sha256": "f6f868a457a6bd485b78d26e619045718bcd0b7720a6bf97d5fe86a1523423e8",
+      "license": "LGPL-2.1-or-later",
+      "license_files": [
+        {
+          "path": "py7zr-1.1.4.dist-info/licenses/LICENSE",
+          "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551"
+        }
+      ],
+      "source": "https://pypi.org/project/py7zr/1.1.4/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "pybcj",
+      "version": "1.0.8",
+      "file": "pybcj-1.0.8-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/39/f4/04d46f5059af00d2fae6086a7f47ebc23e553900ca75ea2a2e276d3a436c/pybcj-1.0.8-cp313-cp313-win_amd64.whl",
+      "size": 24956,
+      "sha256": "e47d9c655d276200e5d08f7b550097dacc826364b44931f0fbdc0da2e4bdf448",
+      "license": "LGPL-2.1-or-later",
+      "license_files": [
+        {
+          "path": "pybcj-1.0.8.dist-info/licenses/LICENSE",
+          "sha256": "1e7e6bae5a5bde32f1ae5a7c37a082d1ab03cf89354f7f936ac40be9e39a6531"
+        }
+      ],
+      "source": "https://pypi.org/project/pybcj/1.0.8/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "pycryptodomex",
+      "version": "3.24.1",
+      "file": "pycryptodomex-3.24.1-cp37-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/13/4c/2c1963e4154da534a3b3a4d6ee9549f5cac4ecffe986d3b470d08b9c4df6/pycryptodomex-3.24.1-cp37-abi3-win_amd64.whl",
+      "size": 1825955,
+      "sha256": "82eb0dd8a95be97f03527b108ee49f9b86a7c534fa47fa7a510be3eab8ea9acd",
+      "license": "BSD License; Public Domain",
+      "license_files": [
+        {
+          "path": "pycryptodomex-3.24.1.dist-info/LICENSE.rst",
+          "sha256": "60b8958a9ef9b7ec512087b725555372175ed2b02b969f8725b8534fde48acdd"
+        }
+      ],
+      "source": "https://pypi.org/project/pycryptodomex/3.24.1/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "pyelftools",
+      "version": "0.32",
+      "file": "pyelftools-0.32-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/af/43/700932c4f0638c3421177144a2e86448c0d75dbaee2c7936bda3f9fd0878/pyelftools-0.32-py3-none-any.whl",
+      "size": 188525,
+      "sha256": "013df952a006db5e138b1edf6d8a68ecc50630adbd0d83a2d41e7f846163d738",
+      "license": "Public domain",
+      "license_files": [
+        {
+          "path": "pyelftools-0.32.dist-info/LICENSE",
+          "sha256": "ae18bf4cb82f92af7547259177bc28bc48e4fc732518bcedfe690226288d3445"
+        }
+      ],
+      "source": "https://pypi.org/project/pyelftools/0.32/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "pykwalify",
+      "version": "1.8.0",
+      "file": "pykwalify-1.8.0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/1f/fd/ac2161cce19fd67a18c269073f8e86292b5511acec6f8ef6eab88615d032/pykwalify-1.8.0-py2.py3-none-any.whl",
+      "size": 24860,
+      "sha256": "731dfa87338cca9f559d1fca2bdea37299116e3139b73f78ca90a543722d6651",
+      "license": "MIT License",
+      "license_files": [
+        {
+          "path": "pykwalify-1.8.0.dist-info/LICENSE",
+          "sha256": "626fafd952ab0345edc227f2d565835fe1fd14067ae0d635ee3e47289b773dc4"
+        }
+      ],
+      "source": "https://pypi.org/project/pykwalify/1.8.0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "pyppmd",
+      "version": "1.3.1",
+      "file": "pyppmd-1.3.1-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/6c/6d/311d8faca142f39b4d158c94ed7eb237a197d41dd7eb67f53442a7904e04/pyppmd-1.3.1-cp313-cp313-win_amd64.whl",
+      "size": 46962,
+      "sha256": "df8d84ab72381058a964ba66e5e81ed52dbd0b5ad734a5ef8353452983506098",
+      "license": "LGPL-2.1-or-later",
+      "license_files": [
+        {
+          "path": "pyppmd-1.3.1.dist-info/licenses/LICENSE",
+          "sha256": "1e7e6bae5a5bde32f1ae5a7c37a082d1ab03cf89354f7f936ac40be9e39a6531"
+        }
+      ],
+      "source": "https://pypi.org/project/pyppmd/1.3.1/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "file": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "size": 229892,
+      "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427",
+      "license": "BSD License; Apache Software License",
+      "license_files": [
+        {
+          "path": "python_dateutil-2.9.0.post0.dist-info/LICENSE",
+          "sha256": "ba00f51a0d92823b5a1cde27d8b5b9d2321e67ed8da9bc163eff96d5e17e577e"
+        }
+      ],
+      "source": "https://pypi.org/project/python-dateutil/2.9.0.post0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "pyyaml",
+      "version": "6.0.3",
+      "file": "pyyaml-6.0.3-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/97/c9/39d5b874e8b28845e4ec2202b5da735d0199dbe5b8fb85f91398814a9a46/pyyaml-6.0.3-cp313-cp313-win_amd64.whl",
+      "size": 154090,
+      "sha256": "79005a0d97d5ddabfeeea4cf676af11e647e41d81c9a7722a193022accdb6b7c",
+      "license": "MIT License",
+      "license_files": [
+        {
+          "path": "pyyaml-6.0.3.dist-info/licenses/LICENSE",
+          "sha256": "8d3928f9dc4490fd635707cb88eb26bd764102a7282954307d3e5167a577e8a4"
+        }
+      ],
+      "source": "https://pypi.org/project/pyyaml/6.0.3/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "referencing",
+      "version": "0.37.0",
+      "file": "referencing-0.37.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl",
+      "size": 26766,
+      "sha256": "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "referencing-0.37.0.dist-info/licenses/COPYING",
+          "sha256": "42dcd63495f87b4eb7c7757afa379bb55a53f94afd7a5f657d9adf57236e515c"
+        }
+      ],
+      "source": "https://pypi.org/project/referencing/0.37.0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "rpds-py",
+      "version": "2026.9.1",
+      "file": "rpds_py-2026.9.1-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/31/9c/ba5a9569d719bfdd6ce863df4133ac6a1658cf1b07cc3534c31db729fbbc/rpds_py-2026.9.1-cp313-cp313-win_amd64.whl",
+      "size": 222409,
+      "sha256": "3e93b2cd69a9830be33e03945cd7cda940a0a8bfcfbff41d6144f0cb0d3d8bd9",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "rpds_py-2026.9.1.dist-info/licenses/LICENSE",
+          "sha256": "8bcb72c82ea8ae74802293c41d93ad7d51434001b0ae45a603a5af0f507aee0a"
+        }
+      ],
+      "source": "https://pypi.org/project/rpds-py/2026.9.1/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "ruamel-yaml",
+      "version": "0.17.21",
+      "file": "ruamel.yaml-0.17.21-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/9e/cb/938214ac358fbef7058343b3765c79a1b7ed0c366f7f992ce7ff38335652/ruamel.yaml-0.17.21-py3-none-any.whl",
+      "size": 109478,
+      "sha256": "742b35d3d665023981bd6d16b3d24248ce5df75fdb4e2924e93a05c1f8b61ca7",
+      "license": "MIT License",
+      "license_files": [
+        {
+          "path": "ruamel.yaml-0.17.21.dist-info/LICENSE",
+          "sha256": "ab837b032c5aae84503fc0c733a116a26fd272e90dc4402fa68d3c9e51aed3b0"
+        }
+      ],
+      "source": "https://pypi.org/project/ruamel-yaml/0.17.21/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "setuptools",
+      "version": "80.9.0",
+      "file": "setuptools-80.9.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl",
+      "size": 1201486,
+      "sha256": "062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "setuptools/_vendor/packaging/licenses/__init__.py",
+          "sha256": "d71e4cd671188dc83011b2edd1d5f0cf6ba48ebd7c0e20b30b4b2b690a89f96c"
+        },
+        {
+          "path": "setuptools/_vendor/packaging/licenses/_spdx.py",
+          "sha256": "a009b5ced3c5c25b2608a7bb94002cbff38839f4b57160eef5b34191ebbeda7b"
+        },
+        {
+          "path": "setuptools/_vendor/platformdirs-4.2.2.dist-info/licenses/LICENSE",
+          "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+        },
+        {
+          "path": "setuptools/_vendor/wheel/vendored/packaging/LICENSE",
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        },
+        {
+          "path": "setuptools/_vendor/wheel/vendored/packaging/LICENSE.APACHE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "setuptools/_vendor/wheel/vendored/packaging/LICENSE.BSD",
+          "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        },
+        {
+          "path": "setuptools/config/NOTICE",
+          "sha256": "2dddf08818297a3b89d43d95ff659d8da85741108c9136dfa3a4d856c0623bd8"
+        },
+        {
+          "path": "setuptools/config/_validate_pyproject/NOTICE",
+          "sha256": "5d300dbfa643138b013b75ac9caeee591f951b8b0ee24288c34ccd926c4780c8"
+        },
+        {
+          "path": "setuptools-80.9.0.dist-info/licenses/LICENSE",
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE",
+          "sha256": "ade78d04982d69972d444a8e14a94f87a2334dd3855cc80348ea8e240aa0df2d"
+        },
+        {
+          "path": "setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE",
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "setuptools/_vendor/importlib_metadata-8.0.0.dist-info/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "setuptools/_vendor/inflect-7.3.1.dist-info/LICENSE",
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "setuptools/_vendor/jaraco.collections-5.1.0.dist-info/LICENSE",
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "setuptools/_vendor/jaraco.context-5.3.0.dist-info/LICENSE",
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "setuptools/_vendor/jaraco.functools-4.0.1.dist-info/LICENSE",
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "setuptools/_vendor/jaraco.text-3.12.1.dist-info/LICENSE",
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "setuptools/_vendor/more_itertools-10.3.0.dist-info/LICENSE",
+          "sha256": "09f1c8c9e941af3e584d59641ea9b87d83c0cb0fd007eb5ef391a7e2643c1a46"
+        },
+        {
+          "path": "setuptools/_vendor/packaging-24.2.dist-info/LICENSE",
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        },
+        {
+          "path": "setuptools/_vendor/packaging-24.2.dist-info/LICENSE.APACHE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "setuptools/_vendor/packaging-24.2.dist-info/LICENSE.BSD",
+          "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        },
+        {
+          "path": "setuptools/_vendor/tomli-2.0.1.dist-info/LICENSE",
+          "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+        },
+        {
+          "path": "setuptools/_vendor/typeguard-4.3.0.dist-info/LICENSE",
+          "sha256": "6163f7987dfb38d6bc320ce2b70b2f02b862bc41126516d552ef1cd43247e758"
+        },
+        {
+          "path": "setuptools/_vendor/typing_extensions-4.12.2.dist-info/LICENSE",
+          "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+        },
+        {
+          "path": "setuptools/_vendor/wheel-0.45.1.dist-info/LICENSE.txt",
+          "sha256": "30c23618679108f3e8ea1d2a658c7ca417bdfc891c98ef1a89fa4ff0c9828654"
+        },
+        {
+          "path": "setuptools/_vendor/zipp-3.19.2.dist-info/LICENSE",
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        }
+      ],
+      "source": "https://pypi.org/project/setuptools/80.9.0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "file": "six-1.17.0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl",
+      "size": 11050,
+      "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+      "license": "MIT License",
+      "license_files": [
+        {
+          "path": "six-1.17.0.dist-info/LICENSE",
+          "sha256": "4375ba20e2b9c6c4e7cad2940a628fd90e95cc3d50ee92aae755715d8ba1fbd0"
+        }
+      ],
+      "source": "https://pypi.org/project/six/1.17.0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "texttable",
+      "version": "1.7.2",
+      "file": "texttable-1.7.2-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/b9/4d/4de8896d9edcfb421e54d236b22a62be3827ca195ff649cad6fcae660f04/texttable-1.7.2-py2.py3-none-any.whl",
+      "size": 10862,
+      "sha256": "a381e1ed30e4d4bd24cdacabe26463b7a570c0e964fc0b35d8d9276b2fcbe252",
+      "license": "MIT License",
+      "license_files": [
+        {
+          "path": "texttable-1.7.2.dist-info/licenses/LICENSE",
+          "sha256": "4ba7bdab54504a3bc44eb33ecca873a26a63ab902822101a87bb46235da63594"
+        }
+      ],
+      "source": "https://pypi.org/project/texttable/1.7.2/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "file": "typing_extensions-4.16.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+      "size": 45571,
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "license": "PSF-2.0",
+      "license_files": [
+        {
+          "path": "typing_extensions-4.16.0.dist-info/licenses/LICENSE",
+          "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+        }
+      ],
+      "source": "https://pypi.org/project/typing-extensions/4.16.0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.5",
+      "file": "tzdata-2026.5-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/94/21/1e5995a1c920cce14e4bffae20c665ec10e7ed03ab25e006cd741092b718/tzdata-2026.5-py2.py3-none-any.whl",
+      "size": 347996,
+      "sha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac",
+      "license": "Apache-2.0",
+      "license_files": [
+        {
+          "path": "tzdata-2026.5.dist-info/licenses/LICENSE",
+          "sha256": "df58f69ea88683035d720b5375bcef0cf5aeaa98a1d098d572e0992c378deb46"
+        },
+        {
+          "path": "tzdata-2026.5.dist-info/licenses/licenses/LICENSE_APACHE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ],
+      "source": "https://pypi.org/project/tzdata/2026.5/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "west",
+      "version": "1.5.0",
+      "file": "west-1.5.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/c5/1d/e50fb71de492abb549917fdbf13c4a8a8459af9d78a2fa47905804905c36/west-1.5.0-py3-none-any.whl",
+      "size": 106991,
+      "sha256": "f71411d11ed9ed00847405c6a83600374c2e0cf8676ed5af5d8b572f92c4765a",
+      "license": "Apache Software License",
+      "license_files": [
+        {
+          "path": "west-1.5.0.dist-info/licenses/LICENSE",
+          "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+        }
+      ],
+      "source": "https://pypi.org/project/west/1.5.0/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    },
+    {
+      "name": "wheel",
+      "version": "0.45.1",
+      "file": "wheel-0.45.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/0b/2c/87f3254fd8ffd29e4c02732eee68a83a1d3c346ae39bc6822dcbcb697f2b/wheel-0.45.1-py3-none-any.whl",
+      "size": 72494,
+      "sha256": "708e7481cc80179af0e556bbf0cc00b8444c7321e2700b8d8580231d13017248",
+      "license": "MIT License",
+      "license_files": [
+        {
+          "path": "wheel/vendored/packaging/LICENSE",
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        },
+        {
+          "path": "wheel/vendored/packaging/LICENSE.APACHE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "wheel/vendored/packaging/LICENSE.BSD",
+          "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        },
+        {
+          "path": "wheel-0.45.1.dist-info/LICENSE.txt",
+          "sha256": "30c23618679108f3e8ea1d2a658c7ca417bdfc891c98ef1a89fa4ff0c9828654"
+        }
+      ],
+      "source": "https://pypi.org/project/wheel/0.45.1/",
+      "review": "approved-build-use",
+      "redistribution": "not bundled; upstream download only",
+      "commercial_use": "permitted under recorded upstream licences",
+      "mandatory_fees": false,
+      "review_date": "2026-10-23",
+      "obligations": "Preserve included notices. GPL/LGPL source and modification obligations apply if redistributing; external build use only approved here."
+    }
+  ],
+  "external_artifact_reviews": [
+    {
+      "artifact": "python-3.13.7-embed-amd64.zip",
+      "sha256": "f6cca216a359be84797cabb54149ce5e062afb16cc7567eb7fc51cacb2d86b65",
+      "licence_files": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120"
+        }
+      ],
+      "review": "approved-build-use",
+      "redistribution": "not approved; download from upstream",
+      "mandatory_fees": false
+    },
+    {
+      "artifact": "MinGit-2.50.1-64-bit.zip",
+      "sha256": "6f672aebe9e488a246efd6875f9197dbc0d9a40100e218acc3877cba2b206c45",
+      "licence_files": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "454649ddc02b5cc098513cea28db6592b45ac0a906386287c4d48cf8dbde651c"
+        },
+        {
+          "path": "mingw64/doc/git-credential-manager/LICENSE",
+          "sha256": "b47f1a8a744ecdc7a3da35804f88552805d33f51a726b87a2105acdfae406b07"
+        },
+        {
+          "path": "mingw64/doc/git-credential-manager/NOTICE",
+          "sha256": "f573f5d21d5d8a054aad1ffcbe0165391a4d93a5aa3e23c3db0752759adfd50c"
+        },
+        {
+          "path": "mingw64/share/licenses/brotli/LICENSE",
+          "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
+        },
+        {
+          "path": "mingw64/share/licenses/curl/LICENSE",
+          "sha256": "e18f1989333b70044b2adfb7dc2f905d0119dbdcac3bc9f4bc9d540e3a29de5b"
+        },
+        {
+          "path": "mingw64/share/licenses/expat/COPYING",
+          "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87"
+        },
+        {
+          "path": "mingw64/share/licenses/gcc-libs/COPYING.LIB",
+          "sha256": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861"
+        },
+        {
+          "path": "mingw64/share/licenses/gcc-libs/COPYING.RUNTIME",
+          "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+        },
+        {
+          "path": "mingw64/share/licenses/gcc-libs/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "mingw64/share/licenses/gettext-runtime/COPYING",
+          "sha256": "7ef2cdfe58e0c0460657b6598b49af29d4e03c1e41cbaf0e1da1eb8ad74b95d0"
+        },
+        {
+          "path": "mingw64/share/licenses/gettext-runtime/intl/COPYING.LIB",
+          "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+        },
+        {
+          "path": "mingw64/share/licenses/gettext-runtime/libasprintf/COPYING",
+          "sha256": "03133addae5b99a6148c538300e6d97074453089be1423b741bd081f18e2b298"
+        },
+        {
+          "path": "mingw64/share/licenses/gettext-runtime/libasprintf/COPYING.LIB",
+          "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+        },
+        {
+          "path": "mingw64/share/licenses/libffi/LICENSE",
+          "sha256": "d5699fa516968e3a1550e6c902b7441c78856f2603d61bedd0b0662a26655366"
+        },
+        {
+          "path": "mingw64/share/licenses/libiconv/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "mingw64/share/licenses/libiconv/COPYING.LIB",
+          "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+        },
+        {
+          "path": "mingw64/share/licenses/libiconv/libcharset/COPYING.LIB",
+          "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+        },
+        {
+          "path": "mingw64/share/licenses/libpsl/COPYING",
+          "sha256": "322392e6001b2b3b0fca705dc9f11f26e12441188ecde50eb1d22909980b2925"
+        },
+        {
+          "path": "mingw64/share/licenses/libssh2/LICENSE",
+          "sha256": "f7f9633cf9ff2f1333f3d7ce46973a8716a4d2a2815ad56f30d437d5fea7bafe"
+        },
+        {
+          "path": "mingw64/share/licenses/libtasn1/COPYING",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+        },
+        {
+          "path": "mingw64/share/licenses/libtasn1/COPYING.LESSERv2",
+          "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+        },
+        {
+          "path": "mingw64/share/licenses/libunistring/LICENSE",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "mingw64/share/licenses/libunistring/LICENSE.LIB",
+          "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c"
+        },
+        {
+          "path": "mingw64/share/licenses/libwinpthread/COPYING",
+          "sha256": "63263614cdd29f2f93cba85e992f041b31f9fc7b4033692f31269489a8a1b177"
+        },
+        {
+          "path": "mingw64/share/licenses/nghttp2/COPYING",
+          "sha256": "6b94f3abc1aabd0c72a7c7d92a77f79dda7c8a0cb3df839a97890b4116a2de2a"
+        },
+        {
+          "path": "mingw64/share/licenses/openssl/LICENSE",
+          "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+        },
+        {
+          "path": "mingw64/share/licenses/pcre2/COPYING",
+          "sha256": "99272c55f3dcfa07a8a7e15a5c1a33096e4727de74241d65fa049fccfdd59507"
+        },
+        {
+          "path": "mingw64/share/licenses/zlib/LICENSE",
+          "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+        },
+        {
+          "path": "mingw64/share/licenses/zstd/LICENSE",
+          "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+        },
+        {
+          "path": "usr/share/licenses/libopenssl/LICENSE.txt",
+          "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+        },
+        {
+          "path": "usr/share/licenses/libsqlite/LICENSE",
+          "sha256": "0b76663a90e034f3d7f2af5bfada4cedec5ebc275361899eccc5c18e6f01ff1f"
+        },
+        {
+          "path": "usr/share/licenses/ncurses/license.txt",
+          "sha256": "41822f8f1a906274f3156d6d13b6fd1c3dc87f315876f62cb91ff0e803def295"
+        },
+        {
+          "path": "usr/share/licenses/zlib/LICENSE",
+          "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+        }
+      ],
+      "review": "approved-build-use",
+      "redistribution": "not approved; download from upstream",
+      "mandatory_fees": false
+    },
+    {
+      "artifact": "zephyr-sdk-1.0.1_windows-x86_64_minimal.7z",
+      "sha256": "17a557e7c6cea5e5c589508fe45a3f26aca4fa2c6153fe3e7b03aeb4b93fea4b",
+      "licence_files": [
+        {
+          "path": "zephyr-sdk-1.0.1/hosttools/qemu-arc/share/edk2-licenses.txt",
+          "sha256": "1ddeaed2e7d2e9ecb960bdfc1b8ee45387aff70d056d985d145949af3951657c"
+        },
+        {
+          "path": "zephyr-sdk-1.0.1/hosttools/qemu/share/edk2-licenses.txt",
+          "sha256": "1ddeaed2e7d2e9ecb960bdfc1b8ee45387aff70d056d985d145949af3951657c"
+        }
+      ],
+      "review": "approved-build-use",
+      "redistribution": "not approved; download from upstream",
+      "mandatory_fees": false
+    },
+    {
+      "artifact": "toolchain_gnu_windows-x86_64_x86_64-zephyr-elf.7z",
+      "sha256": "fc1267f928f1bae6a7fdc5733b89ac09dc20fdb05fadcd165913907c94866873",
+      "licence_files": [
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/zstd/build/LICENSE",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/COPYING",
+          "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/COPYING.LIB",
+          "sha256": "56bdea73b6145ef6ac5259b3da390b981d840c24cb03b8e1cbc678de7ecfa18d"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/COPYING.LIBGLOSS",
+          "sha256": "fd3190e942375b5a15d5a3f34759361921cac05afb33f90b79d0cb132971676e"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/COPYING.NEWLIB",
+          "sha256": "19a3d496c944575951ca048e1fc0c974f030618586059732fa9def2281873f88"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/COPYING3.LIB",
+          "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/bfd/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/gas/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/gdb/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/include/COPYING",
+          "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/include/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/libiberty/COPYING.LIB",
+          "sha256": "32434afcc8666ba060e111d715bfdb6c2d5dd8a35fa4d3ab8ad67d8f850d2f2b"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/readline/readline/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/sim/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/binutils/zlib/contrib/dotzlib/LICENSE_1_0.txt",
+          "sha256": "36266a8fd073568394cb81cdb2b124f7fdae2c64c1a7ed09db34b4d22efa2951"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/crosstool-ng/COPYING",
+          "sha256": "07bc0ccd386469c748c4cf6c8faca5667fbf8c4400386714287fa233acfd68ba"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/crosstool-ng/LICENSE",
+          "sha256": "07bc0ccd386469c748c4cf6c8faca5667fbf8c4400386714287fa233acfd68ba"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/expat/COPYING",
+          "sha256": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/COPYING",
+          "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/COPYING.LIB",
+          "sha256": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/COPYING.RUNTIME",
+          "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/COPYING3.LIB",
+          "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/COPYING",
+          "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/COPYING.LIB",
+          "sha256": "32434afcc8666ba060e111d715bfdb6c2d5dd8a35fa4d3ab8ad67d8f850d2f2b"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/COPYING3.LIB",
+          "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/go/gofrontend/LICENSE",
+          "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/m2/COPYING.FDL",
+          "sha256": "0b402b6bff3c3bb698bd8a7efe33827b4a07b3b9a5b8ace23ff62346d33eb534"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/m2/COPYING.RUNTIME",
+          "sha256": "314527bfbe0acd79ab7845a0dca5cb961a04c443f0a573d45da9d8cb926a1b4e"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/m2/COPYING3",
+          "sha256": "0ae0485a5bd37a63e63603596417e4eb0e653334fa6c7f932ca3a0e85d4af227"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/m2/COPYING3.LIB",
+          "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/m2/images/LICENSE.IMG",
+          "sha256": "7a78a4bfb3305881eae7239b4cdfd48a17c07ecf3596170962d2664bb2c0a883"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/gcc/testsuite/gcc.dg/params/LICENSE",
+          "sha256": "4919cfb14a73cd64fcef67b107613970cf1659a09aa675dba31314f373bc7204"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/include/COPYING",
+          "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/include/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libcody/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libffi/LICENSE",
+          "sha256": "a61d06e8f7be57928e71e800eb9273b05cb8868c484108afe41e4305bb320dde"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libffi/LICENSE-BUILDTOOLS",
+          "sha256": "e67978cd18816c0cb7d29aaaacde7b7447402c2fb321a051698890a8eaedda94"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libgo/LICENSE",
+          "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libgo/go/golang.org/x/mod/LICENSE",
+          "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libgo/go/golang.org/x/sync/LICENSE",
+          "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libgo/go/golang.org/x/tools/LICENSE",
+          "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libgo/go/golang.org/x/xerrors/LICENSE",
+          "sha256": "84d554e7a5d139b7c7b5d6ef0670ae556c4cdcfa354eaad72a1c07c08012c96f"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libiberty/COPYING.LIB",
+          "sha256": "32434afcc8666ba060e111d715bfdb6c2d5dd8a35fa4d3ab8ad67d8f850d2f2b"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libphobos/libdruntime/LICENSE.txt",
+          "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libphobos/src/LICENSE_1_0.txt",
+          "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libquadmath/COPYING.LIB",
+          "sha256": "32434afcc8666ba060e111d715bfdb6c2d5dd8a35fa4d3ab8ad67d8f850d2f2b"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libsanitizer/LICENSE.TXT",
+          "sha256": "74c2b24539a53c34abddb559266d89cb653b0198cd2faf9c04763d3223db7f6d"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/libstdc++-v3/include/pstl/LICENSE.txt",
+          "sha256": "0ca8cbe9219a841f9bc8fbb1f8ecdf5e39b1b0e23ee10fb6b0c090d8987dd1eb"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gcc/zlib/contrib/dotzlib/LICENSE_1_0.txt",
+          "sha256": "36266a8fd073568394cb81cdb2b124f7fdae2c64c1a7ed09db34b4d22efa2951"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/COPYING",
+          "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/COPYING.LIB",
+          "sha256": "56bdea73b6145ef6ac5259b3da390b981d840c24cb03b8e1cbc678de7ecfa18d"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/COPYING.LIBGLOSS",
+          "sha256": "fd3190e942375b5a15d5a3f34759361921cac05afb33f90b79d0cb132971676e"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/COPYING.NEWLIB",
+          "sha256": "19a3d496c944575951ca048e1fc0c974f030618586059732fa9def2281873f88"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/COPYING3.LIB",
+          "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/bfd/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/gas/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/gdb/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/include/COPYING",
+          "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/include/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/libiberty/COPYING.LIB",
+          "sha256": "32434afcc8666ba060e111d715bfdb6c2d5dd8a35fa4d3ab8ad67d8f850d2f2b"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/readline/readline/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/sim/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gdb/zlib/contrib/dotzlib/LICENSE_1_0.txt",
+          "sha256": "36266a8fd073568394cb81cdb2b124f7fdae2c64c1a7ed09db34b4d22efa2951"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/COPYING",
+          "sha256": "e79e9c8a0c85d735ff98185918ec94ed7d175efc377012787aebcf3b80f0d90b"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/gettext-runtime/COPYING",
+          "sha256": "7ef2cdfe58e0c0460657b6598b49af29d4e03c1e41cbaf0e1da1eb8ad74b95d0"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/gettext-runtime/intl/COPYING.LIB",
+          "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/gettext-runtime/libasprintf/COPYING",
+          "sha256": "03133addae5b99a6148c538300e6d97074453089be1423b741bd081f18e2b298"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/gettext-runtime/libasprintf/COPYING.LIB",
+          "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/gettext-tools/COPYING",
+          "sha256": "5d4cff30d5038f82a0edc79798456049b61e1752fdb7e9ab1f4bfb9fae3a7303"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/gettext-tools/gnulib-lib/libxml/COPYING",
+          "sha256": "c5c63674f8a83c4d2e385d96d1c670a03cb871ba2927755467017317878574bd"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/gnulib-local/lib/libxml/COPYING",
+          "sha256": "c5c63674f8a83c4d2e385d96d1c670a03cb871ba2927755467017317878574bd"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/libtextstyle/COPYING",
+          "sha256": "e79e9c8a0c85d735ff98185918ec94ed7d175efc377012787aebcf3b80f0d90b"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gettext/libtextstyle/lib/libxml/COPYING",
+          "sha256": "c5c63674f8a83c4d2e385d96d1c670a03cb871ba2927755467017317878574bd"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gmp/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gmp/COPYING.LESSERv3",
+          "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gmp/COPYINGv2",
+          "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/gmp/COPYINGv3",
+          "sha256": "e6037104443f9a7829b2aa7c5370d0789a7bda3ca65a0b904cdc0c2e285d9195"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/isl/LICENSE",
+          "sha256": "3a2c398103f6bca0f50a9a9465deca9230b370b0212af5fdf31ed88a36215c30"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/libiconv/COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/libiconv/COPYING.LIB",
+          "sha256": "56bdea73b6145ef6ac5259b3da390b981d840c24cb03b8e1cbc678de7ecfa18d"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/libiconv/libcharset/COPYING.LIB",
+          "sha256": "56bdea73b6145ef6ac5259b3da390b981d840c24cb03b8e1cbc678de7ecfa18d"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/mpc/COPYING.LESSER",
+          "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/mpfr/COPYING",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/mpfr/COPYING.LESSER",
+          "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/ncurses/COPYING",
+          "sha256": "63de87399e9fc8860236082b6b0520e068e9eb1fad0ebd30202aa30bb6f690ac"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/picolibc/COPYING.GPL2",
+          "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/picolibc/COPYING.NEWLIB",
+          "sha256": "fcfb5ec69b6ab52676dcc4dab7cf4338c8000ef97812dadd35b8592a640a8419"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/picolibc/COPYING.picolibc",
+          "sha256": "c53b57a90e3f7891ccb9d011f4c2d06fc8b3afefca4b315253b962e3e519a774"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/zlib/LICENSE",
+          "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/zlib/contrib/dotzlib/LICENSE_1_0.txt",
+          "sha256": "36266a8fd073568394cb81cdb2b124f7fdae2c64c1a7ed09db34b4d22efa2951"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/zstd/COPYING",
+          "sha256": "f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505"
+        },
+        {
+          "path": "x86_64-zephyr-elf/share/licenses/zstd/LICENSE",
+          "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+        }
+      ],
+      "review": "approved-build-use",
+      "redistribution": "not approved; download from upstream",
+      "mandatory_fees": false
+    }
+  ]
+}

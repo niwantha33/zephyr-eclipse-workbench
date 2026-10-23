@@ -49,7 +49,7 @@ public final class WorkbenchHandler extends AbstractHandler {
         String operation = event.getCommand().getId().substring("io.github.niwantha33.zew.".length());
         if (operation.equals("cancel")) { cancelCurrent(); return null; }
         var shell = HandlerUtil.getActiveShell(event);
-        if (CURRENT.get() != null || ToolsDialog.isOperationActive()) {
+        if (CURRENT.get() != null || ToolsDialog.isOperationActive() || SetupWizard.isOperationActive()) {
             MessageDialog.openInformation(shell, "Zephyr operation active", "Wait for the current operation or use Zephyr > Cancel Operation.");
             return null;
         }
