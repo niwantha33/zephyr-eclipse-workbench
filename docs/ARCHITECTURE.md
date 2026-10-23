@@ -1,0 +1,60 @@
+# Architecture
+
+Status: proposed architecture, 2026-10-23. Implementation has not started.
+
+## Product decision
+
+Build an installable Eclipse plug-in, using Eclipse CDT for C/C++ tooling and existing Zephyr tools for firmware operations. Reusable scripts may assist development but are not the final user interface.
+
+Do not fork Zephyr, rewrite its build system, or maintain an independent hard-coded catalogue of all vendor chips.
+
+## Components
+
+| Component | Responsibility |
+|---|---|
+| Core service | Workspace identity, settings, environment discovery, typed operation requests, and result models |
+| Eclipse UI | Project wizard, board selector, build configurations, progress, console, diagnostics, and help |
+| Tool process service | Explicit executable paths and argument lists, process environment, working directory, cancellation, exit status, and logs |
+| Hardware discovery adapter | Read hardware metadata through supported facilities of the selected Zephyr version; include boards, revisions, qualifiers, and external roots |
+| Build adapter | West build invocation, separate output directories, pristine rebuilds, sysbuild selection, generated artefact discovery |
+| Configuration adapter | Launch menuconfig/guiconfig where supported, inspect resolved settings, and persist reviewed application fragments |
+| CDT adapter | Consume compilation database and generated settings using a verified CDT integration mechanism |
+| Execution adapter | Board runner discovery and flash, debug-server, and attach capabilities; vendor-specific adapters only for missing workflows |
+| Validation metadata | Store discovery, build, flash, and debug evidence independently |
+
+Initial bundle boundary proposal: core and Eclipse UI bundles, an installable feature, and a p2 repository. Choose exact Eclipse extension points, CDT APIs, Java baseline, target platform, and Tycho versions in an implementation spike before fixing the source layout.
+
+## Settings and portability
+
+- Machine preferences hold local Python, SDK, workspace, and debug-tool locations.
+- Project settings hold portable application paths, board target, configuration fragments, overlays, and build profile names.
+- Never commit user-specific absolute paths, Eclipse workspace metadata, credentials, or downloaded SDKs.
+- Recognise existing workspace layouts; do not assume Zephyr is directly below the workspace root.
+- Resolve Zephyr through West/project metadata and explicit user configuration.
+- Cache discovered hardware per checkout identity and version; invalidate after checkout or dependency changes.
+- Keep output directories separate by board, qualifiers, and profile. Never clean arbitrary paths.
+- Run long operations as cancellable background jobs; surface failures rather than reporting a successful launch as a successful build.
+- Serialize mutations to a workspace and operations that share a build directory.
+- Invoke processes with argument arrays, not shell-interpolated command strings.
+
+## Configuration boundaries
+
+Kconfig controls software configuration. Devicetree describes hardware. The UI must retain that distinction.
+
+Start with upstream configuration interfaces and generated-output inspection. A native graphical Kconfig editor is a later enhancement requiring dependency semantics, help, value provenance, and persistent-fragment handling; it is not part of the first preview.
+
+Do not copy every resolved .config value into prj.conf automatically. Present intended changes and use version-appropriate upstream configuration-saving facilities where available.
+
+## Flash and debugging
+
+Use configured runner metadata and West commands where supported. Detect missing capabilities explicitly. Do not assume every board supports west flash or west debug.
+
+Debugging requires the matching architecture GDB, server executable, transport, probe, target image, and port settings. Integrate with Eclipse debug facilities after an Arm and Xtensa proof of concept. RTOS thread awareness is conditional on server and firmware support.
+
+Multi-image projects require explicit domain/image selection. Flash/run on hardware and emulation are separate launch modes.
+
+## Dependency and release strategy
+
+Pin the tested Zephyr baseline and respect its manifest revisions. Support importing other versions without calling them validated. Fetch only required dependency sets where feasible. Explain vendor downloads and terms before installing optional components.
+
+Develop a reproducible p2 update-site build first. Consider a bundled Eclipse distribution only after plug-in installation and upgrades are reliable.
