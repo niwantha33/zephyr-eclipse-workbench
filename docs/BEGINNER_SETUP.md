@@ -1,4 +1,4 @@
-# Beginner setup — development preview 0.1.5
+# Beginner setup — development preview 0.1.6
 
 The new **Zephyr > Set Up Zephyr** wizard bootstraps a managed environment on
 native Windows x64. No installed Python, Git, winget, terminal commands or global

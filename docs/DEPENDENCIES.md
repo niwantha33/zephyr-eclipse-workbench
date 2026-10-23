@@ -18,7 +18,7 @@ The developer build resolved transitive dependencies. This inventory is not a co
 
 ## Candidate register
 
-The 0.1.5 first-build profile records exact package/artifact sizes, hashes,
+The 0.1.6 first-build profile records exact package/artifact sizes, hashes,
 licence-file paths/digests and external-build-use decisions in
 `plugins/io.github.niwantha33.zew.ui/tools/setup-lock.json`. Its readable review is
 `tools/setup-licences.txt` in the same bundle. Scope is restricted to this pinned

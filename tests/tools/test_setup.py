@@ -64,6 +64,13 @@ class SetupTests(unittest.TestCase):
             setup.requirements_file([{'file': 'a.whl', 'sha256': 'a' * 64}], root, target)
             self.assertIn('%20', target.read_text()); self.assertIn('--hash=sha256:', target.read_text())
 
+    def test_reviewed_wheel_executable_layouts(self):
+        root = Path('/managed')
+        self.assertEqual(setup.installed_executable(root, self.lock(), 'ninja'), root / 'python/Scripts/ninja.exe')
+        self.assertEqual(setup.installed_executable(root, self.lock(), 'cmake'), root / 'python/Lib/site-packages/cmake/data/bin/cmake.exe')
+        lock = self.lock(); next(p for p in lock['packages'] if p['name'] == 'ninja')['installed_executable'] = '../../outside'
+        self.assertRaises(ValueError, setup.installed_executable, root, lock, 'ninja')
+
     def test_sdk_archive_traversal_rejected(self):
         for name in ('../outside', '/outside', 'C:/outside', 'folder\\outside'):
             self.assertRaises(ValueError, setup.safe_archive_names, [SimpleNamespace(filename=name, uncompressed=1)])
@@ -103,6 +110,8 @@ class SetupTests(unittest.TestCase):
     def _build_case(self, success):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); (root / '.zew-managed').write_text('first-build-win-x64-v1\n'); workspace = root / 'workspace'; workspace.mkdir()
+            for name in ('cmake', 'ninja'):
+                path = setup.installed_executable(root, self.lock(), name); path.parent.mkdir(parents=True, exist_ok=True); path.touch()
             def run(command, *unused):
                 if success:
                     path = Path(command[command.index('--build-dir') + 1]) / 'zephyr/zephyr.elf'

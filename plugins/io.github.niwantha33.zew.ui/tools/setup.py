@@ -106,6 +106,15 @@ def run(command, directory, environment, timeout=1800):
                    stdin=subprocess.DEVNULL, check=True, timeout=timeout, shell=False)
 
 
+def installed_executable(root, lock, name):
+    package = next(p for p in lock['packages'] if p['name'] == name)
+    relative = package['installed_executable']
+    path = PurePosixPath(relative)
+    if path.is_absolute() or '..' in path.parts or ':' in relative or '\\' in relative:
+        raise ValueError('Invalid installed executable path')
+    return root / 'python' / relative
+
+
 def requirements_file(packages, cache, path):
     path.write_text('\n'.join((cache / p['file']).resolve().as_uri() + ' --hash=sha256:' + p['sha256']
                               for p in packages) + '\n', encoding='utf-8')
@@ -237,8 +246,8 @@ def setup(root, lock):
     if shutil.disk_usage(root).free < 5 * 1024**3:
         raise ValueError('Setup requires at least 5 GiB free disk space')
     git = root / 'git/cmd/git.exe'
-    cmake = root / 'python/Lib/site-packages/cmake/data/bin/cmake.exe'
-    ninja = root / 'python/Lib/site-packages/ninja/data/bin/ninja.exe'
+    cmake = installed_executable(root, lock, 'cmake')
+    ninja = installed_executable(root, lock, 'ninja')
     environment = dict(os.environ)
     environment.update(PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1', GIT_TERMINAL_PROMPT='0', GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
     environment['PATH'] = os.pathsep.join(map(str, [cmake.parent, ninja.parent, git.parent, root / 'python', root / 'python/Scripts'])) + os.pathsep + environment.get('PATH', '')
@@ -247,6 +256,9 @@ def setup(root, lock):
         environment.pop(name, None)
     log('PHASE 1/5 — Installing pinned Python build packages')
     install_packages(lock, root, environment)
+    for executable in (cmake, ninja):
+        if not executable.is_file():
+            raise ValueError('Installed build executable is missing: ' + str(executable))
     log('PHASE 2/5 — Installing SDK and the x86 compiler only')
     sdk = install_sdk(root)
     environment.update(ZEPHYR_SDK_INSTALL_DIR=str(sdk), ZEPHYR_TOOLCHAIN_VARIANT='zephyr')

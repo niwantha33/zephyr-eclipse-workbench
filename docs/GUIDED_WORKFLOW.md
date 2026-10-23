@@ -1,6 +1,6 @@
 # Guided Eclipse workflow requirements
 
-Status: agreed product direction recorded 2026-10-23. Workbench updates/version details and Tools Manager are implemented. Release 0.1.5 adds a Windows x64 beginner bootstrap, pinned packages/SDK, generated Hello World and native project builder for the qemu_x86/atom first-build profile. Generic board/vendor selection, full CDT indexing, import and hardware run/debug remain pending. See BEGINNER_SETUP.md and TOOLS_MANAGER.md for the exact boundaries.
+Status: agreed product direction recorded 2026-10-23. Workbench updates/version details and Tools Manager are implemented. Release 0.1.6 adds a Windows x64 beginner bootstrap, pinned packages/SDK, generated Hello World and native project builder for the qemu_x86/atom first-build profile. Generic board/vendor selection, full CDT indexing, import and hardware run/debug remain pending. See BEGINNER_SETUP.md and TOOLS_MANAGER.md for the exact boundaries.
 This specification defines the normal user workflow and takes priority over the manual global-configuration prototype.
 
 ## User-visible workflow
