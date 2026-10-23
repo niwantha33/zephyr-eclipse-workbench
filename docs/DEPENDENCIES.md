@@ -1,6 +1,20 @@
 # Dependency register and submodule rules
 
-Status: candidate inventory only. No external code, tools or submodules are bundled, and no dependency licence audit has been completed. Root LICENSE covers original repository material, not these candidates.
+Status: first build versions recorded below; complete dependency licence audit remains pending. No upstream Eclipse/Zephyr code, SDKs or submodules are bundled in the development update site. Root LICENSE covers original repository material, not external build/runtime dependencies.
+
+## First build inventory
+
+| Item | Version/source | Packaging status |
+|---|---|---|
+| JDK | Ubuntu OpenJDK 21.0.12+8-1~24.04 | Build host only; not bundled |
+| Maven | Apache Maven 3.9.11 | Build host only; not bundled |
+| Tycho | 5.0.3 from Maven Central | Build dependency; not bundled |
+| Eclipse target | Platform 4.41, R-4.41-202608281142 | Referenced target/runtime; not bundled |
+| Eclipse compiler | ECJ 3.45.0.v20260224-0835, resolved by Tycho | Build dependency; not bundled |
+| Original feature and plug-ins | 0.1.0 development build | Apache-2.0; full LICENSE included in each JAR |
+| GitHub checkout/upload actions | Exact commits in .github/workflows/build.yml | CI tooling only; workflow not yet executed |
+
+The developer build resolved transitive dependencies. This inventory is not a complete SBOM or licence approval; release review remains required. No actual submodule has been selected.
 
 ## Candidate register
 

@@ -12,6 +12,7 @@ bin/
 # Zephyr and Python generated/local content
 build/
 build-*/
+.zew-build/
 .venv/
 venv/
 __pycache__/

@@ -1,6 +1,6 @@
 # Architecture
 
-Status: proposed architecture, 2026-10-23. Implementation has not started.
+Status: architecture with a first development implementation, 2026-10-23. The core/UI bundles, feature and p2 packaging exist. Most higher-level capabilities below remain planned; see DEVELOPMENT.md and BUILD_REPORT.md for implemented scope and evidence.
 
 ## Product decision
 
@@ -23,7 +23,7 @@ Do not fork Zephyr, rewrite its build system, or maintain an independent hard-co
 | Update service | Component ownership/version inventory, tested compatibility plans, p2 scheduling/staging, idle coordination, restart notification, environment migration and recovery |
 | Validation metadata | Store discovery, build, flash, and debug evidence independently |
 
-Initial bundle boundary proposal: core and Eclipse UI bundles, an installable feature, and a p2 repository. Choose exact Eclipse extension points, CDT APIs, Java baseline, target platform, and Tycho versions in an implementation spike before fixing the source layout.
+Initial bundle boundaries are implemented as core and Eclipse UI bundles, an installable feature, and a p2 repository. The build uses Java 21, Tycho 5.0.3 and the immutable Eclipse 4.41 release repository. Commands, handlers, menus and a preference page use Eclipse extension points. CDT APIs/indexing and Eclipse debugging integration are not implemented yet.
 
 ## Settings and portability
 

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<plugin>
+  <extension point="org.eclipse.ui.preferencePages">
+    <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
+  </extension>
+  <extension point="org.eclipse.ui.commands">
+    <category id="io.github.niwantha33.zew.commands" name="Zephyr Workbench"/>
+    <command id="io.github.niwantha33.zew.diagnostics" name="Check Environment" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.boards" name="Select Board" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.build" name="Build Application" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.rebuild" name="Pristine Rebuild" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
+  </extension>
+  <extension point="org.eclipse.ui.handlers">
+    <handler commandId="io.github.niwantha33.zew.diagnostics" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
+    <handler commandId="io.github.niwantha33.zew.boards" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
+    <handler commandId="io.github.niwantha33.zew.build" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
+    <handler commandId="io.github.niwantha33.zew.rebuild" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
+    <handler commandId="io.github.niwantha33.zew.cancel" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
+  </extension>
+  <extension point="org.eclipse.ui.menus">
+    <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
+      <menu id="io.github.niwantha33.zew.menu" label="Zephyr">
+        <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
+        <command commandId="io.github.niwantha33.zew.boards" label="Select Board..." style="push"/>
+        <separator name="build" visible="true"/>
+        <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
+        <command commandId="io.github.niwantha33.zew.rebuild" label="Pristine Rebuild" style="push"/>
+        <command commandId="io.github.niwantha33.zew.cancel" label="Cancel Operation" style="push"/>
+      </menu>
+    </menuContribution>
+  </extension>
+</plugin>

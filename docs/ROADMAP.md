@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status: step 1 documentation foundation complete; steps 2–19 pending. Planning documents are the only deliverables currently present.
+Status: step 1 complete; the first development slice implements parts of steps 2–8. Core checks and p2 packaging pass on Linux. No full product milestone is complete; desktop, Windows, firmware and hardware checks remain pending.
 
 | Step | Work | Deliverable | Exit criterion |
 |---:|---|---|---|
@@ -50,7 +50,19 @@ Hardware availability governs physical validation. Assessing a vendor does not m
 
 ## Immediate next task
 
-Create the minimal installable Eclipse plug-in and pin its target platform after recording local Eclipse, CDT and Java versions. Do not present an empty installer or mock UI as functional Zephyr integration.
+Install the built development feature in Eclipse 2026-09 on Windows and exercise preferences, environment checks, board selection, incremental/pristine builds and cancellation against the existing workspace. Then implement independent application creation and CDT indexing. See DEVELOPMENT.md for the local installation steps.
+
+## First implementation checkpoint
+
+| Area | Implemented | Still pending |
+|---|---|---|
+| Build foundation | Java 21; Tycho 5.0.3; immutable Eclipse 4.41 target; core/UI/feature/p2 modules | Clean Eclipse installation and upgrade smoke tests |
+| Environment | Local preferences; explicit venv Python; West-root and Zephyr-path checks; host-tool lookup | SDK compatibility inventory and automatic setup |
+| Hardware | Board-name list from West and explicit qualified-target entry | Automatic vendor/SoC/revision/core discovery and licence eligibility |
+| Firmware build | Incremental/pristine build; per-board output directories; streaming console; cancellation; one active operation | Project wizard, profiles, CDT indexing and error markers |
+| Validation | 29 real-process/core checks; Java compilation; update-site archive and metadata checks | GUI, Windows runtime, actual firmware build through Eclipse, hardware and complete dependency audit |
+
+This checkpoint does not implement auto-updates, flash/debug, Kconfig or Devicetree UI. Those remain on the roadmap.
 
 ## Cross-cutting quality and update work
 

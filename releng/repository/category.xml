@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<site>
+  <feature id="io.github.niwantha33.zew.feature" version="0.0.0"><category name="zew"/></feature>
+  <category-def name="zew" label="Zephyr Eclipse Workbench"/>
+</site>
