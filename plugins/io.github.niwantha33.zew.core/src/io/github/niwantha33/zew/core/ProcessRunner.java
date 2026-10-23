@@ -31,6 +31,11 @@ public final class ProcessRunner {
 
     public Result run(List<String> command, Path directory, Duration timeout,
             BooleanSupplier cancelled, Consumer<String> output) throws IOException, InterruptedException {
+        return run(command, directory, timeout, cancelled, output, java.util.Map.of());
+    }
+
+    public Result run(List<String> command, Path directory, Duration timeout,
+            BooleanSupplier cancelled, Consumer<String> output, java.util.Map<String, String> overrides) throws IOException, InterruptedException {
         if (command.isEmpty() || timeout.isNegative() || timeout.isZero()) {
             throw new IllegalArgumentException("A command and positive timeout are required.");
         }
@@ -39,10 +44,16 @@ public final class ProcessRunner {
         // Do not rely on shell activation. The selected venv supplies Python; prepend its Scripts/bin
         // directory so West and Python-installed helper executables resolve consistently.
         var environment = builder.environment();
+        overrides.forEach((key, value) -> {
+            String actual = environment.keySet().stream().filter(k -> k.equalsIgnoreCase(key)).findFirst().orElse(key);
+            environment.put(actual, value);
+        });
         var pathKey = environment.keySet().stream().filter(k -> k.equalsIgnoreCase("PATH")).findFirst().orElse("PATH");
         var executableParent = Path.of(command.getFirst()).toAbsolutePath().getParent();
-        environment.put(pathKey, executableParent + java.io.File.pathSeparator + environment.getOrDefault(pathKey, ""));
+        if (overrides.keySet().stream().noneMatch(k -> k.equalsIgnoreCase("PATH")))
+            environment.put(pathKey, executableParent + java.io.File.pathSeparator + environment.getOrDefault(pathKey, ""));
         environment.put("PYTHONUNBUFFERED", "1");
+        environment.put("PYTHONIOENCODING", "utf-8");
         var process = builder.start();
         process.getOutputStream().close(); // No interactive input for this preview's commands.
         var captured = new StringBuilder();

@@ -54,6 +54,10 @@ public final class CoreTests {
             check(WestCommands.parseZephyrPath(app + "\n").equals(app), "nonstandard Zephyr path parsed");
             rejects(IllegalArgumentException.class, () -> WestCommands.parseZephyrPath("a\nb\n"), "ambiguous path rejected");
             var runner = new ProcessRunner();
+            var environment = runner.run(fixture("environment", "ZEW_TOOL_TEST", "PATH", "PYTHONIOENCODING"), ROOT, Duration.ofSeconds(10),
+                    () -> false, line -> {}, java.util.Map.of("ZEW_TOOL_TEST", "selected-sdk", "PATH", "explicit-tools-path"));
+            check(environment.requireSuccess().contains("selected-sdk\nexplicit-tools-path\nutf-8"), "explicit tool environment and PATH precedence preserved");
+            check(System.getenv("ZEW_TOOL_TEST") == null, "selected environment does not mutate parent process");
             var echo = runner.run(fixture("echo", "hello world", "$(touch NEVER)", "Ω"), ROOT, Duration.ofSeconds(10), () -> false, line -> {});
             check(echo.requireSuccess().contains("$(touch NEVER)"), "literal arguments are not shell evaluated");
             check(echo.output().contains("Ω"), "UTF-8 process output");

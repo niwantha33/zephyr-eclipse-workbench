@@ -1,6 +1,6 @@
 # Guided Eclipse workflow requirements
 
-Status: agreed product direction recorded 2026-10-23; implementation pending unless stated below.
+Status: agreed product direction recorded 2026-10-23. Workbench updates and version details are implemented. Tools inventory/reuse and isolated venv creation are implemented in 0.1.4; package downloads and project/run/debug wizards remain pending. See TOOLS_MANAGER.md for the delivered boundary.
 This specification defines the normal user workflow and takes priority over the manual global-configuration prototype.
 
 ## User-visible workflow
@@ -117,4 +117,4 @@ Develop update-channel metadata/signing and project-schema contracts alongside A
 
 The user has shown the menu installed on Eclipse Embedded 2026-12 M1 on Windows, successful environment diagnostics (Python 3.13.14, West 1.5.0, Zephyr 4.4.0), a missing-qualifier failure, and reports that building proceeds after setting the full procpu target. This is a partial desktop smoke observation, not a recorded completed firmware/hardware validation.
 
-The current ZIP remains the manual prototype. This document changes requirements; it does not add executable wizard/installer/updater functionality.
+The first archive prototype has been followed by an authenticated private update channel. This specification describes the intended complete product; implementation status is recorded above and in the release-specific guides.

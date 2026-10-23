@@ -7,6 +7,7 @@
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="io.github.niwantha33.zew.tools" name="Install / Manage Zephyr Tools" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.about" name="About Zephyr Workbench" categoryId="io.github.niwantha33.zew.commands"/>
     <category id="io.github.niwantha33.zew.commands" name="Zephyr Workbench"/>
     <command id="io.github.niwantha33.zew.checkUpdates" name="Check for Workbench Updates" categoryId="io.github.niwantha33.zew.commands"/>
@@ -18,6 +19,7 @@
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
   </extension>
   <extension point="org.eclipse.ui.handlers">
+    <handler commandId="io.github.niwantha33.zew.tools" class="io.github.niwantha33.zew.ui.ToolsHandler"/>
     <handler commandId="io.github.niwantha33.zew.about" class="io.github.niwantha33.zew.ui.VersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.checkUpdates" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
     <handler commandId="io.github.niwantha33.zew.updateConnection" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
@@ -30,6 +32,8 @@
   <extension point="org.eclipse.ui.menus">
     <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
       <menu id="io.github.niwantha33.zew.menu" label="Zephyr">
+        <command commandId="io.github.niwantha33.zew.tools" label="Install / Manage Zephyr Tools..." style="push"/>
+        <separator name="tools" visible="true"/>
         <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
         <command commandId="io.github.niwantha33.zew.boards" label="Select Board..." style="push"/>
         <separator name="build" visible="true"/>

@@ -6,6 +6,7 @@ public final class ProcessFixture {
     public static void main(String[] args) throws Exception {
         switch (args[0]) {
             case "echo" -> { for (int i = 1; i < args.length; i++) System.out.println(args[i]); }
+            case "environment" -> { for (int i = 1; i < args.length; i++) System.out.println(System.getenv(args[i])); }
             case "fail" -> { System.err.println("intentional error"); System.exit(7); }
             case "flood" -> { for (int i=0; i<10000; i++) { System.out.println("line-" + i); System.err.println("error-" + i); } }
             case "capture" -> { for (int i=0; i<50000; i++) System.out.println("012345678901234567890123456789012345678901234567890123456789"); }

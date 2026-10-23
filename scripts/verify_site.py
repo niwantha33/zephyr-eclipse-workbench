@@ -37,6 +37,11 @@ for p in bundles:
         if not any(n.endswith('.class') for n in z.namelist()):
             raise SystemExit(f'No compiled classes: {p.name}')
         if '.ui_' in p.name:
+            if 'tools/inventory.py' not in z.namelist():
+                raise SystemExit('Tools inventory helper missing.')
+            compile(z.read('tools/inventory.py'), 'tools/inventory.py', 'exec')
+            if 'io/github/niwantha33/zew/ui/ToolsDialog.class' not in z.namelist():
+                raise SystemExit('Tools manager dialog missing.')
             plugin = ET.fromstring(z.read('plugin.xml'))
             for page in plugin.findall("./extension[@point='org.eclipse.ui.preferencePages']/page"):
                 if page.attrib['class'].replace('.', '/') + '.class' not in z.namelist():

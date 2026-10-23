@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Compile and exercise the Java core with JDK 21; no Python packages required."""
+"""Exercise Java core and local tools inventory; packaging enables requirement tests."""
 from pathlib import Path
 import os
 import shutil
 import subprocess
+import sys
 
 root = Path(__file__).resolve().parents[1]
+subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/tools', '-v'], check=True, cwd=root, timeout=90)
 out = root / 'build-core-tests'
 out.mkdir(exist_ok=True)
 suffix = '.exe' if os.name == 'nt' else ''

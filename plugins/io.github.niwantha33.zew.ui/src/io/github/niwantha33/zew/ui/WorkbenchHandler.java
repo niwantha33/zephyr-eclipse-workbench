@@ -49,7 +49,7 @@ public final class WorkbenchHandler extends AbstractHandler {
         String operation = event.getCommand().getId().substring("io.github.niwantha33.zew.".length());
         if (operation.equals("cancel")) { cancelCurrent(); return null; }
         var shell = HandlerUtil.getActiveShell(event);
-        if (CURRENT.get() != null) {
+        if (CURRENT.get() != null || ToolsDialog.isOperationActive()) {
             MessageDialog.openInformation(shell, "Zephyr operation active", "Wait for the current operation or use Zephyr > Cancel Operation.");
             return null;
         }
@@ -115,7 +115,7 @@ public final class WorkbenchHandler extends AbstractHandler {
                         stream.println("Board: " + config.board());
                         stream.println("Build output: " + WestCommands.buildDirectory(config));
                         new ProcessRunner().run(WestCommands.build(config, operation.equals("rebuild")), config.workspace(),
-                                Duration.ofMinutes(30), monitor::isCanceled, stream::println).requireSuccess();
+                                Duration.ofMinutes(30), monitor::isCanceled, stream::println, ToolEnvironment.overrides()).requireSuccess();
                     }
                     stream.println("Completed successfully.");
                     return Status.OK_STATUS;
@@ -146,7 +146,7 @@ public final class WorkbenchHandler extends AbstractHandler {
 
     private static String runCommand(List<String> command, WorkbenchConfig config, IProgressMonitor monitor,
             MessageConsoleStream stream, Duration timeout) throws IOException, InterruptedException {
-        return new ProcessRunner().run(command, config.workspace(), timeout, monitor::isCanceled, stream::println).requireCompleteOutput();
+        return new ProcessRunner().run(command, config.workspace(), timeout, monitor::isCanceled, stream::println, ToolEnvironment.overrides()).requireCompleteOutput();
     }
 
     private static void logFailure(String message) {
