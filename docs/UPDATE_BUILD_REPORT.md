@@ -1,5 +1,25 @@
 # Private updater validation — 2026-10-23
 
+## Version details release 0.1.3
+
+Version 0.1.3.202610232212 adds About Zephyr Workbench with installed version,
+build ID, Eclipse/Java versions, cached channel information, and Copy Details.
+Notifications show installed and available versions. Console output identifies
+the running plug-in. No token or secure-storage value is read by About.
+
+All 56 existing checks passed; all five Maven/Tycho modules built successfully.
+Package verification passed on the exact ZIP, including the compiled About
+handler and menu registration. The verifier now extracts the versioned archive
+into a fresh temporary directory to avoid stale exploded build output.
+Headless Eclipse 4.41 provisioning upgraded 0.1.2 to 0.1.3 and verified replacement
+of the installed feature root. Desktop rendering and clipboard behaviour remain
+for Windows validation. The user reported completing the preceding update flow;
+this is user-reported evidence, not an automated Windows test.
+
+ZIP SHA-256: `2d26adaff81e0b9891ffd97c9efb935fb1691c5fea7dc9ac35e77c4e25a99076`.
+
+## Initial updater release
+
 Development packages: 0.1.1.202610232126 (bootstrap) and
 0.1.2.202610232131 (first channel update). Source baseline: main
 06c79fbfc0c5d0ba030e0bf4bf9682400c9c324d plus this implementation.

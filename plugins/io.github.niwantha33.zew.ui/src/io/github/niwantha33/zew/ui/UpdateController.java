@@ -48,8 +48,12 @@ public final class UpdateController {
                 try {
                     var release = new GitHubUpdates(UpdateConnection.credential()).check(monitor::isCanceled);
                     var installed = Activator.getDefault().getBundle().getVersion();
+                    var store = Activator.getDefault().getPreferenceStore();
+                    store.setValue("updates.lastAvailableVersion", release.version());
+                    store.setValue("updates.lastSuccessfulCheck", java.time.Instant.now().toString());
+                    store.setValue("updates.lastReleaseNotes", release.notes());
                     if (org.osgi.framework.Version.parseVersion(release.version()).compareTo(installed) <= 0) {
-                        if (manual) ui(() -> MessageDialog.openInformation(shell(), "Workbench updates", "Installed version " + installed + " is up to date for this channel."));
+                        if (manual) ui(() -> MessageDialog.openInformation(shell(), "Workbench updates", "Installed version: " + installed + "\nChannel version: " + release.version() + "\n\nNo newer version is available.\n\n" + release.notes().substring(0, Math.min(1000, release.notes().length()))));
                     } else {
                         var preferences = Activator.getDefault().getPreferenceStore();
                         if (manual || !release.version().equals(preferences.getString("updates.lastNotified"))) {
@@ -78,7 +82,9 @@ public final class UpdateController {
         notification.setText("Zephyr Workbench update available");
         notification.setLayout(new GridLayout(2, true));
         var label = new Label(notification, SWT.WRAP);
-        label.setText("New version: " + release.version() + "\n" + release.notes().substring(0, Math.min(1000, release.notes().length())));
+        label.setText("Installed version: " + Activator.getDefault().getBundle().getVersion()
+                + "\nAvailable version: " + release.version() + "\n\nWhat's new:\n"
+                + release.notes().substring(0, Math.min(1000, release.notes().length())));
         var layout = new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1);
         layout.widthHint = 420; label.setLayoutData(layout);
         var install = new Button(notification, SWT.PUSH);

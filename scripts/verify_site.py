@@ -3,16 +3,27 @@
 """Check packaged p2 metadata, original bundle contents and archive integrity."""
 from pathlib import Path
 import argparse
+import tempfile
 import hashlib
 import xml.etree.ElementTree as ET
 import zipfile
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--site', type=Path, default=root / 'releng/repository/target/repository')
+parser.add_argument('--site', type=Path)
 parser.add_argument('--archive', type=Path)
 args = parser.parse_args()
-site = args.site
+version = ET.parse(root / 'pom.xml').getroot().find('{http://maven.apache.org/POM/4.0.0}version').text
+archive = args.archive or root / 'releng/repository/target' / f'workbench-repository-{version}.zip'
+temporary = tempfile.TemporaryDirectory(prefix='zew-verify-site-')
+site = args.site or Path(temporary.name)
+if args.site is None:
+    # Verify the distributable itself, avoiding stale exploded build output.
+    with zipfile.ZipFile(archive) as z:
+        for name in z.namelist():
+            if not (site / name).resolve().is_relative_to(site.resolve()):
+                raise SystemExit('Unsafe archive path.')
+        z.extractall(site)
 expected = {'io.github.niwantha33.zew.core', 'io.github.niwantha33.zew.ui'}
 bundles = list((site / 'plugins').glob('*.jar'))
 if {p.name.split('_', 1)[0] for p in bundles} != expected:
@@ -48,10 +59,6 @@ with zipfile.ZipFile(features[0]) as z:
         raise SystemExit('Feature does not reference the two original bundles.')
     if z.read('LICENSE').strip() != (root / 'LICENSE').read_bytes().strip():
         raise SystemExit('Feature licence missing or incorrect.')
-archives = [args.archive] if args.archive else list(site.parent.glob('workbench-repository-*.zip'))
-if len(archives) != 1:
-    raise SystemExit('Expected one packaged update-site ZIP; use a clean build.')
-archive = archives[0]
 with zipfile.ZipFile(archive) as z:
     if z.testzip() is not None or 'p2.index' not in z.namelist():
         raise SystemExit('Invalid update-site ZIP.')

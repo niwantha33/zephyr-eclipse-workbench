@@ -81,6 +81,7 @@ public final class WorkbenchHandler extends AbstractHandler {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 try (stream) {
                     stream.println("\nZephyr " + operation + " | workspace: " + config.workspace());
+                    stream.println("Zephyr Eclipse Workbench: " + Activator.getDefault().getBundle().getVersion());
                     if (operation.equals("diagnostics")) {
                         runCommand(List.of(config.python().toString(), "--version"), config, monitor, stream, Duration.ofSeconds(30));
                         runCommand(WestCommands.west(config, "--version"), config, monitor, stream, Duration.ofSeconds(30));

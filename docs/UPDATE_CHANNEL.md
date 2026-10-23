@@ -30,6 +30,15 @@ public repository; it does not make this repository public.
 
 ## Behaviour and boundaries
 
+Starting with 0.1.3, **Zephyr > About Zephyr Workbench** shows the installed
+version, build ID, Eclipse/Java versions, update source, check preference, and
+the channel version, release notes and UTC time from the last successful check.
+**Copy Details** copies this information for troubleshooting without including
+the token. Opening About does not access the network or secure storage. Cached
+channel information is labelled as such; use Check for Workbench Updates to refresh.
+Update notifications show both installed and available versions. Build and
+environment console output identifies the running workbench version.
+
 - Checks run about 20 seconds after startup and every six hours while Eclipse is
   open, once the connection is configured. Manual checks are always available.
 - New versions produce an Install Update / Later notification. Automatic checks
