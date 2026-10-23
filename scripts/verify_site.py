@@ -2,12 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 """Check packaged p2 metadata, original bundle contents and archive integrity."""
 from pathlib import Path
+import argparse
 import hashlib
 import xml.etree.ElementTree as ET
 import zipfile
 
 root = Path(__file__).resolve().parents[1]
-site = root / 'releng/repository/target/repository'
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--site', type=Path, default=root / 'releng/repository/target/repository')
+parser.add_argument('--archive', type=Path)
+args = parser.parse_args()
+site = args.site
 expected = {'io.github.niwantha33.zew.core', 'io.github.niwantha33.zew.ui'}
 bundles = list((site / 'plugins').glob('*.jar'))
 if {p.name.split('_', 1)[0] for p in bundles} != expected:
@@ -43,7 +48,10 @@ with zipfile.ZipFile(features[0]) as z:
         raise SystemExit('Feature does not reference the two original bundles.')
     if z.read('LICENSE').strip() != (root / 'LICENSE').read_bytes().strip():
         raise SystemExit('Feature licence missing or incorrect.')
-archive = site.parent / 'workbench-repository-0.1.0-SNAPSHOT.zip'
+archives = [args.archive] if args.archive else list(site.parent.glob('workbench-repository-*.zip'))
+if len(archives) != 1:
+    raise SystemExit('Expected one packaged update-site ZIP; use a clean build.')
+archive = archives[0]
 with zipfile.ZipFile(archive) as z:
     if z.testzip() is not None or 'p2.index' not in z.namelist():
         raise SystemExit('Invalid update-site ZIP.')

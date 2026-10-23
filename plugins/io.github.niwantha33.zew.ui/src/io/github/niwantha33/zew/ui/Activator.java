@@ -10,9 +10,11 @@ public final class Activator extends AbstractUIPlugin {
     @Override public void start(BundleContext context) throws Exception {
         super.start(context);
         instance = this;
+        getPreferenceStore().setDefault(UpdateConnection.AUTO, true);
     }
     @Override public void stop(BundleContext context) throws Exception {
         WorkbenchHandler.cancelCurrent();
+        org.eclipse.core.runtime.jobs.Job.getJobManager().cancel(UpdateController.FAMILY);
         instance = null;
         super.stop(context);
     }

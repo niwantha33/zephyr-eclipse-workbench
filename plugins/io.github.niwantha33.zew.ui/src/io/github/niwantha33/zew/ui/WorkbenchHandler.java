@@ -38,6 +38,8 @@ public final class WorkbenchHandler extends AbstractHandler {
     private static final AtomicReference<Job> CURRENT = new AtomicReference<>();
     private static MessageConsole console;
 
+    public static boolean isOperationActive() { return CURRENT.get() != null; }
+
     public static void cancelCurrent() {
         var job = CURRENT.get();
         if (job != null) job.cancel();

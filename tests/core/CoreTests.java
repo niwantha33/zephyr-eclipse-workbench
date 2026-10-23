@@ -70,7 +70,10 @@ public final class CoreTests {
             rejects(InterruptedIOException.class, () -> runner.run(fixture("sleep"), ROOT, Duration.ofSeconds(10), () -> true, line -> {}), "cancel before launch");
             long start = System.nanoTime();
             rejects(InterruptedIOException.class, () -> runner.run(fixture("sleep"), ROOT, Duration.ofSeconds(10), () -> System.nanoTime()-start > 300_000_000L, line -> {}), "cancel running tool");
-            rejects(IOException.class, () -> runner.run(fixture("echo", "x"), ROOT, Duration.ofSeconds(10), () -> false, line -> { throw new IllegalStateException("fixture failure"); }), "output handler failure surfaced");
+            rejects(IOException.class, () -> {
+                var unexpected = runner.run(fixture("echo", "x"), ROOT, Duration.ofSeconds(10), () -> false, line -> { throw new IllegalStateException("fixture failure"); });
+                throw new AssertionError("Output callback was not invoked: exit=" + unexpected.exitCode() + ", output=" + unexpected.output());
+            }, "output handler failure surfaced");
             var childPid = new AtomicLong();
             long childStart = System.nanoTime();
             rejects(InterruptedIOException.class, () -> runner.run(fixture("child"), ROOT, Duration.ofSeconds(15),

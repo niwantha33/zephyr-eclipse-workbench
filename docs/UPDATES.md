@@ -1,6 +1,8 @@
 # Updates and recovery
 
-Status: proposed product requirements, not implemented. Updated 2026-10-23.
+Status: the private workbench plug-in update client is implemented; broader tool,
+platform migration and recovery requirements below remain proposed. Updated 2026-10-23.
+See [the implemented channel and setup](UPDATE_CHANNEL.md) for current behaviour.
 
 ## Objective
 
@@ -28,7 +30,7 @@ An imported general Eclipse installation and a future managed workbench distribu
 
 ## Normal user flow
 
-The required workflow is an automatic compatible-update check, a version/release-notes notification, an Install Update action, installation progress and a restart prompt when needed. Installation starts from the user's click. A functioning live p2 channel must be configured; the current archive-only development package has no automatic release feed. See GUIDED_WORKFLOW.md for private distribution and signing requirements.
+The implemented workbench workflow checks a private GitHub channel, shows a version/release-notes notification, and opens Eclipse provisioning after Install Update. Installation starts from the user's click. Initial connection setup is required. Platform migration, signing and broader managed-tool updates remain future work. See UPDATE_CHANNEL.md for the exact boundary.
 
 ## Product preferences
 
