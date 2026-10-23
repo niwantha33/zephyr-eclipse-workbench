@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status: all implementation steps pending. Planning documents are the only deliverables currently present.
+Status: step 1 documentation foundation complete; steps 2–17 pending. Planning documents are the only deliverables currently present.
 
 | Step | Work | Deliverable | Exit criterion |
 |---:|---|---|---|
