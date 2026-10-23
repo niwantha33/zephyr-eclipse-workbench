@@ -16,6 +16,8 @@ The intended workflow is: import or create a Zephyr workspace, select a board, c
 - Common build and configuration controls across TI, STMicroelectronics, Espressif, Nordic, Realtek, and other Zephyr-supported vendors.
 - Existing West, CMake, Ninja, Kconfig, Devicetree, compiler, and runner infrastructure.
 - Separate evidence for discovery, compilation, flashing, and debugging.
+- Integrated update management for the workbench, compatible Eclipse components and managed tools, with staged recovery and pinned project dependencies.
+- Measurable quality targets for a simpler Zephyr workflow than competing IDE configurations; comparative results are not yet available.
 
 Vendor presence does not imply support for every chip or peripheral. Physical execution requires a compatible board, connection, probe, and vendor tools where applicable.
 
@@ -38,6 +40,8 @@ The reported command-line build is not evidence that this plug-in works.
 - [Architecture and boundaries](docs/ARCHITECTURE.md)
 - [Hardware research and compatibility policy](docs/COMPATIBILITY.md)
 - [Validation and release criteria](docs/VALIDATION.md)
+- [Automatic updates and recovery](docs/UPDATES.md)
+- [Quality targets and comparison method](docs/QUALITY.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Licensing and publication

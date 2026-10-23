@@ -41,10 +41,18 @@ GitHub Actions jobs must have timeouts, bounded matrices, appropriate cache keys
 - Milestone acceptance criteria in ROADMAP.md pass.
 - Evidence matrix distinguishes discovered, build, flash, run and debug.
 - Fresh install and upgrade have been checked.
+- Applicable [quality targets](QUALITY.md) have recorded results; competitor claims cite actual comparable measurements.
+- [Update and recovery checks](UPDATES.md) pass for the release scope, including interrupted download, incompatible plan, restart deferral and preserved project pins.
 - Distribution licence, third-party notices and binary redistribution terms are resolved.
 - Documentation matches actual UI and functionality.
 - No local paths, credentials, downloaded SDKs or Eclipse workspace metadata are committed.
 - Public publication remains a separate owner decision.
+
+## Update and quality validation
+
+Record component inventories before and after maintenance. Verify idle gating, active jobs, unsaved editors, offline use, tampered downloads, disk/permission failures, recovery and project-file preservation. Treat p2 history, product rollback, environment rollback and project/configuration restoration as separate checks.
+
+Profile UI responsiveness and measure workspace import, cached board search and warm-build overhead on a declared reference machine. Benchmark CLion and a named VS Code extension configuration on equivalent inputs before publishing superiority claims.
 
 ## Current status
 

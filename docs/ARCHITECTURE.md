@@ -20,6 +20,7 @@ Do not fork Zephyr, rewrite its build system, or maintain an independent hard-co
 | Configuration adapter | Launch menuconfig/guiconfig where supported, inspect resolved settings, and persist reviewed application fragments |
 | CDT adapter | Consume compilation database and generated settings using a verified CDT integration mechanism |
 | Execution adapter | Board runner discovery and flash, debug-server, and attach capabilities; vendor-specific adapters only for missing workflows |
+| Update service | Component ownership/version inventory, tested compatibility plans, p2 scheduling/staging, idle coordination, restart notification, environment migration and recovery |
 | Validation metadata | Store discovery, build, flash, and debug evidence independently |
 
 Initial bundle boundary proposal: core and Eclipse UI bundles, an installable feature, and a p2 repository. Choose exact Eclipse extension points, CDT APIs, Java baseline, target platform, and Tycho versions in an implementation spike before fixing the source layout.
@@ -58,3 +59,11 @@ Multi-image projects require explicit domain/image selection. Flash/run on hardw
 Pin the tested Zephyr baseline and respect its manifest revisions. Support importing other versions without calling them validated. Fetch only required dependency sets where feasible. Explain vendor downloads and terms before installing optional components.
 
 Develop a reproducible p2 update-site build first. Consider a bundled Eclipse distribution only after plug-in installation and upgrades are reliable.
+
+## Quality and maintenance requirements
+
+The quality ambition is measurable superiority on specific Zephyr workflows, not an unverified claim about every IDE feature. See [quality targets](QUALITY.md).
+
+Use Eclipse p2 for installed Eclipse features and a separate versioned environment manager for product-owned tools. Keep external installation ownership explicit. Workbench maintenance must not silently migrate application source, Zephyr manifests, SDK/compiler selection or vendor firmware.
+
+Automatic checks/downloads and eligible idle patch installation are product requirements. They are not implemented. Restart, migration, trust and recovery rules are specified in [updates and recovery](UPDATES.md). Do not describe p2 configuration history as a complete backup of application files or external toolchains.

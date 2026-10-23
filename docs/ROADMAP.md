@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status: step 1 documentation foundation complete; steps 2–17 pending. Planning documents are the only deliverables currently present.
+Status: step 1 documentation foundation complete; steps 2–19 pending. Planning documents are the only deliverables currently present.
 
 | Step | Work | Deliverable | Exit criterion |
 |---:|---|---|---|
@@ -20,17 +20,19 @@ Status: step 1 documentation foundation complete; steps 2–17 pending. Planning
 | 14 | Debug | Eclipse launch integration, server/GDB selection and attach | Breakpoints, stepping and variables verified on Arm and Xtensa |
 | 15 | Advanced projects | Sysbuild, domains, multi-core, external boards and modules | Representative multi-image and external-board cases pass |
 | 16 | Vendor/host validation | Five priority vendors assessed; Linux coverage | Claims linked to automated or physical evidence |
-| 17 | Release packaging | Versioned p2 site, install/upgrade guides and release notes | Fresh install and upgrade pass; public publication separately authorised |
+| 17 | Update centre and maintenance | p2-backed compatible patch updates, ownership-aware tool updates, idle coordination and staged migrations | Upgrade, restart, offline failure and recovery suite in UPDATES.md passes; project pins preserved |
+| 18 | Quality and comparison | Benchmark fixtures, UI responsiveness, accessibility, reliability and competitor workflow comparison | Measured results against QUALITY.md; no unsupported superiority claims |
+| 19 | Release packaging | Versioned p2 site, install/upgrade guides and release notes | Fresh install and upgrade pass; public publication separately authorised |
 
 ## Release milestones
 
 | Milestone | Scope | Required evidence |
 |---|---|---|
-| v0.1 developer preview | Install, detect workspace, discover board, create app, build and code navigation | Fresh Windows/Eclipse install and ESP32-S3 build through plug-in |
-| v0.2 configuration | Kconfig, Devicetree, memory reports and diagnostics | Settings persistence and diagnostic checks |
+| v0.1 developer preview | Install, detect workspace, discover board, create app, build and code navigation; update inventory/channel design | Fresh Windows/Eclipse install and ESP32-S3 build through plug-in; version ownership recorded |
+| v0.2 configuration | Kconfig, Devicetree, memory reports, diagnostics and update checks/staging | Settings persistence, diagnostic and update-download checks |
 | v0.3 hardware workflow | Flash, serial and debug | Physical evidence for explicitly listed initial boards |
-| v0.4 broader coverage | Five priority vendors assessed, Linux and multi-image support | Published per-capability matrix, including unsupported workflows |
-| v1.0 stable | Reproducible setup, regression checks, upgrades and documentation | Clean-machine onboarding and upgrade criteria pass |
+| v0.4 broader coverage | Five priority vendors assessed, Linux, multi-image support and eligible automatic maintenance/recovery | Per-capability matrix and upgrade/recovery evidence, including unsupported workflows |
+| v1.0 stable | Reproducible setup, regression checks, updates/recovery, quality benchmarks and documentation | Clean-machine onboarding, update/recovery and applicable QUALITY.md criteria pass |
 
 No release dates are committed. Steps may be split into PRs, but a milestone is complete only after its exit criteria pass.
 
@@ -49,3 +51,10 @@ Hardware availability governs physical validation. Assessing a vendor does not m
 ## Immediate next task
 
 Create the minimal installable Eclipse plug-in and pin its target platform after recording local Eclipse, CDT and Java versions. Do not present an empty installer or mock UI as functional Zephyr integration.
+
+## Cross-cutting quality and update work
+
+Steps 17–18 are acceptance milestones, not instructions to defer architecture until the end. Plan component ownership, update compatibility, cancellation, recovery and measurement during steps 2–4. Implement incrementally according to the release table.
+
+- [Update and recovery requirements](UPDATES.md)
+- [Product quality targets and comparison method](QUALITY.md)
