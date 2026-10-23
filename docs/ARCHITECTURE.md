@@ -75,3 +75,11 @@ Follow [LICENSING.md](LICENSING.md) and [DEPENDENCIES.md](DEPENDENCIES.md). Orig
 Use upstream dependency mechanisms first. Git submodules are allowed for justified source dependencies, pinned to exact commits and retaining all upstream notices. Submodule separation does not alter licence obligations.
 
 Represent open-source eligibility per board operation and firmware feature. A closed radio library or proprietary-only runner must not be silently downloaded or advertised as part of the compliant workflow.
+
+## Guided workflow and project ownership
+
+[GUIDED_WORKFLOW.md](GUIDED_WORKFLOW.md) is the primary user-experience contract. Add a Tools Manager inventory/installer service with component-level state/progress, an environment registry, portable project metadata and a Zephyr project nature/builder. Native File > New/Import and CDT/launch integration replace the global single-application preference as the normal workflow.
+
+Hardware discovery resolves chip vendor, SoC, supported board, revision and exact qualifiers together. Imported source may not identify a board; track detection provenance and resolve missing/conflicting information in the wizard. Never infer a complete board port from a SoC name alone.
+
+Workbench updates normally notify and install after the user's click through p2. Configure an actual private/local distribution channel while the repository is private; installing an archive alone does not establish an update endpoint.

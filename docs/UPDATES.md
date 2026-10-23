@@ -26,12 +26,16 @@ The Eclipse p2 scheduler supports automatic checks and downloads with notificati
 
 An imported general Eclipse installation and a future managed workbench distribution have different ownership boundaries. Do not promise automatic replacement of arbitrary Eclipse installations.
 
+## Normal user flow
+
+The required workflow is an automatic compatible-update check, a version/release-notes notification, an Install Update action, installation progress and a restart prompt when needed. Installation starts from the user's click. A functioning live p2 channel must be configured; the current archive-only development package has no automatic release feed. See GUIDED_WORKFLOW.md for private distribution and signing requirements.
+
 ## Product preferences
 
 - Stable channel by default; preview is explicitly selected.
 - Scheduled update checks while the IDE is running, with a due check on next startup.
 - Automatic download of compatible stable maintenance packages, subject to network/storage policy.
-- Auto-maintenance installs eligible patches at idle when enabled; notify-only, postpone and offline modes are available.
+- The normal mode notifies and installs after the user's click. Eligible unattended patch installation may be added later as an explicit opt-in; postpone and offline modes remain available.
 - A user-visible setting enables/disables automatic installation. Expose policy in onboarding and preferences.
 - Never automatically restart with unsaved editors or active build, flash, debug, serial programming, or workspace migration jobs.
 - External source/build-toolchain changes are project migrations, even if the new version is available through the update centre.

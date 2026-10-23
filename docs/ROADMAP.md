@@ -50,7 +50,11 @@ Hardware availability governs physical validation. Assessing a vendor does not m
 
 ## Immediate next task
 
-Install the built development feature in Eclipse 2026-09 on Windows and exercise preferences, environment checks, board selection, incremental/pristine builds and cancellation against the existing workspace. Then implement independent application creation and CDT indexing. See DEVELOPMENT.md for the local installation steps.
+Implement the guided Tools Manager, beginning with detection/reuse and a dependency status/progress view, then installation. Follow slices A-G in GUIDED_WORKFLOW.md. Existing global preferences are a prototype fallback, not the intended project workflow. The user has shown a partial Windows desktop smoke test; full firmware completion and hardware tests remain unrecorded.
+
+## Revised delivery order
+
+[GUIDED_WORKFLOW.md](GUIDED_WORKFLOW.md) defines the normal user interface and supersedes manual setup as the product goal. Deliver Tools Manager detection/install, vendor-aware exact hardware selection, File > New/Import wizards, per-project CDT build/run/debug and update notifications in slices A-G. Design update-channel and portable-project contracts alongside the first slices.
 
 ## First implementation checkpoint
 

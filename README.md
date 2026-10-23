@@ -7,7 +7,7 @@ An Eclipse-based development environment for Zephyr applications across semicond
 First development slice implemented: two Eclipse plug-ins, an installable feature and a local p2 update-site build. Core checks and packaging have passed on Linux. Desktop installation, Windows execution and hardware validation remain pending; this is not the completed v0.1 milestone or a stable release.
 The repository remains private during development; public publication is a separate future action.
 
-The intended workflow is: import or create a Zephyr workspace, select a board, create an application, build, configure, flash, and debug from Eclipse.
+The required workflow is: Install / Manage Zephyr Tools, File > New > Zephyr Project (new or existing), vendor/SoC/board/core selection, native Eclipse editing/build/run/debug, and click-to-install update notifications. See [the guided workflow specification](docs/GUIDED_WORKFLOW.md); these capabilities are not all implemented in the current prototype.
 
 ## Scope
 
@@ -40,6 +40,7 @@ The reported command-line build is not evidence that this plug-in works.
 
 - [Build, install locally and use the development slice](docs/DEVELOPMENT.md)
 - [First build evidence and limitations](docs/BUILD_REPORT.md)
+- [Guided tools/project/update workflow](docs/GUIDED_WORKFLOW.md)
 - [Step-by-step roadmap](docs/ROADMAP.md)
 - [Architecture and boundaries](docs/ARCHITECTURE.md)
 - [Hardware research and compatibility policy](docs/COMPATIBILITY.md)
