@@ -14,7 +14,9 @@ Read docs/ARCHITECTURE.md, docs/ROADMAP.md and docs/COMPATIBILITY.md before impl
 - Run checks appropriate to the change and report actual results and untested areas.
 - Never claim physical hardware support from a build-only test.
 
-Select the project licence before accepting external contributions.
+Original project contributions are provided under the root Apache-2.0 licence unless explicitly agreed and identified otherwise. Preserve upstream notices for copied/adapted code, and record provenance. Read docs/LICENSING.md and docs/DEPENDENCIES.md before adding dependencies.
+
+Only open-source, commercially usable dependencies without mandatory licence/subscription/royalty fees belong in the core workflow. Pin submodules to reviewed commits and retain their own licences. Proprietary optional exceptions are not currently authorised.
 
 ## Hardware reports
 

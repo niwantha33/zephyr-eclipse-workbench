@@ -43,7 +43,11 @@ GitHub Actions jobs must have timeouts, bounded matrices, appropriate cache keys
 - Fresh install and upgrade have been checked.
 - Applicable [quality targets](QUALITY.md) have recorded results; competitor claims cite actual comparable measurements.
 - [Update and recovery checks](UPDATES.md) pass for the release scope, including interrupted download, incompatible plan, restart deferral and preserved project pins.
-- Distribution licence, third-party notices and binary redistribution terms are resolved.
+- Original material has a root Apache-2.0 licence. Third-party licences, notices, source availability, runtime exceptions and redistribution terms are resolved for each included exact version.
+- A resolved dependency inventory/SBOM covers p2, Maven, Python, native tools, templates, firmware libraries and any submodules.
+- The core workflow passes without proprietary mandatory utilities, non-commercial restrictions, trials or paid activation.
+- Board operations/features requiring proprietary components are labelled and excluded from the compliant workflow.
+- Dependency updates recheck licence/provenance changes; unreviewed or disallowed changes block automatic installation.
 - Documentation matches actual UI and functionality.
 - No local paths, credentials, downloaded SDKs or Eclipse workspace metadata are committed.
 - Public publication remains a separate owner decision.
@@ -53,6 +57,12 @@ GitHub Actions jobs must have timeouts, bounded matrices, appropriate cache keys
 Record component inventories before and after maintenance. Verify idle gating, active jobs, unsaved editors, offline use, tampered downloads, disk/permission failures, recovery and project-file preservation. Treat p2 history, product rollback, environment rollback and project/configuration restoration as separate checks.
 
 Profile UI responsiveness and measure workspace import, cached board search and warm-build overhead on a declared reference machine. Benchmark CLion and a named VS Code extension configuration on equivalent inputs before publishing superiority claims.
+
+## Licence validation
+
+Review the actual shipped/deployed files and exact versions. A permissive root licence does not approve every transitive package. Keep separate records for tool execution, redistributed tools, linked runtime/firmware code and generated templates. Preserve licence/NOTICE files and provide source where the applicable licence requires it.
+
+Submodule validation includes exact gitlinks, nested dependencies, upstream URLs, licences and modifications. No actual submodule is currently selected. No third-party licence audit has passed yet.
 
 ## Current status
 

@@ -19,8 +19,8 @@ The Eclipse p2 scheduler supports automatic checks and downloads with notificati
 | SDK and compiler | Detect versions compatible with the selected Zephyr workspace | Install side by side where supported; preserve the selected compiler until a deliberate project migration passes checks |
 | Python packages and West | Use workspace-specific virtual environments and version-appropriate requirements | Stage a new environment, verify it, then switch; do not upgrade global Python packages |
 | CMake, Ninja and other host tools | Identify product-managed versus externally managed tools | Manage product-owned copies; explain external package-manager actions rather than overwriting system tools |
-| GDB, OpenOCD, probe software and vendor tools | Version/capability checks and permitted download sources | Manage side-by-side copies where licensing/installation permits; system drivers and board/probe firmware require a separate explicit operation |
-| Blobs and vendor binary libraries | Resolve from the selected manifest and vendor instructions | Fetch required versions after applicable terms; never replace with arbitrary latest binaries |
+| GDB, OpenOCD, probe software and vendor tools | Version/capability checks and permitted download sources | Manage reviewed open-source copies side by side; closed utilities are excluded from the compliant workflow. System drivers and board/probe firmware are separate explicit operations |
+| Blobs and vendor binary libraries | Resolve from the selected manifest and vendor instructions | Classify licence before any fetch. Proprietary blobs are excluded from the strict open-source workflow; no auto-install or redistribution. Any future exception requires explicit owner authorisation |
 | Templates, examples and documentation | Version them with the workbench or as explicit template packages | Update template sources; never overwrite an existing user's application |
 | Application source, prj.conf, overlays and local edits | Detect schema or template migration needs | Preview an explicit diff, preserve edits and back up before migration; source files are not update payloads |
 
@@ -81,3 +81,9 @@ Use versioned, immutable release repositories. Keep release channels distinct an
 - [Scheduling automatic updates](https://help.eclipse.org/latest/topic/org.eclipse.platform.doc.user/tasks/tasks-122.htm)
 - [Reverting an install configuration](https://help.eclipse.org/latest/topic/org.eclipse.platform.doc.user/tasks/tasks-123.htm)
 - [p2 trust authorities](https://help.eclipse.org/latest/topic/org.eclipse.platform.doc.user/reference/ref-p2-trust-authority.htm)
+
+## Dependency licence gate
+
+[LICENSING.md](LICENSING.md) applies to both first installation and every update. Compare exact-version licences, notices, transitive dependencies and runtime exceptions before staging an approved plan. Pending, missing, newly restricted, proprietary or incompatible components block installation in the compliant workflow. Report the affected feature and an open-source alternative when available.
+
+Update pinned source submodules through reviewed commits; do not run recursive updates to floating upstream heads. Never automatically rewrite a user's project submodules.

@@ -5,11 +5,11 @@ Status: step 1 documentation foundation complete; steps 2–19 pending. Planning
 | Step | Work | Deliverable | Exit criterion |
 |---:|---|---|---|
 | 1 | Repository foundation | README, architecture, roadmap, compatibility and validation policies | Scope and status are explicit; repository stays private |
-| 2 | Confirm baseline and licensing | Exact Eclipse/CDT/Java/Python/SDK versions; licence decision | Reproducible dependency list and distribution terms |
+| 2 | Confirm baseline and licensing | Exact Eclipse/CDT/Java/Python/SDK versions; Apache-2.0 for original material, dependency audit and submodule policy | Exact-version open-source/commercial-use inventory; notices and distribution obligations recorded |
 | 3 | Eclipse integration spike | Minimal installable plug-in and CDT/build/debug API decisions | Installs in clean Eclipse 2026-09; APIs documented |
 | 4 | Environment diagnostics | Detect Python, West, CMake, Ninja, SDK and existing workspace | Recognises existing installation; actionable missing-tool messages |
 | 5 | Workspace management | Import existing workspace; initialise manifest-based workspace | Standard and external/zephyr layouts work without personal paths |
-| 6 | Hardware discovery | Vendor/SoC/board/revision/core/qualifier selector | Catalogue matches selected checkout and refreshes on version change |
+| 6 | Hardware discovery | Vendor/SoC/board/revision/core/qualifier selector and feature/tool licence eligibility | Catalogue matches checkout/version; non-open dependencies labelled and excluded from compliant workflow |
 | 7 | Project wizard | Standalone Hello World application and sample import | App stays outside upstream source and builds from terminal |
 | 8 | Build operations | Build, pristine rebuild, clean, cancel, console and error markers | Correct exit states, separate outputs, clickable compiler errors |
 | 9 | Code navigation | CDT compilation settings and generated-header indexing | Completion and definitions work in app, kernel and drivers |
@@ -20,9 +20,9 @@ Status: step 1 documentation foundation complete; steps 2–19 pending. Planning
 | 14 | Debug | Eclipse launch integration, server/GDB selection and attach | Breakpoints, stepping and variables verified on Arm and Xtensa |
 | 15 | Advanced projects | Sysbuild, domains, multi-core, external boards and modules | Representative multi-image and external-board cases pass |
 | 16 | Vendor/host validation | Five priority vendors assessed; Linux coverage | Claims linked to automated or physical evidence |
-| 17 | Update centre and maintenance | p2-backed compatible patch updates, ownership-aware tool updates, idle coordination and staged migrations | Upgrade, restart, offline failure and recovery suite in UPDATES.md passes; project pins preserved |
+| 17 | Update centre and maintenance | p2-backed compatible patch updates, ownership-aware tool updates, idle coordination and staged migrations | Upgrade, restart, offline failure and recovery suite in UPDATES.md passes; project pins preserved; changed dependency licences rechecked |
 | 18 | Quality and comparison | Benchmark fixtures, UI responsiveness, accessibility, reliability and competitor workflow comparison | Measured results against QUALITY.md; no unsupported superiority claims |
-| 19 | Release packaging | Versioned p2 site, install/upgrade guides and release notes | Fresh install and upgrade pass; public publication separately authorised |
+| 19 | Release packaging | Versioned p2 site, install/upgrade guides and release notes | Fresh install/upgrade pass; resolved SBOM/notices/source obligations complete; public publication separately authorised |
 
 ## Release milestones
 
@@ -58,3 +58,9 @@ Steps 17–18 are acceptance milestones, not instructions to defer architecture 
 
 - [Update and recovery requirements](UPDATES.md)
 - [Product quality targets and comparison method](QUALITY.md)
+
+## Dependency acceptance
+
+Root LICENSE now establishes Apache-2.0 for original project material. Step 2 remains pending because exact third-party versions, licences, transitives and redistribution conditions are not audited.
+
+Apply [LICENSING.md](LICENSING.md) throughout implementation. Use pinned submodules only when appropriate under [DEPENDENCIES.md](DEPENDENCIES.md). Proprietary dependencies cannot be treated as open source merely because they cost nothing.

@@ -15,6 +15,8 @@ The intended workflow is: import or create a Zephyr workspace, select a board, c
 - Hardware discovery from the selected Zephyr checkout, including external board roots.
 - Common build and configuration controls across TI, STMicroelectronics, Espressif, Nordic, Realtek, and other Zephyr-supported vendors.
 - Existing West, CMake, Ninja, Kconfig, Devicetree, compiler, and runner infrastructure.
+- Open-source dependencies permitting commercial use without mandatory software licence/subscription/royalty fees; per-component licence obligations still apply.
+- Optional pinned Git submodules where upstream packaging/West/p2 integration is unsuitable.
 - Separate evidence for discovery, compilation, flashing, and debugging.
 - Integrated update management for the workbench, compatible Eclipse components and managed tools, with staged recovery and pinned project dependencies.
 - Measurable quality targets for a simpler Zephyr workflow than competing IDE configurations; comparative results are not yet available.
@@ -42,11 +44,13 @@ The reported command-line build is not evidence that this plug-in works.
 - [Validation and release criteria](docs/VALIDATION.md)
 - [Automatic updates and recovery](docs/UPDATES.md)
 - [Quality targets and comparison method](docs/QUALITY.md)
+- [Open-source and commercial-use policy](docs/LICENSING.md)
+- [Dependency register and submodules](docs/DEPENDENCIES.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Licensing and publication
 
-A distribution licence has not yet been selected. Select an explicit licence and review third-party notices before inviting external contributions or publishing releases.
-Do not bundle toolchains, proprietary probes, or binary blobs without checking their distribution terms.
+Original workbench material is licensed under [Apache-2.0](LICENSE), unless a more specific notice applies. Third-party components retain their own licences and obligations.
+The core workflow must use open-source software permitting commercial use without mandatory licence fees. Proprietary blobs and closed utilities are excluded from that workflow; some board features may therefore be unavailable. Exact dependency and firmware-feature audits are pending. See [the policy](docs/LICENSING.md).
 
 This is an independent integration project. Upstream sources: [Zephyr](https://github.com/zephyrproject-rtos/zephyr) and [Eclipse Embedded CDT](https://eclipse-embed-cdt.github.io/).

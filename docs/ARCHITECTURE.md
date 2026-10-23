@@ -56,7 +56,7 @@ Multi-image projects require explicit domain/image selection. Flash/run on hardw
 
 ## Dependency and release strategy
 
-Pin the tested Zephyr baseline and respect its manifest revisions. Support importing other versions without calling them validated. Fetch only required dependency sets where feasible. Explain vendor downloads and terms before installing optional components.
+Pin the tested Zephyr baseline and respect its manifest revisions. Support importing other versions without calling them validated. Fetch only required dependency sets where feasible. Apply the open-source/commercial-use policy before installing any dependency; closed vendor downloads are excluded from the compliant workflow.
 
 Develop a reproducible p2 update-site build first. Consider a bundled Eclipse distribution only after plug-in installation and upgrades are reliable.
 
@@ -67,3 +67,11 @@ The quality ambition is measurable superiority on specific Zephyr workflows, not
 Use Eclipse p2 for installed Eclipse features and a separate versioned environment manager for product-owned tools. Keep external installation ownership explicit. Workbench maintenance must not silently migrate application source, Zephyr manifests, SDK/compiler selection or vendor firmware.
 
 Automatic checks/downloads and eligible idle patch installation are product requirements. They are not implemented. Restart, migration, trust and recovery rules are specified in [updates and recovery](UPDATES.md). Do not describe p2 configuration history as a complete backup of application files or external toolchains.
+
+## Open-source dependency boundary
+
+Follow [LICENSING.md](LICENSING.md) and [DEPENDENCIES.md](DEPENDENCIES.md). Original workbench material is Apache-2.0. All dependency mechanisms, including West, p2, Maven, Python packages and Git submodules, require exact-version licence/provenance records.
+
+Use upstream dependency mechanisms first. Git submodules are allowed for justified source dependencies, pinned to exact commits and retaining all upstream notices. Submodule separation does not alter licence obligations.
+
+Represent open-source eligibility per board operation and firmware feature. A closed radio library or proprietary-only runner must not be silently downloaded or advertised as part of the compliant workflow.

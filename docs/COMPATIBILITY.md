@@ -58,3 +58,9 @@ Current plug-in validation: none.
 Current external baseline: user-reported Zephyr v4.4.0 Hello World compilation for esp32s3_devkitc/esp32s3/procpu on Windows with West 1.5.0. Flash/run/debug unverified.
 
 New hardware found by discovery must remain labelled discovered until further evidence exists.
+
+## Open-source eligibility
+
+In addition to functional verification, record the licence eligibility of each board operation and peripheral feature under [LICENSING.md](LICENSING.md). Hardware discovery is allowed to show targets with restricted features, but must label those restrictions and keep proprietary requirements outside the compliant workflow.
+
+No board/feature currently has a completed licence audit. Espressif/Realtek blob requirements and closed vendor/probe utilities need explicit per-feature assessment. Previously fetched learning-environment binaries are not approved release dependencies. Broad hardware support does not override the open-source requirement.
