@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# Run the private p2 build on the owner's dedicated Linux x64 runner.
-# No GitHub-hosted minutes or intermediate Actions artifact storage.
+# Standard GitHub-hosted Linux runners are free on PUBLIC repositories.
+# Keep the verified one-job publish; no intermediate Actions artifacts.
+# Do not use on a private repository with exhausted Actions minutes.
 name: Build and publish private Zephyr Workbench p2 update
 on:
   push:
@@ -21,9 +22,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build_and_publish:
-    name: Verify and publish using dedicated self-hosted runner
+    name: Verify and publish on public GitHub-hosted runner
     if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
-    runs-on: [self-hosted, linux, x64, zephyr-p2]
+    runs-on: ubuntu-24.04
     timeout-minutes: 75
     defaults:
       run:
