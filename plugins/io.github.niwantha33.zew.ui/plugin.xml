@@ -19,6 +19,22 @@
   <extension point="org.eclipse.cdt.core.CConfigurationDataProvider" id="editorData">
     <provider class="io.github.niwantha33.zew.ui.ZephyrEditorDataProvider"/>
   </extension>
+  <extension point="org.eclipse.ui.propertyPages">
+    <page id="io.github.niwantha33.zew.projectProperties" name="Zephyr"
+          objectClass="org.eclipse.core.resources.IProject"
+          class="io.github.niwantha33.zew.ui.ZephyrProjectPropertyPage"/>
+  </extension>
+  <extension point="org.eclipse.debug.core.launchConfigurationTypes">
+    <launchConfigurationType id="io.github.niwantha33.zew.ui.launchType"
+        name="Zephyr Application" modes="run"
+        delegate="io.github.niwantha33.zew.ui.ZephyrLaunchDelegate"
+        public="true"/>
+  </extension>
+  <extension point="org.eclipse.debug.ui.launchConfigurationTabGroups">
+    <launchConfigurationTabGroup id="io.github.niwantha33.zew.ui.launchTabs"
+        type="io.github.niwantha33.zew.ui.launchType"
+        class="io.github.niwantha33.zew.ui.ZephyrLaunchTabs"/>
+  </extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.SetupStartup"/></extension>
   <extension point="org.eclipse.core.resources.builders" id="zephyrBuilder" name="Zephyr Project Builder">
     <builder hasNature="false"><run class="io.github.niwantha33.zew.ui.ZephyrProjectBuilder"/></builder>
@@ -28,7 +44,6 @@
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
   <extension point="org.eclipse.ui.commands">
-    <command id="io.github.niwantha33.zew.selectCpu" name="Select ESP32-S3 CPU" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugserver" name="Start Debug Server" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.flash" name="Flash Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.run" name="Run in Emulator" categoryId="io.github.niwantha33.zew.commands"/>
@@ -40,13 +55,11 @@
     <command id="io.github.niwantha33.zew.checkUpdates" name="Check for Workbench Updates" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.updateConnection" name="Configure Workbench Updates" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.diagnostics" name="Check Environment" categoryId="io.github.niwantha33.zew.commands"/>
-    <command id="io.github.niwantha33.zew.boards" name="Select Board" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.build" name="Build Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.rebuild" name="Pristine Rebuild" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
   </extension>
   <extension point="org.eclipse.ui.handlers">
-    <handler commandId="io.github.niwantha33.zew.selectCpu" class="io.github.niwantha33.zew.ui.ProjectTargetHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugserver" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.flash" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.run" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
@@ -57,7 +70,6 @@
     <handler commandId="io.github.niwantha33.zew.checkUpdates" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
     <handler commandId="io.github.niwantha33.zew.updateConnection" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
     <handler commandId="io.github.niwantha33.zew.diagnostics" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
-    <handler commandId="io.github.niwantha33.zew.boards" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
     <handler commandId="io.github.niwantha33.zew.build" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
     <handler commandId="io.github.niwantha33.zew.rebuild" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
     <handler commandId="io.github.niwantha33.zew.cancel" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
@@ -69,8 +81,6 @@
         <command commandId="io.github.niwantha33.zew.tools" label="Install / Manage Zephyr Tools..." style="push"/>
         <separator name="tools" visible="true"/>
         <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
-        <command commandId="io.github.niwantha33.zew.boards" label="Select Board..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.selectCpu" label="Select ESP32-S3 CPU..." style="push"/>
         <separator name="build" visible="true"/>
         <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
         <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
