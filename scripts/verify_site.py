@@ -46,10 +46,18 @@ for p in bundles:
             for helper in ('setup.py', 'managed_sitecustomize.py'):
                 if z.read('tools/' + helper) != (root / 'plugins/io.github.niwantha33.zew.ui/tools' / helper).read_bytes():
                     raise SystemExit('Packaged helper differs from verified source: ' + helper)
-            for helper in ('hardware_catalog.py', 'editor_settings.py', 'board_tools.py'):
+            for helper in ('hardware_catalog.py', 'editor_settings.py', 'board_tools.py', 'board_dependencies.py'):
                 compile(z.read('tools/' + helper), 'tools/' + helper, 'exec')
                 if z.read('tools/' + helper) != (root / 'plugins/io.github.niwantha33.zew.ui/tools' / helper).read_bytes():
                     raise SystemExit('Packaged helper differs from source: ' + helper)
+            compiler_lock = json.loads(z.read('tools/sdk-toolchains-windows-1.0.1.json'))
+            if compiler_lock.get('schema') != 1 or compiler_lock.get('sdk_version') != '1.0.1' or compiler_lock.get('host') != 'windows-x86_64':
+                raise SystemExit('Invalid compiler dependency lock')
+            for name, entry in compiler_lock['assets'].items():
+                if entry['file'] != 'toolchain_gnu_windows-x86_64_' + name + '.7z' or len(entry['sha256']) != 64 or entry['size'] <= 0:
+                    raise SystemExit('Malformed compiler dependency: ' + name)
+            if z.read('tools/sdk-toolchains-windows-1.0.1.json') != (root / 'plugins/io.github.niwantha33.zew.ui/tools/sdk-toolchains-windows-1.0.1.json').read_bytes():
+                raise SystemExit('Packaged SDK toolchain lock differs from source')
             board_lock = json.loads(z.read('tools/esp32s3-python-lock.json'))
             if board_lock['platform'] != 'win_amd64' or board_lock['python'] != '3.13':
                 raise SystemExit('Invalid ESP32-S3 Python lock')
@@ -60,7 +68,7 @@ for p in bundles:
                 raise SystemExit('Setup profile or package review is incomplete.')
             if not z.read('tools/setup-licences.txt').strip():
                 raise SystemExit('Setup licence records missing.')
-            for name in ('SetupWizard', 'SetupStartup', 'ZephyrProjectBuilder', 'ZephyrProjectWizard', 'ZephyrImportWizard', 'ProjectActionHandler', 'ProjectContext', 'CdtEditor'):
+            for name in ('SetupWizard', 'SetupStartup', 'ZephyrProjectBuilder', 'ZephyrProjectWizard', 'ZephyrImportWizard', 'ProjectActionHandler', 'ProjectContext', 'CdtEditor', 'ZephyrProjectPropertyPage', 'ZephyrLaunchDelegate', 'ZephyrLaunchTabs'):
                 if 'io/github/niwantha33/zew/ui/' + name + '.class' not in z.namelist():
                     raise SystemExit('Beginner setup class missing: ' + name)
             if 'io/github/niwantha33/zew/ui/ToolsDialog.class' not in z.namelist():
@@ -73,6 +81,17 @@ for p in bundles:
                 registrations = plugin.findall("./extension[@point='" + point + "']/wizard")
                 if not any(w.attrib.get('class') in ('io.github.niwantha33.zew.ui.ZephyrProjectWizard', 'io.github.niwantha33.zew.ui.ZephyrImportWizard') for w in registrations):
                     raise SystemExit('New/Import Zephyr wizard not registered for ' + point)
+            for point, cls in (
+                    ('org.eclipse.ui.propertyPages', 'ZephyrProjectPropertyPage'),
+                    ('org.eclipse.debug.core.launchConfigurationTypes', 'ZephyrLaunchDelegate'),
+                    ('org.eclipse.debug.ui.launchConfigurationTabGroups', 'ZephyrLaunchTabs')):
+                registrations = plugin.findall("./extension[@point='" + point + "']/*")
+                if not any(item.attrib.get('class', item.attrib.get('delegate', '')).endswith('.' + cls)
+                           for item in registrations):
+                    raise SystemExit('Missing native Eclipse registration: ' + cls)
+            if any(item.attrib.get('commandId', '').endswith('.selectCpu')
+                   for item in plugin.findall(".//command")):
+                raise SystemExit('Obsolete vendor-specific CPU command still registered')
             for handler in plugin.findall("./extension[@point='org.eclipse.ui.handlers']/handler"):
                 if handler.attrib['class'].replace('.', '/') + '.class' not in z.namelist():
                     raise SystemExit('Command handler class missing.')

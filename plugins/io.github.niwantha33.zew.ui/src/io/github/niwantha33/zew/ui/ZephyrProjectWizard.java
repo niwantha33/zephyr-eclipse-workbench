@@ -21,6 +21,7 @@ import io.github.niwantha33.zew.core.*;
 /** Create/import independent applications without changing environment-owned source. */
 public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWizard {
     private Page page;
+    private ReviewPage review;
     private String selectedRoot;
     protected boolean importing;
     public ZephyrProjectWizard() { setWindowTitle("Zephyr Project"); setNeedsProgressMonitor(true); }
@@ -30,7 +31,45 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             catch (CoreException ignored) { }
         }
     }
-    @Override public void addPages() { page = new Page(); addPage(page); }
+    @Override public void addPages() {
+        page = new Page();
+        review = new ReviewPage();
+        addPage(page);
+        addPage(review);
+    }
+    /** Confirm the exact selected hardware and destination before any file writes. */
+    private final class ReviewPage extends WizardPage {
+        Label summary;
+        ReviewPage() {
+            super("review");
+            setTitle("Review Zephyr project");
+            setDescription("Check the target, CPU and application path. Only new project metadata is written.");
+        }
+        @Override public void createControl(Composite parent) {
+            Composite body = new Composite(parent, SWT.NONE);
+            body.setLayout(new GridLayout(1, false));
+            summary = new Label(body, SWT.WRAP);
+            summary.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+            setControl(body);
+            setPageComplete(true);
+        }
+        @Override public void setVisible(boolean visible) {
+            if (visible && summary != null && !summary.isDisposed()) {
+                String[] target = page.targets.getSelectionCount() == 1
+                    ? (String[]) page.targets.getSelection()[0].getData() : null;
+                summary.setText("Action: " + (page.existing.getSelection() ? "Import existing application" : "Create new application")
+                    + "\nProject: " + page.name.getText().trim()
+                    + "\nLocation: " + page.location.getText().trim()
+                    + "\nChip vendor: " + (target == null ? "not selected" : target[0])
+                    + "\nSoC: " + (target == null ? "not selected" : target[2])
+                    + "\nCPU / qualifier: " + (target == null ? "not selected" : target[5])
+                    + "\nExact build target: " + (target == null ? "not selected" : target[6])
+                    + "\n\nThe first Build Project prepares matching pinned SDK/West dependencies; existing source and unrelated output directories remain untouched.");
+                summary.getParent().layout(true, true);
+            }
+            super.setVisible(visible);
+        }
+    }
     private final class Page extends WizardPage {
         Text name, location, environment, search;
         Button existing;
@@ -38,7 +77,7 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
         Table targets;
         List<String[]> rows = new ArrayList<>();
         Path loadedRoot;
-        Page() { super("project"); setTitle("New or existing Zephyr application"); setDescription("Select a ready tool environment, load its hardware, then choose an exact target."); }
+        Page() { super("project"); setTitle("New or existing Zephyr application"); setDescription("Reuse a managed environment and select the exact board, SoC and CPU for this project."); }
         @Override public void createControl(Composite parent) {
             var body = new Composite(parent, SWT.NONE); body.setLayout(new GridLayout(3, false));
             name = field(body, "Project name", "MyZephyr", false);
@@ -141,7 +180,7 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             } catch (Exception e) { error = e.getMessage(); }
             if (targets.getSelectionCount() == 1 && ((String[]) targets.getSelection()[0].getData())[6].contains("/esp32s3/appcpu"))
                 setMessage("APPCPU is the secondary core and requires primary-core firmware. For standalone Hello World choose esp32s3/procpu.", org.eclipse.jface.dialogs.IMessageProvider.WARNING);
-            else setMessage("Missing ESP32-S3 compiler and build tools are installed automatically on the first project build.");
+            else setMessage("Eclipse Build Project will check the selected SoC and CPU, then prepare matching pinned SDK and West modules.");
             setErrorMessage(error); setPageComplete(error == null);
         }
     }
