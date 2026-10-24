@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Automatically prepare the selected Zephyr board's pinned modules and compiler.
+
+Invoked by the native Eclipse project builder; not a user-operated installer.
+Never edit application sources, replace existing SDK toolchains, fetch blobs, or
+update a module past the West manifest's immutable revision.
+"""
+import argparse
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+HERE = Path(__file__).resolve().parent
+spec = importlib.util.spec_from_file_location('zew_board_tools', HERE / 'board_tools.py')
+legacy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(legacy)
+setup = legacy.setup
+PINNED_ZEPHYR = '684c9e8f32e4373a21098559f748f06915f950c9'
+PINNED_SDK = '1.0.1'
+BOARD_PATTERN = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.@/+\-]{0,255}$')
+SHA_PATTERN = re.compile(r'^[a-f0-9]{40}$')
+# SoC metadata supplies the chip vendor, independently of the board vendor.
+HAL_ALIASES = {'st': 'stm32', 'nordic': 'nordic', 'ti': 'ti',
+               'espressif': 'espressif', 'nxp': 'nxp', 'silabs': 'silabs'}
+CPU_FAMILIES = (
+    (re.compile(r'CPU_CORTEX|\bARM(?:64)?\b|\bARMV[6789]'), 'arm'),
+    (re.compile(r'\bRISCV\b|\bRISC_V\b'), 'riscv'),
+    (re.compile(r'\bXTENSA\b'), 'xtensa'),
+    (re.compile(r'\bX86(?:_64)?\b'), 'x86'),
+    (re.compile(r'\bARC(?:64)?\b'), 'arc'),
+)
+
+
+def checked_board(board):
+    if not BOARD_PATTERN.fullmatch(board) or '..' in board or '//' in board or board.endswith('/'):
+        raise ValueError('Invalid exact Zephyr board qualifier')
+    return board
+
+
+def soc_metadata(zephyr, soc):
+    """Find a SoC in the checked-out Zephyr YAML, never infer from board maker."""
+    import yaml
+    def contains_name(value):
+        if isinstance(value, dict):
+            return value.get('name') == soc or any(contains_name(v) for v in value.values())
+        return any(contains_name(v) for v in value) if isinstance(value, list) else False
+    matches = []
+    for path in (zephyr / 'soc').rglob('soc.yml'):
+        if contains_name(yaml.safe_load(path.read_text(encoding='utf-8'))):
+            matches.append(path.parent)
+    if len(matches) != 1:
+        raise ValueError('Cannot unambiguously resolve SoC ' + soc + ' from the pinned Zephyr tree')
+    relative = matches[0].relative_to(zephyr / 'soc')
+    return relative.parts[0], matches[0]
+
+
+def architecture(vendor, soc, folder, qualifier):
+    """Read SoC Kconfig for CPU architecture; reject ambiguous CPU families.
+
+    The explicit SoC-family fallbacks cover layouts whose Kconfig selects a
+    shared family outside the individual SoC directory. Unsupported CPU
+    families fail before any download, rather than guessing an ARM compiler.
+    """
+    chip = soc.lower()
+    if vendor == 'espressif':
+        if chip in ('esp32', 'esp32s2', 'esp32s3'):
+            return 'xtensa-espressif_' + chip + '_zephyr-elf'
+        if chip.startswith(('esp32c', 'esp32h', 'esp32p')):
+            return 'riscv64-zephyr-elf'
+    chunks = []
+    for source in folder.rglob('Kconfig*'):
+        if source.is_file():
+            chunks.append(source.read_text(encoding='utf-8', errors='replace'))
+    flags = set()
+    all_text = '\n'.join(chunks)
+    for regex, family in CPU_FAMILIES:
+        if regex.search(all_text):
+            flags.add(family)
+    # A SoC family may include several cores. Architecture is selected by the
+    # exact qualifier, and unknown combinations require explicit support.
+    if flags == {'arm'}:
+        return 'arm-zephyr-eabi'
+    if flags == {'riscv'}:
+        return 'riscv64-zephyr-elf'
+    if flags == {'x86'}:
+        return 'x86_64-zephyr-elf'
+    if flags == {'arc'}:
+        return 'arc-zephyr-elf'
+    if vendor in ('ti', 'st', 'nordic', 'nxp') and ('mspm0' in chip or vendor in ('st', 'nordic') or 'cortex' in all_text.lower()):
+        return 'arm-zephyr-eabi'
+    if vendor == 'intel' and 'x86' in all_text.lower():
+        return 'x86_64-zephyr-elf'
+    raise ValueError('CPU architecture cannot be confirmed for ' + soc + '/' + qualifier
+                     + '. The application and current SDK were preserved.')
+
+
+def manifest_projects(python, workspace):
+    command = [str(python), '-m', 'west', 'list', '-f', '{name}\t{revision}\t{path}']
+    result = subprocess.run(command, cwd=workspace, check=True, text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+    rows = {}
+    for line in result.stdout.splitlines():
+        cells = line.split('\t')
+        if len(cells) != 3:
+            raise ValueError('Unexpected West manifest output (expected project/revision/path)')
+        name, revision, path = cells
+        if name in rows or not name or not SHA_PATTERN.fullmatch(revision):
+            raise ValueError('West manifest module revision is not pinned to a commit: ' + name)
+        relative = Path(path)
+        if relative.is_absolute() or '..' in relative.parts or ':' in path or '\\' in path:
+            raise ValueError('Unsafe West manifest module path: ' + name)
+        rows[name] = (revision, relative)
+    return rows
+
+
+def modules_for(vendor, compiler, manifest):
+    names = []
+    if compiler == 'arm-zephyr-eabi' and 'cmsis' in manifest:
+        names.append('cmsis')
+    alias = HAL_ALIASES.get(vendor, vendor)
+    for candidate in ('hal_' + alias, 'hal_' + vendor):
+        if candidate in manifest:
+            names.append(candidate)
+            break
+    return names
+
+
+def plan(board, workspace, python):
+    checked_board(board)
+    zephyr = workspace / 'zephyr'
+    revision = subprocess.check_output(['git', '-C', str(zephyr), 'rev-parse', 'HEAD'],
+                                       text=True, timeout=30).strip()
+    if revision != PINNED_ZEPHYR:
+        raise ValueError('Dependency preparation requires the pinned managed Zephyr 4.4.0 checkout')
+    spec = importlib.util.spec_from_file_location('zew_hardware_catalog', HERE / 'hardware_catalog.py')
+    catalogue = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(catalogue)
+    matches = [row for row in catalogue.catalogue(zephyr) if row[6] == board]
+    if len(matches) != 1:
+        raise ValueError('Board qualifier not found in this Zephyr checkout: ' + board)
+    soc = matches[0][2]
+    if soc == '-':
+        raise ValueError('Selected board has no unique SoC: ' + board)
+    vendor, folder = soc_metadata(zephyr, soc)
+    compiler = architecture(vendor, soc, folder, board.split('/', 1)[-1])
+    assets = json.loads((HERE / 'sdk-toolchains-windows-1.0.1.json').read_text())
+    if assets.get('sdk_version') != PINNED_SDK or compiler not in assets['assets']:
+        raise ValueError('No reviewed Windows Zephyr SDK compiler for ' + compiler)
+    manifest = manifest_projects(python, workspace)
+    names = modules_for(vendor, compiler, manifest)
+    return {'board': board, 'soc': soc, 'vendor': vendor, 'compiler': compiler,
+            'modules': names, 'manifest': manifest, 'asset': assets['assets'][compiler]}
+
+
+def git_revision(git, path):
+    return subprocess.check_output([str(git), '-C', str(path), 'rev-parse', 'HEAD'],
+                                   text=True, timeout=30).strip()
+
+
+def prepare_modules(plan_data, workspace, python, git):
+    for name in plan_data['modules']:
+        revision, relative = plan_data['manifest'][name]
+        destination = workspace / relative
+        if destination.is_symlink():
+            raise ValueError('Refusing symlinked module path: ' + str(destination))
+        if destination.exists():
+            if not (destination / '.git').exists() or git_revision(git, destination) != revision:
+                raise ValueError('Existing module differs from pinned West manifest; preserved: ' + str(destination))
+            setup.log('Reusing pinned West module: ' + name)
+            continue
+        setup.log('Installing pinned West module: ' + name)
+        subprocess.run([str(python), '-m', 'west', 'update', name], cwd=workspace, check=True,
+                       timeout=1200, stdin=subprocess.DEVNULL)
+        if not destination.is_dir() or git_revision(git, destination) != revision:
+            raise ValueError('West module revision verification failed: ' + name)
+
+
+def prepare_compiler(root, sdk, compiler, asset):
+    if (sdk / 'sdk_version').read_text().strip() != PINNED_SDK:
+        raise ValueError('Managed SDK version differs from reviewed ' + PINNED_SDK)
+    destination = sdk / 'gnu' / compiler
+    executable = destination / 'bin' / (compiler + '-gcc.exe')
+    if executable.is_file():
+        legacy.verify(executable)
+        setup.log('Reusing verified ' + compiler)
+        return
+    if destination.exists():
+        raise ValueError('Incomplete compiler directory preserved: ' + str(destination))
+    meta = dict(asset, url='https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/' + asset['file'])
+    if meta['file'] != 'toolchain_gnu_windows-x86_64_' + compiler + '.7z':
+        raise ValueError('Compiler asset name does not match target architecture')
+    (root / 'cache').mkdir(exist_ok=True)
+    archive = setup.fetch(meta, root / 'cache')
+    import py7zr
+    with tempfile.TemporaryDirectory(prefix='.zew-compiler-stage-', dir=sdk) as temporary:
+        stage = Path(temporary)
+        with py7zr.SevenZipFile(archive) as source:
+            setup.safe_archive_names(source.list())
+            source.extractall(stage)
+        matches = [p for p in stage.rglob(compiler + '-gcc.exe') if p.parent.name == 'bin' and p.parent.parent.name == compiler]
+        if len(matches) != 1:
+            raise ValueError('Unexpected Zephyr compiler archive layout for ' + compiler)
+        legacy.verify(matches[0])
+        installed = matches[0].parent.parent
+        (installed / '.zew-toolchain-proof').write_text(meta['sha256'] + '\n')
+        destination.parent.mkdir(exist_ok=True)
+        installed.rename(destination)
+    setup.log('READY — ' + compiler + ' verified')
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--root', required=True, type=Path)
+    parser.add_argument('--sdk', required=True, type=Path)
+    parser.add_argument('--workspace', required=True, type=Path)
+    parser.add_argument('--git', required=True)
+    parser.add_argument('--board', required=True)
+    parser.add_argument('--plan', action='store_true', help='Report plan only, without modifying files')
+    args = parser.parse_args(argv)
+    root, sdk, workspace = args.root.resolve(), args.sdk.resolve(), args.workspace.resolve()
+    details = plan(args.board, workspace, sys.executable)
+    setup.log('Selected: ' + details['board'] + ' | SoC=' + details['soc'] +
+              ' | chip vendor=' + details['vendor'])
+    setup.log('Compiler: ' + details['compiler'] + ' | pinned West modules: ' +
+              (', '.join(details['modules']) or 'none'))
+    if args.plan:
+        return 0
+    if os.name != 'nt':
+        raise ValueError('Automatic compiler preparation supports managed Windows x64. No changes were made.')
+    prepare_compiler(root, sdk, details['compiler'], details['asset'])
+    prepare_modules(details, workspace, sys.executable, args.git)
+    if details['vendor'] == 'espressif' and details['soc'] == 'esp32s3':
+        legacy.install_python_tools(root)
+    setup.log('READY — target dependencies checked against the pinned SDK and West manifest')
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        raise SystemExit(main())
+    except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+        setup.log('FAILED — ' + str(exc))
+        raise SystemExit(1)
