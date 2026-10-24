@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
+# Run the private p2 build on the owner's dedicated Linux x64 runner.
+# No GitHub-hosted minutes or intermediate Actions artifact storage.
 name: Build and publish private Zephyr Workbench p2 update
 on:
   push:
@@ -11,65 +13,48 @@ on:
       - 'tests/**'
       - 'pom.xml'
       - '.github/workflows/private-update.yml'
-  # Optional manual retry if a GitHub-hosted runner was unavailable;
-  # never required after a successful main merge.
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: private-zephyr-updates-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  verify:
-    name: Verify new version and package p2 update
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - name: Check out code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-      - name: Select runner OpenJDK 21
-        run: |
-          test -d "$JAVA_HOME_21_X64"
-          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
-          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
-      - name: Run regression tests
-        run: python3 scripts/test_core.py
-      - name: Build Tycho p2 update site
-        run: mvn --batch-mode --no-transfer-progress clean verify
-      - name: Verify exact built p2 site
-        run: python3 scripts/verify_site.py
-      - name: Save private candidate for inspection
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: private-zephyr-workbench-p2-candidate
-          path: releng/repository/target/
-          if-no-files-found: error
-          retention-days: 14
-
-  publish:
-    name: Promote verified candidate atomically
-    needs: verify
-    # Automatic on every successful main code merge. Reuses the exact verified
-    # artifact; no separate script, confirmation or release operation required.
+  build_and_publish:
+    name: Verify and publish using dedicated self-hosted runner
     if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: write
+    runs-on: [self-hosted, linux, x64, zephyr-p2]
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: Check out verified default branch with write permission
+      - name: Check out exact merged commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
           persist-credentials: true
-      - name: Reuse tested p2 site, not a rebuild
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.1.8
-        with:
-          name: private-zephyr-workbench-p2-candidate
-          path: releng/repository/target/
-      - name: Reverify p2 archive
+      - name: Validate local Java 21, Python, Maven and Git
+        run: |
+          set -euo pipefail
+          command -v java
+          command -v javac
+          command -v python3
+          command -v mvn
+          command -v git
+          JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
+          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
+          "$JAVA_HOME/bin/java" -version
+          "$JAVA_HOME/bin/java" -version 2>&1 | grep -Eq 'version "21(\.|")'
+          python3 -c 'import sys; assert sys.version_info >= (3, 10), sys.version'
+          mvn -version
+          mvn -version | grep -Eq 'Apache Maven 3\.9\.|Apache Maven 4\.'
+      - name: Run all core and Python dependency regression tests
+        run: python3 scripts/test_core.py
+      - name: Build clean Tycho p2 update site
+        run: mvn --batch-mode --no-transfer-progress clean verify
+      - name: Verify packaged p2 site before publication
         run: python3 scripts/verify_site.py
       - name: Publish release and channel as one fast-forward operation
         shell: bash
@@ -105,7 +90,9 @@ jobs:
           }
           git fetch --no-tags origin refs/heads/updates:refs/remotes/origin/updates
           RELEASE_ROOT="$RUNNER_TEMP/zephyr-p2-updates"
+          git worktree prune
           git worktree add --detach "$RELEASE_ROOT" refs/remotes/origin/updates
+          trap 'git worktree remove --force "$RELEASE_ROOT" >/dev/null 2>&1 || true' EXIT
           export RELEASE_ROOT VERSION
 
           python3 - <<'PY'
@@ -133,7 +120,7 @@ jobs:
           python3 scripts/prepare_update.py \
             --site "$SITE" --revision "$IMMUTABLE_SHA" \
             --output "$RUNNER_TEMP/prepared-release" \
-            --notes "Development preview: new/import Zephyr project, portable metadata and isolated per-project builds. Windows desktop testing pending."
+            --notes "Development preview: cross-vendor board dependencies, project properties and native run configurations. Windows hardware and desktop validation pending."
           cp "$RUNNER_TEMP/prepared-release/channel.properties" "$RELEASE_ROOT/channel.properties"
 
           python3 - <<'PY'
