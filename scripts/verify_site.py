@@ -71,6 +71,19 @@ for p in bundles:
             for name in ('SetupWizard', 'SetupStartup', 'ZephyrProjectBuilder', 'ZephyrProjectWizard', 'ZephyrImportWizard', 'ProjectActionHandler', 'ProjectContext', 'CdtEditor', 'ZephyrProjectPropertyPage', 'ZephyrLaunchDelegate', 'ZephyrLaunchTabs'):
                 if 'io/github/niwantha33/zew/ui/' + name + '.class' not in z.namelist():
                     raise SystemExit('Beginner setup class missing: ' + name)
+            # Guard against the exact OSGi FileLocator failure on Windows:
+            # a single .py jar entry can be extracted without any siblings.
+            # The builder must bundle its dependency set as one versioned unit.
+            board_class = z.read('io/github/niwantha33/zew/ui/BoardTools.class')
+            for required in (b'.zew-board-tools', b'board_dependencies.py', b'board_tools.py',
+                             b'hardware_catalog.py'):
+                if required not in board_class:
+                    raise SystemExit('Board-tools sibling staging missing from compiled builder')
+            for helper in ('board_dependencies.py', 'board_tools.py', 'hardware_catalog.py',
+                           'setup.py', 'managed_sitecustomize.py',
+                           'sdk-toolchains-windows-1.0.1.json', 'esp32s3-python-lock.json'):
+                if 'tools/' + helper not in z.namelist():
+                    raise SystemExit('Required bundled board helper missing: ' + helper)
             if 'io/github/niwantha33/zew/ui/ToolsDialog.class' not in z.namelist():
                 raise SystemExit('Tools manager dialog missing.')
             plugin = ET.fromstring(z.read('plugin.xml'))

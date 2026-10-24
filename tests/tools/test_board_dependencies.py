@@ -3,6 +3,9 @@
 import importlib.util
 import json
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -15,6 +18,29 @@ spec.loader.exec_module(board)
 
 
 class DependencyTests(unittest.TestCase):
+    def test_jar_entry_extract_requires_all_sibling_files(self):
+        """A single FileLocator extraction must not reach the Windows builder."""
+        tool_names = (
+            'board_dependencies.py', 'board_tools.py', 'hardware_catalog.py',
+            'setup.py', 'managed_sitecustomize.py',
+            'sdk-toolchains-windows-1.0.1.json', 'esp32s3-python-lock.json',
+        )
+        with tempfile.TemporaryDirectory(prefix='zew-osgi-tools-') as directory:
+            staged = Path(directory)
+            shutil.copyfile(TOOLS / tool_names[0], staged / tool_names[0])
+            missing = subprocess.run(
+                [sys.executable, '-I', str(staged / 'board_dependencies.py'), '--help'],
+                text=True, capture_output=True, timeout=15)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn('board_tools.py', missing.stderr)
+            for name in tool_names[1:]:
+                shutil.copyfile(TOOLS / name, staged / name)
+            ready = subprocess.run(
+                [sys.executable, '-I', str(staged / 'board_dependencies.py'), '--help'],
+                text=True, capture_output=True, timeout=15)
+            self.assertEqual(ready.returncode, 0, ready.stderr)
+            self.assertIn('--board BOARD', ready.stdout)
+
     def test_official_compiler_lock_is_complete_and_consistent(self):
         lock = json.loads((TOOLS / 'sdk-toolchains-windows-1.0.1.json').read_text())
         self.assertEqual(lock['schema'], 1)
