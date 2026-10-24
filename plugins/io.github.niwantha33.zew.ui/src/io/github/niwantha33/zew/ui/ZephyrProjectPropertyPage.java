@@ -95,7 +95,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
         search.addModifyListener(e -> filterTargets());
         targets.addListener(SWT.Selection, e -> validateSelection());
         setValid(false);
-        getControl().getDisplay().asyncExec(() -> { if (!panel.isDisposed()) loadHardware(); });
+        panel.getDisplay().asyncExec(() -> { if (!panel.isDisposed()) loadHardware(); });
         return panel;
     }
 
