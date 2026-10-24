@@ -330,6 +330,19 @@ def check_zephyr_scripts(source, workspace, environment):
         workspace, environment, 120)
 
 
+def cmake_path(value):
+    # Windows accepts forward slashes. CMake macros reparse backslashes as
+    # escapes (e.g. C:\\Sandbox produces an invalid \\S escape).
+    return str(value).replace('\\', '/')
+
+
+def first_build_command(python, project, build, board, ninja):
+    return [python, '-m', 'west', 'build', '--build-dir', cmake_path(build),
+            '--board', board, cmake_path(project), '--', '-DZEPHYR_MODULES=',
+            '-DCMAKE_MAKE_PROGRAM:FILEPATH=' + cmake_path(ninja),
+            '-DPython3_EXECUTABLE:FILEPATH=' + cmake_path(python)]
+
+
 def setup(root, lock):
     validate_lock(lock)
     if sys.platform != 'win32' or sys.maxsize <= 2**32:
@@ -355,17 +368,16 @@ def setup(root, lock):
             raise ValueError('Installed build executable is missing: ' + str(executable))
     log('PHASE 2/5 — Installing SDK and the x86 compiler only')
     sdk = install_sdk(root)
-    environment.update(ZEPHYR_SDK_INSTALL_DIR=str(sdk), ZEPHYR_TOOLCHAIN_VARIANT='zephyr')
+    environment.update(ZEPHYR_SDK_INSTALL_DIR=cmake_path(sdk), ZEPHYR_TOOLCHAIN_VARIANT='zephyr')
     log('PHASE 3/5 — Obtaining the pinned Zephyr source')
     workspace, source = ensure_source(root, git, lock, environment)
-    environment['ZEPHYR_BASE'] = str(source)
+    environment['ZEPHYR_BASE'] = cmake_path(source)
     check_zephyr_scripts(source, workspace, environment)
     log('PHASE 4/5 — Creating Hello World without changing existing source')
     project = create_application(root)
     log('PHASE 5/5 — Building and verifying the first firmware')
     build = project / '.zew-build/first'
-    run([sys.executable, '-m', 'west', 'build', '--build-dir', build, '--board', lock['board'], project, '--',
-         '-DZEPHYR_MODULES=', '-DCMAKE_MAKE_PROGRAM=' + str(ninja), '-DPython3_EXECUTABLE=' + sys.executable], workspace, environment)
+    run(first_build_command(sys.executable, project, build, lock['board'], ninja), workspace, environment)
     if not (build / 'zephyr/zephyr.elf').is_file():
         raise ValueError('Build finished without the expected firmware; setup is not ready')
     values = {'python': sys.executable, 'workspace': workspace, 'application': project, 'board': lock['board'],
@@ -386,5 +398,6 @@ if __name__ == '__main__':
         log('FAILED — ' + str(error))
         log('Existing environments were preserved. Retry with the same folder to reuse verified downloads.')
         raise SystemExit(1)
+
 
 

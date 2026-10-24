@@ -24,6 +24,18 @@ spec.loader.exec_module(setup)
 
 
 class SetupTests(unittest.TestCase):
+    def test_windows_build_arguments_use_cmake_paths(self):
+        command = setup.first_build_command(r'C:\Sandbox\Zephyr Setup Ω\python\python.exe',
+                r'C:\Sandbox\Zephyr Setup Ω\projects\hello_world',
+                r'C:\Sandbox\Zephyr Setup Ω\projects\hello_world\.zew-build\first',
+                'qemu_x86/atom', r'C:\Sandbox\Zephyr Setup Ω\python\Scripts\ninja.exe')
+        self.assertEqual(command[command.index('--build-dir')+1], 'C:/Sandbox/Zephyr Setup Ω/projects/hello_world/.zew-build/first')
+        definitions = command[command.index('--')+1:]
+        self.assertIn('-DPython3_EXECUTABLE:FILEPATH=C:/Sandbox/Zephyr Setup Ω/python/python.exe', definitions)
+        self.assertIn('-DCMAKE_MAKE_PROGRAM:FILEPATH=C:/Sandbox/Zephyr Setup Ω/python/Scripts/ninja.exe', definitions)
+        self.assertTrue(all('\\' not in value for value in definitions))
+        self.assertIn('C:/Sandbox/Zephyr Setup Ω/projects/hello_world', command)
+
     def test_child_install_into_initially_missing_package_path(self):
         # Reproduce a first-ever embedded-runtime install: the path was absent
         # when the parent searched it, then pip's child creates the directory.
@@ -282,5 +294,6 @@ with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
 
 if __name__ == '__main__':
     unittest.main()
+
 
 

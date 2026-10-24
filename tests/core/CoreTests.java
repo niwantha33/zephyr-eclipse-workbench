@@ -29,6 +29,7 @@ public final class CoreTests {
         command.addAll(List.of(args)); return command;
     }
     public static void main(String[] args) throws Exception {
+        check(WestCommands.cmakePath("C:\\Sandbox\\Zephyr Setup Ω\\python.exe").equals("C:/Sandbox/Zephyr Setup Ω/python.exe"), "Windows CMake paths avoid macro escapes");
         Path temp = Files.createTempDirectory("zew test space-");
         try {
             Path workspace = Files.createDirectories(temp.resolve("workspace with spaces"));
@@ -94,3 +95,4 @@ public final class CoreTests {
         }
     }
 }
+

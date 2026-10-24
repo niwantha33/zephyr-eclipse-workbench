@@ -26,9 +26,10 @@ final class ToolEnvironment {
         }
         String sdk = preferences.getString("tools.sdk");
         if (!sdk.isBlank()) {
-            result.put("ZEPHYR_SDK_INSTALL_DIR", sdk);
+            result.put("ZEPHYR_SDK_INSTALL_DIR", io.github.niwantha33.zew.core.WestCommands.cmakePath(sdk));
             result.put("ZEPHYR_TOOLCHAIN_VARIANT", "zephyr");
         }
         return Map.copyOf(result);
     }
 }
+

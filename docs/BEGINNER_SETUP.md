@@ -1,4 +1,4 @@
-# Beginner setup — development preview 0.1.9
+# Beginner setup — development preview 0.1.10
 
 The new **Zephyr > Set Up Zephyr** wizard bootstraps a managed environment on
 native Windows x64. No installed Python, Git, winget, terminal commands or global
@@ -26,6 +26,11 @@ board/vendor selection, physical flashing and debugging are follow-up work.
 It is not yet a complete all-board onboarding product.
 
 ## Isolation and recovery
+
+Release 0.1.10 normalizes Windows paths at the CMake boundary, fixing
+`Invalid character escape '\S'` during Kconfig target creation. Setup retries
+replace old Python/Ninja cache definitions without deleting the installation.
+See [the path hotfix validation record](INSTALLER_HOTFIX_0.1.10.md).
 
 Release 0.1.9 refreshes the running installer's Python import caches after pip
 installation and verifies `py7zr` before SDK extraction. This fixes fresh setup
@@ -84,5 +89,6 @@ policies can affect bootstrap installation; failures remain visible in the conso
 
 The earlier Tools Manager remains the route for existing Zephyr environments
 and additional boards. No existing firmware project is migrated automatically.
+
 
 

@@ -13,6 +13,11 @@ import java.util.List;
 public final class WestCommands {
     private WestCommands() {}
 
+    /** CMake macros reparse Windows backslashes as escapes. */
+    public static String cmakePath(String path) {
+        return path.replace('\\', '/');
+    }
+
     public static List<String> west(WorkbenchConfig config, String... arguments) {
         var command = new ArrayList<String>();
         command.add(config.python().toString());
@@ -57,3 +62,4 @@ public final class WestCommands {
         return Path.of(lines.getFirst()).toAbsolutePath().normalize();
     }
 }
+

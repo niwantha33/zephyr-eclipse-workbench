@@ -60,12 +60,14 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             directories.add(Path.of(settings.getProperty("python")).getParent().toString());
             String pathKey = System.getenv().keySet().stream().filter(key -> key.equalsIgnoreCase("PATH")).findFirst().orElse("PATH");
             environment.put(pathKey, String.join(java.io.File.pathSeparator, directories) + java.io.File.pathSeparator + System.getenv().getOrDefault(pathKey, ""));
-            environment.put("ZEPHYR_SDK_INSTALL_DIR", settings.getProperty("tools.sdk"));
+            environment.put("ZEPHYR_SDK_INSTALL_DIR", io.github.niwantha33.zew.core.WestCommands.cmakePath(settings.getProperty("tools.sdk")));
             environment.put("ZEPHYR_TOOLCHAIN_VARIANT", "zephyr");
-            environment.put("ZEPHYR_BASE", Path.of(settings.getProperty("workspace"), "zephyr").toString());
+            environment.put("ZEPHYR_BASE", io.github.niwantha33.zew.core.WestCommands.cmakePath(Path.of(settings.getProperty("workspace"), "zephyr").toString()));
             var command = new ArrayList<>(List.of(settings.getProperty("python"), "-m", "west", "build", "--build-dir", project.resolve(".zew-build/first").toString()));
             if (clean) command.addAll(List.of("--target", "clean"));
-            else command.addAll(List.of("--board", settings.getProperty("board"), project.toString(), "--", "-DZEPHYR_MODULES=", "-DCMAKE_MAKE_PROGRAM=" + settings.getProperty("tools.ninja")));
+            else command.addAll(List.of("--board", settings.getProperty("board"), project.toString(), "--", "-DZEPHYR_MODULES=",
+                    "-DCMAKE_MAKE_PROGRAM:FILEPATH=" + io.github.niwantha33.zew.core.WestCommands.cmakePath(settings.getProperty("tools.ninja")),
+                    "-DPython3_EXECUTABLE:FILEPATH=" + io.github.niwantha33.zew.core.WestCommands.cmakePath(settings.getProperty("python"))));
             stream.println("Workbench " + Activator.getDefault().getBundle().getVersion() + " | " + getProject().getName());
             monitor.beginTask(clean ? "Clean Zephyr project" : "Build Zephyr project", IProgressMonitor.UNKNOWN);
             new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofMinutes(30), monitor::isCanceled, stream::println, environment).requireSuccess();
@@ -79,3 +81,4 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         finally { monitor.done(); }
     }
 }
+
