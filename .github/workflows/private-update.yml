@@ -11,13 +11,9 @@ on:
       - 'tests/**'
       - 'pom.xml'
       - '.github/workflows/private-update.yml'
+  # Optional manual retry if a GitHub-hosted runner was unavailable;
+  # never required after a successful main merge.
   workflow_dispatch:
-    inputs:
-      publish:
-        description: 'Publish only after tests pass (private updates branch)'
-        type: boolean
-        required: true
-        default: false
 permissions:
   contents: read
 concurrency:
@@ -55,7 +51,9 @@ jobs:
   publish:
     name: Promote verified candidate atomically
     needs: verify
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main' }}
+    # Automatic on every successful main code merge. Reuses the exact verified
+    # artifact; no separate script, confirmation or release operation required.
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -98,6 +96,13 @@ jobs:
           print(version)
           PY
           )"
+          # A PR merge is only valid if this job is still publishing the tip of
+          # main. Never publish an older completed build over a newer commit.
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "$GITHUB_SHA" || {
+            echo "Main advanced since this build; a newer workflow will publish it."
+            exit 1
+          }
           git fetch --no-tags origin refs/heads/updates:refs/remotes/origin/updates
           RELEASE_ROOT="$RUNNER_TEMP/zephyr-p2-updates"
           git worktree add --detach "$RELEASE_ROOT" refs/remotes/origin/updates
