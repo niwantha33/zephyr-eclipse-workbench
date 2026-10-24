@@ -51,7 +51,7 @@ for p in bundles:
                 raise SystemExit('Setup profile or package review is incomplete.')
             if not z.read('tools/setup-licences.txt').strip():
                 raise SystemExit('Setup licence records missing.')
-            for name in ('SetupWizard', 'SetupStartup', 'ZephyrProjectBuilder'):
+            for name in ('SetupWizard', 'SetupStartup', 'ZephyrProjectBuilder', 'ZephyrProjectWizard'):
                 if 'io/github/niwantha33/zew/ui/' + name + '.class' not in z.namelist():
                     raise SystemExit('Beginner setup class missing: ' + name)
             if 'io/github/niwantha33/zew/ui/ToolsDialog.class' not in z.namelist():
@@ -60,6 +60,10 @@ for p in bundles:
             for page in plugin.findall("./extension[@point='org.eclipse.ui.preferencePages']/page"):
                 if page.attrib['class'].replace('.', '/') + '.class' not in z.namelist():
                     raise SystemExit('Preference page class missing.')
+            for point in ('org.eclipse.ui.newWizards', 'org.eclipse.ui.importWizards'):
+                registrations = plugin.findall("./extension[@point='" + point + "']/wizard")
+                if not any(w.attrib.get('class') == 'io.github.niwantha33.zew.ui.ZephyrProjectWizard' for w in registrations):
+                    raise SystemExit('New/Import Zephyr wizard not registered for ' + point)
             for handler in plugin.findall("./extension[@point='org.eclipse.ui.handlers']/handler"):
                 if handler.attrib['class'].replace('.', '/') + '.class' not in z.namelist():
                     raise SystemExit('Command handler class missing.')

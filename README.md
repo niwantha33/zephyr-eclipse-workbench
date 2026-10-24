@@ -36,6 +36,21 @@ Vendor presence does not imply support for every chip or peripheral. Physical ex
 
 The reported command-line build is not evidence that this plug-in works.
 
+## Preview 0.1.11 — project workflow
+
+The review branch adds native **File > New > Other > Zephyr > Zephyr Project**
+and **File > Import > Zephyr > Existing Zephyr Application**, independently
+bound to the verified managed Windows x64 environment. New source projects are
+portable and protected against overwrite. Each application has an isolated
+build directory, and the existing HelloZephyr build cache is retained.
+
+**Board limitation:** the managed installer presently includes the x86 compiler
+for `qemu_x86/atom` only. General vendor/SoC/core selection, external
+toolchain installation, CDT indexing, running/flashing and on-target debugging
+are still pending and are *not* presented as working.
+
+See [Project workflow 0.1.11](docs/PROJECT_WORKFLOW_0.1.11.md).
+
 ## Start here
 
 - [Build, install locally and use the development slice](docs/DEVELOPMENT.md)
