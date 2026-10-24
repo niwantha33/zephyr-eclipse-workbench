@@ -44,30 +44,50 @@ def checked_board(board):
 
 
 def soc_metadata(zephyr, soc):
-    """Find a SoC in the checked-out Zephyr YAML, never infer from board maker."""
+    """Locate both the SoC and its CPU series in the checkout's own YAML."""
     import yaml
-    def contains_name(value):
-        if isinstance(value, dict):
-            return value.get('name') == soc or any(contains_name(v) for v in value.values())
-        return any(contains_name(v) for v in value) if isinstance(value, list) else False
+
+    def matching_series(value, series=None):
+        if isinstance(value, list):
+            for item in value:
+                result = matching_series(item, series)
+                if result is not None:
+                    return result
+        elif isinstance(value, dict):
+            if value.get('name') == soc and series is not None:
+                return series
+            for key, child in value.items():
+                if key == 'series' and isinstance(child, list):
+                    for entry in child:
+                        result = matching_series(entry, entry.get('name'))
+                        if result is not None:
+                            return result
+                else:
+                    result = matching_series(child, series)
+                    if result is not None:
+                        return result
+        return None
+
     matches = []
     for path in (zephyr / 'soc').rglob('soc.yml'):
-        if contains_name(yaml.safe_load(path.read_text(encoding='utf-8'))):
-            matches.append(path.parent)
+        series = matching_series(yaml.safe_load(path.read_text(encoding='utf-8')))
+        if series is not None:
+            folder = path.parent / series
+            matches.append((path.parent, folder if folder.is_dir() else path.parent))
     if len(matches) != 1:
         raise ValueError('Cannot unambiguously resolve SoC ' + soc + ' from the pinned Zephyr tree')
-    relative = matches[0].relative_to(zephyr / 'soc')
-    return relative.parts[0], matches[0]
+    relative = matches[0][0].relative_to(zephyr / 'soc')
+    return relative.parts[0], matches[0][1]
 
 
 def architecture(vendor, soc, folder, qualifier):
-    """Read SoC Kconfig for CPU architecture; reject ambiguous CPU families.
+    """Derive compiler from the selected SoC series and exact core qualifier.
 
-    The explicit SoC-family fallbacks cover layouts whose Kconfig selects a
-    shared family outside the individual SoC directory. Unsupported CPU
-    families fail before any download, rather than guessing an ARM compiler.
+    Mixed ARM/RISC-V SoCs must select a core explicitly; an ambiguous or
+    unsupported core fails closed instead of silently installing ARM tools.
     """
     chip = soc.lower()
+    core = qualifier.lower().split('/')[-1]
     if vendor == 'espressif':
         if chip in ('esp32', 'esp32s2', 'esp32s3'):
             return 'xtensa-espressif_' + chip + '_zephyr-elf'
@@ -77,28 +97,39 @@ def architecture(vendor, soc, folder, qualifier):
     for source in folder.rglob('Kconfig*'):
         if source.is_file():
             chunks.append(source.read_text(encoding='utf-8', errors='replace'))
-    flags = set()
     all_text = '\n'.join(chunks)
+    flags = set()
     for regex, family in CPU_FAMILIES:
         if regex.search(all_text):
             flags.add(family)
-    # A SoC family may include several cores. Architecture is selected by the
-    # exact qualifier, and unknown combinations require explicit support.
+    if re.search(r'\bARM64\b|\bAARCH64\b', all_text):
+        flags.add('aarch64')
+    if 'aarch64' in flags and 'arm' in flags:
+        # Cortex-A/M can coexist in one family; there is no safe universal default.
+        raise ValueError('Multiple ARM core widths found: select a supported CPU cluster for ' + qualifier)
+    if len(flags) > 1:
+        if core in ('cpuflpr', 'lpcore') and 'riscv' in flags:
+            return 'riscv64-zephyr-elf'
+        if core in ('cpuapp', 'cpunet', 'cpuppr') and 'arm' in flags:
+            return 'arm-zephyr-eabi'
+        raise ValueError('Mixed architectures in SoC series; cannot determine compiler for ' + qualifier)
     if flags == {'arm'}:
         return 'arm-zephyr-eabi'
+    if flags == {'aarch64'}:
+        return 'aarch64-zephyr-elf'
     if flags == {'riscv'}:
         return 'riscv64-zephyr-elf'
     if flags == {'x86'}:
         return 'x86_64-zephyr-elf'
     if flags == {'arc'}:
         return 'arc-zephyr-elf'
-    if vendor in ('ti', 'st', 'nordic', 'nxp') and ('mspm0' in chip or vendor in ('st', 'nordic') or 'cortex' in all_text.lower()):
+    if flags == {'xtensa'}:
+        # Xtensa toolchains are core-specific, not interchangeable.
+        raise ValueError('No uniquely identified Xtensa CPU compiler for ' + qualifier)
+    if vendor == 'ti' and chip.startswith('mspm0'):
         return 'arm-zephyr-eabi'
-    if vendor == 'intel' and 'x86' in all_text.lower():
-        return 'x86_64-zephyr-elf'
     raise ValueError('CPU architecture cannot be confirmed for ' + soc + '/' + qualifier
-                     + '. The application and current SDK were preserved.')
-
+                     + '. Application and SDK were preserved.')
 
 def manifest_projects(python, workspace):
     command = [str(python), '-m', 'west', 'list', '-f', '{name}\t{revision}\t{path}']
