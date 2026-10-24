@@ -148,6 +148,40 @@ class DependencyTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'inactive in CMake discovery'):
                     board.activate_modules({'modules': ['cmsis_6']}, Path('.'), 'python')
 
+    def test_transitive_build_depends_are_pinned_and_prepared(self):
+        with tempfile.TemporaryDirectory() as home:
+            workspace = Path(home)
+            hal = workspace / 'modules/hal/ti'
+            cmsis = workspace / 'modules/hal/cmsis_6'
+            for item in (hal, cmsis):
+                (item / '.git').mkdir(parents=True)
+            (hal / 'zephyr').mkdir()
+            (hal / 'zephyr/module.yml').write_text(
+                'name: hal_ti\\nbuild:\\n  depends:\\n    - cmsis_6\\n')
+            plan = {'modules': ['hal_ti'], 'manifest': {
+                'hal_ti': ('a' * 40, Path('modules/hal/ti')),
+                'cmsis_6': ('b' * 40, Path('modules/hal/cmsis_6'))}}
+            with patch.object(board, 'git_revision',
+                              side_effect=lambda git, folder: 'a' * 40 if folder == hal else 'b' * 40):
+                with patch('subprocess.run') as run:
+                    board.prepare_modules(plan, workspace, 'python', 'git')
+                    run.assert_not_called()
+            self.assertEqual(plan['modules'], ['hal_ti', 'cmsis_6'])
+
+    def test_missing_transitive_project_fails_before_build(self):
+        with tempfile.TemporaryDirectory() as home:
+            workspace = Path(home)
+            hal = workspace / 'modules/hal/ti'
+            (hal / '.git').mkdir(parents=True)
+            (hal / 'zephyr').mkdir()
+            (hal / 'zephyr/module.yml').write_text(
+                'build:\\n  depends:\\n    - missing_dependency\\n')
+            plan = {'modules': ['hal_ti'],
+                    'manifest': {'hal_ti': ('a' * 40, Path('modules/hal/ti'))}}
+            with patch.object(board, 'git_revision', return_value='a' * 40):
+                with self.assertRaisesRegex(ValueError, 'requires unavailable West project'):
+                    board.prepare_modules(plan, workspace, 'python', 'git')
+
     def test_existing_compiler_is_verified_not_overwritten(self):
         with tempfile.TemporaryDirectory() as home:
             root = Path(home)
