@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<feature id="io.github.niwantha33.zew.feature" label="Zephyr Eclipse Workbench (development preview)" version="0.1.6.qualifier" provider-name="Zephyr Eclipse Workbench contributors">
+<feature id="io.github.niwantha33.zew.feature" label="Zephyr Eclipse Workbench (development preview)" version="0.1.7.qualifier" provider-name="Zephyr Eclipse Workbench contributors">
   <description>Build existing Zephyr applications through West. No automatic installation of SDKs or vendor blobs.</description>
   <copyright>Copyright 2026 Zephyr Eclipse Workbench contributors.</copyright>
   <license url="https://www.apache.org/licenses/LICENSE-2.0">Original feature and plug-in material is provided under Apache License 2.0. See LICENSE in each bundle. External dependencies retain their own licences.</license>
   <plugin id="io.github.niwantha33.zew.core" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
   <plugin id="io.github.niwantha33.zew.ui" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
 </feature>
+

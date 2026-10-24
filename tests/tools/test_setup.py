@@ -6,6 +6,10 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
+import subprocess
+import sys
+import tarfile
+import io
 import unittest
 from unittest.mock import patch
 
@@ -71,6 +75,64 @@ class SetupTests(unittest.TestCase):
         lock = self.lock(); next(p for p in lock['packages'] if p['name'] == 'ninja')['installed_executable'] = '../../outside'
         self.assertRaises(ValueError, setup.installed_executable, root, lock, 'ninja')
 
+    def source_fixture(self, root):
+        source = root / 'fixture/docopt-0.6.2'; source.mkdir(parents=True)
+        (source / 'docopt.py').write_text('__version__ = "0.6.2"\n')
+        (source / 'setup.py').write_text('''from docopt import __version__
+import pathlib,sys,zipfile
+output=pathlib.Path(sys.argv[sys.argv.index('--dist-dir')+1])
+with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
+    wheel.writestr('docopt.py','__version__="0.6.2"')
+    wheel.writestr('docopt-0.6.2.dist-info/METADATA','Metadata-Version: 2.1\\nName: docopt\\nVersion: '+__version__+'\\n')
+    wheel.writestr('docopt-0.6.2.dist-info/LICENSE-MIT','MIT fixture licence')
+''')
+        archive = root / 'docopt-0.6.2.tar.gz'
+        with tarfile.open(archive, 'w:gz') as output: output.add(source, arcname='docopt-0.6.2')
+        return source, {'name': 'docopt', 'version': '0.6.2', 'file': archive.name,
+                        'size': archive.stat().st_size, 'sha256': setup.digest(archive), 'review': 'approved-build-use'}
+
+    def test_isolated_source_failure_reproduced_and_fixed(self):
+        with tempfile.TemporaryDirectory(prefix='isolated source Ω ') as directory:
+            root = Path(directory); source, package = self.source_fixture(root)
+            output = root / 'old-output'; output.mkdir()
+            old = subprocess.run([sys.executable, '-I', '-c', 'import runpy;runpy.run_path("setup.py",run_name="__main__")',
+                                  'bdist_wheel', '--dist-dir', output], cwd=source, text=True,
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=20)
+            self.assertNotEqual(old.returncode, 0); self.assertIn("No module named 'docopt'", old.stdout)
+            previous_path = sys.path.copy()
+            result = setup.build_source_wheel(package, root, dict(setup.os.environ))
+            self.assertEqual(sys.path, previous_path)
+            self.assertTrue(result['file'].endswith('.whl'))
+            self.assertTrue(setup.valid_cache(root / result['file'], result))
+            proof = json.loads((root / 'docopt-local-build.json').read_text())
+            self.assertEqual(proof['source_sha256'], package['sha256'])
+            self.assertEqual(proof['wheel_sha256'], result['sha256'])
+            self.assertFalse(any(root.glob('*._pth')))
+
+    def test_changed_source_archive_blocks_build_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); _, package = self.source_fixture(root)
+            (root / package['file']).write_bytes(b'tampered')
+            with patch.object(setup, 'run', side_effect=AssertionError('should not execute')):
+                self.assertRaises(ValueError, setup.build_source_wheel, package, root, {})
+
+    def test_source_archive_traversal_and_links_rejected(self):
+        for kind in ('traversal', 'link'):
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); archive = root / 'docopt-0.6.2.tar.gz'
+                with tarfile.open(archive, 'w:gz') as output:
+                    member = tarfile.TarInfo('../outside' if kind == 'traversal' else 'docopt-0.6.2/link')
+                    if kind == 'link': member.type = tarfile.SYMTYPE; member.linkname = '../../outside'
+                    output.addfile(member, io.BytesIO())
+                package = {'name': 'docopt', 'version': '0.6.2', 'file': archive.name, 'size': archive.stat().st_size,
+                           'sha256': setup.digest(archive), 'review': 'approved-build-use'}
+                with patch.object(setup, 'run', side_effect=AssertionError('should not execute')):
+                    self.assertRaises(ValueError, setup.build_source_wheel, package, root, {})
+
+    def test_unreviewed_source_build_rejected(self):
+        self.assertRaises(ValueError, setup.build_source_wheel,
+                          {'name': 'other', 'version': '0.6.2', 'review': 'approved-build-use'}, Path('.'), {})
+
     def test_sdk_archive_traversal_rejected(self):
         for name in ('../outside', '/outside', 'C:/outside', 'folder\\outside'):
             self.assertRaises(ValueError, setup.safe_archive_names, [SimpleNamespace(filename=name, uncompressed=1)])
@@ -127,3 +189,4 @@ class SetupTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

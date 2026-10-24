@@ -6,6 +6,7 @@ No global PATH/registry edits, no module/blob updates, no user-source replacemen
 The Java bootstrap reserves the directory and holds its installation lock.
 """
 import argparse
+from email.parser import BytesParser
 import hashlib
 import json
 import os
@@ -14,9 +15,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tarfile
 import time
 import urllib.parse
 import urllib.request
+import zipfile
 
 SDK_ASSETS = [
     {'file': 'zephyr-sdk-1.0.1_windows-x86_64_minimal.7z', 'size': 104319274,
@@ -120,6 +123,67 @@ def requirements_file(packages, cache, path):
                               for p in packages) + '\n', encoding='utf-8')
 
 
+def source_build_command(python, source, output):
+    # Embedded Python's ._pth deliberately excludes cwd. Grant only this
+    # verified source directory to this one isolated build process.
+    wrapper = ('import sys,runpy;source=sys.argv.pop(1);sys.path.insert(0,source);'
+               'runpy.run_path(source+"/setup.py",run_name="__main__")')
+    return [python, '-I', '-c', wrapper, str(source), 'bdist_wheel', '--dist-dir', str(output)]
+
+
+def build_source_wheel(package, cache, environment):
+    """Build the single reviewed source-only dependency without changing ._pth."""
+    if package['name'] != 'docopt' or package['version'] != '0.6.2' or package['review'] != 'approved-build-use':
+        raise ValueError('Unreviewed source build requested')
+    archive = cache / package['file']
+    if not valid_cache(archive, package):
+        raise ValueError('Source archive changed after download verification')
+    log('Building verified Docopt source wheel with an explicit isolated import path')
+    with tempfile.TemporaryDirectory(prefix='docopt-build-', dir=cache) as directory:
+        stage = Path(directory)
+        with tarfile.open(archive) as source_archive:
+            members = source_archive.getmembers()
+            if len(members) > 500 or sum(m.size for m in members) > 16777216:
+                raise ValueError('Source archive exceeds extraction limits')
+            for member in members:
+                path = PurePosixPath(member.name)
+                if (path.is_absolute() or '..' in path.parts or ':' in member.name or '\\' in member.name
+                        or not (member.isfile() or member.isdir())):
+                    raise ValueError('Unsafe source archive member')
+            source_archive.extractall(stage, filter='data')
+        source = stage / 'docopt-0.6.2'
+        if not (source / 'setup.py').is_file() or not (source / 'docopt.py').is_file():
+            raise ValueError('Unexpected reviewed source layout')
+        output = stage / 'wheels'; output.mkdir()
+        run(source_build_command(sys.executable, source, output), source, environment, 300)
+        wheels = list(output.glob('*.whl'))
+        if len(wheels) != 1:
+            raise ValueError('Source build did not produce exactly one wheel')
+        wheel = wheels[0]
+        with zipfile.ZipFile(wheel) as built:
+            if built.testzip() is not None or 'docopt.py' not in built.namelist():
+                raise ValueError('Built source wheel is incomplete or corrupt')
+            metadata_files = [p for p in built.namelist() if p.endswith('.dist-info/METADATA')]
+            if len(metadata_files) != 1:
+                raise ValueError('Built wheel has ambiguous package metadata')
+            metadata = BytesParser().parsebytes(built.read(metadata_files[0]))
+            if metadata['Name'] != 'docopt' or metadata['Version'] != '0.6.2':
+                raise ValueError('Built wheel identity differs from reviewed source')
+            if not any('license' in p.lower() for p in built.namelist()):
+                raise ValueError('Built wheel did not retain the source licence')
+        wheel_hash = digest(wheel)
+        target = cache / wheel.name
+        partial = target.with_name(target.name + '.partial')
+        shutil.copyfile(wheel, partial); partial.replace(target)
+        provenance = {'name': package['name'], 'version': package['version'],
+                      'source_sha256': package['sha256'], 'wheel_sha256': wheel_hash,
+                      'wheel': wheel.name, 'python': sys.version}
+        proof = cache / 'docopt-local-build.json'
+        proof.write_text(json.dumps(provenance, indent=2) + '\n', encoding='utf-8')
+        result = dict(package, file=wheel.name, sha256=wheel_hash, size=target.stat().st_size)
+    return result
+
+
 def install_packages(lock, root, environment):
     cache = root / 'cache'; cache.mkdir(exist_ok=True)
     for package in lock['packages']:
@@ -132,6 +196,7 @@ def install_packages(lock, root, environment):
                '--disable-pip-version-check', '--no-warn-script-location', '-r', root / 'bootstrap-requirements.txt']
     run(command, root, environment)
     rest = [p for p in lock['packages'] if p not in bootstrap]
+    rest = [p if p['file'].endswith('.whl') else build_source_wheel(p, cache, environment) for p in rest]
     requirements_file(rest, cache, root / 'build-requirements.txt')
     run([sys.executable, '-m', 'pip', 'install', '--no-index', '--no-deps', '--no-build-isolation',
          '--require-hashes', '--disable-pip-version-check', '--no-warn-script-location', '-r', root / 'build-requirements.txt'], root, environment)
@@ -291,3 +356,4 @@ if __name__ == '__main__':
         log('FAILED — ' + str(error))
         log('Existing environments were preserved. Retry with the same folder to reuse verified downloads.')
         raise SystemExit(1)
+

@@ -1,4 +1,4 @@
-# Beginner setup — development preview 0.1.6
+# Beginner setup — development preview 0.1.7
 
 The new **Zephyr > Set Up Zephyr** wizard bootstraps a managed environment on
 native Windows x64. No installed Python, Git, winget, terminal commands or global
@@ -34,6 +34,11 @@ It is not yet a complete all-board onboarding product.
   resolution. Docopt is built locally from its pinned source distribution using
   pinned build tools; the resolver-only placeholder used during lock preparation
   is never included in the installer or lock.
+  Release 0.1.7 builds the reviewed Docopt source in its own isolated process,
+  explicitly adding only that verified source directory to the build import path.
+  The generated wheel is checked for package identity, integrity and licence
+  retention, then installed using its recorded SHA-256. Runtime `._pth` isolation
+  remains unchanged. This fixes the Windows `No module named 'docopt'` failure.
 - Python, MinGit and SDK archives are pinned as well. Licence/notice file paths
   and digests are recorded in `tools/setup-lock.json`; original notices remain in
   the downloaded distributions. Approval is for external build use, not tool-bundle
@@ -70,3 +75,4 @@ policies can affect bootstrap installation; failures remain visible in the conso
 
 The earlier Tools Manager remains the route for existing Zephyr environments
 and additional boards. No existing firmware project is migrated automatically.
+
