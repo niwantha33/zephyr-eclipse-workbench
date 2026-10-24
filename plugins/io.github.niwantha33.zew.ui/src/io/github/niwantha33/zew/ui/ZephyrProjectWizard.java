@@ -38,7 +38,7 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
         Table targets;
         List<String[]> rows = new ArrayList<>();
         Path loadedRoot;
-        Page() { super("project"); setTitle("New or existing Zephyr application"); setDescription("Select a ready tool environment, load its hardware, then choose an exact target."); }
+        Page() { super("project"); setTitle("New or existing Zephyr application"); setDescription("Reuse a managed environment and select the exact board, SoC and CPU for this project."); }
         @Override public void createControl(Composite parent) {
             var body = new Composite(parent, SWT.NONE); body.setLayout(new GridLayout(3, false));
             name = field(body, "Project name", "MyZephyr", false);
@@ -141,7 +141,7 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             } catch (Exception e) { error = e.getMessage(); }
             if (targets.getSelectionCount() == 1 && ((String[]) targets.getSelection()[0].getData())[6].contains("/esp32s3/appcpu"))
                 setMessage("APPCPU is the secondary core and requires primary-core firmware. For standalone Hello World choose esp32s3/procpu.", org.eclipse.jface.dialogs.IMessageProvider.WARNING);
-            else setMessage("Missing ESP32-S3 compiler and build tools are installed automatically on the first project build.");
+            else setMessage("Eclipse Build Project will check the selected SoC and CPU, then prepare matching pinned SDK and West modules.");
             setErrorMessage(error); setPageComplete(error == null);
         }
     }
