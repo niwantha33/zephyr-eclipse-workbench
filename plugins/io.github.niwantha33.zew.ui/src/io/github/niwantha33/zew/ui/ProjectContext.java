@@ -19,14 +19,19 @@ final class ProjectContext {
         if (Files.isRegularFile(application.resolve(".zew/project.json"))) {
             settings.setProperty("board", ProjectProfile.read(application).board());
             settings.setProperty("application", application.toString());
-            if (settings.getProperty("board").equals("qemu_x86/atom")) settings.setProperty("zew.modules.none", "true");
+            // Never carry a no-modules flag over to a non-x86 SoC.
+            settings.setProperty("zew.modules.none", settings.getProperty("board").equals("qemu_x86/atom") ? "true" : "false");
         } else if (Files.isRegularFile(application.resolve(".zew/project.properties"))) {
             settings.setProperty("board", io.github.niwantha33.zew.core.ZephyrProjectFiles.readBoard(application));
             settings.setProperty("application", application.toString());
-            settings.setProperty("zew.modules.none", "true");
+            settings.setProperty("zew.modules.none", settings.getProperty("board").equals("qemu_x86/atom") ? "true" : "false");
         } else if (!application.toRealPath().equals(Path.of(settings.getProperty("application")).toRealPath())) {
             throw new java.io.IOException("Legacy project differs from its managed environment. Import it using the project wizard.");
         }
+        // Imported legacy projects may inherit a starter environment setting.
+        // Only the original qemu_x86/atom starter intentionally bypasses modules.
+        settings.setProperty("zew.modules.none",
+                "qemu_x86/atom".equals(settings.getProperty("board")) ? "true" : "false");
         return settings;
     }
     static Path buildDirectory(IProject project, Properties settings) throws Exception {
