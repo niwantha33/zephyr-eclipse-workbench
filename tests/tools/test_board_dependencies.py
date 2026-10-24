@@ -24,6 +24,7 @@ class DependencyTests(unittest.TestCase):
             'board_dependencies.py', 'board_tools.py', 'hardware_catalog.py',
             'setup.py', 'managed_sitecustomize.py',
             'sdk-toolchains-windows-1.0.1.json', 'esp32s3-python-lock.json',
+            'mcuboot-python-lock.json',
         )
         with tempfile.TemporaryDirectory(prefix='zew-osgi-tools-') as directory:
             staged = Path(directory)
@@ -181,6 +182,69 @@ class DependencyTests(unittest.TestCase):
             with patch.object(board, 'git_revision', return_value='a' * 40):
                 with self.assertRaisesRegex(ValueError, 'requires unavailable West project'):
                     board.prepare_modules(plan, workspace, 'python', 'git')
+
+    def test_imgtool_is_required_for_esp32_and_explicit_mcuboot(self):
+        with tempfile.TemporaryDirectory() as home:
+            application = Path(home)
+            self.assertTrue(board.requires_imgtool('espressif', application))
+            self.assertFalse(board.requires_imgtool('ti', application))
+            (application / 'prj.conf').write_text('CONFIG_BOOTLOADER_MCUBOOT=n\n')
+            self.assertFalse(board.requires_imgtool('ti', application))
+            (application / 'prj.conf').write_text('CONFIG_BOOTLOADER_MCUBOOT=y\n')
+            self.assertTrue(board.requires_imgtool('ti', application))
+            (application / 'prj.conf').write_text('# CONFIG_BOOTLOADER_MCUBOOT=y\n')
+            (application / 'sysbuild.conf').write_text('SB_CONFIG_BOOTLOADER_MCUBOOT=y\n')
+            self.assertTrue(board.requires_imgtool('st', application))
+
+    def test_mcuboot_python_wheels_have_exact_pins(self):
+        lock = json.loads((TOOLS / 'mcuboot-python-lock.json').read_text())
+        self.assertEqual((lock['schema'], lock['python'], lock['platform']), (1, '3.13', 'win_amd64'))
+        self.assertEqual({p['name'].lower() for p in lock['packages']},
+                         {'cbor2', 'cffi', 'click', 'cryptography', 'intelhex', 'pycparser', 'pyyaml'})
+        for package in lock['packages']:
+            self.assertRegex(package['sha256'], r'^[a-f0-9]{64}$')
+            self.assertTrue(package['url'].startswith('https://files.pythonhosted.org/'))
+            self.assertGreater(package['size'], 1000)
+
+    def test_missing_mcuboot_script_rejected_before_download(self):
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            manifest = {'mcuboot': ('a' * 40, Path('bootloader/mcuboot'))}
+            with patch.object(board.setup, 'fetch') as fetch:
+                with self.assertRaisesRegex(ValueError, 'scripts/imgtool.py'):
+                    board.install_signing_tools(root, root, 'python', manifest)
+                fetch.assert_not_called()
+
+    def test_signing_install_preserves_previous_esp32_environment(self):
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            signing = root / 'bootloader/mcuboot/scripts/imgtool.py'
+            signing.parent.mkdir(parents=True)
+            signing.write_text('print("imgtool")')
+            existing = root / 'board-python/esp32s3/.zew-ready'
+            existing.parent.mkdir(parents=True)
+            existing.write_text('unchanged')
+            site = root / 'python/Lib/site-packages'
+            site.mkdir(parents=True)
+            manifest = {'mcuboot': ('a' * 40, Path('bootloader/mcuboot'))}
+
+            def process(args, **kwargs):
+                if args[1:4] == ['-m', 'pip', 'install']:
+                    Path(args[args.index('--target') + 1]).mkdir(parents=True)
+                return subprocess.CompletedProcess(args, 0)
+
+            with patch.object(board.sys, 'version_info', (3, 13)):
+                with patch.object(board.setup, 'fetch', return_value=root / 'cache' / 'wheel.whl') as fetch:
+                    with patch('subprocess.run', side_effect=process) as run:
+                        board.install_signing_tools(root, root, 'python', manifest)
+                        self.assertEqual(run.call_count, 3)  # install, imports, imgtool --help
+                        self.assertEqual(fetch.call_count, 7)
+                        board.install_signing_tools(root, root, 'python', manifest)
+                        self.assertEqual(run.call_count, 4)  # reused, check imgtool --help
+                        self.assertEqual(fetch.call_count, 7)  # no downloads on rebuild
+            self.assertEqual(existing.read_text(), 'unchanged')
+            self.assertEqual((site / 'zew-mcuboot.pth').read_text(),
+                             str(root / 'board-python/mcuboot') + '\n')
 
     def test_existing_compiler_is_verified_not_overwritten(self):
         with tempfile.TemporaryDirectory() as home:
