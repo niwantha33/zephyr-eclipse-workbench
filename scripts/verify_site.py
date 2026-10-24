@@ -42,6 +42,10 @@ for p in bundles:
                 raise SystemExit('Tools inventory helper missing.')
             compile(z.read('tools/inventory.py'), 'tools/inventory.py', 'exec')
             compile(z.read('tools/setup.py'), 'tools/setup.py', 'exec')
+            compile(z.read('tools/managed_sitecustomize.py'), 'tools/managed_sitecustomize.py', 'exec')
+            for helper in ('setup.py', 'managed_sitecustomize.py'):
+                if z.read('tools/' + helper) != (root / 'plugins/io.github.niwantha33.zew.ui/tools' / helper).read_bytes():
+                    raise SystemExit('Packaged helper differs from verified source: ' + helper)
             lock = json.loads(z.read('tools/setup-lock.json'))
             if lock['profile'] != 'first-build-win-x64' or any(p['review'] != 'approved-build-use' for p in lock['packages']):
                 raise SystemExit('Setup profile or package review is incomplete.')
@@ -80,3 +84,4 @@ with zipfile.ZipFile(archive) as z:
 print('Verified p2 metadata and feature.')
 print('Update-site SHA-256:', hashlib.sha256(archive.read_bytes()).hexdigest())
 print('This checks packaging; it does not establish desktop installation or hardware support.')
+

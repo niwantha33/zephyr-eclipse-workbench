@@ -302,12 +302,30 @@ def write_properties(values, path):
     temporary.replace(path)
 
 
+def install_runtime_support(root):
+    # Reinstall on retries so older managed environments receive the fix too.
+    # Only this managed runtime is changed; keep python313._pth isolated.
+    target = root / 'python/sitecustomize.py'
+    source = Path(__file__).with_name('managed_sitecustomize.py')
+    temporary = target.with_suffix('.partial')
+    temporary.write_bytes(source.read_bytes())
+    temporary.replace(target)
+
+
+def check_zephyr_scripts(source, workspace, environment):
+    log('Checking isolated Python imports and the starter board metadata')
+    run([sys.executable, source / 'scripts/list_boards.py', '--board', 'qemu_x86',
+         '--board-root', source, '--soc-root', source, '--cmakeformat', '{NAME};{QUALIFIERS}'],
+        workspace, environment, 120)
+
+
 def setup(root, lock):
     validate_lock(lock)
     if sys.platform != 'win32' or sys.maxsize <= 2**32:
         raise ValueError('This installer profile supports native Windows x64 only; use existing tools on other hosts')
     if not (root / '.zew-managed').is_file() or (root / '.zew-managed').read_text() != 'first-build-win-x64-v1\n':
         raise ValueError('Setup root is not owned by the workbench')
+    install_runtime_support(root)
     if shutil.disk_usage(root).free < 5 * 1024**3:
         raise ValueError('Setup requires at least 5 GiB free disk space')
     git = root / 'git/cmd/git.exe'
@@ -330,6 +348,7 @@ def setup(root, lock):
     log('PHASE 3/5 — Obtaining the pinned Zephyr source')
     workspace, source = ensure_source(root, git, lock, environment)
     environment['ZEPHYR_BASE'] = str(source)
+    check_zephyr_scripts(source, workspace, environment)
     log('PHASE 4/5 — Creating Hello World without changing existing source')
     project = create_application(root)
     log('PHASE 5/5 — Building and verifying the first firmware')

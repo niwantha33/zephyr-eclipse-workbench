@@ -11,6 +11,7 @@ import sys
 import tarfile
 import io
 import unittest
+import venv
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -172,6 +173,7 @@ with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
     def _build_case(self, success):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); (root / '.zew-managed').write_text('first-build-win-x64-v1\n'); workspace = root / 'workspace'; workspace.mkdir()
+            (root / 'python').mkdir()
             for name in ('cmake', 'ninja'):
                 path = setup.installed_executable(root, self.lock(), name); path.parent.mkdir(parents=True, exist_ok=True); path.touch()
             def run(command, *unused):
@@ -180,11 +182,67 @@ with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
                     path.parent.mkdir(parents=True); path.write_bytes(b'fixture firmware')
             with patch.object(setup.sys, 'platform', 'win32'), patch.object(setup.shutil, 'disk_usage', return_value=SimpleNamespace(free=10 * 1024**3)), \
                  patch.object(setup, 'install_packages'), patch.object(setup, 'install_sdk', return_value=root / 'sdk'), \
+                 patch.object(setup, 'check_zephyr_scripts'), \
                  patch.object(setup, 'ensure_source', return_value=(workspace, workspace / 'zephyr')), patch.object(setup, 'run', side_effect=run):
                 if success:
                     setup.setup(root, self.lock()); self.assertTrue((root / '.zew-ready').is_file()); self.assertTrue((root / 'environment.properties').is_file())
                 else:
                     self.assertRaises(ValueError, setup.setup, root, self.lock()); self.assertFalse((root / '.zew-ready').exists())
+
+    def test_managed_script_sibling_imports_under_real_isolated_startup(self):
+        with tempfile.TemporaryDirectory(prefix='managed runtime Ω ') as directory:
+            root = Path(directory); (root / 'python').mkdir()
+            scripts = root / 'workspace/zephyr/scripts'; scripts.mkdir(parents=True)
+            (scripts / 'list_hardware.py').write_text('VALUE = "sibling-import-ok"\n')
+            board = scripts / 'list_boards.py'
+            board.write_text('from list_hardware import VALUE\nprint(VALUE)\n')
+            runtime = root / 'test-venv'; venv.EnvBuilder(with_pip=False).create(runtime)
+            python = runtime / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
+            # Add just the embedded runtime directory, reproducing ._pth's
+            # explicit search path; -I excludes the script directory and cwd.
+            sites = subprocess.check_output([str(python), '-I', '-c',
+                    'import site;print(site.getsitepackages()[0])'], text=True).strip()
+            Path(sites).mkdir(parents=True, exist_ok=True)
+            (Path(sites) / 'zew-test.pth').write_text(str(root / 'python') + '\n', encoding='utf-8')
+            def execute(script):
+                return subprocess.run([str(python), '-I', str(script)], cwd=root,
+                                      text=True, capture_output=True, timeout=20)
+            before = execute(board)
+            self.assertNotEqual(before.returncode, 0)
+            self.assertIn("No module named 'list_hardware'", before.stderr)
+            setup.install_runtime_support(root)
+            after = execute(board)
+            self.assertEqual(after.returncode, 0, after.stderr)
+            self.assertEqual(after.stdout.strip(), 'sibling-import-ok')
+            nested = scripts / 'build'; nested.mkdir()
+            (nested / 'helper.py').write_text('VALUE = "nested-import-ok"\n')
+            (nested / 'generate.py').write_text('from helper import VALUE\nprint(VALUE)\n')
+            self.assertEqual(execute(nested / 'generate.py').stdout.strip(), 'nested-import-ok')
+            outside = root / 'outside'; outside.mkdir()
+            (outside / 'list_boards.py').write_text(board.read_text())
+            (outside / 'list_hardware.py').write_text('VALUE = "must-not-import"\n')
+            self.assertNotEqual(execute(outside / 'list_boards.py').returncode, 0)
+            # A corrupted hook is repaired on retry, without touching source.
+            (root / 'python/sitecustomize.py').write_text('raise RuntimeError("old")')
+            setup.install_runtime_support(root)
+            self.assertEqual(execute(board).returncode, 0)
+            self.assertEqual(board.read_text(), 'from list_hardware import VALUE\nprint(VALUE)\n')
+
+    def test_script_preflight_failure_cannot_mark_ready(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / 'python').mkdir()
+            (root / '.zew-managed').write_text('first-build-win-x64-v1\n')
+            for name in ('cmake', 'ninja'):
+                path = setup.installed_executable(root, self.lock(), name)
+                path.parent.mkdir(parents=True, exist_ok=True); path.touch()
+            with patch.object(setup.sys, 'platform', 'win32'), \
+                 patch.object(setup.shutil, 'disk_usage', return_value=SimpleNamespace(free=10 * 1024**3)), \
+                 patch.object(setup, 'install_packages'), patch.object(setup, 'install_sdk', return_value=root / 'sdk'), \
+                 patch.object(setup, 'ensure_source', return_value=(root / 'workspace', root / 'workspace/zephyr')), \
+                 patch.object(setup, 'check_zephyr_scripts', side_effect=RuntimeError('broken imports')), \
+                 patch.object(setup, 'create_application', side_effect=AssertionError('must stop before project/build')):
+                self.assertRaisesRegex(RuntimeError, 'broken imports', setup.setup, root, self.lock())
+            self.assertFalse((root / '.zew-ready').exists())
 
 
 if __name__ == '__main__':

@@ -151,6 +151,7 @@ public final class SetupWizard extends Wizard {
                         Files.writeString(root.resolve("python/python313._pth"), "python313.zip\n.\nLib/site-packages\nimport site\n");
                         Files.writeString(root.resolve("python/.zew-managed-python"), "Isolated workbench runtime\n");
                         copyResource("tools/setup.py", root.resolve("installer/setup.py"));
+                        copyResource("tools/managed_sitecustomize.py", root.resolve("installer/managed_sitecustomize.py"));
                         copyResource("tools/setup-lock.json", root.resolve("installer/setup-lock.json"));
                         copyResource("tools/setup-licences.txt", root.resolve("installer/setup-licences.txt"));
                         new ProcessRunner().run(List.of(root.resolve("python/python.exe").toString(), "-u", root.resolve("installer/setup.py").toString(),
@@ -197,3 +198,4 @@ public final class SetupWizard extends Wizard {
         MessageDialog.openInformation(getShell(), "Your first Zephyr build is ready", "Hello World compiled successfully for qemu_x86/atom.\n\nYour editable source is open. Use Project > Build Project to rebuild.\nEmulator execution, flashing and debugging are separate steps.");
     }
 }
+

@@ -1,4 +1,4 @@
-# Beginner setup — development preview 0.1.7
+# Beginner setup — development preview 0.1.8
 
 The new **Zephyr > Set Up Zephyr** wizard bootstraps a managed environment on
 native Windows x64. No installed Python, Git, winget, terminal commands or global
@@ -39,6 +39,10 @@ It is not yet a complete all-board onboarding product.
   The generated wheel is checked for package identity, integrity and licence
   retention, then installed using its recorded SHA-256. Runtime `._pth` isolation
   remains unchanged. This fixes the Windows `No module named 'docopt'` failure.
+- Release 0.1.8 restores sibling imports for scripts inside the managed Zephyr
+  scripts tree, fixing `No module named 'list_hardware'`. It retains runtime
+  isolation and checks board metadata before building. See
+  [the hotfix validation record](INSTALLER_HOTFIX_0.1.8.md).
 - Python, MinGit and SDK archives are pinned as well. Licence/notice file paths
   and digests are recorded in `tools/setup-lock.json`; original notices remain in
   the downloaded distributions. Approval is for external build use, not tool-bundle
