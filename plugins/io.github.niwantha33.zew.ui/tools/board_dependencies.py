@@ -151,9 +151,19 @@ def manifest_projects(python, workspace):
 
 
 def modules_for(vendor, compiler, manifest):
+    """Plan pinned CPU support before the selected SoC vendor HAL.
+
+    Zephyr 4.2+ uses cmsis_6 for Cortex-M, while the legacy cmsis
+    module remains useful for Cortex-A/R and vendor-HAL compatibility.
+    Installing both on 32-bit ARM also handles mixed-profile trees
+    without guessing from the vendor name.
+    """
     names = []
-    if compiler == 'arm-zephyr-eabi' and 'cmsis' in manifest:
-        names.append('cmsis')
+    if compiler == 'arm-zephyr-eabi':
+        for name in ('cmsis_6', 'cmsis'):
+            if name not in manifest:
+                raise ValueError('Required ARM module is missing from pinned West manifest: ' + name)
+            names.append(name)
     alias = HAL_ALIASES.get(vendor, vendor)
     found_hal = False
     for candidate in ('hal_' + alias, 'hal_' + vendor):
@@ -163,8 +173,6 @@ def modules_for(vendor, compiler, manifest):
             break
     if vendor in HAL_ALIASES and not found_hal:
         raise ValueError('Selected vendor HAL is missing from West manifest: hal_' + alias)
-    if compiler == 'arm-zephyr-eabi' and 'cmsis' not in manifest:
-        raise ValueError('Required ARM CMSIS module is missing from West manifest')
     return names
 
 
@@ -218,6 +226,42 @@ def prepare_modules(plan_data, workspace, python, git):
                        timeout=1200, stdin=subprocess.DEVNULL)
         if not destination.is_dir() or git_revision(git, destination) != revision:
             raise ValueError('West module revision verification failed: ' + name)
+
+
+def active_projects(python, workspace):
+    """Projects Zephyr can actually discover (west list without --all)."""
+    result = subprocess.run([str(python), '-m', 'west', 'list', '-f', '{name}'],
+                            cwd=workspace, check=True, text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+    return set(result.stdout.splitlines())
+
+
+def activate_modules(plan_data, workspace, python):
+    """Make pinned, installed dependencies visible to Zephyr's CMake discovery.
+
+    Keep the existing West project filter intact, including intentionally
+    disabled unrelated vendors. Add only exact-name activation overrides.
+    """
+    required = plan_data['modules']
+    missing = [name for name in required if name not in active_projects(python, workspace)]
+    if not missing:
+        return
+    current = subprocess.run([str(python), '-m', 'west', 'config', 'manifest.project-filter'],
+                             cwd=workspace, text=True, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, timeout=30)
+    if current.returncode not in (0, 1):
+        raise ValueError('Cannot read existing West project filter: ' + current.stderr.strip())
+    previous = current.stdout.strip() if current.returncode == 0 else ''
+    overrides = ','.join('+' + re.escape(name) for name in missing)
+    value = ','.join(filter(None, (previous, overrides)))
+    setup.log('Activating required pinned West modules: ' + ', '.join(missing))
+    subprocess.run([str(python), '-m', 'west', 'config', '--local',
+                    'manifest.project-filter', value],
+                   cwd=workspace, check=True, text=True, timeout=30)
+    still_missing = [name for name in required if name not in active_projects(python, workspace)]
+    if still_missing:
+        raise ValueError('Required West modules are installed but inactive in CMake discovery: '
+                         + ', '.join(still_missing))
 
 
 def prepare_compiler(root, sdk, compiler, asset):
@@ -274,9 +318,10 @@ def main(argv=None):
         raise ValueError('Automatic compiler preparation supports managed Windows x64. No changes were made.')
     prepare_compiler(root, sdk, details['compiler'], details['asset'])
     prepare_modules(details, workspace, sys.executable, args.git)
+    activate_modules(details, workspace, sys.executable)
     if details['vendor'] == 'espressif' and details['soc'] == 'esp32s3':
         legacy.install_python_tools(root)
-    setup.log('READY — target dependencies checked against the pinned SDK and West manifest')
+    setup.log('READY — pinned SDK, West revisions and active CMake module discovery verified')
     return 0
 
 
