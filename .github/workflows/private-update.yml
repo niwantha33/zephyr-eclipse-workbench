@@ -43,7 +43,8 @@ jobs:
           command -v python3
           command -v mvn
           command -v git
-          JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
+          test -d "${JAVA_HOME_21_X64:-}"
+          export JAVA_HOME="$JAVA_HOME_21_X64"
           echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
           echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
           "$JAVA_HOME/bin/java" -version
