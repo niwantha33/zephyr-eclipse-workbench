@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Zephyr Workbench Core
 Bundle-SymbolicName: io.github.niwantha33.zew.core
-Bundle-Version: 0.1.13.qualifier
+Bundle-Version: 0.1.14.qualifier
 Bundle-Vendor: Zephyr Eclipse Workbench contributors
 Bundle-RequiredExecutionEnvironment: JavaSE-21
 Bundle-License: Apache-2.0;link="https://www.apache.org/licenses/LICENSE-2.0"
