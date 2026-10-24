@@ -1,65 +1,64 @@
-# Publishing the private Zephyr Workbench 0.1.11 update
+# Automatic private Eclipse Workbench updates
 
-## Root cause of Eclipse remaining on 0.1.10
+## How it works
 
-The Eclipse update client tracks a private GitHub branch named updates,
-NOT the source-code main branch. Its channel.properties still advertises
-0.1.10.202610241100. Merging the 0.1.11 source PR does not compile Tycho,
-package an Eclipse p2 repository or advance that manifest.
+A merge to **main** triggers `.github/workflows/private-update.yml` when
+Workbench source, build, test, packaging or the workflow itself changes.
 
-The first build attempt (Actions #40093850097) failed before allocating a
-runner: no build/test steps were executed. That cannot be treated as a
-successful compilation or an updater defect.
+1. GitHub Actions checks out the exact merged source commit.
+2. Run the existing Python and Java regression tests, then a clean Maven/Tycho
+   package build and packaged Eclipse p2 site verification.
+3. Retain the verified p2 archive as a private Actions artifact.
+4. If **every** verification step passed and the build still matches the
+   current `main` commit, the next job downloads **that exact artifact**.
+5. Refuse an older/equal version or a pre-existing release directory.
+   Add the new p2 files as one immutable commit in the PRIVATE
+   `updates` branch; use that commit SHA in `channel.properties`.
+6. Recheck the manifest sizes and SHA-256 of every published file.
+   Commit the manifest and push both commits in **one fast-forward push**.
+7. Eclipse's existing update checker reads the new private channel version
+   and shows **Install Update**. Eclipse's native p2 installer handles
+   installation, licence/trust prompts and restart.
 
-## GitHub Actions release (when private runners are available)
+There is **no user-run Python script, local publishing command, manual artifact
+copy or extra release/publish action**. The update itself remains a user-visible
+Eclipse p2 install prompt to avoid interrupting open projects.
 
-1. Merge the reviewed private-update.yml workflow into main.
-2. In GitHub Actions, select "Build and publish private Zephyr Workbench p2 update".
-3. Run workflow on main, with publish = true.
-4. Python/Java tests, clean Maven/Tycho build and p2 ZIP integrity checks
-   must pass. Only then may the publishing job run.
-5. The updates branch receives a new immutable versioned release and a
-   channel.properties revision pointing at the exact artifact commit.
-6. Pushes to main only build a candidate. They never change the update channel.
-   Older releases remain available; no force push, public Pages or marketplace.
+An optional Actions "Run workflow" on `main` supports recovery from an
+infrastructure interruption; normal merges do not need it. PRs only run
+verification and never update the channel.
 
-## Local Windows release when GitHub Actions cannot allocate a runner
+## Why version 0.1.11 was missing on 24 October 2026
 
-On a trusted developer PC use JDK 21, Maven 3.9+, Python 3.11+ and Git.
-Use your existing Git Credential Manager authentication for the PRIVATE repo;
-never paste credentials in source files or logs.
+The Zephyr project-wizard source was merged into `main`, but the independent
+private `updates/channel.properties` still advertised
+`0.1.10.202610241100`. The earlier CI run (#40093850097) ended before it
+was allocated a GitHub-hosted runner (zero steps, no log), so no build/site
+could be published. This is a build-service blocker, not an Eclipse updater
+version comparison bug.
 
-From PowerShell in a clean local repository checkout:
+**Important:** If GitHub Actions still refuses to allocate a runner, no
+repository workflow can complete. Resolve private-repository Actions access,
+billing/usage restrictions or hosted-runner availability in GitHub's Actions
+settings. The workflow does not bypass disabled runner execution.
 
-    git switch main
-    git pull --ff-only origin main
-    python scripts/publish_private_update.py
+## After a successful automatic publish
 
-This tests core/installer/update components and produces/validates the p2 ZIP
-without changing any published channel.
+In GitHub, select the private `updates` branch and confirm
+`channel.properties` advertises `0.1.11.<timestamp>` and an immutable
+artifact commit SHA. Older `releases/0.1.10...` directories remain present.
 
-Only after reviewing the local test result, explicitly publish with:
+In Eclipse:
 
-    python scripts/publish_private_update.py --publish
+1. **Zephyr > About Zephyr Workbench** displays the installed version.
+2. **Zephyr > Check for Workbench Updates** should detect the new version.
+   With automatic checks enabled, Eclipse checks on startup and periodically.
+3. Choose **Install Update**, follow Eclipse's normal trust/licence wizard and
+   restart Eclipse when prompted.
+4. Reopen About and check for **File > New > Other > Zephyr > Zephyr Project**
+   and **File > Import > Zephyr > Existing Zephyr Application**.
 
-It refuses dirty/unpushed source, downgrades, an existing immutable version,
-bad or mismatched SHA256 metadata and unreadable channels. Both release
-commits are pushed together after all verification. A failure leaves the
-previous channel intact.
-
-## Verify in Eclipse
-
-1. In GitHub, browse the PRIVATE updates branch/channel.properties; the
-   version must now be 0.1.11 with a timestamp qualifier.
-2. Use Zephyr > About Zephyr Workbench to check currently installed version.
-3. Use Zephyr > Check for Workbench Updates and choose Install Update.
-4. Complete the standard Eclipse p2 licence/trust installer and restart.
-5. Confirm installed 0.1.11 in About, and File > New > Other > Zephyr >
-   Zephyr Project, plus File > Import > Zephyr > Existing Application.
-6. If private GitHub authentication fails, update the READ-ONLY repository
-   access token in Zephyr > Configure Workbench Updates. Never share it.
-
-The 0.1.11 update is a development preview and still needs real Windows GUI
-testing. It does not install ESP32-S3 or STM32 compilers, enable arbitrary
-hardware, or overwrite Zephyr project sources. The managed SDK first profile
-currently includes only qemu_x86/atom.
+If authentication fails, review the private repository read-only token in
+**Zephyr > Configure Workbench Updates**. Never share credentials or commit
+them. Stable version claims still require native Windows and GUI acceptance;
+0.1.11 is a development preview with only the qemu_x86/atom compiler profile.
