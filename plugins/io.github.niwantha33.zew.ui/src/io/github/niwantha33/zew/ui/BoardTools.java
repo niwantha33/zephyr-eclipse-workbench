@@ -9,8 +9,55 @@ import java.util.function.Consumer;
 import org.eclipse.core.runtime.*;
 import io.github.niwantha33.zew.core.ProcessRunner;
 
-/** Serialize automatic profile additions with the existing setup install lock. */
+/** Serialize automatic board dependencies with the existing managed-install lock. */
 final class BoardTools {
+    // OSGi FileLocator.toFileURL() extracts ONLY the requested entry from a
+    // packed plug-in. Python must see all sibling helpers in the same directory.
+    // Keep this inventory in sync with scripts/verify_site.py.
+    private static final List<String> PYTHON_TOOLS = List.of(
+        "board_dependencies.py", "board_tools.py", "hardware_catalog.py",
+        "setup.py", "managed_sitecustomize.py",
+        "sdk-toolchains-windows-1.0.1.json", "esp32s3-python-lock.json"
+    );
+
+    private static java.nio.file.Path stageTools(java.nio.file.Path root) throws Exception {
+        var bundle = Activator.getDefault().getBundle();
+        // A version-specific directory preserves previous tool sets and avoids
+        // mixing a newer Python front-end with older sibling files.
+        var parent = root.resolve(".zew-board-tools");
+        var directory = parent.resolve(bundle.getVersion().toString());
+        if (Files.isSymbolicLink(parent) || Files.isSymbolicLink(directory))
+            throw new java.io.IOException("Managed board-tools directory is a symlink; refusing to overwrite it.");
+        Files.createDirectories(directory);
+        for (String name : PYTHON_TOOLS) {
+            var resource = bundle.getEntry("tools/" + name);
+            if (resource == null) throw new java.io.IOException("Installed Workbench bundle is missing tools/" + name);
+            var target = directory.resolve(name);
+            if (Files.isSymbolicLink(target))
+                throw new java.io.IOException("Managed board-tools file is a symlink: " + target);
+            // Read directly from the live OSGi bundle. Never rely on the URL
+            // extraction cache to contain imports or neighbouring JSON locks.
+            byte[] verified;
+            try (var input = resource.openStream()) {
+                verified = input.readNBytes(8 * 1024 * 1024 + 1);
+            }
+            if (verified.length == 0 || verified.length > 8 * 1024 * 1024)
+                throw new java.io.IOException("Invalid bundled board-tool size: " + name);
+            if (Files.isRegularFile(target) && Arrays.equals(verified, Files.readAllBytes(target)))
+                continue;
+            var temporary = directory.resolve(name + ".partial");
+            if (Files.isSymbolicLink(temporary))
+                throw new java.io.IOException("Managed temporary board-tool file is a symlink: " + temporary);
+            Files.write(temporary, verified, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException error) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        return directory.resolve("board_dependencies.py");
+    }
+
     static void prepare(Properties settings, Map<String, String> environment, IProgressMonitor monitor, Consumer<String> output) throws Exception {
         if (!Platform.OS_WIN32.equals(Platform.getOS())) return; // Other hosts may use installed toolchains.
         String board = settings.getProperty("board");
@@ -20,7 +67,7 @@ final class BoardTools {
         try (var channel = FileChannel.open(root.resolve(".zew-install.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
                 var lock = channel.tryLock()) {
             if (lock == null) throw new java.io.IOException("Another project is preparing this tool environment. Wait for it to finish, then build again.");
-            var helper = java.nio.file.Path.of(FileLocator.toFileURL(Activator.getDefault().getBundle().getEntry("tools/board_dependencies.py")).toURI());
+            var helper = stageTools(root);
             output.accept("Resolving board, SoC, CPU, required compiler and pinned West modules. Existing application, SDK tools and modules are preserved.");
             new ProcessRunner().run(List.of(settings.getProperty("python"), "-u", helper.toString(), "--root", root.toString(),
                 "--sdk", settings.getProperty("tools.sdk"), "--workspace", settings.getProperty("workspace"),
