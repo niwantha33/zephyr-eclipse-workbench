@@ -117,13 +117,19 @@ class DependencyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 board.manifest_projects('python', Path('.'))
 
-    def test_pin_target_compiler_modules_match_manifest(self):
-        with patch.object(board.subprocess, 'check_output', return_value=board.PINNED_ZEPHYR):
-            with patch.object(board.importlib.util, 'module_from_spec') as imported:
-                # Assert the resolver is always board-qualified; valid real-board
-                # integration depends on the separately tested Zephyr checkout.
-                self.assertEqual(board.checked_board('lp_mspm0g3507/mspm0g3507'),
-                                 'lp_mspm0g3507/mspm0g3507')
+    def test_vendor_without_hal_fails_before_build(self):
+        manifest = {'cmsis': ('a' * 40, Path('modules/hal/cmsis'))}
+        with self.assertRaisesRegex(ValueError, 'hal_ti'):
+            board.modules_for('ti', 'arm-zephyr-eabi', manifest)
+
+    def test_inactive_west_modules_included_in_manifest_plan(self):
+        fake = type('Result', (), {'stdout':
+            'cmsis\\t' + 'a' * 40 + '\\tmodules/hal/cmsis\\n'
+            + 'hal_ti\\t' + 'b' * 40 + '\\tmodules/hal/ti\\n'})()
+        with patch('subprocess.run', return_value=fake) as run:
+            manifest = board.manifest_projects('python', Path('.'))
+        self.assertIn('--all', run.call_args.args[0])
+        self.assertEqual(board.modules_for('ti', 'arm-zephyr-eabi', manifest), ['cmsis', 'hal_ti'])
 
 
 if __name__ == '__main__':
