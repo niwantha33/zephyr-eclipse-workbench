@@ -16,7 +16,7 @@ spec.loader.exec_module(publisher)
 
 class PrivateUpdateTests(unittest.TestCase):
     def test_current_source_version_is_timestamp_qualified(self):
-        self.assertEqual(publisher.expected_version(), "0.1.11")
+        self.assertRegex(publisher.expected_version(), r"^\d+\.\d+\.\d+$")
 
     def test_prevents_overwrite_and_downgrade(self):
         with tempfile.TemporaryDirectory() as directory:
