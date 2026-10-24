@@ -128,8 +128,8 @@ class DependencyTests(unittest.TestCase):
                 board.activate_modules(plan, Path('.'), 'python')
                 self.assertEqual(run.call_count, 2)
                 command = run.call_args.args[0]
-                self.assertEqual(command[2:5], ['config', '--local', 'manifest.project-filter'])
-                self.assertEqual(command[5], '-hal_.*,+hal_ti,+cmsis_6')
+                self.assertEqual(command[3:6], ['config', '--local', 'manifest.project-filter'])
+                self.assertEqual(command[6], '-hal_.*,+hal_ti,+cmsis_6')
                 self.assertEqual(active.call_count, 2)
 
     def test_no_filter_changes_when_all_modules_already_active(self):
