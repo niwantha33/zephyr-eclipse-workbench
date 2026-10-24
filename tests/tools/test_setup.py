@@ -258,6 +258,17 @@ with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
             self.assertNotEqual(before.returncode, 0)
             self.assertIn("No module named 'list_hardware'", before.stderr)
             setup.install_runtime_support(root)
+            # The embedded Windows ._pth runtime imports its own sitecustomize.
+            # A Linux venv can load /usr/lib/python*/sitecustomize.py first,
+            # so explicitly execute the installed hook during .pth startup.
+            # Unlike runpy.run_path(), exec preserves sys.argv[0], allowing
+            # the real startup hook to inspect the launched Zephyr script.
+            hook = root / 'python/sitecustomize.py'
+            Path(sites, 'zew-test.pth').write_text(
+                str(root / 'python') + '\n' +
+                'import pathlib; p=pathlib.Path(' + repr(str(hook)) +
+                '); exec(compile(p.read_bytes(), str(p), "exec"), {"__file__":str(p)})\n',
+                encoding='utf-8')
             after = execute(board)
             self.assertEqual(after.returncode, 0, after.stderr)
             self.assertEqual(after.stdout.strip(), 'sibling-import-ok')
