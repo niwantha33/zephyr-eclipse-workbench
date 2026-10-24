@@ -99,12 +99,88 @@ class DependencyTests(unittest.TestCase):
 
     def test_vendor_hal_and_shared_cmsis(self):
         manifest = {n: ('a' * 40, Path(n)) for n in
-                    ('cmsis', 'hal_ti', 'hal_stm32', 'hal_nordic', 'hal_espressif')}
+                    ('cmsis_6', 'cmsis', 'hal_ti', 'hal_stm32', 'hal_nordic', 'hal_espressif')}
         for vendor, module in [('ti', 'hal_ti'), ('st', 'hal_stm32'),
                                ('nordic', 'hal_nordic'), ('espressif', 'hal_espressif')]:
             compiler = 'xtensa-espressif_esp32s3_zephyr-elf' if vendor == 'espressif' else 'arm-zephyr-eabi'
-            expected = [module] if vendor == 'espressif' else ['cmsis', module]
+            expected = [module] if vendor == 'espressif' else ['cmsis_6', 'cmsis', module]
             self.assertEqual(board.modules_for(vendor, compiler, manifest), expected)
+
+    def test_cortex_m_requires_modern_cmsis_6_not_legacy_alone(self):
+        manifest = {name: ('a' * 40, Path(name)) for name in ('cmsis', 'hal_ti')}
+        with self.assertRaisesRegex(ValueError, 'cmsis_6'):
+            board.modules_for('ti', 'arm-zephyr-eabi', manifest)
+
+    def test_non_arm_targets_do_not_install_cmsis(self):
+        manifest = {name: ('a' * 40, Path(name))
+                    for name in ('cmsis_6', 'cmsis', 'hal_espressif', 'hal_ti')}
+        for compiler in ('xtensa-espressif_esp32s3_zephyr-elf', 'riscv64-zephyr-elf'):
+            self.assertEqual(board.modules_for('espressif', compiler, manifest), ['hal_espressif'])
+
+    def test_required_inactive_modules_are_activated_without_disabling_others(self):
+        plan = {'modules': ['cmsis_6', 'cmsis', 'hal_ti']}
+        current = type('Result', (), {'returncode': 0,
+                    'stdout': '-hal_.*,+hal_ti\n', 'stderr': ''})()
+        with patch.object(board, 'active_projects',
+                          side_effect=[{'cmsis', 'hal_ti'},
+                                       {'cmsis_6', 'cmsis', 'hal_ti'}]) as active:
+            with patch('subprocess.run', return_value=current) as run:
+                board.activate_modules(plan, Path('.'), 'python')
+                self.assertEqual(run.call_count, 2)
+                command = run.call_args.args[0]
+                self.assertEqual(command[2:5], ['config', '--local', 'manifest.project-filter'])
+                self.assertEqual(command[5], '-hal_.*,+hal_ti,+cmsis_6')
+                self.assertEqual(active.call_count, 2)
+
+    def test_no_filter_changes_when_all_modules_already_active(self):
+        with patch.object(board, 'active_projects',
+                          return_value={'cmsis_6', 'cmsis', 'hal_ti'}):
+            with patch('subprocess.run') as run:
+                board.activate_modules({'modules': ['cmsis_6', 'cmsis', 'hal_ti']},
+                                       Path('.'), 'python')
+                run.assert_not_called()
+
+    def test_inactive_module_after_activation_fails_before_compilation(self):
+        result = type('Result', (), {'returncode': 1, 'stdout': '', 'stderr': 'not set'})()
+        with patch.object(board, 'active_projects',
+                          side_effect=[set(), set()]):
+            with patch('subprocess.run', return_value=result):
+                with self.assertRaisesRegex(ValueError, 'inactive in CMake discovery'):
+                    board.activate_modules({'modules': ['cmsis_6']}, Path('.'), 'python')
+
+    def test_transitive_build_depends_are_pinned_and_prepared(self):
+        with tempfile.TemporaryDirectory() as home:
+            workspace = Path(home)
+            hal = workspace / 'modules/hal/ti'
+            cmsis = workspace / 'modules/hal/cmsis_6'
+            for item in (hal, cmsis):
+                (item / '.git').mkdir(parents=True)
+            (hal / 'zephyr').mkdir()
+            (hal / 'zephyr/module.yml').write_text(
+                'name: hal_ti\nbuild:\n  depends:\n    - cmsis_6\n')
+            plan = {'modules': ['hal_ti'], 'manifest': {
+                'hal_ti': ('a' * 40, Path('modules/hal/ti')),
+                'cmsis_6': ('b' * 40, Path('modules/hal/cmsis_6'))}}
+            with patch.object(board, 'git_revision',
+                              side_effect=lambda git, folder: 'a' * 40 if folder == hal else 'b' * 40):
+                with patch('subprocess.run') as run:
+                    board.prepare_modules(plan, workspace, 'python', 'git')
+                    run.assert_not_called()
+            self.assertEqual(plan['modules'], ['hal_ti', 'cmsis_6'])
+
+    def test_missing_transitive_project_fails_before_build(self):
+        with tempfile.TemporaryDirectory() as home:
+            workspace = Path(home)
+            hal = workspace / 'modules/hal/ti'
+            (hal / '.git').mkdir(parents=True)
+            (hal / 'zephyr').mkdir()
+            (hal / 'zephyr/module.yml').write_text(
+                'build:\n  depends:\n    - missing_dependency\n')
+            plan = {'modules': ['hal_ti'],
+                    'manifest': {'hal_ti': ('a' * 40, Path('modules/hal/ti'))}}
+            with patch.object(board, 'git_revision', return_value='a' * 40):
+                with self.assertRaisesRegex(ValueError, 'requires unavailable West project'):
+                    board.prepare_modules(plan, workspace, 'python', 'git')
 
     def test_existing_compiler_is_verified_not_overwritten(self):
         with tempfile.TemporaryDirectory() as home:
@@ -144,18 +220,20 @@ class DependencyTests(unittest.TestCase):
                 board.manifest_projects('python', Path('.'))
 
     def test_vendor_without_hal_fails_before_build(self):
-        manifest = {'cmsis': ('a' * 40, Path('modules/hal/cmsis'))}
+        manifest = {'cmsis_6': ('a' * 40, Path('modules/hal/cmsis_6')),
+                    'cmsis': ('a' * 40, Path('modules/hal/cmsis'))}
         with self.assertRaisesRegex(ValueError, 'hal_ti'):
             board.modules_for('ti', 'arm-zephyr-eabi', manifest)
 
     def test_inactive_west_modules_included_in_manifest_plan(self):
         fake = type('Result', (), {'stdout':
-            'cmsis\t' + 'a' * 40 + '\tmodules/hal/cmsis\n'
+            'cmsis_6\t' + 'c' * 40 + '\tmodules/hal/cmsis_6\n'
+            + 'cmsis\t' + 'a' * 40 + '\tmodules/hal/cmsis\n'
             + 'hal_ti\t' + 'b' * 40 + '\tmodules/hal/ti\n'})()
         with patch('subprocess.run', return_value=fake) as run:
             manifest = board.manifest_projects('python', Path('.'))
         self.assertIn('--all', run.call_args.args[0])
-        self.assertEqual(board.modules_for('ti', 'arm-zephyr-eabi', manifest), ['cmsis', 'hal_ti'])
+        self.assertEqual(board.modules_for('ti', 'arm-zephyr-eabi', manifest), ['cmsis_6', 'cmsis', 'hal_ti'])
 
 
 if __name__ == '__main__':
