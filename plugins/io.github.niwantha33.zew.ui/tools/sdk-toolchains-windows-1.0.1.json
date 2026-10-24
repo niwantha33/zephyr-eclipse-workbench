@@ -1,0 +1,183 @@
+{
+  "schema": 1,
+  "sdk_version": "1.0.1",
+  "host": "windows-x86_64",
+  "release": "https://github.com/zephyrproject-rtos/sdk-ng/releases/tag/v1.0.1",
+  "assets": {
+    "aarch64-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_aarch64-zephyr-elf.7z",
+      "size": 59795459,
+      "sha256": "17ebc57dc47bf75f8f08b429cc1c72ff5ca5c917bda1d582048cd9b399cb7579"
+    },
+    "arc-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_arc-zephyr-elf.7z",
+      "size": 60851650,
+      "sha256": "a67f772c157f04c0e120cdd30979bb8e09561eaa53c46a025da2e45b94d992f0"
+    },
+    "arc64-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_arc64-zephyr-elf.7z",
+      "size": 50604721,
+      "sha256": "7e32f4784e10193b710f84db519bb67d2bca29089e7537e3efb2b6561f52eda4"
+    },
+    "arm-zephyr-eabi": {
+      "file": "toolchain_gnu_windows-x86_64_arm-zephyr-eabi.7z",
+      "size": 79217349,
+      "sha256": "d08df2e83378dc8d28d0c67ab72d021ca633344b7a2bc053ababf9b8e677aa8d"
+    },
+    "microblazeel-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_microblazeel-zephyr-elf.7z",
+      "size": 53114989,
+      "sha256": "8e193fdc1249eb137e2882214d49bf8975288b44da96557dc4fe527e1ae5d8bb"
+    },
+    "mips-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_mips-zephyr-elf.7z",
+      "size": 54246153,
+      "sha256": "b9a749bbce81e78c0b16920419ec48faa8345a6316f41fa37fa2da9e5189d42e"
+    },
+    "or1k-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_or1k-zephyr-elf.7z",
+      "size": 45560292,
+      "sha256": "4f07a5a08eb7980966be35d9d4ae668b7282962d86d74a7e5709d9a06e24cd2a"
+    },
+    "riscv64-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_riscv64-zephyr-elf.7z",
+      "size": 130298572,
+      "sha256": "8d816b4452c4e6e08630f7e9837a6cca7d80ec88584e26997f63a4442831003a"
+    },
+    "rx-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_rx-zephyr-elf.7z",
+      "size": 55438459,
+      "sha256": "1a1b11f306427384a7978f77f8b9786ed9bc0b395462ce17ede1d2b074e6f521"
+    },
+    "sparc-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_sparc-zephyr-elf.7z",
+      "size": 56452253,
+      "sha256": "58c2c7560e023e1f5db30cd413fe37f9baca9e4700c258947610db8d426c6463"
+    },
+    "x86_64-zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_x86_64-zephyr-elf.7z",
+      "size": 59281601,
+      "sha256": "fc1267f928f1bae6a7fdc5733b89ac09dc20fdb05fadcd165913907c94866873"
+    },
+    "xtensa-amd_acp_6_0_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-amd_acp_6_0_adsp_zephyr-elf.7z",
+      "size": 49863455,
+      "sha256": "cb89f5d502dfca05dc5a2fd72d69aad1562c881697014f90d4b51c6f78671228"
+    },
+    "xtensa-amd_acp_7_0_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-amd_acp_7_0_adsp_zephyr-elf.7z",
+      "size": 49962203,
+      "sha256": "5e948a7ec941f93c410f7d284791d3a29e5de7107b383192f1d62fc2de0e5656"
+    },
+    "xtensa-amd_acp_7_3_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-amd_acp_7_3_adsp_zephyr-elf.7z",
+      "size": 50229995,
+      "sha256": "72269a921fc8025456d648d631293d16e506e2c7227af12032eee5b5dfdf8299"
+    },
+    "xtensa-dc233c_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-dc233c_zephyr-elf.7z",
+      "size": 47309892,
+      "sha256": "a8d6e9e3c3f3c83b587e2bc1977351dddf9c16d592edc1cfa422aedf7d8c66b3"
+    },
+    "xtensa-espressif_esp32s2_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-espressif_esp32s2_zephyr-elf.7z",
+      "size": 47487396,
+      "sha256": "23d826be2071232169a37592a3545ca84569e1c4dde210735fa9087f6ff43713"
+    },
+    "xtensa-espressif_esp32s3_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-espressif_esp32s3_zephyr-elf.7z",
+      "size": 47622966,
+      "sha256": "a3af742531382e94a378cb3d5f36c11150f54832037ab399ff765c830d5a5901"
+    },
+    "xtensa-espressif_esp32_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-espressif_esp32_zephyr-elf.7z",
+      "size": 47534756,
+      "sha256": "53324eb84525498574689e3e30a99d2d3ca37a34bfd323786312f7133ad4d5ef"
+    },
+    "xtensa-intel_ace15_mtpm_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-intel_ace15_mtpm_zephyr-elf.7z",
+      "size": 48563501,
+      "sha256": "73fd6cf7017c469802418bdb73d81b04a068d97b909158219f2ac19d636b537c"
+    },
+    "xtensa-intel_ace30_ptl_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-intel_ace30_ptl_zephyr-elf.7z",
+      "size": 48544765,
+      "sha256": "d1c653275a2df33913bfcd181eb6b34cfe2844cecb4a4e48c4ed32d86cdc89d5"
+    },
+    "xtensa-intel_ace40_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-intel_ace40_zephyr-elf.7z",
+      "size": 50190830,
+      "sha256": "ed988fcc683cc531e579a4f4df3c838df550030b7805efebed6ff319b4f2f775"
+    },
+    "xtensa-intel_tgl_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-intel_tgl_adsp_zephyr-elf.7z",
+      "size": 47675048,
+      "sha256": "24581560a7b94a256fbe8b40ba10d768db7059a900e10ab8c7dad0ff593a5cba"
+    },
+    "xtensa-mtk_mt818x_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-mtk_mt818x_adsp_zephyr-elf.7z",
+      "size": 49915356,
+      "sha256": "83e5996c78503e4c2c96881eecb70c4ee2df00890900ff3d50e9dc7d54e7445d"
+    },
+    "xtensa-mtk_mt8195_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-mtk_mt8195_adsp_zephyr-elf.7z",
+      "size": 48552413,
+      "sha256": "5361d2ae12f08779073bd99f3fc5fc2e93b04800427999962ec44cb828c452b8"
+    },
+    "xtensa-mtk_mt8196_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-mtk_mt8196_adsp_zephyr-elf.7z",
+      "size": 49942722,
+      "sha256": "9a5dd142629becec9aff0a64d77b15a89e1144e96778172fcbd173a478516d31"
+    },
+    "xtensa-mtk_mt8365_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-mtk_mt8365_adsp_zephyr-elf.7z",
+      "size": 48540259,
+      "sha256": "1c3642b4b4c3618f107664c77aa1399753a0e9f8892fc63ae6daf326c79640cf"
+    },
+    "xtensa-nxp_imx8m_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-nxp_imx8m_adsp_zephyr-elf.7z",
+      "size": 48562280,
+      "sha256": "16f2ada6cb46e657cda73ae4828d161ce92e606f23a81f5989541c249c9a815d"
+    },
+    "xtensa-nxp_imx8ulp_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-nxp_imx8ulp_adsp_zephyr-elf.7z",
+      "size": 48587393,
+      "sha256": "213a8fb736a114f2ba5d94e488f14d5fc6cd6181d61c650b066c2fb44d8e1e34"
+    },
+    "xtensa-nxp_imx_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-nxp_imx_adsp_zephyr-elf.7z",
+      "size": 48571185,
+      "sha256": "9883c4cdb840bcc9e385239e5ae01e6c3dc829f3e85b314b1f34e31e4e5221ab"
+    },
+    "xtensa-nxp_rt500_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-nxp_rt500_adsp_zephyr-elf.7z",
+      "size": 47648783,
+      "sha256": "284475579f33ba871ec680d579d0946d5241b68b2e943157b1f303ebfa92cb15"
+    },
+    "xtensa-nxp_rt600_adsp_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-nxp_rt600_adsp_zephyr-elf.7z",
+      "size": 48579811,
+      "sha256": "6e62a1e07bf7fbd7f63c21e469c1104fc7364c0bafc0de1bd89336d9265b31f4"
+    },
+    "xtensa-nxp_rt700_hifi1_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-nxp_rt700_hifi1_zephyr-elf.7z",
+      "size": 47699002,
+      "sha256": "50ccb1e6f198e0db01641fd5c9856c26d65363dcbbf05957f852f7441aaf41e8"
+    },
+    "xtensa-nxp_rt700_hifi4_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-nxp_rt700_hifi4_zephyr-elf.7z",
+      "size": 48538741,
+      "sha256": "8cea1acd7f847c9018c3709518970bb05180815ed87f922adcb16a2e6c68d2a5"
+    },
+    "xtensa-sample_controller32_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-sample_controller32_zephyr-elf.7z",
+      "size": 47259873,
+      "sha256": "b0e3bb0c052023f9a5f428e91854d3a79aeb4f8660d21729bb75448ddb0ae608"
+    },
+    "xtensa-sample_controller_zephyr-elf": {
+      "file": "toolchain_gnu_windows-x86_64_xtensa-sample_controller_zephyr-elf.7z",
+      "size": 47255295,
+      "sha256": "11f643699c57523c80381d01780cacc07bc262ec83378f6fe3a0b375bf058cfc"
+    }
+  }
+}
