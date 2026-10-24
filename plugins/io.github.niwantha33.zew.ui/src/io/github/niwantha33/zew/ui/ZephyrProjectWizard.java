@@ -58,13 +58,13 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
                 String[] target = page.targets.getSelectionCount() == 1
                     ? (String[]) page.targets.getSelection()[0].getData() : null;
                 summary.setText("Action: " + (page.existing.getSelection() ? "Import existing application" : "Create new application")
-                    + "\\nProject: " + page.name.getText().trim()
-                    + "\\nLocation: " + page.location.getText().trim()
-                    + "\\nChip vendor: " + (target == null ? "not selected" : target[0])
-                    + "\\nSoC: " + (target == null ? "not selected" : target[2])
-                    + "\\nCPU / qualifier: " + (target == null ? "not selected" : target[5])
-                    + "\\nExact build target: " + (target == null ? "not selected" : target[6])
-                    + "\\n\\nThe first Build Project prepares matching pinned SDK/West dependencies; existing source and unrelated output directories remain untouched.");
+                    + "\nProject: " + page.name.getText().trim()
+                    + "\nLocation: " + page.location.getText().trim()
+                    + "\nChip vendor: " + (target == null ? "not selected" : target[0])
+                    + "\nSoC: " + (target == null ? "not selected" : target[2])
+                    + "\nCPU / qualifier: " + (target == null ? "not selected" : target[5])
+                    + "\nExact build target: " + (target == null ? "not selected" : target[6])
+                    + "\n\nThe first Build Project prepares matching pinned SDK/West dependencies; existing source and unrelated output directories remain untouched.");
                 summary.getParent().layout(true, true);
             }
             super.setVisible(visible);
