@@ -157,7 +157,7 @@ class DependencyTests(unittest.TestCase):
                 (item / '.git').mkdir(parents=True)
             (hal / 'zephyr').mkdir()
             (hal / 'zephyr/module.yml').write_text(
-                'name: hal_ti\\nbuild:\\n  depends:\\n    - cmsis_6\\n')
+                'name: hal_ti\nbuild:\n  depends:\n    - cmsis_6\n')
             plan = {'modules': ['hal_ti'], 'manifest': {
                 'hal_ti': ('a' * 40, Path('modules/hal/ti')),
                 'cmsis_6': ('b' * 40, Path('modules/hal/cmsis_6'))}}
@@ -175,7 +175,7 @@ class DependencyTests(unittest.TestCase):
             (hal / '.git').mkdir(parents=True)
             (hal / 'zephyr').mkdir()
             (hal / 'zephyr/module.yml').write_text(
-                'build:\\n  depends:\\n    - missing_dependency\\n')
+                'build:\n  depends:\n    - missing_dependency\n')
             plan = {'modules': ['hal_ti'],
                     'manifest': {'hal_ti': ('a' * 40, Path('modules/hal/ti'))}}
             with patch.object(board, 'git_revision', return_value='a' * 40):
