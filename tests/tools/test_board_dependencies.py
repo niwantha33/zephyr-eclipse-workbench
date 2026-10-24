@@ -124,8 +124,8 @@ class DependencyTests(unittest.TestCase):
 
     def test_inactive_west_modules_included_in_manifest_plan(self):
         fake = type('Result', (), {'stdout':
-            'cmsis\\t' + 'a' * 40 + '\\tmodules/hal/cmsis\\n'
-            + 'hal_ti\\t' + 'b' * 40 + '\\tmodules/hal/ti\\n'})()
+            'cmsis\t' + 'a' * 40 + '\tmodules/hal/cmsis\n'
+            + 'hal_ti\t' + 'b' * 40 + '\tmodules/hal/ti\n'})()
         with patch('subprocess.run', return_value=fake) as run:
             manifest = board.manifest_projects('python', Path('.'))
         self.assertIn('--all', run.call_args.args[0])
