@@ -1,227 +1,167 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.ui;
 
-import java.nio.file.Files;
+import java.nio.file.*;
 import java.nio.file.Path;
-import java.util.Arrays;
-
-import org.eclipse.core.resources.ICommand;
-import org.eclipse.core.resources.IProject;
-import org.eclipse.core.resources.IResource;
-import org.eclipse.core.resources.ResourcesPlugin;
-import org.eclipse.core.runtime.QualifiedName;
+import java.time.Duration;
+import java.util.*;
+import java.util.List;
+import org.eclipse.core.resources.*;
+import org.eclipse.core.runtime.*;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.viewers.IStructuredSelection;
-import org.eclipse.jface.wizard.Wizard;
-import org.eclipse.jface.wizard.WizardPage;
+import org.eclipse.jface.wizard.*;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.layout.GridData;
-import org.eclipse.swt.layout.GridLayout;
-import org.eclipse.swt.widgets.Button;
-import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
-import org.eclipse.swt.widgets.Label;
-import org.eclipse.swt.widgets.Text;
-import org.eclipse.ui.IImportWizard;
-import org.eclipse.ui.INewWizard;
-import org.eclipse.ui.IWorkbench;
-import org.eclipse.ui.PlatformUI;
+import org.eclipse.swt.layout.*;
+import org.eclipse.swt.widgets.*;
+import org.eclipse.ui.*;
 import org.eclipse.ui.ide.IDE;
+import io.github.niwantha33.zew.core.*;
 
-import io.github.niwantha33.zew.core.ZephyrProjectFiles;
-
-/** New/Import Zephyr Application: reuse a verified installer without modifying user source. */
-public final class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWizard {
-    private ProjectPage page;
+/** Create/import independent applications without changing environment-owned source. */
+public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWizard {
+    private Page page;
     private String selectedRoot;
-
-    public ZephyrProjectWizard() {
-        setWindowTitle("Zephyr Project");
-        setNeedsProgressMonitor(true);
-    }
-
+    protected boolean importing;
+    public ZephyrProjectWizard() { setWindowTitle("Zephyr Project"); setNeedsProgressMonitor(true); }
     @Override public void init(IWorkbench workbench, IStructuredSelection selection) {
-        Object first = selection == null ? null : selection.getFirstElement();
-        if (first instanceof IProject project) selectedRoot = knownRoot(project);
-        if (selectedRoot == null) {
-            for (var project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
-                selectedRoot = knownRoot(project);
-                if (selectedRoot != null) break;
-            }
+        for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
+            try { selectedRoot = project.getPersistentProperty(new QualifiedName(Activator.ID, "setupRoot")); if (selectedRoot != null) break; }
+            catch (CoreException ignored) { }
         }
     }
-
-    private static String knownRoot(IProject project) {
-        try {
-            String value = project.getPersistentProperty(new QualifiedName(Activator.ID, "setupRoot"));
-            return value == null || value.isBlank() ? null : value;
-        } catch (Exception ignored) { return null; }
-    }
-
-    @Override public void addPages() { page = new ProjectPage(); addPage(page); }
-
-    private final class ProjectPage extends WizardPage {
-        private Text installation;
-        private Text name;
-        private Text folder;
-        private Button importExisting;
-        private boolean changingDefault;
-
-        ProjectPage() {
-            super("project");
-            setTitle("New or existing Zephyr application");
-            setDescription("Use an existing verified Windows setup. No terminal or PATH changes; current compiler supports qemu_x86/atom only.");
-        }
-
+    @Override public void addPages() { page = new Page(); addPage(page); }
+    private final class Page extends WizardPage {
+        Text name, location, environment, search;
+        Button existing;
+        Combo vendor, soc;
+        Table targets;
+        List<String[]> rows = new ArrayList<>();
+        Path loadedRoot;
+        Page() { super("project"); setTitle("New or existing Zephyr application"); setDescription("Select a ready tool environment, load its hardware, then choose an exact target."); }
         @Override public void createControl(Composite parent) {
-            var body = new Composite(parent, SWT.NONE);
-            body.setLayout(new GridLayout(3, false));
-
-            new Label(body, SWT.NONE).setText("Mode:");
-            var create = new Button(body, SWT.RADIO); create.setText("Create new application");
-            create.setSelection(true);
-            var existing = new Button(body, SWT.RADIO); existing.setText("Import existing application");
-            importExisting = existing;
-
-            new Label(body, SWT.NONE).setText("Managed Zephyr installation:");
-            installation = new Text(body, SWT.BORDER);
-            installation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            installation.setText(selectedRoot != null ? selectedRoot
-                    : Path.of(System.getProperty("user.home"), "ZephyrWorkbench", "first-build-4.4.0").toString());
-            addDirectoryPicker(body, installation);
-
-            new Label(body, SWT.NONE).setText("Eclipse project name:");
-            name = new Text(body, SWT.BORDER);
-            name.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            name.setText("ZephyrApp");
-            new Label(body, SWT.NONE);
-
-            new Label(body, SWT.NONE).setText("Application folder:");
-            folder = new Text(body, SWT.BORDER);
-            folder.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            addDirectoryPicker(body, folder);
-
-            var board = new Label(body, SWT.WRAP);
-            board.setText("Build target: qemu_x86/atom (Zephyr 4.4.0; managed x86 toolchain). Other boards need a verified matching SDK and are not silently enabled.");
-            board.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1));
-
-            create.addListener(SWT.Selection, event -> modeChanged());
-            existing.addListener(SWT.Selection, event -> modeChanged());
-            installation.addModifyListener(event -> { updateDefaultPath(); validate(); });
-            name.addModifyListener(event -> { updateDefaultPath(); validate(); });
-            folder.addModifyListener(event -> validate());
-            updateDefaultPath();
-            setControl(body);
-            validate();
+            var body = new Composite(parent, SWT.NONE); body.setLayout(new GridLayout(3, false));
+            name = field(body, "Project name", "MyZephyr", false);
+            location = field(body, "Application folder", "", true);
+            String workspace = Activator.getDefault().getPreferenceStore().getString("workspace");
+            String initial = selectedRoot != null ? selectedRoot : workspace.isBlank() ? "" : Path.of(workspace).getParent().toString();
+            environment = field(body, "Ready setup folder", initial, true);
+            if (!initial.isBlank() && !importing) location.setText(Path.of(initial, "projects", name.getText()).toString());
+            existing = new Button(body, SWT.CHECK); existing.setText("Import existing application in place"); existing.setSelection(importing);
+            existing.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1));
+            var load = new Button(body, SWT.PUSH); load.setText("Load hardware from environment");
+            load.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1)); load.addListener(SWT.Selection, e -> load());
+            vendor = combo(body, "Chip vendor"); soc = combo(body, "SoC");
+            search = field(body, "Search board / core / revision", "", false);
+            targets = new Table(body, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION | SWT.V_SCROLL); targets.setHeaderVisible(true);
+            var data = new GridData(SWT.FILL, SWT.FILL, true, true, 3, 1); data.heightHint = 240; targets.setLayoutData(data);
+            for (String title : List.of("Board maker", "Board", "Revision", "Exact target")) { var column = new TableColumn(targets, SWT.NONE); column.setText(title); column.setWidth(title.equals("Exact target") ? 340 : 120); }
+            vendor.addListener(SWT.Selection, e -> { fillSoc(); filter(); }); soc.addListener(SWT.Selection, e -> filter());
+            search.addModifyListener(e -> filter()); targets.addListener(SWT.Selection, e -> validatePage());
+            for (Text text : List.of(name, location, environment)) text.addModifyListener(e -> validatePage());
+            existing.addListener(SWT.Selection, e -> validatePage());
+            setControl(body); setPageComplete(false);
         }
-
-        private void modeChanged() { updateDefaultPath(); validate(); }
-
-        private void updateDefaultPath() {
-            if (folder == null || folder.isDisposed() || installation == null || name == null) return;
-            if (importExisting.getSelection()) return;
-            String value = name.getText().trim();
-            if (value.isEmpty()) return;
-            // Populate the beginner default only when the current folder is empty
-            // or still under this installation's projects/ location.
-            String current = folder.getText().trim();
-            Path projects;
-            try { projects = Path.of(installation.getText().trim(), "projects").toAbsolutePath().normalize(); }
-            catch (RuntimeException ignored) { return; }
-            if (!current.isBlank() && !Path.of(current).toAbsolutePath().normalize().startsWith(projects)) return;
-            if (changingDefault) return;
-            changingDefault = true;
-            try { folder.setText(projects.resolve(value).toString()); }
-            finally { changingDefault = false; }
+        Text field(Composite parent, String title, String value, boolean browse) {
+            new Label(parent, SWT.NONE).setText(title);
+            var text = new Text(parent, SWT.BORDER); text.setText(value); text.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+            if (browse) { var button = new Button(parent, SWT.PUSH); button.setText("Browse..."); button.addListener(SWT.Selection, e -> { var dialog = new DirectoryDialog(getShell()); dialog.setFilterPath(text.getText()); String selected = dialog.open(); if (selected != null) text.setText(selected); }); }
+            else new Label(parent, SWT.NONE);
+            return text;
         }
-
-        private void addDirectoryPicker(Composite body, Text value) {
-            var browse = new Button(body, SWT.PUSH); browse.setText("Browse...");
-            browse.addListener(SWT.Selection, event -> {
-                var chooser = new DirectoryDialog(getShell());
-                chooser.setFilterPath(value.getText());
-                String selected = chooser.open();
-                if (selected != null) value.setText(selected);
-            });
+        Combo combo(Composite parent, String title) {
+            new Label(parent, SWT.NONE).setText(title); var combo = new Combo(parent, SWT.READ_ONLY); combo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false)); new Label(parent, SWT.NONE); return combo;
         }
-
-        void validate() {
+        void load() {
+            try {
+                Path root = Path.of(environment.getText().trim()).toAbsolutePath().normalize();
+                var settings = ProjectContext.load(root); var discovered = new ArrayList<String[]>();
+                getContainer().run(true, true, monitor -> {
+                    try {
+                        var helper = Path.of(FileLocator.toFileURL(Activator.getDefault().getBundle().getEntry("tools/hardware_catalog.py")).toURI());
+                        monitor.beginTask("Discover Zephyr hardware", IProgressMonitor.UNKNOWN);
+                        new ProcessRunner().run(List.of(settings.getProperty("python"), helper.toString(), "--zephyr", Path.of(settings.getProperty("workspace"), "zephyr").toString()),
+                            Path.of(settings.getProperty("workspace")), Duration.ofMinutes(3), monitor::isCanceled, line -> {
+                                String[] cells = line.split("\t", -1); if (cells.length == 7) discovered.add(cells);
+                            }, ProjectContext.environment(settings)).requireSuccess();
+                    } catch (InterruptedException error) { throw error; }
+                    catch (Exception error) { throw new java.lang.reflect.InvocationTargetException(error); }
+                    finally { monitor.done(); }
+                });
+                if (discovered.isEmpty()) throw new java.io.IOException("No hardware found. Check this environment's Zephyr installation.");
+                rows = discovered; loadedRoot = root;
+                vendor.setItems(java.util.stream.Stream.concat(java.util.stream.Stream.of("All vendors"), rows.stream().map(r -> r[0]).distinct().sorted()).toArray(String[]::new)); vendor.select(0); fillSoc(); filter();
+                if (existing.getSelection() && !location.getText().isBlank()) {
+                    Path application = Path.of(location.getText().trim());
+                    if (Files.isRegularFile(application.resolve(".zew/project.json"))) {
+                        String board = ProjectProfile.read(application).board();
+                        search.setText(board);
+                        for (var item : targets.getItems()) if (((String[]) item.getData())[6].equals(board)) { targets.setSelection(item); break; }
+                        setMessage("Target loaded from .zew/project.json. Source files will be preserved.");
+                    } else setMessage("No saved workbench target. Select the exact hardware used by this application.");
+                }
+                validatePage();
+            } catch (Exception error) { loadedRoot = null; setErrorMessage(error.getCause() == null ? error.getMessage() : error.getCause().getMessage()); setPageComplete(false); }
+        }
+        void fillSoc() {
+            soc.setItems(java.util.stream.Stream.concat(java.util.stream.Stream.of("All SoCs"), rows.stream().filter(r -> vendor.getSelectionIndex() == 0 || r[0].equals(vendor.getText())).map(r -> r[2]).distinct().sorted()).toArray(String[]::new)); soc.select(0);
+        }
+        void filter() {
+            if (targets == null) return;
+            targets.removeAll(); String query = search.getText().toLowerCase(Locale.ROOT);
+            for (String[] row : rows) {
+                if (vendor.getSelectionIndex() > 0 && !row[0].equals(vendor.getText())) continue;
+                if (soc.getSelectionIndex() > 0 && !row[2].equals(soc.getText())) continue;
+                if (!String.join(" ", row).toLowerCase(Locale.ROOT).contains(query)) continue;
+                var item = new TableItem(targets, SWT.NONE); item.setText(new String[] {row[1], row[3], row[4], row[6]}); item.setData(row);
+            }
+            validatePage();
+        }
+        void validatePage() {
+            if (targets == null) return;
             String error = null;
             try {
-                ZephyrProjectFiles.validateName(name.getText().trim());
-                Path root = Path.of(installation.getText().trim()).toAbsolutePath().normalize();
-                ZephyrProjectFiles.requireManagedEnvironment(root);
-                Path source = Path.of(folder.getText().trim()).toAbsolutePath().normalize();
-                if (folder.getText().isBlank() || !source.isAbsolute())
-                    throw new IllegalArgumentException("Choose an absolute application folder.");
-                if (source.startsWith(root.resolve("workspace/zephyr")))
-                    throw new IllegalArgumentException("Keep applications outside the upstream Zephyr source checkout.");
-                if (importExisting.getSelection()) {
-                    if (!Files.isRegularFile(source.resolve("CMakeLists.txt")))
-                        throw new IllegalArgumentException("Existing application needs CMakeLists.txt.");
-                } else if (Files.exists(source)) {
-                    if (!Files.isDirectory(source))
-                        throw new IllegalArgumentException("Application path is a file.");
-                    try (var children = Files.list(source)) {
-                        if (children.findAny().isPresent())
-                            throw new IllegalArgumentException("Folder is not empty. Choose Import Existing instead.");
-                    }
+                if (!ResourcesPlugin.getWorkspace().validateName(name.getText().trim(), IResource.PROJECT).isOK()) error = "Enter a valid Eclipse project name.";
+                else if (ResourcesPlugin.getWorkspace().getRoot().getProject(name.getText().trim()).exists()) error = "An Eclipse project already uses this name.";
+                else if (location.getText().isBlank() || !Path.of(location.getText().trim()).isAbsolute()) error = "Choose an absolute application folder.";
+                else if (loadedRoot == null || !loadedRoot.equals(Path.of(environment.getText().trim()).toAbsolutePath().normalize())) error = "Load hardware from the selected ready environment.";
+                else if (targets.getSelectionCount() != 1) error = "Select one exact board target.";
+                else {
+                    Path source = Path.of(location.getText().trim()).toAbsolutePath().normalize();
+                    Path zephyr = Path.of(ProjectContext.load(loadedRoot).getProperty("workspace"), "zephyr").toRealPath();
+                    Path ancestor = source; while (ancestor != null && !Files.exists(ancestor)) ancestor = ancestor.getParent();
+                    if (ancestor != null && ancestor.toRealPath().startsWith(zephyr)) error = "Choose a standalone application outside the upstream Zephyr tree.";
+                    else if (existing.getSelection() && !Files.isRegularFile(source.resolve("CMakeLists.txt"))) error = "Existing application must contain CMakeLists.txt.";
+                    else if (!existing.getSelection() && Files.exists(source)) { try (var files = Files.list(source)) { if (files.findAny().isPresent()) error = "Folder is not empty. Select Import existing application."; } }
+                    else if (existing.getSelection() && Files.exists(source.resolve(".project"))) error = "This folder already contains Eclipse metadata. Use Eclipse's Existing Projects import to preserve it.";
+                    if (existing.getSelection() && Files.isRegularFile(source.resolve(".zew/project.properties"))
+                            && !ZephyrProjectFiles.readBoard(source).equals(((String[]) targets.getSelection()[0].getData())[6])) error = "Selected hardware conflicts with the saved project target.";
+                    if (existing.getSelection() && Files.isRegularFile(source.resolve(".zew/project.json")) && !ProjectProfile.read(source).board().equals(((String[]) targets.getSelection()[0].getData())[6])) error = "Selected hardware conflicts with the saved project target.";
                 }
-                IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject(name.getText().trim());
-                if (project.exists() && !project.getLocation().toFile().toPath().toAbsolutePath().normalize().equals(source))
-                    throw new IllegalArgumentException("That Eclipse project name already refers to another folder.");
-            } catch (Exception exception) {
-                error = exception.getMessage() == null ? "Check the environment and application paths." : exception.getMessage();
-            }
-            setErrorMessage(error);
-            setPageComplete(error == null);
+            } catch (Exception e) { error = e.getMessage(); }
+            setErrorMessage(error); setPageComplete(error == null);
         }
-
-        Path installation() { return Path.of(installation.getText().trim()).toAbsolutePath().normalize(); }
-        Path folder() { return Path.of(folder.getText().trim()).toAbsolutePath().normalize(); }
-        String projectName() { return name.getText().trim(); }
-        boolean importing() { return importExisting.getSelection(); }
     }
-
     @Override public boolean performFinish() {
+        page.validatePage(); if (!page.isPageComplete()) return false;
         try {
-            if (!page.isPageComplete()) return false;
-            ZephyrProjectFiles.requireManagedEnvironment(page.installation());
-            Path source = page.importing()
-                    ? ZephyrProjectFiles.importExisting(page.folder())
-                    : ZephyrProjectFiles.createNew(page.folder(), page.projectName());
-            IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject(page.projectName());
-            if (!project.exists()) {
-                var desc = ResourcesPlugin.getWorkspace().newProjectDescription(page.projectName());
-                desc.setLocationURI(source.toUri());
-                project.create(desc, null);
-            }
-            project.open(null);
-            project.setPersistentProperty(new QualifiedName(Activator.ID, "setupRoot"), page.installation().toString());
-            var desc = project.getDescription();
-            String builder = Activator.ID + ".zephyrBuilder";
-            if (Arrays.stream(desc.getBuildSpec()).noneMatch(command -> builder.equals(command.getBuilderName()))) {
-                ICommand newCommand = desc.newCommand();
-                newCommand.setBuilderName(builder);
-                var spec = new java.util.ArrayList<ICommand>(Arrays.asList(desc.getBuildSpec()));
-                spec.add(newCommand);
-                desc.setBuildSpec(spec.toArray(ICommand[]::new));
-                project.setDescription(desc, null);
-            }
-            project.refreshLocal(IResource.DEPTH_INFINITE, null);
-            var window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
-            if (window != null) {
-                var workbenchPage = window.getActivePage();
-                workbenchPage.showView("org.eclipse.ui.navigator.ProjectExplorer");
-                if (!page.importing() && project.getFile("src/main.c").exists())
-                    IDE.openEditor(workbenchPage, project.getFile("src/main.c"));
-            }
-            MessageDialog.openInformation(getShell(), "Zephyr project ready",
-                    "Project " + page.projectName() + " uses qemu_x86/atom. Build it using Project > Build Project. Existing application source was preserved.");
+            Path source = Path.of(page.location.getText().trim()).toAbsolutePath().normalize();
+            String target = ((String[]) page.targets.getSelection()[0].getData())[6];
+            if (!page.existing.getSelection()) ProjectProfile.createApplication(source, target);
+            else if (!Files.exists(source.resolve(".zew/project.json")) && !Files.exists(source.resolve(".zew/project.properties"))) new ProjectProfile(target).write(source);
+            var workspace = ResourcesPlugin.getWorkspace(); var project = workspace.getRoot().getProject(page.name.getText().trim());
+            workspace.run(monitor -> {
+                var description = workspace.newProjectDescription(project.getName()); description.setLocationURI(source.toUri());
+                var command = description.newCommand(); command.setBuilderName(Activator.ID + ".zephyrBuilder"); description.setBuildSpec(new ICommand[] {command});
+                project.create(description, monitor); project.open(monitor);
+                project.setPersistentProperty(new QualifiedName(Activator.ID, "setupRoot"), page.loadedRoot.toString());
+                project.refreshLocal(IResource.DEPTH_INFINITE, monitor);
+            }, workspace.getRoot(), IWorkspace.AVOID_UPDATE, null);
+            var active = PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage(); active.showView("org.eclipse.ui.navigator.ProjectExplorer");
+            if (Platform.getBundle("org.eclipse.cdt.core") != null) CdtEditor.ensureProject(project, null);
+            if (project.getFile("src/main.c").exists()) IDE.openEditor(active, project.getFile("src/main.c"));
+            EditorIntegration.schedule(project);
             return true;
-        } catch (Exception error) {
-            MessageDialog.openError(getShell(), "Zephyr project", error.getMessage() == null ? error.toString() : error.getMessage());
-            return false;
-        }
+        } catch (Exception error) { MessageDialog.openError(getShell(), "Zephyr project", error.getMessage()); return false; }
     }
 }

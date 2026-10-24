@@ -46,12 +46,16 @@ for p in bundles:
             for helper in ('setup.py', 'managed_sitecustomize.py'):
                 if z.read('tools/' + helper) != (root / 'plugins/io.github.niwantha33.zew.ui/tools' / helper).read_bytes():
                     raise SystemExit('Packaged helper differs from verified source: ' + helper)
+            for helper in ('hardware_catalog.py', 'editor_settings.py'):
+                compile(z.read('tools/' + helper), 'tools/' + helper, 'exec')
+                if z.read('tools/' + helper) != (root / 'plugins/io.github.niwantha33.zew.ui/tools' / helper).read_bytes():
+                    raise SystemExit('Packaged helper differs from source: ' + helper)
             lock = json.loads(z.read('tools/setup-lock.json'))
             if lock['profile'] != 'first-build-win-x64' or any(p['review'] != 'approved-build-use' for p in lock['packages']):
                 raise SystemExit('Setup profile or package review is incomplete.')
             if not z.read('tools/setup-licences.txt').strip():
                 raise SystemExit('Setup licence records missing.')
-            for name in ('SetupWizard', 'SetupStartup', 'ZephyrProjectBuilder', 'ZephyrProjectWizard'):
+            for name in ('SetupWizard', 'SetupStartup', 'ZephyrProjectBuilder', 'ZephyrProjectWizard', 'ZephyrImportWizard', 'ProjectActionHandler', 'ProjectContext', 'CdtEditor'):
                 if 'io/github/niwantha33/zew/ui/' + name + '.class' not in z.namelist():
                     raise SystemExit('Beginner setup class missing: ' + name)
             if 'io/github/niwantha33/zew/ui/ToolsDialog.class' not in z.namelist():
@@ -62,7 +66,7 @@ for p in bundles:
                     raise SystemExit('Preference page class missing.')
             for point in ('org.eclipse.ui.newWizards', 'org.eclipse.ui.importWizards'):
                 registrations = plugin.findall("./extension[@point='" + point + "']/wizard")
-                if not any(w.attrib.get('class') == 'io.github.niwantha33.zew.ui.ZephyrProjectWizard' for w in registrations):
+                if not any(w.attrib.get('class') in ('io.github.niwantha33.zew.ui.ZephyrProjectWizard', 'io.github.niwantha33.zew.ui.ZephyrImportWizard') for w in registrations):
                     raise SystemExit('New/Import Zephyr wizard not registered for ' + point)
             for handler in plugin.findall("./extension[@point='org.eclipse.ui.handlers']/handler"):
                 if handler.attrib['class'].replace('.', '/') + '.class' not in z.namelist():
@@ -88,4 +92,5 @@ with zipfile.ZipFile(archive) as z:
 print('Verified p2 metadata and feature.')
 print('Update-site SHA-256:', hashlib.sha256(archive.read_bytes()).hexdigest())
 print('This checks packaging; it does not establish desktop installation or hardware support.')
+
 

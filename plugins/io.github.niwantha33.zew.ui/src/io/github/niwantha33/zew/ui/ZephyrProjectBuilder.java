@@ -39,11 +39,13 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         delta.accept(change -> {
             String path = change.getProjectRelativePath().toPortableString();
             if (path.equals(".zew-build") || path.startsWith(".zew-build/")) return false;
-            if (change.getResource().getType() == IResource.FILE
+            boolean contentChange = change.getKind() != org.eclipse.core.resources.IResourceDelta.CHANGED
+                    || (change.getFlags() & (org.eclipse.core.resources.IResourceDelta.CONTENT | org.eclipse.core.resources.IResourceDelta.REPLACED | org.eclipse.core.resources.IResourceDelta.ENCODING)) != 0;
+            if (contentChange && change.getResource().getType() == IResource.FILE
                     && (path.startsWith("src/") || path.startsWith("include/") || path.startsWith("boards/")
                         || path.startsWith("dts/") || path.startsWith("modules/")
                         || path.equals("prj.conf") || path.equals("CMakeLists.txt")
-                        || path.equals("Kconfig") || path.equals(".zew/project.properties")
+                        || path.equals("Kconfig") || (path.equals(".zew/project.properties") || path.equals(".zew/project.json"))
                         || path.endsWith(".overlay") || path.endsWith(".conf"))) changed[0] = true;
             return !changed[0];
         });
@@ -55,30 +57,11 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         ConsolePlugin.getDefault().getConsoleManager().addConsoles(new org.eclipse.ui.console.IConsole[] {console});
         ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
         try (var stream = console.newMessageStream()) {
-            String selected = getProject().getPersistentProperty(new QualifiedName(Activator.ID, "setupRoot"));
-            if (selected == null) throw new java.io.IOException("This project has no managed Zephyr environment mapping.");
-            Path root = Path.of(selected);
-            ZephyrProjectFiles.requireManagedEnvironment(root);
-            var settings = new Properties(); try (var reader = Files.newBufferedReader(root.resolve("environment.properties"), StandardCharsets.UTF_8)) { settings.load(reader); }
+            var settings = ProjectContext.settings(getProject());
             Path project = getProject().getLocation().toFile().toPath().toRealPath();
-            if (!Files.isRegularFile(project.resolve("CMakeLists.txt"))) throw new java.io.IOException("Missing application CMakeLists.txt.");
-            String board = ZephyrProjectFiles.readBoard(project);
-            var config = new WorkbenchConfig(Path.of(settings.getProperty("python")),
-                    Path.of(settings.getProperty("workspace")), project, board);
-            Path buildDirectory = WestCommands.buildDirectory(config);
-            // Preserve the previously built first-profile directory rather than
-            // invalidating a successful first run by changing its CMake cache path.
-            if (project.equals(Path.of(settings.getProperty("application")).toRealPath())
-                    && Files.isRegularFile(project.resolve(".zew-build/first/CMakeCache.txt")))
-                buildDirectory = project.resolve(".zew-build/first");
-            var environment = new LinkedHashMap<String, String>(); var directories = new ArrayList<String>();
-            for (String tool : new String[] {"cmake", "ninja", "git"}) directories.add(Path.of(settings.getProperty("tools." + tool)).getParent().toString());
-            directories.add(Path.of(settings.getProperty("python")).getParent().toString());
-            String pathKey = System.getenv().keySet().stream().filter(key -> key.equalsIgnoreCase("PATH")).findFirst().orElse("PATH");
-            environment.put(pathKey, String.join(java.io.File.pathSeparator, directories) + java.io.File.pathSeparator + System.getenv().getOrDefault(pathKey, ""));
-            environment.put("ZEPHYR_SDK_INSTALL_DIR", io.github.niwantha33.zew.core.WestCommands.cmakePath(settings.getProperty("tools.sdk")));
-            environment.put("ZEPHYR_TOOLCHAIN_VARIANT", "zephyr");
-            environment.put("ZEPHYR_BASE", io.github.niwantha33.zew.core.WestCommands.cmakePath(Path.of(settings.getProperty("workspace"), "zephyr").toString()));
+            String board = settings.getProperty("board");
+            Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
+            var environment = ProjectContext.environment(settings);
             if (clean && !Files.isRegularFile(buildDirectory.resolve("CMakeCache.txt"))) {
                 stream.println("No configured build exists for " + board + "; nothing to clean.");
                 return;
@@ -86,14 +69,20 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             var command = new ArrayList<>(List.of(settings.getProperty("python"), "-m", "west", "build",
                     "--build-dir", WestCommands.cmakePath(buildDirectory.toString())));
             if (clean) command.addAll(List.of("--target", "clean"));
-            else command.addAll(List.of("--board", board, WestCommands.cmakePath(project.toString()), "--", "-DZEPHYR_MODULES=",
+            else command.addAll(List.of("--board", board, WestCommands.cmakePath(project.toString()), "--", "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON",
                     "-DCMAKE_MAKE_PROGRAM:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("tools.ninja")),
                     "-DPython3_EXECUTABLE:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("python"))));
+            if (!clean && "true".equals(settings.getProperty("zew.modules.none"))) command.add("-DZEPHYR_MODULES=");
             stream.println("Workbench " + Activator.getDefault().getBundle().getVersion() + " | " + getProject().getName());
             stream.println("Exact board target: " + board + " | independent output: " + buildDirectory);
             monitor.beginTask(clean ? "Clean Zephyr project" : "Build Zephyr project", IProgressMonitor.UNKNOWN);
-            new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofMinutes(30), monitor::isCanceled, stream::println, environment).requireSuccess();
+            BuildDiagnostics.clear(getProject());
+            new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofMinutes(30), monitor::isCanceled, line -> { stream.println(line); BuildDiagnostics.accept(getProject(), buildDirectory, line); }, environment).requireSuccess();
             if (!clean && !Files.isRegularFile(buildDirectory.resolve("zephyr/zephyr.elf"))) throw new java.io.IOException("Expected firmware output is missing at " + buildDirectory);
+            if (!clean) {
+                Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
+                EditorIntegration.schedule(getProject());
+            }
             stream.println(clean ? "Clean completed." : "Firmware build verified.");
             getProject().refreshLocal(IResource.DEPTH_INFINITE, monitor);
             var output = getProject().getFolder(".zew-build"); if (output.exists()) output.setDerived(true, monitor);
@@ -103,4 +92,5 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         finally { monitor.done(); }
     }
 }
+
 

@@ -194,8 +194,10 @@ public final class SetupWizard extends Wizard {
         project.refreshLocal(org.eclipse.core.resources.IResource.DEPTH_INFINITE, null);
         var page = PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage();
         page.showView("org.eclipse.ui.navigator.ProjectExplorer");
+        EditorIntegration.schedule(project);
         IDE.openEditor(page, project.getFile("src/main.c"));
         MessageDialog.openInformation(getShell(), "Your first Zephyr build is ready", "Hello World compiled successfully for qemu_x86/atom.\n\nYour editable source is open. Use Project > Build Project to rebuild.\nEmulator execution, flashing and debugging are separate steps.");
     }
 }
+
 

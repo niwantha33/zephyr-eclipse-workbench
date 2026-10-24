@@ -2,6 +2,23 @@
 <?eclipse version="3.4"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <plugin>
+  <extension point="org.eclipse.core.resources.markers" id="buildProblem" name="Zephyr build diagnostic">
+    <super type="org.eclipse.core.resources.problemmarker"/><persistent value="true"/>
+  </extension>
+  <extension point="org.eclipse.ui.newWizards">
+    <category id="io.github.niwantha33.zew.category" name="Zephyr"/>
+    <wizard id="io.github.niwantha33.zew.newProject" name="Zephyr Project" category="io.github.niwantha33.zew.category" project="true" class="io.github.niwantha33.zew.ui.ZephyrProjectWizard"/>
+  </extension>
+  <extension point="org.eclipse.ui.importWizards">
+    <category id="io.github.niwantha33.zew.importCategory" name="Zephyr"/>
+    <wizard id="io.github.niwantha33.zew.importProject" name="Existing Zephyr Application" category="io.github.niwantha33.zew.importCategory" class="io.github.niwantha33.zew.ui.ZephyrImportWizard"/>
+  </extension>
+  <extension point="org.eclipse.cdt.core.LanguageSettingsProvider">
+    <provider id="io.github.niwantha33.zew.ui.editor.compiler" name="Zephyr compiler settings" class="io.github.niwantha33.zew.ui.ZephyrLanguageSettingsProvider"/>
+  </extension>
+  <extension point="org.eclipse.cdt.core.CConfigurationDataProvider" id="editorData">
+    <provider class="io.github.niwantha33.zew.ui.ZephyrEditorDataProvider"/>
+  </extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.SetupStartup"/></extension>
   <extension point="org.eclipse.core.resources.builders" id="zephyrBuilder" name="Zephyr Project Builder">
     <builder hasNature="false"><run class="io.github.niwantha33.zew.ui.ZephyrProjectBuilder"/></builder>
@@ -10,19 +27,11 @@
   <extension point="org.eclipse.ui.preferencePages">
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
-  <extension point="org.eclipse.ui.newWizards">
-    <category id="io.github.niwantha33.zew.wizards" name="Zephyr"/>
-    <wizard id="io.github.niwantha33.zew.newProject" name="Zephyr Project"
-            category="io.github.niwantha33.zew.wizards"
-            class="io.github.niwantha33.zew.ui.ZephyrProjectWizard" project="true"/>
-  </extension>
-  <extension point="org.eclipse.ui.importWizards">
-    <category id="io.github.niwantha33.zew.imports" name="Zephyr"/>
-    <wizard id="io.github.niwantha33.zew.importProject" name="Existing Zephyr Application"
-            category="io.github.niwantha33.zew.imports"
-            class="io.github.niwantha33.zew.ui.ZephyrProjectWizard"/>
-  </extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="io.github.niwantha33.zew.debugserver" name="Start Debug Server" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.flash" name="Flash Application" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.run" name="Run in Emulator" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.editor" name="Refresh C/C++ Editor Settings" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.setup" name="Set Up Zephyr" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tools" name="Install / Manage Zephyr Tools" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.about" name="About Zephyr Workbench" categoryId="io.github.niwantha33.zew.commands"/>
@@ -36,6 +45,10 @@
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
   </extension>
   <extension point="org.eclipse.ui.handlers">
+    <handler commandId="io.github.niwantha33.zew.debugserver" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
+    <handler commandId="io.github.niwantha33.zew.flash" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
+    <handler commandId="io.github.niwantha33.zew.run" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
+    <handler commandId="io.github.niwantha33.zew.editor" class="io.github.niwantha33.zew.ui.EditorHandler"/>
     <handler commandId="io.github.niwantha33.zew.setup" class="io.github.niwantha33.zew.ui.SetupHandler"/>
     <handler commandId="io.github.niwantha33.zew.tools" class="io.github.niwantha33.zew.ui.ToolsHandler"/>
     <handler commandId="io.github.niwantha33.zew.about" class="io.github.niwantha33.zew.ui.VersionHandler"/>
@@ -56,9 +69,13 @@
         <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
         <command commandId="io.github.niwantha33.zew.boards" label="Select Board..." style="push"/>
         <separator name="build" visible="true"/>
+        <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
         <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
         <command commandId="io.github.niwantha33.zew.rebuild" label="Pristine Rebuild" style="push"/>
         <command commandId="io.github.niwantha33.zew.cancel" label="Cancel Operation" style="push"/>
+        <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
         <separator name="updates" visible="true"/>
         <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check for Workbench Updates..." style="push"/>
         <command commandId="io.github.niwantha33.zew.updateConnection" label="Configure Workbench Updates..." style="push"/>
@@ -68,3 +85,4 @@
     </menuContribution>
   </extension>
 </plugin>
+

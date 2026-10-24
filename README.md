@@ -4,6 +4,9 @@ An Eclipse-based development environment for Zephyr applications across semicond
 
 ## Project status
 
+The 0.1.12 preview integrates project-specific builds, resolved hardware selection, CDT build settings and West runner commands. See [the exact workflow and remaining boundaries](docs/PROJECT_WORKFLOW_0.1.12.md).
+
+
 Development slices implemented: environment checks, qualified-board selection, application builds, and a private click-to-install workbench update client. The user has exercised the earlier plug-in on Windows and reported a successful build. Automated checks and packaging run on Linux; the new interactive update flow and hardware execution still need desktop validation. This is not a stable release.
 The repository remains private during development; public publication is a separate future action.
 
@@ -81,3 +84,4 @@ Original workbench material is licensed under [Apache-2.0](LICENSE), unless a mo
 The core workflow must use open-source software permitting commercial use without mandatory licence fees. Proprietary blobs and closed utilities are excluded from that workflow; some board features may therefore be unavailable. Exact dependency and firmware-feature audits are pending. See [the policy](docs/LICENSING.md).
 
 This is an independent integration project. Upstream sources: [Zephyr](https://github.com/zephyrproject-rtos/zephyr) and [Eclipse Embedded CDT](https://eclipse-embed-cdt.github.io/).
+

@@ -100,6 +100,7 @@ public final class UpdateController {
     }
 
     private static boolean activeWork() {
+        if (Job.getJobManager().find(ProjectActionHandler.FAMILY).length > 0 || Job.getJobManager().find(EditorIntegration.FAMILY).length > 0) return true;
         if (WorkbenchHandler.isOperationActive() || ToolsDialog.isOperationActive() || SetupWizard.isOperationActive()) return true;
         if (Job.getJobManager().find(ResourcesPlugin.FAMILY_MANUAL_BUILD).length > 0
                 || Job.getJobManager().find(ResourcesPlugin.FAMILY_AUTO_BUILD).length > 0) return true;
@@ -172,3 +173,4 @@ public final class UpdateController {
         if (manual) ui(() -> MessageDialog.openError(shell(), "Workbench update", message));
     }
 }
+

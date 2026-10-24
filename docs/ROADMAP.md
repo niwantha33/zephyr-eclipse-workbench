@@ -80,3 +80,8 @@ Steps 17–18 are acceptance milestones, not instructions to defer architecture 
 Root LICENSE now establishes Apache-2.0 for original project material. Step 2 remains pending because exact third-party versions, licences, transitives and redistribution conditions are not audited.
 
 Apply [LICENSING.md](LICENSING.md) throughout implementation. Use pinned submodules only when appropriate under [DEPENDENCIES.md](DEPENDENCIES.md). Proprietary dependencies cannot be treated as open source merely because they cost nothing.
+
+
+## 0.1.12 checkpoint
+
+Resolved hardware browsing, new/import projects, per-project builds and CDT settings are integrated. West emulator/flash/debug-server commands are added with stale-target checks. Additional automatic toolchain profiles, native debugger sessions, serial, configuration editors, reports and hardware evidence remain pending; see [the detailed boundary](PROJECT_WORKFLOW_0.1.12.md).
