@@ -276,7 +276,8 @@ def activate_modules(plan_data, workspace, python):
     disabled unrelated vendors. Add only exact-name activation overrides.
     """
     required = plan_data['modules']
-    missing = [name for name in required if name not in active_projects(python, workspace)]
+    active = active_projects(python, workspace)
+    missing = [name for name in required if name not in active]
     if not missing:
         return
     current = subprocess.run([str(python), '-m', 'west', 'config', 'manifest.project-filter'],
@@ -291,7 +292,8 @@ def activate_modules(plan_data, workspace, python):
     subprocess.run([str(python), '-m', 'west', 'config', '--local',
                     'manifest.project-filter', value],
                    cwd=workspace, check=True, text=True, timeout=30)
-    still_missing = [name for name in required if name not in active_projects(python, workspace)]
+    active_after = active_projects(python, workspace)
+    still_missing = [name for name in required if name not in active_after]
     if still_missing:
         raise ValueError('Required West modules are installed but inactive in CMake discovery: '
                          + ', '.join(still_missing))
