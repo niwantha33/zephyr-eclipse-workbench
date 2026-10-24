@@ -8,6 +8,7 @@ The Java bootstrap reserves the directory and holds its installation lock.
 import argparse
 from email.parser import BytesParser
 import hashlib
+import importlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -201,6 +202,16 @@ def install_packages(lock, root, environment):
     run([sys.executable, '-m', 'pip', 'install', '--no-index', '--no-deps', '--no-build-isolation',
          '--require-hashes', '--disable-pip-version-check', '--no-warn-script-location', '-r', root / 'build-requirements.txt'], root, environment)
     run([sys.executable, '-m', 'pip', 'check'], root, environment, 60)
+    verify_installed_runtime()
+
+
+def verify_installed_runtime():
+    # On a clean embedded runtime site-packages does not exist at startup.
+    # Imports can cache that missing path as None. Pip creates it in a child;
+    # refresh the still-running parent before importing installed packages.
+    importlib.invalidate_caches()
+    importlib.import_module('py7zr')
+    log('Verified SDK extractor imports in the running installer')
 
 
 def safe_archive_names(entries):
@@ -375,4 +386,5 @@ if __name__ == '__main__':
         log('FAILED — ' + str(error))
         log('Existing environments were preserved. Retry with the same folder to reuse verified downloads.')
         raise SystemExit(1)
+
 

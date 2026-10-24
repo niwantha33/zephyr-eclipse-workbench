@@ -1,4 +1,4 @@
-# Beginner setup — development preview 0.1.8
+# Beginner setup — development preview 0.1.9
 
 The new **Zephyr > Set Up Zephyr** wizard bootstraps a managed environment on
 native Windows x64. No installed Python, Git, winget, terminal commands or global
@@ -26,6 +26,11 @@ board/vendor selection, physical flashing and debugging are follow-up work.
 It is not yet a complete all-board onboarding product.
 
 ## Isolation and recovery
+
+Release 0.1.9 refreshes the running installer's Python import caches after pip
+installation and verifies `py7zr` before SDK extraction. This fixes fresh setup
+reporting `No module named 'py7zr'` despite a successful child-process package
+check. See [the validation record](INSTALLER_HOTFIX_0.1.9.md).
 
 - A workbench-owned portable Python 3.13.7 runtime and MinGit 2.50.1 are installed
   under the chosen directory. These are separate from existing user installations.
@@ -79,4 +84,5 @@ policies can affect bootstrap installation; failures remain visible in the conso
 
 The earlier Tools Manager remains the route for existing Zephyr environments
 and additional boards. No existing firmware project is migrated automatically.
+
 

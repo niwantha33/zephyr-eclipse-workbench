@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import copy
+import importlib
+import importlib.util
 import hashlib
 import importlib.util
 import json
@@ -22,6 +24,39 @@ spec.loader.exec_module(setup)
 
 
 class SetupTests(unittest.TestCase):
+    def test_child_install_into_initially_missing_package_path(self):
+        # Reproduce a first-ever embedded-runtime install: the path was absent
+        # when the parent searched it, then pip's child creates the directory.
+        module = 'zew_new_package_fixture'
+        with tempfile.TemporaryDirectory(prefix='fresh packages Ω ') as directory:
+            packages = Path(directory) / 'site-packages'
+            previous = sys.path.copy()
+            sys.path.insert(0, str(packages))
+            try:
+                self.assertIsNone(importlib.util.find_spec(module))
+                self.assertIn(str(packages), sys.path_importer_cache)
+                self.assertIsNone(sys.path_importer_cache[str(packages)])
+                subprocess.run([sys.executable, '-I', '-c',
+                    'import pathlib,sys;p=pathlib.Path(sys.argv[1]);p.mkdir();'
+                    '(p/"zew_new_package_fixture.py").write_text("VALUE=42")', str(packages)], check=True, timeout=20)
+                with self.assertRaises(ModuleNotFoundError):
+                    importlib.import_module(module)
+                original = importlib.import_module
+                def import_extractor(name):
+                    self.assertEqual(name, 'py7zr')
+                    return original(module)
+                with patch.object(setup.importlib, 'import_module', side_effect=import_extractor):
+                    setup.verify_installed_runtime()
+                self.assertEqual(sys.modules[module].VALUE, 42)
+            finally:
+                sys.path[:] = previous
+                sys.modules.pop(module, None)
+                sys.path_importer_cache.pop(str(packages), None)
+
+    def test_broken_extractor_import_stops_package_stage(self):
+        with patch.object(setup.importlib, 'import_module', side_effect=ModuleNotFoundError('broken dependency')):
+            self.assertRaisesRegex(ModuleNotFoundError, 'broken dependency', setup.verify_installed_runtime)
+
     def lock(self):
         return json.loads((TOOLS / 'setup-lock.json').read_text())
 
@@ -247,4 +282,5 @@ with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
 
 if __name__ == '__main__':
     unittest.main()
+
 
