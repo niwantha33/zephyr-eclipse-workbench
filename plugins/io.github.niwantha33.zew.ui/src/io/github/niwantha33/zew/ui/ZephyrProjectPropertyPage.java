@@ -44,7 +44,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
     private List<String[]> hardware = List.of();
 
     @Override protected Control createContents(Composite parent) {
-        project = getElement().getAdapter(IProject.class);
+        project = getElement() instanceof IProject selected ? selected : getElement().getAdapter(IProject.class);
         var panel = new Composite(parent, SWT.NONE);
         panel.setLayout(new GridLayout(3, false));
         if (project == null) {
