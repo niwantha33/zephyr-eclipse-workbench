@@ -10,6 +10,18 @@
   <extension point="org.eclipse.ui.preferencePages">
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
+  <extension point="org.eclipse.ui.newWizards">
+    <category id="io.github.niwantha33.zew.wizards" name="Zephyr"/>
+    <wizard id="io.github.niwantha33.zew.newProject" name="Zephyr Project"
+            category="io.github.niwantha33.zew.wizards"
+            class="io.github.niwantha33.zew.ui.ZephyrProjectWizard" project="true"/>
+  </extension>
+  <extension point="org.eclipse.ui.importWizards">
+    <category id="io.github.niwantha33.zew.imports" name="Zephyr"/>
+    <wizard id="io.github.niwantha33.zew.importProject" name="Existing Zephyr Application"
+            category="io.github.niwantha33.zew.imports"
+            class="io.github.niwantha33.zew.ui.ZephyrProjectWizard"/>
+  </extension>
   <extension point="org.eclipse.ui.commands">
     <command id="io.github.niwantha33.zew.setup" name="Set Up Zephyr" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tools" name="Install / Manage Zephyr Tools" categoryId="io.github.niwantha33.zew.commands"/>
