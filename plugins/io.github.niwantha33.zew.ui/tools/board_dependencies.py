@@ -110,8 +110,8 @@ def manifest_projects(python, workspace):
         if len(cells) != 3:
             raise ValueError('Unexpected West manifest output (expected project/revision/path)')
         name, revision, path = cells
-        if name in rows or not name or not SHA_PATTERN.fullmatch(revision):
-            raise ValueError('West manifest module revision is not pinned to a commit: ' + name)
+        if name in rows or not name:
+            raise ValueError('Duplicate or invalid West manifest project: ' + name)
         relative = Path(path)
         if relative.is_absolute() or '..' in relative.parts or ':' in path or '\\' in path:
             raise ValueError('Unsafe West manifest module path: ' + name)
@@ -166,6 +166,8 @@ def git_revision(git, path):
 def prepare_modules(plan_data, workspace, python, git):
     for name in plan_data['modules']:
         revision, relative = plan_data['manifest'][name]
+        if not SHA_PATTERN.fullmatch(revision):
+            raise ValueError('Selected West module lacks a pinned SHA: ' + name)
         destination = workspace / relative
         if destination.is_symlink():
             raise ValueError('Refusing symlinked module path: ' + str(destination))
