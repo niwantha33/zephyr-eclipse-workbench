@@ -51,7 +51,7 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
                     try { ProjectContext.settings(candidate); projects.add(candidate); }
                     catch (Exception ignored) { }
                 }
-                var dialog = new ListDialog(getShell());
+                var dialog = new ListDialog(getControl().getShell());
                 dialog.setTitle("Select a Zephyr project");
                 dialog.setMessage("Select one imported Zephyr application");
                 dialog.setContentProvider(ArrayContentProvider.getInstance());
@@ -88,7 +88,9 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
                     switch (action.getSelectionIndex()) { case 1 -> "flash"; case 2 -> "debugserver"; default -> "run"; });
         }
         @Override public boolean isValid(ILaunchConfiguration configuration) {
-            var candidate = ResourcesPlugin.getWorkspace().getRoot().getProject(project.getText().trim());
+            String name = project.getText().trim();
+            if (name.isEmpty()) { setErrorMessage("Choose a Zephyr project."); return false; }
+            var candidate = ResourcesPlugin.getWorkspace().getRoot().getProject(name);
             if (!candidate.isAccessible()) { setErrorMessage("Choose an open Zephyr project."); return false; }
             try { ProjectContext.settings(candidate); }
             catch (Exception e) { setErrorMessage("Choose an imported Zephyr project: " + e.getMessage()); return false; }
