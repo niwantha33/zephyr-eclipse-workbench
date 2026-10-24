@@ -208,8 +208,34 @@ def git_revision(git, path):
                                    text=True, timeout=30).strip()
 
 
+def module_dependencies(path):
+    """Read the Zephyr module's declared build dependencies, if any."""
+    import yaml
+    metadata = path / 'zephyr' / 'module.yml'
+    if not metadata.is_file():
+        return []
+    document = yaml.safe_load(metadata.read_text(encoding='utf-8')) or {}
+    if not isinstance(document, dict):
+        raise ValueError('Invalid Zephyr module metadata: ' + str(metadata))
+    build = document.get('build') or {}
+    if not isinstance(build, dict):
+        raise ValueError('Invalid build metadata: ' + str(metadata))
+    depends = build.get('depends') or []
+    if not isinstance(depends, list) or any(not isinstance(item, str) or not item for item in depends):
+        raise ValueError('Invalid build.depends list in ' + str(metadata))
+    return depends
+
+
 def prepare_modules(plan_data, workspace, python, git):
-    for name in plan_data['modules']:
+    """Install pinned direct and transitive Zephyr module dependencies."""
+    pending = list(plan_data['modules'])
+    selected = []
+    while pending:
+        name = pending.pop(0)
+        if name in selected:
+            continue
+        if name not in plan_data['manifest']:
+            raise ValueError('Required module not found in pinned West manifest: ' + name)
         revision, relative = plan_data['manifest'][name]
         if not SHA_PATTERN.fullmatch(revision):
             raise ValueError('Selected West module lacks a pinned SHA: ' + name)
@@ -220,12 +246,19 @@ def prepare_modules(plan_data, workspace, python, git):
             if not (destination / '.git').exists() or git_revision(git, destination) != revision:
                 raise ValueError('Existing module differs from pinned West manifest; preserved: ' + str(destination))
             setup.log('Reusing pinned West module: ' + name)
-            continue
-        setup.log('Installing pinned West module: ' + name)
-        subprocess.run([str(python), '-m', 'west', 'update', name], cwd=workspace, check=True,
-                       timeout=1200, stdin=subprocess.DEVNULL)
-        if not destination.is_dir() or git_revision(git, destination) != revision:
-            raise ValueError('West module revision verification failed: ' + name)
+        else:
+            setup.log('Installing pinned West module: ' + name)
+            subprocess.run([str(python), '-m', 'west', 'update', name], cwd=workspace, check=True,
+                           timeout=1200, stdin=subprocess.DEVNULL)
+            if not destination.is_dir() or git_revision(git, destination) != revision:
+                raise ValueError('West module revision verification failed: ' + name)
+        selected.append(name)
+        for required in module_dependencies(destination):
+            if required not in plan_data['manifest']:
+                raise ValueError('Zephyr module ' + name + ' requires unavailable West project: ' + required)
+            if required not in selected and required not in pending:
+                pending.append(required)
+    plan_data['modules'] = selected
 
 
 def active_projects(python, workspace):
