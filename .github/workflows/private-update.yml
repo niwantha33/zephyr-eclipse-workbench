@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-# Run the private p2 build on the owner's dedicated Linux x64 runner.
-# No GitHub-hosted minutes or intermediate Actions artifact storage.
-name: Build and publish private Zephyr Workbench p2 update
+# Standard GitHub-hosted Linux runners are free on PUBLIC repositories.
+# Keep the verified one-job publish; no intermediate Actions artifacts.
+# Do not use on a private repository with exhausted Actions minutes.
+name: Build and publish Zephyr Workbench p2 update
 on:
   push:
     branches: [main]
@@ -17,13 +18,13 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: private-zephyr-updates-${{ github.ref }}
+  group: public-zephyr-updates-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build_and_publish:
-    name: Verify and publish using dedicated self-hosted runner
+    name: Verify and publish on public GitHub-hosted runner
     if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
-    runs-on: [self-hosted, linux, x64, zephyr-p2]
+    runs-on: ubuntu-24.04
     timeout-minutes: 75
     defaults:
       run:
@@ -42,7 +43,8 @@ jobs:
           command -v python3
           command -v mvn
           command -v git
-          JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
+          test -d "${JAVA_HOME_21_X64:-}"
+          export JAVA_HOME="$JAVA_HOME_21_X64"
           echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
           echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
           "$JAVA_HOME/bin/java" -version
