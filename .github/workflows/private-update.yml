@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Build and publish private Zephyr Workbench p2 update
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/**'
+      - 'features/**'
+      - 'releng/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'pom.xml'
+      - '.github/workflows/private-update.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish only after tests pass (private updates branch)'
+        type: boolean
+        required: true
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: private-zephyr-updates-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    name: Verify new version and package p2 update
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Select runner OpenJDK 21
+        run: |
+          test -d "$JAVA_HOME_21_X64"
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+      - name: Run regression tests
+        run: python3 scripts/test_core.py
+      - name: Build Tycho p2 update site
+        run: mvn --batch-mode --no-transfer-progress clean verify
+      - name: Verify exact built p2 site
+        run: python3 scripts/verify_site.py
+      - name: Save private candidate for inspection
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: private-zephyr-workbench-p2-candidate
+          path: releng/repository/target/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Promote verified candidate atomically
+    needs: verify
+    if: "${{ github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main' }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out verified default branch with write permission
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Reuse tested p2 site, not a rebuild
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.1.8
+        with:
+          name: private-zephyr-workbench-p2-candidate
+          path: releng/repository/target/
+      - name: Reverify p2 archive
+        run: python3 scripts/verify_site.py
+      - name: Publish release and channel as one fast-forward operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          SITE="$GITHUB_WORKSPACE/releng/repository/target/repository"
+          VERSION="$(python3 - <<'PY'
+          import re, zipfile
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          jars = list(Path('releng/repository/target/repository/features').glob('*.jar'))
+          if len(jars) != 1:
+              raise SystemExit('Expected one installable feature')
+          with zipfile.ZipFile(jars[0]) as archive:
+              feature = ET.fromstring(archive.read('feature.xml'))
+          version = feature.attrib['version']
+          if feature.attrib.get('id') != 'io.github.niwantha33.zew.feature' or not re.fullmatch(r'0\.1\.11\.[0-9]{8,14}', version):
+              raise SystemExit('Expected a correctly versioned 0.1.11 development preview')
+          print(version)
+          PY
+          )"
+          git fetch --no-tags origin refs/heads/updates:refs/remotes/origin/updates
+          RELEASE_ROOT="$RUNNER_TEMP/zephyr-p2-updates"
+          git worktree add --detach "$RELEASE_ROOT" refs/remotes/origin/updates
+          export RELEASE_ROOT VERSION
+
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          root = Path(os.environ['RELEASE_ROOT'])
+          current = next((line.partition('=')[2] for line in (root/'channel.properties').read_text().splitlines()
+                          if line.startswith('version=')), '')
+          version = os.environ['VERSION']
+          if not re.fullmatch(r'\d+\.\d+\.\d+\.\d+', current):
+              raise SystemExit('Current channel is invalid')
+          if tuple(map(int, version.split('.'))) <= tuple(map(int, current.split('.'))):
+              raise SystemExit('Refusing downgrade or same-version replacement')
+          if (root/'releases'/version).exists():
+              raise SystemExit('Immutable release directory already exists')
+          PY
+
+          mkdir "$RELEASE_ROOT/releases/$VERSION"
+          cp -a "$SITE/." "$RELEASE_ROOT/releases/$VERSION/"
+          git -C "$RELEASE_ROOT" add -- "releases/$VERSION"
+          git -C "$RELEASE_ROOT" -c user.name=zephyr-p2-ci \
+            -c user.email=zephyr-p2-ci@users.noreply.github.com \
+            commit -m "updates: stage immutable p2 release $VERSION"
+          IMMUTABLE_SHA="$(git -C "$RELEASE_ROOT" rev-parse HEAD)"
+          python3 scripts/prepare_update.py \
+            --site "$SITE" --revision "$IMMUTABLE_SHA" \
+            --output "$RUNNER_TEMP/prepared-release" \
+            --notes "0.1.11 development preview: new/import Zephyr project, portable metadata and isolated per-project builds. Windows desktop testing pending."
+          cp "$RUNNER_TEMP/prepared-release/channel.properties" "$RELEASE_ROOT/channel.properties"
+
+          python3 - <<'PY'
+          import os, hashlib
+          from pathlib import Path
+          root = Path(os.environ['RELEASE_ROOT'])
+          rows = dict(line.split('=',1) for line in (root/'channel.properties').read_text().splitlines() if '=' in line)
+          if rows['version'] != os.environ['VERSION'] or rows['directory'] != 'releases/'+rows['version']:
+              raise SystemExit('Incorrect channel version or release directory')
+          if not 3 <= int(rows['files']) <= 100:
+              raise SystemExit('Invalid number of release files')
+          for i in range(int(rows['files'])):
+              name = rows[f'file.{i}.path']
+              data = (root/rows['directory']/name).read_bytes()
+              if len(data) != int(rows[f'file.{i}.size']) or hashlib.sha256(data).hexdigest() != rows[f'file.{i}.sha256']:
+                  raise SystemExit('Checksum mismatch: '+name)
+          print('Verified all versioned files before publishing.')
+          PY
+
+          git -C "$RELEASE_ROOT" add -- channel.properties
+          git -C "$RELEASE_ROOT" -c user.name=zephyr-p2-ci \
+            -c user.email=zephyr-p2-ci@users.noreply.github.com \
+            commit -m "updates: activate $VERSION"
+          git -C "$RELEASE_ROOT" push origin HEAD:updates
+          echo "Published private $VERSION with previous releases retained." >> "$GITHUB_STEP_SUMMARY"
