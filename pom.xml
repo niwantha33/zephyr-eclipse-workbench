@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.niwantha33.zew</groupId>
   <artifactId>workbench-parent</artifactId>
-  <version>0.1.15-SNAPSHOT</version>
+  <version>0.1.16-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Zephyr Eclipse Workbench</name>
   <licenses><license><name>Apache License 2.0</name><url>https://www.apache.org/licenses/LICENSE-2.0</url></license></licenses>
