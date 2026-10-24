@@ -2,7 +2,7 @@
 # Standard GitHub-hosted Linux runners are free on PUBLIC repositories.
 # Keep the verified one-job publish; no intermediate Actions artifacts.
 # Do not use on a private repository with exhausted Actions minutes.
-name: Build and publish private Zephyr Workbench p2 update
+name: Build and publish Zephyr Workbench p2 update
 on:
   push:
     branches: [main]
@@ -18,7 +18,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: private-zephyr-updates-${{ github.ref }}
+  group: public-zephyr-updates-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build_and_publish:
