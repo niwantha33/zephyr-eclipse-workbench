@@ -21,6 +21,16 @@ public record ProjectProfile(String board) {
         try { return new ProjectProfile(match.group(1)); }
         catch (IllegalArgumentException e) { throw new IOException(e.getMessage(), e); }
     }
+    public void replace(Path application, String expectedBoard) throws IOException {
+        if (!read(application).board().equals(expectedBoard)) throw new IOException("Project target changed; reopen target selection.");
+        Path directory = application.resolve(".zew");
+        if (Files.isSymbolicLink(directory)) throw new IOException("Project metadata directory must not be a symbolic link");
+        Path temporary = Files.createTempFile(directory, ".project-", ".tmp");
+        try {
+            Files.writeString(temporary, "{\n  \"schema\": 1,\n  \"board\": \"" + board + "\",\n  \"profile\": \"first\"\n}\n");
+            Files.move(temporary, directory.resolve("project.json"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally { Files.deleteIfExists(temporary); }
+    }
     public void write(Path application) throws IOException {
         Path directory = application.resolve(".zew");
         if (Files.isSymbolicLink(directory)) throw new IOException("Project metadata directory must not be a symbolic link");

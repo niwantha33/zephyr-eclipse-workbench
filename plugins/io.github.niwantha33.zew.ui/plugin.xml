@@ -28,6 +28,7 @@
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="io.github.niwantha33.zew.selectCpu" name="Select ESP32-S3 CPU" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugserver" name="Start Debug Server" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.flash" name="Flash Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.run" name="Run in Emulator" categoryId="io.github.niwantha33.zew.commands"/>
@@ -45,6 +46,7 @@
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
   </extension>
   <extension point="org.eclipse.ui.handlers">
+    <handler commandId="io.github.niwantha33.zew.selectCpu" class="io.github.niwantha33.zew.ui.ProjectTargetHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugserver" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.flash" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.run" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
@@ -68,6 +70,7 @@
         <separator name="tools" visible="true"/>
         <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
         <command commandId="io.github.niwantha33.zew.boards" label="Select Board..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.selectCpu" label="Select ESP32-S3 CPU..." style="push"/>
         <separator name="build" visible="true"/>
         <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
         <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>

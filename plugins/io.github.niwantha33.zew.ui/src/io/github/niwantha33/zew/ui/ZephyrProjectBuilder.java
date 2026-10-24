@@ -62,6 +62,8 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             String board = settings.getProperty("board");
             Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
             var environment = ProjectContext.environment(settings);
+            monitor.beginTask(clean ? "Clean Zephyr project" : "Prepare tools and build Zephyr project", IProgressMonitor.UNKNOWN);
+            if (!clean) BoardTools.prepare(settings, environment, monitor, stream::println);
             if (clean && !Files.isRegularFile(buildDirectory.resolve("CMakeCache.txt"))) {
                 stream.println("No configured build exists for " + board + "; nothing to clean.");
                 return;
@@ -75,7 +77,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             if (!clean && "true".equals(settings.getProperty("zew.modules.none"))) command.add("-DZEPHYR_MODULES=");
             stream.println("Workbench " + Activator.getDefault().getBundle().getVersion() + " | " + getProject().getName());
             stream.println("Exact board target: " + board + " | independent output: " + buildDirectory);
-            monitor.beginTask(clean ? "Clean Zephyr project" : "Build Zephyr project", IProgressMonitor.UNKNOWN);
+            monitor.setTaskName(clean ? "Clean Zephyr project" : "Build Zephyr project");
             BuildDiagnostics.clear(getProject());
             new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofMinutes(30), monitor::isCanceled, line -> { stream.println(line); BuildDiagnostics.accept(getProject(), buildDirectory, line); }, environment).requireSuccess();
             if (!clean && !Files.isRegularFile(buildDirectory.resolve("zephyr/zephyr.elf"))) throw new java.io.IOException("Expected firmware output is missing at " + buildDirectory);

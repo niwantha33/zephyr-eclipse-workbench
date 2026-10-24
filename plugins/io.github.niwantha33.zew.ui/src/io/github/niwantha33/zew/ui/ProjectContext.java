@@ -14,6 +14,7 @@ final class ProjectContext {
         String root = project.getPersistentProperty(new QualifiedName(Activator.ID, "setupRoot"));
         if (root == null) throw new java.io.IOException("Import this application using File > Import > Zephyr first.");
         Properties settings = load(Path.of(root));
+        settings.setProperty("zew.setupRoot", root);
         Path application = project.getLocation().toFile().toPath();
         if (Files.isRegularFile(application.resolve(".zew/project.json"))) {
             settings.setProperty("board", ProjectProfile.read(application).board());
@@ -47,6 +48,11 @@ final class ProjectContext {
         var values = new LinkedHashMap<String, String>();
         var paths = new LinkedHashSet<String>();
         for (String key : List.of("tools.cmake", "tools.ninja", "tools.git", "python")) paths.add(Path.of(settings.getProperty(key)).getParent().toString());
+        String managedRoot = settings.getProperty("zew.setupRoot", "");
+        if (!managedRoot.isBlank()) {
+            paths.add(Path.of(managedRoot, "board-python/esp32s3/Scripts").toString());
+            paths.add(Path.of(managedRoot, "board-python/esp32s3/bin").toString());
+        }
         String pathKey = System.getenv().keySet().stream().filter(k -> k.equalsIgnoreCase("PATH")).findFirst().orElse("PATH");
         values.put(pathKey, String.join(java.io.File.pathSeparator, paths) + java.io.File.pathSeparator + System.getenv().getOrDefault(pathKey, ""));
         values.put("ZEPHYR_BASE", WestCommands.cmakePath(Path.of(settings.getProperty("workspace"), "zephyr").toString()));

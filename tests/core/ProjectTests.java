@@ -33,6 +33,11 @@ public final class ProjectTests {
             new ProjectProfile("nrf52840dk@1.0.0/nrf52840").write(imported);
             check(Files.readString(imported.resolve("prj.conf")).equals("CONFIG_TEST=y\n"));
             check(ProjectProfile.read(imported).board().equals("nrf52840dk@1.0.0/nrf52840"));
+            new ProjectProfile("esp32s3_devkitc/esp32s3/procpu").replace(imported, "nrf52840dk@1.0.0/nrf52840");
+            check(ProjectProfile.read(imported).board().equals("esp32s3_devkitc/esp32s3/procpu"));
+            check(Files.readString(imported.resolve("prj.conf")).equals("CONFIG_TEST=y\n"));
+            rejects(() -> new ProjectProfile("qemu_x86/atom").replace(imported, "old/stale"));
+            check(ProjectProfile.read(imported).board().equals("esp32s3_devkitc/esp32s3/procpu"));
             System.out.println("Passed " + checks + " portable project checks.");
         } finally { try (var paths = Files.walk(root)) { for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) Files.delete(path); } }
     }

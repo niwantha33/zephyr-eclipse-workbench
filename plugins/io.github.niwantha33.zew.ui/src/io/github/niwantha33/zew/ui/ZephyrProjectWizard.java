@@ -139,6 +139,9 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
                     if (existing.getSelection() && Files.isRegularFile(source.resolve(".zew/project.json")) && !ProjectProfile.read(source).board().equals(((String[]) targets.getSelection()[0].getData())[6])) error = "Selected hardware conflicts with the saved project target.";
                 }
             } catch (Exception e) { error = e.getMessage(); }
+            if (targets.getSelectionCount() == 1 && ((String[]) targets.getSelection()[0].getData())[6].contains("/esp32s3/appcpu"))
+                setMessage("APPCPU is the secondary core and requires primary-core firmware. For standalone Hello World choose esp32s3/procpu.", org.eclipse.jface.dialogs.IMessageProvider.WARNING);
+            else setMessage("Missing ESP32-S3 compiler and build tools are installed automatically on the first project build.");
             setErrorMessage(error); setPageComplete(error == null);
         }
     }

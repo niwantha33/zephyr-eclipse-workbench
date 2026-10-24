@@ -4,6 +4,9 @@ An Eclipse-based development environment for Zephyr applications across semicond
 
 ## Project status
 
+0.1.13 adds [automatic ESP32-S3 compiler/esptool/HAL preparation and an existing-project CPU selector](docs/ESP32S3_REPAIR_0.1.13.md).
+
+
 The 0.1.12 preview integrates project-specific builds, resolved hardware selection, CDT build settings and West runner commands. See [the exact workflow and remaining boundaries](docs/PROJECT_WORKFLOW_0.1.12.md).
 
 

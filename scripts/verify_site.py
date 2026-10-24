@@ -46,10 +46,15 @@ for p in bundles:
             for helper in ('setup.py', 'managed_sitecustomize.py'):
                 if z.read('tools/' + helper) != (root / 'plugins/io.github.niwantha33.zew.ui/tools' / helper).read_bytes():
                     raise SystemExit('Packaged helper differs from verified source: ' + helper)
-            for helper in ('hardware_catalog.py', 'editor_settings.py'):
+            for helper in ('hardware_catalog.py', 'editor_settings.py', 'board_tools.py'):
                 compile(z.read('tools/' + helper), 'tools/' + helper, 'exec')
                 if z.read('tools/' + helper) != (root / 'plugins/io.github.niwantha33.zew.ui/tools' / helper).read_bytes():
                     raise SystemExit('Packaged helper differs from source: ' + helper)
+            board_lock = json.loads(z.read('tools/esp32s3-python-lock.json'))
+            if board_lock['platform'] != 'win_amd64' or board_lock['python'] != '3.13':
+                raise SystemExit('Invalid ESP32-S3 Python lock')
+            if z.read('tools/esp32s3-python-lock.json') != (root / 'plugins/io.github.niwantha33.zew.ui/tools/esp32s3-python-lock.json').read_bytes():
+                raise SystemExit('Board dependency lock differs from source')
             lock = json.loads(z.read('tools/setup-lock.json'))
             if lock['profile'] != 'first-build-win-x64' or any(p['review'] != 'approved-build-use' for p in lock['packages']):
                 raise SystemExit('Setup profile or package review is incomplete.')
