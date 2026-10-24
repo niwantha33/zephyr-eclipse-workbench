@@ -120,7 +120,7 @@ class DependencyTests(unittest.TestCase):
     def test_required_inactive_modules_are_activated_without_disabling_others(self):
         plan = {'modules': ['cmsis_6', 'cmsis', 'hal_ti']}
         current = type('Result', (), {'returncode': 0,
-                    'stdout': '-hal_.*,+hal_ti\\n', 'stderr': ''})()
+                    'stdout': '-hal_.*,+hal_ti\n', 'stderr': ''})()
         with patch.object(board, 'active_projects',
                           side_effect=[{'cmsis', 'hal_ti'},
                                        {'cmsis_6', 'cmsis', 'hal_ti'}]) as active:
