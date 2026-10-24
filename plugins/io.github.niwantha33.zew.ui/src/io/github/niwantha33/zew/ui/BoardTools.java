@@ -15,6 +15,7 @@ final class BoardTools {
         if (!Platform.OS_WIN32.equals(Platform.getOS())) return; // Other hosts may use installed toolchains.
         String board = settings.getProperty("board");
         if (board == null || board.isBlank()) throw new java.io.IOException("Set an exact project board target in Project Properties > Zephyr.");
+        if (board.equals("qemu_x86/atom")) return; // The managed starter already installed its pinned x86 compiler.
         java.nio.file.Path root = java.nio.file.Path.of(settings.getProperty("zew.setupRoot"));
         try (var channel = FileChannel.open(root.resolve(".zew-install.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
                 var lock = channel.tryLock()) {
