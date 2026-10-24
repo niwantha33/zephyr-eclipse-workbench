@@ -51,6 +51,12 @@ are still pending and are *not* presented as working.
 
 See [Project workflow 0.1.11](docs/PROJECT_WORKFLOW_0.1.11.md).
 
+**Updates:** A source merge is not an Eclipse installation update. The IDE
+tracks the private `updates` branch's pinned p2 channel; it will continue
+showing 0.1.10 until a verified 0.1.11 site has been published there.
+Use the [private update publishing and recovery guide](docs/PRIVATE_UPDATE_PUBLISH.md)
+when publishing a new workbench build.
+
 ## Start here
 
 - [Build, install locally and use the development slice](docs/DEVELOPMENT.md)
