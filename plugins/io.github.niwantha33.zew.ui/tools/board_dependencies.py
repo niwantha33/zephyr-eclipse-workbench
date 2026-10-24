@@ -132,7 +132,7 @@ def architecture(vendor, soc, folder, qualifier):
                      + '. Application and SDK were preserved.')
 
 def manifest_projects(python, workspace):
-    command = [str(python), '-m', 'west', 'list', '-f', '{name}\t{revision}\t{path}']
+    command = [str(python), '-m', 'west', 'list', '--all', '-f', '{name}\t{revision}\t{path}']
     result = subprocess.run(command, cwd=workspace, check=True, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
     rows = {}
@@ -155,10 +155,16 @@ def modules_for(vendor, compiler, manifest):
     if compiler == 'arm-zephyr-eabi' and 'cmsis' in manifest:
         names.append('cmsis')
     alias = HAL_ALIASES.get(vendor, vendor)
+    found_hal = False
     for candidate in ('hal_' + alias, 'hal_' + vendor):
         if candidate in manifest:
             names.append(candidate)
+            found_hal = True
             break
+    if vendor in HAL_ALIASES and not found_hal:
+        raise ValueError('Selected vendor HAL is missing from West manifest: hal_' + alias)
+    if compiler == 'arm-zephyr-eabi' and 'cmsis' not in manifest:
+        raise ValueError('Required ARM CMSIS module is missing from West manifest')
     return names
 
 
