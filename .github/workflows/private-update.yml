@@ -51,7 +51,7 @@ jobs:
           "$JAVA_HOME/bin/java" -version 2>&1 | grep -Eq 'version "21(\.|")'
           python3 -c 'import sys; assert sys.version_info >= (3, 10), sys.version'
           mvn -version
-          mvn -version | grep -Eq 'Apache Maven 3\.9\.|Apache Maven 4\.'
+          mvn -version | python3 -c 'import re,sys; s=sys.stdin.read(); m=re.search(r"Apache Maven (\d+)\.(\d+)\.", s); assert m and tuple(map(int,m.groups())) >= (3,9), s'
       - name: Run all core and Python dependency regression tests
         run: python3 scripts/test_core.py
       - name: Build clean Tycho p2 update site
