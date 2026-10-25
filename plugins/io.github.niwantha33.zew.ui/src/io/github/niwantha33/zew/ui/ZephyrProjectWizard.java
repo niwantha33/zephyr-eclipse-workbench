@@ -208,6 +208,22 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             if (Platform.getBundle("org.eclipse.cdt.core") != null) CdtEditor.ensureProject(project, null);
             if (project.getFile("src/main.c").exists()) IDE.openEditor(active, project.getFile("src/main.c"));
             EditorIntegration.schedule(project);
+            // New and imported projects immediately become build-ready without
+            // sending users to Preferences or requiring a second Build command.
+            // All downloads and compiler output use the normal progress and Zephyr console.
+            var initialBuild = new org.eclipse.core.runtime.jobs.Job("Prepare and build Zephyr — " + project.getName()) {
+                @Override protected org.eclipse.core.runtime.IStatus run(IProgressMonitor monitor) {
+                    try {
+                        project.build(IncrementalProjectBuilder.FULL_BUILD,
+                            Activator.ID + ".zephyrBuilder", java.util.Map.of(), monitor);
+                        return monitor.isCanceled() ? Status.CANCEL_STATUS : Status.OK_STATUS;
+                    } catch (CoreException error) {
+                        return error.getStatus();
+                    }
+                }
+            };
+            initialBuild.setUser(true);
+            initialBuild.schedule();
             return true;
         } catch (Exception error) { MessageDialog.openError(getShell(), "Zephyr project", error.getMessage()); return false; }
     }
