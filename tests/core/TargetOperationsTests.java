@@ -36,6 +36,9 @@ public final class TargetOperationsTests {
             rejects(() -> TargetOperations.prepare(build, board, "flash", "--erase"), "runner flag injection must fail");
             rejects(() -> TargetOperations.prepare(build, board, "flash", "esptool --erase"), "runner whitespace injection must fail");
             rejects(() -> TargetOperations.prepare(build, board, "invalid", null), "unsupported operation must fail");
+            Files.writeString(zephyr.resolve(".config"), "CONFIG_XTENSA=y\nCONFIG_KERNEL_BIN_NAME=\"zephyr\"\nCONFIG_BOARD_TARGET=\"esp32s3_devkitc/esp32s3/appcpu\"\n");
+            rejects(() -> TargetOperations.prepare(build, board, "flash", null), "reconfigured CPU mismatch must fail despite old receipt");
+            Files.writeString(zephyr.resolve(".config"), "CONFIG_XTENSA=y\nCONFIG_KERNEL_BIN_NAME=\"zephyr\"\nCONFIG_BOARD_TARGET=\"esp32s3_devkitc/esp32s3/procpu\"\n");
             Files.delete(zephyr.resolve("zephyr.elf"));
             rejects(() -> TargetOperations.prepare(build, board, "flash", null), "deleted firmware must fail");
             Files.write(zephyr.resolve("zephyr.elf"), new byte[] {0x7f,'E','L','F',1});
