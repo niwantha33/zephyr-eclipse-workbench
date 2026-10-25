@@ -98,7 +98,7 @@ def main():
         raise ValueError('CI managed environment is not ready')
     workspace = root / 'workspace'
     ninja = root / 'python/Scripts/ninja.exe'
-    env['PATH'] = os.pathsep.join(map(str, [root / 'python', root / 'python/Scripts', root / 'git/cmd', root / 'sdk/hosttools/bin', root / 'sdk/hosttools/usr/bin'])) + os.pathsep + env.get('PATH', '')
+    env['PATH'] = os.pathsep.join(map(str, [root / 'python', root / 'python/Scripts', root / 'git/cmd', root / 'board-python/esp32s3/Scripts', root / 'board-python/esp32s3/bin', root / 'sdk/hosttools/bin', root / 'sdk/hosttools/usr/bin'])) + os.pathsep + env.get('PATH', '')
     env.update(ZEPHYR_BASE=(workspace / 'zephyr').as_posix(), ZEPHYR_TOOLCHAIN_VARIANT='zephyr',
                ZEPHYR_SDK_INSTALL_DIR=(root / 'sdk').as_posix())
     text = run([python, root / 'installer/hardware_catalog.py', '--zephyr', workspace / 'zephyr'], root, env, capture=True)
