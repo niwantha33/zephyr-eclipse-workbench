@@ -137,3 +137,38 @@ Ports are released after selection so OpenOCD can bind them. Another process can
 claim one in that interval; startup reports a bind failure instead of connecting
 to an unknown server. Retry Debug to select free endpoints. Physical Windows
 termination/relaunch validation remains required.
+
+## Eclipse's standard Debug button
+
+Select an imported Zephyr project or open one of its source files. On the first
+launch choose the standard green bug dropdown > Debug As > Zephyr Application
+(or right-click > Debug As > Zephyr Application). The managed project preparation
+and native CDT DSF-GDB launch are shared with Zephyr > Debug Application. Saved
+Debug configurations are associated with the project for Eclipse's contextual
+launching and launch history; the normal Debug button can repeat a saved launch.
+Eclipse's launch preference controls whether the main button follows the current
+selection or repeats the last launch, as it does for other CDT applications.
+
+The duplicate Zephyr Debug toolbar button has been removed. The Flash toolbar
+action remains explicit: standard Eclipse Run is not redefined to program a board,
+and using the standard Debug button does not silently flash firmware.
+
+## USB access denied after a previous successful session
+
+`LIBUSB_ERROR_ACCESS` / `LIBUSB_ERROR_BUSY` occurs while opening the physical
+JTAG interface, before a usable GDB session. An older OpenOCD instance may still
+own it even if the new launch has free TCP ports. Terminate the previous Eclipse
+Debug and External Debug Server sessions first. On Windows list candidate servers:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='openocd.exe'" |
+    Select-Object ProcessId, ParentProcessId, ExecutablePath, CommandLine |
+    Format-List
+```
+
+Identify the stale server for this board from its command line before stopping
+that specific PID. Reconnect the native USB/JTAG cable and retry. If there is no
+competing server and access remains denied, inspect the JTAG interface driver
+and permissions. UART flashing success does not validate the JTAG interface.
+PyUSB import warnings from the unrelated rtsflash runner and OpenOCD deprecation
+notices do not explain a physical JTAG access-denied error.

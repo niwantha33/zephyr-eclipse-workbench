@@ -138,7 +138,18 @@ for p in bundles:
                     raise SystemExit('Missing ' + cmd + ' Eclipse command')
                 if 'icons/' + cmd + '.png' not in z.namelist():
                     raise SystemExit('Missing packaged ' + cmd + ' toolbar icon')
+            shortcut = plugin.find("./extension[@point='org.eclipse.debug.ui.launchShortcuts']/shortcut[@id='io.github.niwantha33.zew.ui.debugShortcut']")
+            if shortcut is None or shortcut.attrib.get('modes') != 'debug':
+                raise SystemExit('Native Eclipse Debug shortcut missing or advertises a flash/run mode')
+            if shortcut.find("configurationType[@id='io.github.niwantha33.zew.ui.launchType']") is None:
+                raise SystemExit('Debug shortcut is not associated with the managed CDT launch type')
+            if shortcut.find("contextualLaunch/enablement") is None:
+                raise SystemExit('Debug shortcut lacks project-sensitive enablement')
+            toolbar = plugin.findall("./extension[@point='org.eclipse.ui.menus']/menuContribution/toolbar/command")
+            if any(item.attrib.get('commandId') == 'io.github.niwantha33.zew.debug' for item in toolbar):
+                raise SystemExit('Duplicate custom Debug toolbar button; use native Eclipse Debug')
             for cls in ('ZephyrNativeDebugDelegate', 'ZephyrDebugHandler',
+                        'ZephyrDebugShortcut', 'ZephyrProjectTester',
                         'SelectedProject', 'ZephyrBuildHandler', 'ZephyrArtifactsHandler',
                         'DebugToolsHandler', 'SharedDebugTools',
                         'ZephyrChipMismatchRecovery',

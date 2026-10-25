@@ -43,7 +43,15 @@ public final class DebugServerDiagnostics {
                     + "tools installation with OpenOCD selected. The Workbench can detect "
                     + "a complete installation under %USERPROFILE%\\\\.espressif\\\\tools "
                     + "or IDF_TOOLS_PATH after rebuilding the selected project.";
-        } else if (lower.contains("libusb_error_not_found") || lower.contains("libusb_error_access")
+        } else if (lower.contains("libusb_error_access") || lower.contains("libusb_error_busy")) {
+            diagnosis = "USB/JTAG access was denied or the interface is already claimed. "
+                    + "Terminate existing Workbench Debug/External Debug Server sessions and check for "
+                    + "a stale OpenOCD process for this board, including processes from another IDE or "
+                    + "an earlier Eclipse instance. Stop only the identified stale server. Changing TCP "
+                    + "ports does not release the physical probe. Reconnect the native USB/JTAG cable "
+                    + "and retry; if access is still denied, verify the interface driver/permissions "
+                    + "(ESP32-S3 on Windows requires the JTAG interface driver, separate from UART flashing).";
+        } else if (lower.contains("libusb_error_not_found")
                 || lower.contains("unable to open ftdi device") || lower.contains("no device found")
                 || lower.contains("no matching usb device") || lower.contains("usb device not found")) {
             diagnosis = "OpenOCD could not access the JTAG USB interface. On ESP32-S3, "
