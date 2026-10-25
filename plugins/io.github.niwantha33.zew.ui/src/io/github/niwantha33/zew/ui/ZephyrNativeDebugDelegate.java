@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import io.github.niwantha33.zew.core.DebugServerDiagnostics;
 import java.util.regex.Pattern;
 import org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants;
 import org.eclipse.cdt.dsf.gdb.IGDBLaunchConfigurationConstants;
@@ -145,7 +146,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             session = new ManagedServer(server, console.newMessageStream(), lease, launch);
             lease = null; // ManagedServer now owns this physical operation.
             var owned = session;
-            server.onExit().thenRun(owned::close);
+            server.onExit().thenRun(() -> { owned.awaitLogDrain(1500); owned.close(); });
             session.startLogPump();
             long deadline = System.nanoTime() + Duration.ofSeconds(25).toNanos();
             boolean ready = false;
@@ -154,9 +155,11 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 if (isListening(params.port())) { ready = true; break; }
                 Thread.sleep(100);
             }
-            if (!ready || !server.isAlive())
-                throw new IOException("OpenOCD GDB server failed to start at localhost:"
-                        + params.port() + ". See the Zephyr DSF-GDB console.");
+            if (!ready || !server.isAlive()) {
+                session.awaitLogDrain(1500);
+                Integer exitCode = server.isAlive() ? null : server.exitValue();
+                throw new IOException(session.diagnose(params.plan().board(), params.port(), exitCode));
+            }
             session.register();
             // Superclass initializes a true GdbLaunch with Eclipse breakpoints,
             // registers, variables, call stacks, memory and source stepping.
@@ -191,6 +194,19 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         private final TargetOperationGuard.Lease lease;
         private final ILaunch launch;
         private final AtomicBoolean closed = new AtomicBoolean();
+        private final DebugServerDiagnostics diagnostics = new DebugServerDiagnostics();
+        private volatile Thread logThread;
+
+        String diagnose(String board, int port, Integer exitCode) {
+            return diagnostics.describe(board, port, exitCode);
+        }
+
+        void awaitLogDrain(long millis) {
+            Thread t = logThread;
+            if (t == null || t == Thread.currentThread()) return;
+            try { t.join(millis); }
+            catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+        }
 
         ManagedServer(Process process, MessageConsoleStream stream, TargetOperationGuard.Lease lease, ILaunch launch) {
             this.process = process; this.stream = stream; this.lease = lease; this.launch = launch;
@@ -200,10 +216,14 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 try (var input = new BufferedReader(
                         new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
-                    while ((line = input.readLine()) != null) stream.println(line);
+                    while ((line = input.readLine()) != null) {
+                        diagnostics.accept(line);
+                        if (!closed.get()) stream.println(line);
+                    }
                 } catch (IOException ignored) { /* exit/terminate closes the stream */ }
             }, "zew-owned-openocd-output");
             reader.setDaemon(true);
+            logThread = reader;
             reader.start();
         }
         void register() {
