@@ -100,6 +100,11 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             for (Text text : List.of(name, location, environment)) text.addModifyListener(e -> validatePage());
             existing.addListener(SWT.Selection, e -> validatePage());
             setControl(body); setPageComplete(false);
+            // Reuse the detected managed environment without making beginners
+            // discover and press a separate hardware-loading step.
+            body.getDisplay().asyncExec(() -> {
+                if (!body.isDisposed() && !environment.getText().isBlank()) load();
+            });
         }
         Text field(Composite parent, String title, String value, boolean browse) {
             new Label(parent, SWT.NONE).setText(title);
