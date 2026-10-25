@@ -29,24 +29,30 @@ public final class ProjectActionHandler extends AbstractHandler {
         if (!Set.of("run", "flash", "debugserver").contains(action)) return null;
         try {
             var settings = ProjectContext.settings(project); Path build = ProjectContext.buildDirectory(project, settings);
-            if (!Files.isRegularFile(build.resolve("CMakeCache.txt"))) throw new java.io.IOException("Build the selected project before running it.");
-            Path receipt = build.resolve(".zew-built-target");
-            if (!Files.isRegularFile(receipt) || !Files.readString(receipt).equals(settings.getProperty("board"))) throw new java.io.IOException("Build this project's current target once before using Run, Flash or Debug Server.");
-            if (action.equals("run") && !settings.getProperty("board").startsWith("qemu_")) throw new java.io.IOException("This build has no detected QEMU emulator. Use Flash for a physical board.");
-            if (!action.equals("run") && !Files.isRegularFile(build.resolve("zephyr/runners.yaml"))) throw new java.io.IOException("This build has no runner configuration. Build a physical board target first.");
+            var plan = io.github.niwantha33.zew.core.TargetOperations.prepare(
+                    build, settings.getProperty("board"), action, "");
             if (action.equals("flash") && !MessageDialog.openConfirm(HandlerUtil.getActiveShell(event), "Flash " + project.getName(), "Program the connected board using the build's default runner for " + settings.getProperty("board") + "?")) return null;
             var job = new WorkspaceJob("Zephyr " + action + " — " + project.getName()) {
                 @Override public boolean belongsTo(Object family) { return family == FAMILY; }
                 @Override public IStatus runInWorkspace(IProgressMonitor monitor) {
                     var console = new MessageConsole("Zephyr " + action + " — " + project.getName(), null);
                     ConsolePlugin.getDefault().getConsoleManager().addConsoles(new IConsole[] {console}); ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
-                    try (var stream = console.newMessageStream()) {
-                        var command = new ArrayList<>(List.of(settings.getProperty("python"), "-m", "west"));
-                        if (action.equals("run")) command.addAll(List.of("build", "--build-dir", build.toString(), "--target", "run"));
-                        else command.addAll(List.of(action, "--build-dir", build.toString()));
+                    try (var stream = console.newMessageStream();
+                         var lease = TargetOperationGuard.acquire(action)) {
                         monitor.beginTask("Zephyr " + action + " (cancel in Progress view)", IProgressMonitor.UNKNOWN);
-                        if (action.equals("debugserver")) stream.println("Starting the default board debug server. Connect a compatible GDB client separately; Eclipse stepping/variables integration is pending.");
-                        new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofHours(8), monitor::isCanceled, stream::println, ProjectContext.environment(settings)).requireSuccess();
+                        // Revalidate after acquiring the physical guard: queued jobs must
+                        // not flash a firmware image replaced while they were waiting.
+                        var currentPlan = io.github.niwantha33.zew.core.TargetOperations.prepare(
+                                plan.buildDirectory(), plan.board(), action, "");
+                        stream.println("Exact board: " + plan.board());
+                        stream.println("Verified build: " + currentPlan.buildDirectory());
+                        stream.println("Runner: Zephyr build's default (resolved by West; probe not independently verified)");
+                        if (action.equals("debugserver")) stream.println("External GDB server only. Eclipse source-level debugging is not yet available.");
+                        new ProcessRunner().run(currentPlan.command(settings.getProperty("python")),
+                            Path.of(settings.getProperty("workspace")), Duration.ofHours(8), monitor::isCanceled,
+                            stream::println, ProjectContext.environment(settings)).requireSuccess();
+                        stream.println(action.equals("flash") ? "West flash command completed successfully; independent read-back verification was not performed."
+                                : "West " + action + " command completed.");
                         return Status.OK_STATUS;
                     } catch (java.io.InterruptedIOException e) { return Status.CANCEL_STATUS; }
                     catch (InterruptedException e) { Thread.currentThread().interrupt(); return Status.CANCEL_STATUS; }

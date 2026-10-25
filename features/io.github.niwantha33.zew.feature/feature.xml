@@ -4,6 +4,7 @@
   <description>Create/import managed Zephyr applications and build through West. No proprietary vendor blobs.</description>
   <copyright>Copyright 2026 Zephyr Eclipse Workbench contributors.</copyright>
   <license url="https://www.apache.org/licenses/LICENSE-2.0">Original feature and plug-in material is provided under Apache License 2.0. See LICENSE in each bundle. External dependencies retain their own licences.</license>
+  <requires><import plugin="org.eclipse.cdt.dsf.gdb"/><import plugin="org.eclipse.cdt.dsf.gdb.ui"/></requires>
   <plugin id="io.github.niwantha33.zew.core" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
   <plugin id="io.github.niwantha33.zew.ui" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
 </feature>

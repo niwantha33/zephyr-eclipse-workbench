@@ -26,9 +26,22 @@
   </extension>
   <extension point="org.eclipse.debug.core.launchConfigurationTypes">
     <launchConfigurationType id="io.github.niwantha33.zew.ui.launchType"
-        name="Zephyr Application" modes="run"
-        delegate="io.github.niwantha33.zew.ui.ZephyrLaunchDelegate"
+        name="Zephyr Application" modes="run,debug"
         public="true"/>
+  </extension>
+  <extension point="org.eclipse.debug.core.launchDelegates">
+    <launchDelegate id="io.github.niwantha33.zew.ui.runRunner"
+        type="io.github.niwantha33.zew.ui.launchType" modes="run"
+        delegate="io.github.niwantha33.zew.ui.ZephyrLaunchDelegate"
+        name="Zephyr Runner"/>
+  </extension>
+  <extension point="org.eclipse.debug.core.launchDelegates">
+    <launchDelegate id="io.github.niwantha33.zew.ui.nativeDsfDebug"
+        type="io.github.niwantha33.zew.ui.launchType" modes="debug"
+        delegate="io.github.niwantha33.zew.ui.ZephyrNativeDebugDelegate"
+        name="Zephyr (CDT DSF-GDB)"
+        sourceLocatorId="org.eclipse.cdt.debug.core.sourceLocator"
+        sourcePathComputerId="org.eclipse.cdt.debug.core.sourcePathComputer"/>
   </extension>
   <extension point="org.eclipse.debug.ui.launchConfigurationTabGroups">
     <launchConfigurationTabGroup id="io.github.niwantha33.zew.ui.launchTabs"
@@ -45,6 +58,7 @@
   </extension>
   <extension point="org.eclipse.ui.commands">
     <command id="io.github.niwantha33.zew.debugserver" name="Start Debug Server" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.debug" name="Debug Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.flash" name="Flash Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.run" name="Run in Emulator" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.editor" name="Refresh C/C++ Editor Settings" categoryId="io.github.niwantha33.zew.commands"/>
@@ -61,6 +75,7 @@
   </extension>
   <extension point="org.eclipse.ui.handlers">
     <handler commandId="io.github.niwantha33.zew.debugserver" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
+    <handler commandId="io.github.niwantha33.zew.debug" class="io.github.niwantha33.zew.ui.ZephyrDebugHandler"/>
     <handler commandId="io.github.niwantha33.zew.flash" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.run" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.editor" class="io.github.niwantha33.zew.ui.EditorHandler"/>
@@ -88,6 +103,7 @@
         <command commandId="io.github.niwantha33.zew.cancel" label="Cancel Operation" style="push"/>
         <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
         <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.debug" label="Debug Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
         <separator name="updates" visible="true"/>
         <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check for Workbench Updates..." style="push"/>
@@ -95,6 +111,14 @@
         <separator name="about" visible="true"/>
         <command commandId="io.github.niwantha33.zew.about" label="About Zephyr Workbench..." style="push"/>
       </menu>
+    </menuContribution>
+  </extension>
+  <extension point="org.eclipse.ui.menus">
+    <menuContribution locationURI="toolbar:org.eclipse.ui.main.toolbar?after=additions">
+      <toolbar id="io.github.niwantha33.zew.ui.targetActions">
+        <command commandId="io.github.niwantha33.zew.flash" icon="icons/flash.png" label="Flash Zephyr firmware" style="push" tooltip="Flash selected Zephyr project"/>
+        <command commandId="io.github.niwantha33.zew.debug" icon="icons/debug.png" label="Debug Zephyr application" style="push" tooltip="Debug selected Zephyr project using CDT GDB"/>
+      </toolbar>
     </menuContribution>
   </extension>
 </plugin>

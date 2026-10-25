@@ -10,6 +10,14 @@
     <location includeAllPlatforms="false" includeConfigurePhase="true" includeMode="planner" includeSource="false" type="InstallableUnit">
       <repository location="https://download.eclipse.org/tools/cdt/releases/12.6/cdt-12.6.0/"/>
       <unit id="org.eclipse.cdt.core" version="9.3.200.202607131546"/>
+      <unit id="org.eclipse.cdt.debug.core" version="0.0.0"/>
+      <unit id="org.eclipse.cdt.dsf.gdb" version="0.0.0"/>
+      <unit id="org.eclipse.cdt.dsf.gdb.ui" version="0.0.0"/>
+    </location>
+    <!-- CDT DSF UI requires ICU4J; pin the immutable 2026-09 SimRel snapshot. -->
+    <location includeAllPlatforms="false" includeConfigurePhase="true" includeMode="planner" includeSource="false" type="InstallableUnit">
+      <repository location="https://download.eclipse.org/releases/2026-09/202609091000/"/>
+      <unit id="com.ibm.icu" version="78.3.0"/>
     </location>
   </locations>
 </target>

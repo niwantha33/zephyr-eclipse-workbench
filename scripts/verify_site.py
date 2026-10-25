@@ -105,12 +105,32 @@ for p in bundles:
                     raise SystemExit('New/Import Zephyr wizard not registered for ' + point)
             for point, cls in (
                     ('org.eclipse.ui.propertyPages', 'ZephyrProjectPropertyPage'),
-                    ('org.eclipse.debug.core.launchConfigurationTypes', 'ZephyrLaunchDelegate'),
+                    ('org.eclipse.debug.core.launchDelegates', 'ZephyrLaunchDelegate'),
+                    ('org.eclipse.debug.core.launchDelegates', 'ZephyrNativeDebugDelegate'),
                     ('org.eclipse.debug.ui.launchConfigurationTabGroups', 'ZephyrLaunchTabs')):
                 registrations = plugin.findall("./extension[@point='" + point + "']/*")
                 if not any(item.attrib.get('class', item.attrib.get('delegate', '')).endswith('.' + cls)
                            for item in registrations):
                     raise SystemExit('Missing native Eclipse registration: ' + cls)
+            types = plugin.findall("./extension[@point='org.eclipse.debug.core.launchConfigurationTypes']/launchConfigurationType")
+            if not any(t.attrib.get('id') == 'io.github.niwantha33.zew.ui.launchType'
+                       and set(t.attrib.get('modes', '').split(',')) == {'run', 'debug'} for t in types):
+                raise SystemExit('Zephyr launch type must support real Run and Debug modes')
+            delegates = plugin.findall("./extension[@point='org.eclipse.debug.core.launchDelegates']/launchDelegate")
+            for mode, classname in (('run', 'ZephyrLaunchDelegate'), ('debug', 'ZephyrNativeDebugDelegate')):
+                if not any(d.attrib.get('modes') == mode and
+                           d.attrib.get('delegate', '').endswith('.' + classname)
+                           for d in delegates):
+                    raise SystemExit('Missing Zephyr ' + mode + ' launch delegate')
+            for cmd in ('flash', 'debug'):
+                commands = plugin.findall("./extension[@point='org.eclipse.ui.commands']/command")
+                if not any(c.attrib.get('id') == 'io.github.niwantha33.zew.' + cmd for c in commands):
+                    raise SystemExit('Missing ' + cmd + ' Eclipse command')
+                if 'icons/' + cmd + '.png' not in z.namelist():
+                    raise SystemExit('Missing packaged ' + cmd + ' toolbar icon')
+            for cls in ('ZephyrNativeDebugDelegate', 'ZephyrDebugHandler'):
+                if 'io/github/niwantha33/zew/ui/' + cls + '.class' not in z.namelist():
+                    raise SystemExit('Missing native Debug class: ' + cls)
             if any(item.attrib.get('commandId', '').endswith('.selectCpu')
                    for item in plugin.findall(".//command")):
                 raise SystemExit('Obsolete vendor-specific CPU command still registered')

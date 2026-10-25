@@ -37,27 +37,27 @@ public final class ZephyrLaunchDelegate implements ILaunchConfigurationDelegate 
         try {
             var settings = ProjectContext.settings(project);
             Path output = ProjectContext.buildDirectory(project, settings);
-            String target = settings.getProperty("board");
-            Path receipt = output.resolve(".zew-built-target");
-            if (!Files.isRegularFile(output.resolve("CMakeCache.txt")) || !Files.isRegularFile(receipt) ||
-                    !Files.readString(receipt).equals(target))
-                throw new java.io.IOException("Build this project's current exact target before running or flashing.");
-            if (action.equals("run") && !target.startsWith("qemu_"))
-                throw new java.io.IOException("Run in Emulator requires a QEMU board. Choose Flash for physical hardware.");
-            if (!action.equals("run") && !Files.isRegularFile(output.resolve("zephyr/runners.yaml")))
-                throw new java.io.IOException("This build has no Zephyr runner definition for flashing/debug server.");
-            var command = new ArrayList<>(List.of(settings.getProperty("python"), "-m", "west"));
-            if (action.equals("run")) command.addAll(List.of("build", "--build-dir", WestCommands.cmakePath(output.toString()), "--target", "run"));
-            else command.addAll(List.of(action, "--build-dir", WestCommands.cmakePath(output.toString())));
-            var builder = new ProcessBuilder(command);
+            var plan = io.github.niwantha33.zew.core.TargetOperations.prepare(
+                    output, settings.getProperty("board"), action, "");
+            var builder = new ProcessBuilder(plan.command(settings.getProperty("python")));
             builder.directory(Path.of(settings.getProperty("workspace")).toFile());
             builder.environment().putAll(ProjectContext.environment(settings));
             builder.redirectErrorStream(true);
             if (monitor.isCanceled()) return;
-            Process process = builder.start();
-            DebugPlugin.newProcess(launch, process, "Zephyr " + action + " — " + project.getName());
-            // The Eclipse launch owns termination; do not spawn a detached console
-            // process or a vendor-dependent script.
+            var lease = TargetOperationGuard.acquire(action);
+            Process process = null;
+            try {
+                process = builder.start();
+                Process owned = process;
+                owned.onExit().thenRun(lease::close);
+                DebugPlugin.newProcess(launch, owned, "Zephyr " + action + " — " + project.getName());
+                // The Eclipse launch owns process termination and its console.
+                // The lease persists until the West child exits (including user terminate).
+            } catch (Exception error) {
+                if (process != null) process.destroyForcibly();
+                lease.close();
+                throw error;
+            }
         } catch (Exception error) {
             throw failure(error.getMessage(), error);
         }
