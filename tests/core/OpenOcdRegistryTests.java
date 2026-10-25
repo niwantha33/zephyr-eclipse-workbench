@@ -84,7 +84,7 @@ public final class OpenOcdRegistryTests {
                     "missing executable rejected");
             check(OpenOcdRegistry.missing("mspm0l1306_evk").getMessage().contains("TI-compatible"),
                     "TI-specific recovery guidance");
-            check(OpenOcdRegistry.missing("nucleo_f446re").getMessage().contains("globally"),
+            check(OpenOcdRegistry.missing("nucleo_f446re").getMessage().contains("one global OpenOCD"),
                     "global manager guidance");
             System.out.println("OpenOcdRegistryTests PASS " + assertions + " checks");
         } finally {
