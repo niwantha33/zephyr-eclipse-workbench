@@ -74,10 +74,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             // West supports runtime tool overrides. Old build metadata can name a
             // removed installation; bind the validated shared tool without changing
             // runners.yaml, recompiling firmware, or issuing a flash operation.
-            var selectedOpenOcd = SharedDebugTools.select(settings.getProperty("board"), settings)
-                    .orElseThrow(() -> io.github.niwantha33.zew.core.OpenOcdRegistry
-                            .missing(settings.getProperty("board")));
-            plan = io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(plan, selectedOpenOcd);
+            plan = SharedDebugTools.bindDebugTool(plan, settings);
             var gdbEntry = CONFIG_GDB.matcher(yaml);
             if (!gdbEntry.find() || gdbEntry.group(1).isBlank())
                 throw new IOException("Zephyr runner configuration does not declare an architecture-correct GDB.");

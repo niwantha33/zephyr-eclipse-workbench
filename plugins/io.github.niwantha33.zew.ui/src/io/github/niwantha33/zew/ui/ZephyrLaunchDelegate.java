@@ -39,6 +39,7 @@ public final class ZephyrLaunchDelegate implements ILaunchConfigurationDelegate 
             Path output = ProjectContext.buildDirectory(project, settings);
             var plan = io.github.niwantha33.zew.core.TargetOperations.prepare(
                     output, settings.getProperty("board"), action, "");
+            if ("debugserver".equals(action)) plan = SharedDebugTools.bindDebugTool(plan, settings);
             var builder = new ProcessBuilder(plan.command(settings.getProperty("python")));
             builder.directory(Path.of(settings.getProperty("workspace")).toFile());
             builder.environment().putAll(ProjectContext.environment(settings));

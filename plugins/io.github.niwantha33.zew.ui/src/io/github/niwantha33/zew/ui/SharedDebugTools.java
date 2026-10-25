@@ -26,6 +26,17 @@ final class SharedDebugTools {
                 path(System.getenv("ProgramFiles"))));
     }
 
+    /** Apply the same provider policy to native and external OpenOCD debug launches. */
+    static io.github.niwantha33.zew.core.TargetOperations.Plan bindDebugTool(
+            io.github.niwantha33.zew.core.TargetOperations.Plan plan, Properties settings)
+            throws java.io.IOException {
+        String yaml = java.nio.file.Files.readString(plan.buildDirectory().resolve("zephyr/runners.yaml"));
+        if (!io.github.niwantha33.zew.core.TargetOperations.usesOpenOcdDebugServer(plan, yaml)) return plan;
+        var selected = select(plan.board(), settings)
+                .orElseThrow(() -> OpenOcdRegistry.missing(plan.board()));
+        return io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(plan, selected);
+    }
+
     private static Path path(String value) {
         if (value == null || value.isBlank()) return null;
         try { return Path.of(value).toAbsolutePath().normalize(); }
