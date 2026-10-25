@@ -61,15 +61,30 @@ public final class EspressifFlashSafety {
         return chip;
     }
 
+    /** Structured mismatch: the UI may offer board selection without hiding other I/O errors. */
+    public static final class ChipMismatchException extends IOException {
+        private final String expectedChip;
+        private final String connectedChip;
+
+        public ChipMismatchException(String expectedChip, String connectedChip) {
+            super("Flash blocked: project builds for " + expectedChip
+                + " but the connected board reports " + connectedChip
+                + ". Select the actual board/CPU in Project Properties > Zephyr and rebuild."
+                + " Firmware was NOT written. Never use esptool --force.");
+            this.expectedChip = expectedChip;
+            this.connectedChip = connectedChip;
+        }
+
+        public String expectedChip() { return expectedChip; }
+        public String connectedChip() { return connectedChip; }
+    }
+
     /** Must run only after the chosen port has completed a read-only probe. */
     public static void requireMatch(String board, String probeOutput) throws IOException {
         String expected = expectedChip(board);
         String connected = normalizeDetectedChip(probeOutput);
         if (!expected.equals(connected))
-            throw new IOException("Flash blocked: project builds for " + expected
-                + " but the connected board reports " + connected
-                + ". Select the actual board/CPU in Project Properties > Zephyr and rebuild."
-                + " Firmware was NOT written. Never use esptool --force.");
+            throw new ChipMismatchException(expected, connected);
     }
 
     /** Validate before passing a port beyond West's '--' runner boundary. */
