@@ -60,20 +60,39 @@ final class BoardTools {
     }
 
     static void prepare(Properties settings, Map<String, String> environment, IProgressMonitor monitor, Consumer<String> output) throws Exception {
-        if (!Platform.OS_WIN32.equals(Platform.getOS())) return; // Other hosts may use installed toolchains.
+        prepareFor(settings, environment, monitor, output, null);
+    }
+
+    static void prepareHostTool(Properties settings, Map<String, String> environment, IProgressMonitor monitor,
+            Consumer<String> output, String tool) throws Exception {
+        if (!"IMGTOOL".equals(tool)) throw new java.io.IOException("Unsupported required build host tool: " + tool);
+        prepareFor(settings, environment, monitor, output, tool);
+    }
+
+    private static void prepareFor(Properties settings, Map<String, String> environment, IProgressMonitor monitor,
+            Consumer<String> output, String requiredHostTool) throws Exception {
+        if (!Platform.OS_WIN32.equals(Platform.getOS())) {
+            if (requiredHostTool != null) throw new java.io.IOException("Managed host-tool provisioning requires Windows x64");
+            return;
+        }
         String board = settings.getProperty("board");
         if (board == null || board.isBlank()) throw new java.io.IOException("Set an exact project board target in Project Properties > Zephyr.");
-        if (board.equals("qemu_x86/atom")) return; // The managed starter already installed its pinned x86 compiler.
+        if (board.equals("qemu_x86/atom")) {
+            if (requiredHostTool != null) throw new java.io.IOException("Host-tool auto-install is not available for the minimal x86 starter; use a full managed hardware target");
+            return; // The managed starter already installed its pinned x86 compiler.
+        }
         java.nio.file.Path root = java.nio.file.Path.of(settings.getProperty("zew.setupRoot"));
         try (var channel = FileChannel.open(root.resolve(".zew-install.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
                 var lock = channel.tryLock()) {
             if (lock == null) throw new java.io.IOException("Another project is preparing this tool environment. Wait for it to finish, then build again.");
             var helper = stageTools(root);
             output.accept("Resolving board, SoC, CPU, required compiler and pinned West modules. Existing application, SDK tools and modules are preserved.");
-            new ProcessRunner().run(List.of(settings.getProperty("python"), "-u", helper.toString(), "--root", root.toString(),
+            var command = new ArrayList<>(List.of(settings.getProperty("python"), "-u", helper.toString(), "--root", root.toString(),
                 "--sdk", settings.getProperty("tools.sdk"), "--workspace", settings.getProperty("workspace"),
                 "--git", settings.getProperty("tools.git"), "--board", board,
-                "--application", settings.getProperty("application")), root, Duration.ofMinutes(40), monitor::isCanceled,
+                "--application", settings.getProperty("application")));
+            if (requiredHostTool != null) command.addAll(List.of("--require-host-tool", requiredHostTool));
+            new ProcessRunner().run(command, root, Duration.ofMinutes(40), monitor::isCanceled,
                 line -> { monitor.subTask(line); output.accept(line); }, environment).requireSuccess();
         }
     }
