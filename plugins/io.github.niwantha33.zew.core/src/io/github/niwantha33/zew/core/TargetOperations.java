@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: Apache-2.0
+package io.github.niwantha33.zew.core;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
+/** Validated, vendor-neutral invocation plan for the pinned West build output.
+ * Planning has no side effects and never probes or alters physical hardware.
+ */
+public final class TargetOperations {
+    private static final Set<String> ACTIONS = Set.of("run", "flash", "debugserver");
+    private TargetOperations() {}
+
+    public record Plan(String action, String board, Path buildDirectory, List<String> westArguments) {
+        public Plan { westArguments = List.copyOf(westArguments); }
+        public List<String> command(String python) {
+            if (python == null || python.isBlank()) throw new IllegalArgumentException("Missing managed Python executable.");
+            var command = new ArrayList<>(List.of(python, "-m", "west"));
+            command.addAll(westArguments);
+            return List.copyOf(command);
+        }
+    }
+
+    public static Plan prepare(Path directory, String exactBoard, String action, String selectedRunner) throws IOException {
+        if (directory == null || exactBoard == null || exactBoard.isBlank() || action == null || !ACTIONS.contains(action))
+            throw new IOException("Select a valid imported target and supported runner action.");
+        String runner = selectedRunner == null ? "" : selectedRunner.trim();
+        if (!runner.isEmpty() && !runner.matches("[a-zA-Z][a-zA-Z0-9_+.-]{0,63}"))
+            throw new IOException("Invalid West runner name; refusing command-option injection.");
+        if (action.equals("run") && !runner.isEmpty())
+            throw new IOException("QEMU run does not accept a physical flash/debug runner.");
+        Path build = directory.toRealPath();
+        Path cache = build.resolve("CMakeCache.txt");
+        Path receipt = build.resolve(".zew-built-target");
+        if (!Files.isRegularFile(cache) || !Files.isRegularFile(receipt) || Files.size(receipt) > 256)
+            throw new IOException("Missing verified build receipt or CMake configuration. Build this exact target first.");
+        if (!Files.readString(receipt, StandardCharsets.UTF_8).equals(exactBoard))
+            throw new IOException("Build receipt does not match the selected exact board/CPU: " + exactBoard);
+        if (action.equals("run") && !exactBoard.startsWith("qemu_"))
+            throw new IOException("Run in Emulator requires a QEMU target. Use Flash for physical hardware.");
+        if (!action.equals("run")) {
+            Path runners = build.resolve("zephyr/runners.yaml");
+            if (!Files.isRegularFile(runners) || Files.size(runners) == 0 || !runners.toRealPath().startsWith(build))
+                throw new IOException("Missing generated Zephyr runner configuration. Rebuild this board first.");
+            // A successful old build receipt alone is insufficient: mandatory image files
+            // could have been deleted or replaced since compilation.
+            BuildArtifacts.verify(build);
+        }
+        var args = new ArrayList<String>();
+        if (action.equals("run")) {
+            args.addAll(List.of("build", "--build-dir", WestCommands.cmakePath(build.toString()), "--target", "run"));
+        } else {
+            args.addAll(List.of(action, "--build-dir", WestCommands.cmakePath(build.toString()), "--skip-rebuild"));
+            if (!runner.isBlank()) args.addAll(List.of("--runner", runner));
+        }
+        return new Plan(action, exactBoard, build, args);
+    }
+}
