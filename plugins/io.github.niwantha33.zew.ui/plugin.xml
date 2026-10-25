@@ -62,6 +62,7 @@
     <command id="io.github.niwantha33.zew.flash" name="Flash Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.run" name="Run in Emulator" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.editor" name="Refresh C/C++ Editor Settings" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.quickStart" name="Start a Zephyr Project" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.setup" name="Set Up Zephyr" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tools" name="Install / Manage Zephyr Tools" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.about" name="About Zephyr Workbench" categoryId="io.github.niwantha33.zew.commands"/>
@@ -69,6 +70,7 @@
     <command id="io.github.niwantha33.zew.checkUpdates" name="Check for Workbench Updates" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.updateConnection" name="Configure Workbench Updates" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.diagnostics" name="Check Environment" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.artifacts" name="Build and Show Firmware" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.build" name="Build Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.rebuild" name="Pristine Rebuild" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
@@ -79,19 +81,22 @@
     <handler commandId="io.github.niwantha33.zew.flash" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.run" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.editor" class="io.github.niwantha33.zew.ui.EditorHandler"/>
+    <handler commandId="io.github.niwantha33.zew.quickStart" class="io.github.niwantha33.zew.ui.ZephyrQuickStartHandler"/>
     <handler commandId="io.github.niwantha33.zew.setup" class="io.github.niwantha33.zew.ui.SetupHandler"/>
     <handler commandId="io.github.niwantha33.zew.tools" class="io.github.niwantha33.zew.ui.ToolsHandler"/>
     <handler commandId="io.github.niwantha33.zew.about" class="io.github.niwantha33.zew.ui.VersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.checkUpdates" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
     <handler commandId="io.github.niwantha33.zew.updateConnection" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
     <handler commandId="io.github.niwantha33.zew.diagnostics" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
-    <handler commandId="io.github.niwantha33.zew.build" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
-    <handler commandId="io.github.niwantha33.zew.rebuild" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
+    <handler commandId="io.github.niwantha33.zew.artifacts" class="io.github.niwantha33.zew.ui.ZephyrArtifactsHandler"/>
+    <handler commandId="io.github.niwantha33.zew.build" class="io.github.niwantha33.zew.ui.ZephyrBuildHandler"/>
+    <handler commandId="io.github.niwantha33.zew.rebuild" class="io.github.niwantha33.zew.ui.ZephyrBuildHandler"/>
     <handler commandId="io.github.niwantha33.zew.cancel" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
   </extension>
   <extension point="org.eclipse.ui.menus">
     <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
       <menu id="io.github.niwantha33.zew.menu" label="Zephyr">
+        <command commandId="io.github.niwantha33.zew.quickStart" label="Start Here — Create Zephyr Project..." style="push"/>
         <command commandId="io.github.niwantha33.zew.setup" label="Set Up Zephyr..." style="push"/>
         <command commandId="io.github.niwantha33.zew.tools" label="Install / Manage Zephyr Tools..." style="push"/>
         <separator name="tools" visible="true"/>
@@ -100,6 +105,7 @@
         <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
         <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
         <command commandId="io.github.niwantha33.zew.rebuild" label="Pristine Rebuild" style="push"/>
+        <command commandId="io.github.niwantha33.zew.artifacts" label="Build and Show Firmware..." style="push"/>
         <command commandId="io.github.niwantha33.zew.cancel" label="Cancel Operation" style="push"/>
         <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
         <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>

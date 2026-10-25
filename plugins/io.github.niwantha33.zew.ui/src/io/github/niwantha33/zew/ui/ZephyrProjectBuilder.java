@@ -34,7 +34,7 @@ import io.github.niwantha33.zew.core.ZephyrProjectFiles;
 /** Native Eclipse Build/Clean for independently imported or generated managed Zephyr projects. */
 public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
     @Override protected IProject[] build(int kind, Map<String, String> arguments, IProgressMonitor monitor) throws CoreException {
-        if (kind != AUTO_BUILD || sourceChanged()) run(false, monitor);
+        if (kind != AUTO_BUILD || sourceChanged()) run(false, "true".equals(arguments.get("zew.pristine")), monitor);
         return new IProject[0];
     }
     private boolean sourceChanged() throws CoreException {
@@ -70,8 +70,8 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         return scanner.missing();
     }
 
-    @Override protected void clean(IProgressMonitor monitor) throws CoreException { run(true, monitor); }
-    private void run(boolean clean, IProgressMonitor monitor) throws CoreException {
+    @Override protected void clean(IProgressMonitor monitor) throws CoreException { run(true, false, monitor); }
+    private void run(boolean clean, boolean pristine, IProgressMonitor monitor) throws CoreException {
         var console = new MessageConsole("Zephyr — " + getProject().getName(), null);
         ConsolePlugin.getDefault().getConsoleManager().addConsoles(new org.eclipse.ui.console.IConsole[] {console});
         ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
@@ -117,8 +117,8 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 // tools marked NOTFOUND, so it is not authoritative.
                 var configure = new ArrayList<>(command);
                 configure.add(4, "--cmake-only");
-                if (paths.freshConfiguration()) {
-                    stream.println("Refreshing this managed target for a verified Windows short-path alias.");
+                if (paths.freshConfiguration() || pristine) {
+                    stream.println(pristine ? "Explicit pristine rebuild; regenerating only this target build folder." : "Refreshing this managed target for a verified Windows short-path alias.");
                     configure.add(5, "--pristine=always");
                 }
                 stream.println("Preflight: Zephyr configure-only; checking actual host tool dependencies.");

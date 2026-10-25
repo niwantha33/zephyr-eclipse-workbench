@@ -1,67 +1,108 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.ui;
 
-import java.nio.file.*;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.*;
-import java.util.List;
-import org.eclipse.core.commands.*;
-import org.eclipse.core.resources.*;
-import org.eclipse.core.runtime.*;
+import java.util.Map;
+import java.util.Set;
+import org.eclipse.core.commands.AbstractHandler;
+import org.eclipse.core.commands.ExecutionEvent;
+import org.eclipse.core.commands.ExecutionException;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IncrementalProjectBuilder;
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.MessageDialog;
-import org.eclipse.jface.viewers.IStructuredSelection;
-import org.eclipse.ui.console.*;
+import org.eclipse.ui.console.ConsolePlugin;
+import org.eclipse.ui.console.IConsole;
+import org.eclipse.ui.console.MessageConsole;
 import org.eclipse.ui.handlers.HandlerUtil;
 import io.github.niwantha33.zew.core.ProcessRunner;
+import io.github.niwantha33.zew.core.TargetOperations;
 
-/** Project-scoped runner operations. Debug server is explicitly not a CDT debug session. */
+/**
+ * One project-aware operation: prepare dependencies, build exactly the current
+ * project, validate its firmware, then call Zephyr's default West runner.
+ * Only Flash programs hardware, and it is explicitly confirmed beforehand.
+ */
 public final class ProjectActionHandler extends AbstractHandler {
     public static final Object FAMILY = new Object();
+
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
-        IResource resource = null;
-        if (HandlerUtil.getCurrentSelection(event) instanceof IStructuredSelection selection && selection.getFirstElement() instanceof IAdaptable adaptable)
-            resource = adaptable.getAdapter(IResource.class);
-        if (resource == null && HandlerUtil.getActiveEditor(event) != null) resource = HandlerUtil.getActiveEditor(event).getEditorInput().getAdapter(IResource.class);
-        if (resource == null) { MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Zephyr", "Select a Zephyr project first."); return null; }
-        IProject project = resource.getProject();
-        String action = event.getCommand().getId().substring(event.getCommand().getId().lastIndexOf('.') + 1);
+        IProject project = SelectedProject.from(event);
+        if (project == null || !project.isAccessible()) {
+            MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Zephyr",
+                    "Select an imported Zephyr project in Project Explorer or open one of its source files.");
+            return null;
+        }
+        String action = event.getCommand().getId();
+        action = action.substring(action.lastIndexOf('.') + 1);
         if (!Set.of("run", "flash", "debugserver").contains(action)) return null;
+        final String operation = action;
+        final String originalBoard;
         try {
-            var settings = ProjectContext.settings(project); Path build = ProjectContext.buildDirectory(project, settings);
-            var plan = io.github.niwantha33.zew.core.TargetOperations.prepare(
-                    build, settings.getProperty("board"), action, "");
-            if (action.equals("flash") && !MessageDialog.openConfirm(HandlerUtil.getActiveShell(event), "Flash " + project.getName(), "Program the connected board using the build's default runner for " + settings.getProperty("board") + "?")) return null;
-            var job = new WorkspaceJob("Zephyr " + action + " — " + project.getName()) {
-                @Override public boolean belongsTo(Object family) { return family == FAMILY; }
-                @Override public IStatus runInWorkspace(IProgressMonitor monitor) {
-                    var console = new MessageConsole("Zephyr " + action + " — " + project.getName(), null);
-                    ConsolePlugin.getDefault().getConsoleManager().addConsoles(new IConsole[] {console}); ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
-                    try (var stream = console.newMessageStream();
-                         var lease = TargetOperationGuard.acquire(action)) {
-                        monitor.beginTask("Zephyr " + action + " (cancel in Progress view)", IProgressMonitor.UNKNOWN);
-                        // Revalidate after acquiring the physical guard: queued jobs must
-                        // not flash a firmware image replaced while they were waiting.
-                        var currentPlan = io.github.niwantha33.zew.core.TargetOperations.prepare(
-                                plan.buildDirectory(), plan.board(), action, "");
-                        stream.println("Exact board: " + plan.board());
-                        stream.println("Verified build: " + currentPlan.buildDirectory());
-                        stream.println("Runner: Zephyr build's default (resolved by West; probe not independently verified)");
-                        if (action.equals("debugserver")) stream.println("External GDB server only. Eclipse source-level debugging is not yet available.");
-                        new ProcessRunner().run(currentPlan.command(settings.getProperty("python")),
-                            Path.of(settings.getProperty("workspace")), Duration.ofHours(8), monitor::isCanceled,
-                            stream::println, ProjectContext.environment(settings)).requireSuccess();
-                        stream.println(action.equals("flash") ? "West flash command completed successfully; independent read-back verification was not performed."
-                                : "West " + action + " command completed.");
-                        return Status.OK_STATUS;
-                    } catch (java.io.InterruptedIOException e) { return Status.CANCEL_STATUS; }
-                    catch (InterruptedException e) { Thread.currentThread().interrupt(); return Status.CANCEL_STATUS; }
-                    catch (Exception e) { return new Status(IStatus.ERROR, Activator.ID, e.getMessage(), e); }
-                    finally { monitor.done(); }
-                }
-            };
-            job.setRule(project); job.setUser(true); job.schedule();
-        } catch (Exception error) { MessageDialog.openError(HandlerUtil.getActiveShell(event), "Zephyr " + action, error.getMessage()); }
+            originalBoard = ProjectContext.settings(project).getProperty("board");
+        } catch (Exception error) {
+            MessageDialog.openError(HandlerUtil.getActiveShell(event), "Zephyr " + operation,
+                    "Project setup is missing: " + error.getMessage());
+            return null;
+        }
+        if (operation.equals("flash") && !MessageDialog.openConfirm(HandlerUtil.getActiveShell(event),
+                "Build and Flash — " + project.getName(),
+                "Automatically prepare the tools, build and program the firmware for:\n\n"
+                + originalBoard + "\n\nThis writes to the connected device using Zephyr's board runner. Continue?"))
+            return null;
+
+        Job job = new Job("Zephyr Build & " + operation + " — " + project.getName()) {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                var console = new MessageConsole("Zephyr " + operation + " — " + project.getName(), null);
+                ConsolePlugin.getDefault().getConsoleManager().addConsoles(new IConsole[] {console});
+                try (var stream = console.newMessageStream();
+                     var lease = TargetOperationGuard.acquire(operation)) {
+                    monitor.beginTask("Prepare, build and " + operation, IProgressMonitor.UNKNOWN);
+                    stream.println("Selected project: " + project.getName());
+                    stream.println("Exact board: " + originalBoard);
+                    stream.println("Preparing SDK/modules and compiling the latest project automatically...");
+                    // Calls ZephyrProjectBuilder, which already owns dependency setup,
+                    // managed paths and final firmware verification. No parallel private
+                    // build implementation or home-grown flashing protocol.
+                    project.build(IncrementalProjectBuilder.FULL_BUILD, Activator.ID + ".zephyrBuilder", Map.of(), monitor);
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    var settings = ProjectContext.settings(project);
+                    String board = settings.getProperty("board");
+                    if (!originalBoard.equals(board))
+                        throw new java.io.IOException("Board changed during build. Operation cancelled; select the exact target again.");
+                    Path output = ProjectContext.buildDirectory(project, settings);
+                    var plan = TargetOperations.prepare(output, board, operation, "");
+                    ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
+                    stream.println("Verified firmware directory: " + plan.buildDirectory());
+                    stream.println("Runner: board-defined West default; --skip-rebuild; no unapproved runner override.");
+                    if (operation.equals("debugserver"))
+                        stream.println("External GDB server only. Use the native Debug action for source breakpoints.");
+                    new ProcessRunner().run(plan.command(settings.getProperty("python")),
+                        Path.of(settings.getProperty("workspace")),
+                        operation.equals("debugserver") ? Duration.ofHours(8) : Duration.ofMinutes(15),
+                        monitor::isCanceled, stream::println,
+                        ProjectContext.environment(settings)).requireSuccess();
+                    stream.println(operation.equals("flash")
+                        ? "West reported flash success. Hardware read-back has not been independently verified."
+                        : "West " + operation + " completed.");
+                    return Status.OK_STATUS;
+                } catch (java.io.InterruptedIOException error) {
+                    return Status.CANCEL_STATUS;
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    return Status.CANCEL_STATUS;
+                } catch (Exception error) {
+                    return new Status(IStatus.ERROR, Activator.ID,
+                        "Zephyr " + operation + " failed: " + error.getMessage(), error);
+                } finally { monitor.done(); }
+            }
+        };
+        job.setUser(true);
+        job.schedule();
         return null;
     }
 }
