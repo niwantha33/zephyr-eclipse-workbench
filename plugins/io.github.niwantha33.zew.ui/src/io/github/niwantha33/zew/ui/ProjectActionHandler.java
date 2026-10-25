@@ -114,6 +114,21 @@ public final class ProjectActionHandler extends AbstractHandler {
                 } catch (InterruptedException error) {
                     Thread.currentThread().interrupt();
                     return Status.CANCEL_STATUS;
+                } catch (EspressifFlashSafety.ChipMismatchException mismatch) {
+                    // Expected fail-closed physical protection is a guided
+                    // recovery, not an opaque failed Job error repeated by Eclipse.
+                    // Never auto-retry/flash after changing target configuration.
+                    try (var summary = console.newMessageStream()) {
+                        summary.println("FLASH BLOCKED BEFORE PROGRAMMING: "
+                                + mismatch.expectedChip() + " build, "
+                                + mismatch.connectedChip() + " connected.");
+                        summary.println("Choose Select Matching Board in the recovery dialog.");
+                    } catch (java.io.IOException ignored) { }
+                    if (targetShell != null) targetShell.getDisplay().asyncExec(() -> {
+                        if (!targetShell.isDisposed())
+                            ZephyrChipMismatchRecovery.offer(targetShell, project, mismatch);
+                    });
+                    return Status.CANCEL_STATUS;
                 } catch (Exception error) {
                     return new Status(IStatus.ERROR, Activator.ID,
                         "Zephyr " + operation + " failed: " + error.getMessage(), error);

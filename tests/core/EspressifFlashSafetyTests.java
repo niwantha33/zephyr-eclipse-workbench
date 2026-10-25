@@ -32,6 +32,16 @@ public final class EspressifFlashSafetyTests {
                 "ESP32-C3 target variant");
         rejects(() -> EspressifFlashSafety.requireMatch("esp32_devkitc/esp32/procpu", output),
                 "Never program ESP32 classic image into ESP32-S3 on COM11");
+        try {
+            EspressifFlashSafety.requireMatch("esp32_devkitc/esp32/procpu", output);
+            throw new AssertionError("Expected structured wrong-SoC error");
+        } catch (EspressifFlashSafety.ChipMismatchException mismatch) {
+            ok(mismatch.expectedChip().equals("ESP32")
+                && mismatch.connectedChip().equals("ESP32-S3"),
+                "Recovery receives exact expected and detected SoC");
+            ok(mismatch.getMessage().contains("Firmware was NOT written"),
+                "Fail-closed reason is explicit");
+        }
         EspressifFlashSafety.requireMatch("esp32s3_devkitc/esp32s3/procpu", output);
         ok(true, "S3 identity match");
         rejects(() -> EspressifFlashSafety.requireMatch("esp32s3_devkitc/esp32s3/procpu",
