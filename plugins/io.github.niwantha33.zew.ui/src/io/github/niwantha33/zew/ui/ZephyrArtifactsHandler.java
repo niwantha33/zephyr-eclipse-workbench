@@ -40,7 +40,7 @@ public final class ZephyrArtifactsHandler extends AbstractHandler {
         Job job = new Job("Build and show Zephyr firmware — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 try {
-                    project.build(IncrementalProjectBuilder.FULL_BUILD, Map.of(), monitor);
+                    project.build(IncrementalProjectBuilder.FULL_BUILD, Activator.ID + ".zephyrBuilder", Map.of(), monitor);
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     var settings = ProjectContext.settings(project);
                     Path build = ProjectContext.buildDirectory(project, settings);
