@@ -22,6 +22,8 @@ acceptance gate is **not met**.
   OS-wide or cross-IDE probe lock.
 - A queued project action repeats validation after acquiring the guard.
 - Existing QEMU Run and external Debug Server actions remain available.
+- Flash and Debug toolbar commands are registered with packaged icons.
+- CDT DSF-GDB launch is registered for Debug mode with a managed OpenOCD server, exact ELF and GDB, local endpoint readiness and owned-server cleanup. Other runners are refused until backend validation.
 - Offline fixture tests cover wrong CPU qualifiers, missing artifacts, invalid
   runner names, attempted option injection and generated target mismatch.
 
@@ -32,14 +34,12 @@ acceptance gate is **not met**.
 3. Per-probe cross-process ownership and robust unplug/reconnect handling.
 4. Programmer verification and independent firmware read-back verification.
 5. Protected-region inspection and explicit destructive recovery workflows.
-6. Native CDT DSF-GDB launch and source-level debugging (0.1.23).
+6. Physical validation of the OpenOCD CDT DSF-GDB prototype and additional debug backends (0.1.23).
 7. Fault injection, serial-port lifecycle, debug-server ownership and multi-core
    debugging acceptance (0.1.24).
 8. Physical hardware sessions and repeated 20-cycle measurements.
 
-The existing Debug mode rejection is intentional until a correctly integrated
-Eclipse DSF-GDB launch exists. **Start Debug Server** provides external GDB
-server functionality only.
+Native Eclipse Debug mode is now registered and wired into CDT DSF-GDB for OpenOCD-backed boards with a generated matching GDB and ELF. This implementation has **not** been physically validated. The separately retained **Start Debug Server** action provides external GDB access only.
 
 ## Evidence matrix
 
@@ -53,7 +53,7 @@ server functionality only.
 | ESP32-S3 / ESP32-C3 hardware | NOT RUN | Physical device inaccessible |
 | TI MSPM0 hardware | NOT RUN | Physical device inaccessible |
 | Nordic / NXP hardware | NOT RUN | Physical device inaccessible |
-| Breakpoints / register inspection / RTOS awareness | NOT IMPLEMENTED | Requires CDT DSF-GDB milestone |
+| Breakpoints / register inspection / RTOS awareness | NOT RUN ON HARDWARE | OpenOCD-backed native CDT DSF-GDB integration built; physical validation pending |
 | Programming/read-back verification | NOT RUN | Requires physical programmer and verified backend |
 
 ## Operational caveats
@@ -70,8 +70,8 @@ backend-policy gates are implemented.
 ## Next engineering steps
 
 Use the pinned Zephyr runner APIs and generated configuration for capability
-discovery, add verified probe selection and per-probe ownership, then build
-the Eclipse CDT DSF-GDB debugger against the pinned 2026-09 Eclipse target.
+discovery, add verified probe selection and per-probe ownership, then validate and expand
+the Eclipse CDT DSF-GDB integration against the pinned 2026-09 Eclipse target.
 Preserve the existing independent .zew-build paths, tool provisioning,
 release automation and out-of-tree runner compatibility.
 
