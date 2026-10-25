@@ -11,6 +11,7 @@ on:
       - 'tests/**'
       - 'pom.xml'
       - '.github/workflows/build.yml'
+      - '.github/workflows/private-update.yml'
 permissions:
   contents: read
 concurrency:
@@ -36,7 +37,9 @@ jobs:
       - name: Exercise process and command core
         run: python3 scripts/test_core.py
       - name: Build plug-ins and p2 repository
-        run: mvn --batch-mode --no-transfer-progress verify
+        # PR packaging smoke-test for the forceContextQualifier contract used by
+        # the automatic publisher. Actual release qualifiers come from updates.
+        run: mvn --batch-mode --no-transfer-progress "-DforceContextQualifier=20261025000001" verify
       - name: Verify packaged site
         run: python3 scripts/verify_site.py
       - name: Retain private development update site
