@@ -107,14 +107,17 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     monitor::isCanceled, ignored -> {}, environment).requireCompleteOutput();
                 var missing = BuildHostRequirements.missingInCommands(commands);
                 var recovery = new BuildRecovery(Map.of("IMGTOOL", () ->
-                    BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "IMGTOOL")), 2);
+                    BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "IMGTOOL"),
+                    "ESPTOOL", () -> BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "ESPTOOL")), 2);
                 while (!missing.isEmpty()) {
                     stage[0] = "Recover required build tools";
                     stream.println("Preparing mandatory host tools: " + missing);
                     recovery.repair(missing);
                     // Reconfigure after provisioning; no pristine deletion is needed.
                     // Force CMake to discard only stale host-tool cache entries.
+                    configure.remove("-DZEPHYR_MODULES="); command.remove("-DZEPHYR_MODULES=");
                     var refresh = new ArrayList<>(configure);
+                    refresh.add("-UZEPHYR_MODULES");
                     for (String tool : missing) refresh.add("-U" + tool);
                     stage[0] = "Refresh target configuration";
                     runner.run(refresh, workspace, Duration.ofMinutes(15),

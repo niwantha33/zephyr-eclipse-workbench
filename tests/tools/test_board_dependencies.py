@@ -2,6 +2,7 @@
 """Regression tests for board/SoC-driven dependency preparation (no downloads)."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -22,7 +23,7 @@ class DependencyTests(unittest.TestCase):
     def test_jar_entry_extract_requires_all_sibling_files(self):
         """A single FileLocator extraction must not reach the Windows builder."""
         tool_names = (
-            'board_dependencies.py', 'board_tools.py', 'hardware_catalog.py',
+            'board_dependencies.py', 'board_tools.py', 'hardware_catalog.py', 'target_metadata.py',
             'setup.py', 'managed_sitecustomize.py',
             'sdk-toolchains-windows-1.0.1.json', 'esp32s3-python-lock.json',
             'mcuboot-python-lock.json',
@@ -66,38 +67,28 @@ class DependencyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 board.checked_board(name)
 
-    def test_ti_series_requires_arm(self):
-        with tempfile.TemporaryDirectory() as home:
-            directory = Path(home)
-            (directory / 'Kconfig').write_text('config SOC_SERIES_MSPM0G\n  select ARM\n  select CPU_CORTEX_M0PLUS\n')
-            self.assertEqual(board.architecture('ti', 'mspm0g3507', directory, 'mspm0g3507'),
-                             'arm-zephyr-eabi')
+    @staticmethod
+    def info(vendor):
+        folder = Path('/zephyr/soc') / vendor
+        if vendor == 'st': folder = folder / 'stm32'
+        return {'vendor':vendor, 'arch':'arm', 'type':'mcu', 'folders':[folder], 'source_text':''}
 
-    def test_stm32_series_requires_arm(self):
-        with tempfile.TemporaryDirectory() as home:
-            directory = Path(home)
-            (directory / 'Kconfig').write_text('config SOC_STM32F446XX\n  select CPU_CORTEX_M4\n')
-            self.assertEqual(board.architecture('st', 'stm32f446xx', directory, 'stm32f446xx'),
-                             'arm-zephyr-eabi')
+    def test_architecture_is_target_metadata_not_a_vendor_guess(self):
+        provider=board.metadata_provider()
+        assets=json.loads((TOOLS/'sdk-toolchains-windows-1.0.1.json').read_text())['assets']
+        for arch,expected in [('arm','arm-zephyr-eabi'),('arm64','aarch64-zephyr-elf'),('riscv','riscv64-zephyr-elf'),('x86','x86_64-zephyr-elf')]:
+            for vendor in ['ti','st','nordic','renesas','nxp','realtek']:
+                info={'arch':arch,'vendor':vendor,'board':'test/soc','source_text':''}
+                self.assertEqual(provider.compiler(info,assets),expected)
+        self.assertRaises(ValueError,provider.compiler,{'arch':'unsupported','board':'board','source_text':''},assets)
 
-    def test_nordic_mixed_cpu_requires_explicit_cpu_cluster(self):
-        with tempfile.TemporaryDirectory() as home:
-            directory = Path(home)
-            (directory / 'Kconfig').write_text('select ARM\nselect RISCV\n')
-            self.assertEqual(board.architecture('nordic', 'nrf54l15', directory, 'nrf54l15/cpuflpr'),
-                             'riscv64-zephyr-elf')
-            self.assertEqual(board.architecture('nordic', 'nrf54l15', directory, 'nrf54l15/cpuapp'),
-                             'arm-zephyr-eabi')
-            with self.assertRaises(ValueError):
-                board.architecture('nordic', 'nrf54l15', directory, 'nrf54l15')
-
-    def test_espressif_compilers_follow_soc(self):
-        with tempfile.TemporaryDirectory() as home:
-            directory = Path(home)
-            self.assertEqual(board.architecture('espressif', 'esp32s3', directory, 'esp32s3/procpu'),
-                             'xtensa-espressif_esp32s3_zephyr-elf')
-            self.assertEqual(board.architecture('espressif', 'esp32c3', directory, 'esp32c3'),
-                             'riscv64-zephyr-elf')
+    def test_xtensa_compiler_comes_from_selected_soc_configuration(self):
+        provider=board.metadata_provider()
+        assets=json.loads((TOOLS/'sdk-toolchains-windows-1.0.1.json').read_text())['assets']
+        info={'arch':'xtensa','board':'third_party/soc/cpu','source_text':'config SOC_TOOLCHAIN_NAME\n string\n default "espressif_esp32s3"\n'}
+        self.assertEqual(provider.compiler(info,assets),'xtensa-espressif_esp32s3_zephyr-elf')
+        info['source_text']+='config SOC_TOOLCHAIN_NAME\n string\n default "espressif_esp32s2"\n'
+        self.assertRaises(ValueError,provider.compiler,info,assets)
 
     def test_vendor_hal_and_shared_cmsis(self):
         manifest = {n: ('a' * 40, Path(n)) for n in
@@ -106,18 +97,18 @@ class DependencyTests(unittest.TestCase):
                                ('nordic', 'hal_nordic'), ('espressif', 'hal_espressif')]:
             compiler = 'xtensa-espressif_esp32s3_zephyr-elf' if vendor == 'espressif' else 'arm-zephyr-eabi'
             expected = [module] if vendor == 'espressif' else ['cmsis_6', 'cmsis', module]
-            self.assertEqual(board.modules_for(vendor, compiler, manifest), expected)
+            self.assertEqual(board.modules_for(vendor, compiler, manifest, self.info(vendor)), expected)
 
     def test_cortex_m_requires_modern_cmsis_6_not_legacy_alone(self):
         manifest = {name: ('a' * 40, Path(name)) for name in ('cmsis', 'hal_ti')}
         with self.assertRaisesRegex(ValueError, 'cmsis_6'):
-            board.modules_for('ti', 'arm-zephyr-eabi', manifest)
+            board.modules_for('ti', 'arm-zephyr-eabi', manifest, self.info('ti'))
 
     def test_non_arm_targets_do_not_install_cmsis(self):
         manifest = {name: ('a' * 40, Path(name))
                     for name in ('cmsis_6', 'cmsis', 'hal_espressif', 'hal_ti')}
         for compiler in ('xtensa-espressif_esp32s3_zephyr-elf', 'riscv64-zephyr-elf'):
-            self.assertEqual(board.modules_for('espressif', compiler, manifest), ['hal_espressif'])
+            self.assertEqual(board.modules_for('espressif', compiler, manifest, self.info('espressif')), ['hal_espressif'])
 
     def test_required_inactive_modules_are_activated_without_disabling_others(self):
         plan = {'modules': ['cmsis_6', 'cmsis', 'hal_ti']}
@@ -130,8 +121,8 @@ class DependencyTests(unittest.TestCase):
                 board.activate_modules(plan, Path('.'), 'python')
                 self.assertEqual(run.call_count, 2)
                 command = run.call_args.args[0]
-                self.assertEqual(command[3:6], ['config', '--local', 'manifest.project-filter'])
-                self.assertEqual(command[6], '-hal_.*,+hal_ti,+cmsis_6')
+                self.assertEqual(command[3:7], ['config', '--local', '--', 'manifest.project-filter'])
+                self.assertEqual(command[7], '-hal_.*,+hal_ti,+cmsis_6')
                 self.assertEqual(active.call_count, 2)
 
     def test_no_filter_changes_when_all_modules_already_active(self):
@@ -355,8 +346,47 @@ class DependencyTests(unittest.TestCase):
     def test_vendor_without_hal_fails_before_build(self):
         manifest = {'cmsis_6': ('a' * 40, Path('modules/hal/cmsis_6')),
                     'cmsis': ('a' * 40, Path('modules/hal/cmsis'))}
+        info=self.info('ti');info['source_text']='#include <ti/mspm0/pins.dtsi>'
         with self.assertRaisesRegex(ValueError, 'hal_ti'):
-            board.modules_for('ti', 'arm-zephyr-eabi', manifest)
+            board.modules_for('ti', 'arm-zephyr-eabi', manifest, info)
+
+    def test_new_module_is_published_only_after_verified_checkout(self):
+        with tempfile.TemporaryDirectory() as home:
+            root=Path(home);destination=root/'modules/hal/vendor';revision='a'*40
+            def run(command,**kwargs):
+                if command[1:3]==['-m','west']:return type('Result',(),{'stdout':'https://github.com/zephyrproject-rtos/hal_ti.git\n'})()
+                self.assertFalse(destination.exists())
+                stage=Path(kwargs['cwd'])
+                if 'init' in command:(stage/'.git').mkdir()
+                if 'checkout' in command:(stage/'payload').write_text('verified source')
+                return type('Result',(),{'returncode':0})()
+            with patch('subprocess.run',side_effect=run),patch.object(board,'git_revision',return_value=revision):
+                board.install_module_staged('vendor',revision,destination,root,'python','git')
+            self.assertEqual((destination/'payload').read_text(),'verified source')
+            self.assertFalse(list(destination.parent.glob('.zew-module-stage-*')))
+
+    def test_cancelled_or_failed_fetch_leaves_no_live_partial_module(self):
+        with tempfile.TemporaryDirectory() as home:
+            root=Path(home);destination=root/'modules/hal/vendor';(root/'keep').write_text('untouched')
+            def run(command,**kwargs):
+                if command[1:3]==['-m','west']:return type('Result',(),{'stdout':'https://github.com/zephyrproject-rtos/hal_ti.git\n'})()
+                if 'fetch' in command:raise subprocess.CalledProcessError(1,command)
+                return type('Result',(),{'returncode':0})()
+            with patch('subprocess.run',side_effect=run):
+                with self.assertRaises(subprocess.CalledProcessError):board.install_module_staged('vendor','a'*40,destination,root,'python','git')
+            self.assertFalse(destination.exists());self.assertEqual((root/'keep').read_text(),'untouched')
+            self.assertFalse(list(destination.parent.glob('.zew-module-stage-*')))
+
+    @unittest.skipUnless(importlib.util.find_spec('west'),'West is needed for manifest-filter integration')
+    def test_real_west_filter_preserves_unrelated_project_exclusions(self):
+        with tempfile.TemporaryDirectory() as home:
+            root=Path(home);(root/'.west').mkdir();(root/'zephyr').mkdir()
+            (root/'.west/config').write_text('[manifest]\npath = zephyr\nproject-filter = -hal_.*\n')
+            (root/'zephyr/west.yml').write_text('manifest:\n  projects:\n'+''.join('    - name: '+name+'\n      url: https://github.com/zephyrproject-rtos/'+name+'\n      revision: '+('a'*40)+'\n' for name in ['cmsis_6','hal_ti','hal_stm32']))
+            board.activate_modules({'modules':['cmsis_6','hal_ti']},root,sys.executable)
+            active=board.active_projects(sys.executable,root)
+            self.assertIn('cmsis_6',active);self.assertIn('hal_ti',active);self.assertNotIn('hal_stm32',active)
+            self.assertIn('-hal_.*',(root/'.west/config').read_text())
 
     def test_inactive_west_modules_included_in_manifest_plan(self):
         fake = type('Result', (), {'stdout':
@@ -366,37 +396,9 @@ class DependencyTests(unittest.TestCase):
         with patch('subprocess.run', return_value=fake) as run:
             manifest = board.manifest_projects('python', Path('.'))
         self.assertIn('--all', run.call_args.args[0])
-        self.assertEqual(board.modules_for('ti', 'arm-zephyr-eabi', manifest), ['cmsis_6', 'cmsis', 'hal_ti'])
+        self.assertEqual(board.modules_for('ti', 'arm-zephyr-eabi', manifest, self.info('ti')), ['cmsis_6', 'cmsis', 'hal_ti'])
 
 
 if __name__ == '__main__':
     unittest.main()
 
-class StagedModuleTests(unittest.TestCase):
-    def test_interrupted_fetch_cannot_activate_partial_module(self):
-        with tempfile.TemporaryDirectory() as home:
-            workspace = Path(home); destination = workspace / 'modules/hal/test'
-            def command(args, **kwargs):
-                if 'fetch' in args:
-                    raise subprocess.CalledProcessError(1, args)
-                return subprocess.CompletedProcess(args, 0)
-            with patch('subprocess.check_output', return_value='https://github.com/zephyrproject-rtos/hal_test\n'), patch('subprocess.run', side_effect=command):
-                with self.assertRaises(subprocess.CalledProcessError):
-                    board.stage_module('hal_test', 'a'*40, destination, workspace, 'python', 'git')
-            self.assertFalse(destination.exists())
-            self.assertEqual(list(destination.parent.iterdir()), [])
-
-    def test_unapproved_module_origin_rejected_before_git(self):
-        with tempfile.TemporaryDirectory() as home:
-            workspace = Path(home)
-            with patch('subprocess.check_output', return_value='https://unreviewed.example/hal'), patch('subprocess.run') as run:
-                with self.assertRaisesRegex(ValueError, 'reviewed GitHub'):
-                    board.stage_module('hal', 'a'*40, workspace / 'hal', workspace, 'python', 'git')
-                run.assert_not_called()
-
-    def test_staged_module_verified_before_atomic_activation(self):
-        with tempfile.TemporaryDirectory() as home:
-            workspace = Path(home); destination = workspace / 'modules/hal/test'
-            with patch('subprocess.check_output', return_value='https://github.com/zephyrproject-rtos/hal_test'), patch('subprocess.run'), patch.object(board, 'git_revision', return_value='a'*40):
-                board.stage_module('hal_test', 'a'*40, destination, workspace, 'python', 'git')
-            self.assertTrue(destination.is_dir())

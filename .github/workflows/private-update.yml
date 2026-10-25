@@ -52,6 +52,8 @@ jobs:
           python3 -c 'import sys; assert sys.version_info >= (3, 10), sys.version'
           mvn -version
           mvn -version | python3 -c 'import re,sys; s=sys.stdin.read(); m=re.search(r"Apache Maven (\d+)\.(\d+)\.", s); assert m and tuple(map(int,m.groups())) >= (3,9), s'
+      - name: Install pinned test metadata dependencies
+        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3 west==1.5.0
       - name: Run all core and Python dependency regression tests
         run: python3 scripts/test_core.py
       - name: Build clean Tycho p2 update site
@@ -148,3 +150,4 @@ jobs:
             commit -m "updates: activate $VERSION"
           git -C "$RELEASE_ROOT" push origin HEAD:updates
           echo "Published private $VERSION with previous releases retained." >> "$GITHUB_STEP_SUMMARY"
+

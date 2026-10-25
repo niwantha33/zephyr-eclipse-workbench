@@ -9,7 +9,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import time
 
 
 class DependencyError(ValueError):
@@ -151,14 +150,34 @@ class RecoveryManager:
 class DependencyResolver:
     def __init__(self, bootstrap=None, host_tools=None):
         self.bootstrap = bootstrap if bootstrap is not None else [CompilerProvider(), WestModuleProvider(), PythonPackageProvider()]
-        self.host_tools = host_tools if host_tools is not None else {'IMGTOOL': HostToolProvider('IMGTOOL', signing_provider)}
+        self.host_tools = host_tools if host_tools is not None else {'IMGTOOL': HostToolProvider('IMGTOOL', signing_provider),
+                                                                         'ESPTOOL': HostToolProvider('ESPTOOL', lambda ctx: ctx.backend.legacy.install_python_tools(ctx.root))}
 
     def prepare(self, ctx, required=()):
         required = set(required)
+        key = hashlib.sha256(ctx.details['board'].encode()).hexdigest()[:16]
+        state = ctx.root / '.zew-dependency-state' / (key + '.json')
+        if state.is_symlink() or state.parent.is_symlink():
+            raise DependencyError('Refusing symlinked dependency state')
+        if state.is_file():
+            if state.stat().st_size > 1024 * 1024:
+                raise DependencyError('Dependency evidence exceeds size limit')
+            previous = json.loads(state.read_text(encoding='utf-8'))
+            digest = previous.pop('fingerprint', None)
+            if (previous.get('board') != ctx.details['board'] or digest !=
+                    hashlib.sha256(json.dumps(previous, sort_keys=True).encode()).hexdigest()):
+                raise DependencyError('Dependency evidence is corrupt; preserve it and select a fresh managed setup')
+            required.update(item['name'] for item in previous['dependencies'] if item['kind'] == 'host-tool')
         if ctx.details.get('signing'):
+
             required.add('IMGTOOL')
         # Reject unsupported requests before any mutation or download.
         host = RecoveryManager(self.host_tools).resolve(required)
+        if 'IMGTOOL' in required:
+            if 'mcuboot' not in ctx.details.get('manifest', {}):
+                raise DependencyError('Required IMGTOOL has no pinned MCUboot module')
+            if 'mcuboot' not in ctx.details['modules']:
+                ctx.details['modules'].append('mcuboot')
         with InstallationLock(ctx.root):
             for provider in [*self.bootstrap, *host]:
                 ctx.backend.setup.log('Dependency stage: ' + provider.name)

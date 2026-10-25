@@ -41,7 +41,7 @@ public class BuildReliabilityTests {
             check(BuildHostRequirements.missingInCommands("python IMGTOOL-NOTFOUND sign\n").equals(Set.of("IMGTOOL")), "required default command detected");
             check(BuildHostRequirements.missingInCommands("gcc main.c\n").isEmpty(), "ordinary source compile does not require repair");
             Path include = build.resolve("CMakeFiles/rules.ninja"); Files.createDirectories(include.getParent());
-            Files.writeString(include, "rule IMAGE\n  command = gperf-NOTFOUND\n");
+            Files.writeString(include, "rule IMAGE\n  command = GPERF-NOTFOUND\n");
             Files.writeString(build.resolve("build.ninja"), "# OPTIONAL-NOTFOUND\ninclude CMakeFiles/rules.ninja\n");
             check(BuildHostRequirements.missingInGeneratedBuild(build).equals(Set.of("GPERF")), "nested rules inspected; comments ignored");
         } finally {

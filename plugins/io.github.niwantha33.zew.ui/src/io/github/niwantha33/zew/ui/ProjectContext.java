@@ -53,6 +53,10 @@ final class ProjectContext {
         var values = new LinkedHashMap<String, String>();
         var paths = new LinkedHashSet<String>();
         for (String key : List.of("tools.cmake", "tools.ninja", "tools.git", "python")) paths.add(Path.of(settings.getProperty(key)).getParent().toString());
+        String dtc = settings.getProperty("tools.dtc", "");
+        if (!dtc.isBlank()) paths.add(Path.of(dtc).getParent().toString());
+        paths.add(Path.of(settings.getProperty("tools.sdk"), "hosttools/bin").toString());
+        paths.add(Path.of(settings.getProperty("tools.sdk"), "hosttools/usr/bin").toString());
         String managedRoot = settings.getProperty("zew.setupRoot", "");
         if (!managedRoot.isBlank()) {
             paths.add(Path.of(managedRoot, "board-python/esp32s3/Scripts").toString());
@@ -66,3 +70,4 @@ final class ProjectContext {
         return values;
     }
 }
+
