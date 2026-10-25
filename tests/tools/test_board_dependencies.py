@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import venv
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -259,7 +260,60 @@ class DependencyTests(unittest.TestCase):
                         self.assertEqual(fetch.call_count, 7)  # no downloads on rebuild
             self.assertEqual(existing.read_text(), 'unchanged')
             self.assertEqual((site / 'zew-mcuboot.pth').read_text(),
-                             str(root / 'board-python/mcuboot') + '\n')
+                             str(root / 'board-python/mcuboot') + '\n'
+                             + str(signing.parent.resolve()) + '\n')
+
+    def test_signing_sibling_imports_with_isolated_python_and_old_mapping(self):
+        with tempfile.TemporaryDirectory(prefix='signing runtime Ω ') as home:
+            root = Path(home)
+            runtime = root / 'python'
+            venv.EnvBuilder(with_pip=False).create(runtime)
+            python = runtime / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
+            sites = Path(subprocess.check_output(
+                [str(python), '-I', '-c', 'import site;print(site.getsitepackages()[0])'],
+                text=True).strip())
+            managed_site = runtime / 'Lib/site-packages'
+            managed_site.mkdir(parents=True, exist_ok=True)
+            # Reproduce the embedded runtime's explicit site-packages path.
+            (sites / 'managed-test.pth').write_text(str(managed_site) + '\nimport site; site.addsitedir('
+                                                   + repr(str(managed_site)) + ')\n')
+            scripts = root / 'workspace/bootloader/mcuboot/scripts'
+            scripts.mkdir(parents=True)
+            package = scripts / 'imgtool'; package.mkdir()
+            (package / '__init__.py').write_text('VALUE = "pinned-imgtool-ok"\n')
+            entry = scripts / 'imgtool.py'
+            entry.write_text('from imgtool import VALUE\nprint(VALUE)\n')
+            dependencies = root / 'board-python/mcuboot'
+            dependencies.mkdir(parents=True)
+            lock = (TOOLS / 'mcuboot-python-lock.json').read_bytes()
+            (dependencies / '.zew-ready').write_text(board.hashlib.sha256(lock).hexdigest() + '\n')
+            mapping = managed_site / 'zew-mcuboot.pth'
+            mapping.write_text(str(dependencies) + '\n')
+            before = subprocess.run([str(python), '-I', str(entry)], capture_output=True, text=True)
+            self.assertNotEqual(before.returncode, 0)
+            manifest = {'mcuboot': ('a' * 40, Path('bootloader/mcuboot'))}
+            with patch.object(board.sys, 'version_info', (3, 13)):
+                board.install_signing_tools(root, root / 'workspace', python, manifest)
+                # Retry reuses dependencies and the upgraded mapping.
+                board.install_signing_tools(root, root / 'workspace', python, manifest)
+            after = subprocess.run([str(python), '-I', str(entry)], capture_output=True, text=True)
+            self.assertEqual(after.returncode, 0, after.stderr)
+            self.assertEqual(after.stdout.strip(), 'pinned-imgtool-ok')
+
+    def test_signing_validation_retains_python_traceback(self):
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            scripts = root / 'bootloader/mcuboot/scripts'; scripts.mkdir(parents=True)
+            (scripts / 'imgtool.py').touch()
+            (root / 'python/Lib/site-packages').mkdir(parents=True)
+            destination = root / 'board-python/mcuboot'; destination.mkdir(parents=True)
+            (destination / '.zew-ready').write_text(board.hashlib.sha256(
+                (TOOLS / 'mcuboot-python-lock.json').read_bytes()).hexdigest() + '\n')
+            with patch.object(board.sys, 'version_info', (3, 13)), patch('subprocess.run',
+                    return_value=subprocess.CompletedProcess([], 1, '', 'ModuleNotFoundError: missing dependency')):
+                with self.assertRaisesRegex(ValueError, 'ModuleNotFoundError: missing dependency'):
+                    board.install_signing_tools(root, root, 'python',
+                                                {'mcuboot': ('a' * 40, Path('bootloader/mcuboot'))})
 
     def test_existing_compiler_is_verified_not_overwritten(self):
         with tempfile.TemporaryDirectory() as home:

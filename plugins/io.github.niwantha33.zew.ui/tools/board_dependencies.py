@@ -250,13 +250,22 @@ def install_signing_tools(root, workspace, python, manifest):
     if not site.is_dir():
         raise ValueError('Managed Python site-packages is missing: ' + str(site))
     mapping = site / 'zew-mcuboot.pth'
-    value = str(destination) + '\n'
-    if mapping.exists() and mapping.read_text(encoding='utf-8') != value:
+    # Windows embedded Python excludes the launched script's directory. The
+    # entry point imports the adjacent imgtool package, not a PyPI package.
+    # Expose only this verified manifest module's scripts and pinned wheels.
+    previous_value = str(destination) + '\n'
+    value = previous_value + str(imgtool.parent.resolve()) + '\n'
+    if mapping.exists() and mapping.read_text(encoding='utf-8') not in (previous_value, value):
         raise ValueError('Conflicting MCUboot Python path mapping preserved: ' + str(mapping))
-    mapping.write_text(value, encoding='utf-8')
-    subprocess.run([str(python), str(imgtool), '--help'], check=True,
-                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                   text=True, timeout=30, stdin=subprocess.DEVNULL)
+    temporary = mapping.with_suffix('.partial')
+    temporary.write_text(value, encoding='utf-8')
+    temporary.replace(mapping)
+    result = subprocess.run([str(python), str(imgtool), '--help'],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, timeout=30, stdin=subprocess.DEVNULL)
+    if result.returncode:
+        raise ValueError('MCUboot imgtool validation failed (' + str(result.returncode)
+                         + '):\n' + (result.stderr or result.stdout or 'No diagnostic output').strip())
     setup.log('READY — pinned MCUboot imgtool is runnable: ' + str(imgtool))
 
 def plan(board, workspace, python, application=None):
