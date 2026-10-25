@@ -68,7 +68,7 @@ public final class ProjectActionHandler extends AbstractHandler {
                     // Calls ZephyrProjectBuilder, which already owns dependency setup,
                     // managed paths and final firmware verification. No parallel private
                     // build implementation or home-grown flashing protocol.
-                    project.build(IncrementalProjectBuilder.FULL_BUILD, Map.of(), monitor);
+                    project.build(IncrementalProjectBuilder.FULL_BUILD, Activator.ID + ".zephyrBuilder", Map.of(), monitor);
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     var settings = ProjectContext.settings(project);
                     String board = settings.getProperty("board");
