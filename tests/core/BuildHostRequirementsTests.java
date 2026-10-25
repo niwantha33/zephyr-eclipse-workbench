@@ -22,10 +22,10 @@ public class BuildHostRequirementsTests {
             check(missingCaught, "missing Ninja file must be an error");
             Files.writeString(ninja, "# sample cmake target\nrule BUILD\n"
                     + "  command = python IMGTOOL-NOTFOUND sign --version 0.0.0+0\n"
-                    + "  command2 = GP ERF-NOTFOUND\n");
+                    + "  command2 = gperf-NOTFOUND\n");
             check(BuildHostRequirements.missingInGeneratedBuild(temp).equals(Set.of("IMGTOOL")),
                     "Must detect imgtool used in a generated command");
-            Files.writeString(ninja, "rule BUILD\n  command = IMGTOOL-NOTFOUND GP ERF-NOTFOUND GPERF-NOTFOUND\n");
+            Files.writeString(ninja, "rule BUILD\n  command = IMGTOOL-NOTFOUND gperf-NOTFOUND GPERF-NOTFOUND\n");
             check(BuildHostRequirements.missingInGeneratedBuild(temp).equals(Set.of("IMGTOOL", "GPERF")),
                     "Must detect every distinct needed host executable");
             Files.writeString(ninja, "# No signing or other optional missing tools\nrule BUILD\n  command = echo READY\n");
