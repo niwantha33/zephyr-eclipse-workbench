@@ -213,8 +213,28 @@ def module_dependencies(path):
     return depends
 
 
+def required_submodules(name, workspace, python):
+    """Repository .gitmodules can be optional; only the West declaration requires them."""
+    import yaml
+    result = subprocess.run([str(python), '-m', 'west', 'manifest', '--resolve'], cwd=workspace,
+                            check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+    if len(result.stdout) > 16 * 1024 * 1024:
+        raise ValueError('Resolved West manifest exceeds inspection limit')
+    document = yaml.safe_load(result.stdout)
+    projects = document.get('manifest', {}).get('projects', []) if isinstance(document, dict) else []
+    found = [project for project in projects if project.get('name') == name]
+    if len(found) != 1:
+        raise ValueError('Cannot resolve required submodule policy for pinned project: ' + name)
+    policy = found[0].get('submodules', False)
+    if not isinstance(policy, (bool, list)):
+        raise ValueError('Invalid West submodule policy: ' + name)
+    return bool(policy)
+
+
 def install_module_staged(name, revision, destination, workspace, python, git):
     """Publish only a complete checkout; cancellation cannot leave a partial live module."""
+    if required_submodules(name, workspace, python):
+        raise ValueError('Pinned West project requires a reviewed submodule provider: ' + name)
     result = subprocess.run([str(python), '-m', 'west', 'list', '--all', name, '-f', '{url}'],
                             cwd=workspace, check=True, text=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, timeout=60)
@@ -226,14 +246,12 @@ def install_module_staged(name, revision, destination, workspace, python, git):
     with tempfile.TemporaryDirectory(prefix='.zew-module-stage-', dir=destination.parent) as temporary:
         stage = Path(temporary) / 'source'; stage.mkdir()
         def run(arguments):
-            subprocess.run([str(git), '-c', 'core.longpaths=true', *arguments], cwd=stage,
+            subprocess.run([str(git), '-c', 'core.longpaths=true', '-c', 'fetch.recurseSubmodules=false', '-c', 'submodule.recurse=false', *arguments], cwd=stage,
                            check=True, timeout=1200, stdin=subprocess.DEVNULL)
         setup.log('Staging pinned West module: ' + name)
         run(['init']); run(['remote', 'add', 'origin', url])
         run(['fetch', '--depth', '1', 'origin', revision]); run(['checkout', '--detach', 'FETCH_HEAD'])
         if git_revision(git, stage) != revision: raise ValueError('Staged module revision mismatch: ' + name)
-        if (stage / '.gitmodules').is_file():
-            raise ValueError('Module requires a reviewed submodule provider: ' + name)
         module_dependencies(stage)
         # Never replace an installation made concurrently or a user's directory.
         if destination.exists(): raise ValueError('Module destination appeared during preparation; preserved: ' + name)

@@ -23,8 +23,8 @@ The module provider prepares transitive `zephyr/module.yml` dependencies,
 activates only required West project filters, verifies immutable revisions and
 rejects local modifications. New modules are shallow-fetched from the pinned
 manifest's GitHub HTTPS origin into a sibling stage, checked, then renamed into
-place. Failed stages never become discoverable modules. Submodules require a
-future reviewed provider and currently produce an explicit unsupported error.
+place. Failed stages never become discoverable modules. Only submodules required by the resolved West manifest require a future reviewed
+provider. Optional repository submodules are not fetched or treated as mandatory.
 
 The Python utility provider reuses the approved Espressif tools lock when the
 resolved HAL requires it. MCUboot is a generic IMGTOOL capability, independent

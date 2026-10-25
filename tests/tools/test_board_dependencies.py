@@ -360,7 +360,7 @@ class DependencyTests(unittest.TestCase):
                 if 'init' in command:(stage/'.git').mkdir()
                 if 'checkout' in command:(stage/'payload').write_text('verified source')
                 return type('Result',(),{'returncode':0})()
-            with patch('subprocess.run',side_effect=run),patch.object(board,'git_revision',return_value=revision):
+            with patch('subprocess.run',side_effect=run),patch.object(board,'git_revision',return_value=revision),patch.object(board,'required_submodules',return_value=False):
                 board.install_module_staged('vendor',revision,destination,root,'python','git')
             self.assertEqual((destination/'payload').read_text(),'verified source')
             self.assertFalse(list(destination.parent.glob('.zew-module-stage-*')))
@@ -372,7 +372,7 @@ class DependencyTests(unittest.TestCase):
                 if command[1:3]==['-m','west']:return type('Result',(),{'stdout':'https://github.com/zephyrproject-rtos/hal_ti.git\n'})()
                 if 'fetch' in command:raise subprocess.CalledProcessError(1,command)
                 return type('Result',(),{'returncode':0})()
-            with patch('subprocess.run',side_effect=run):
+            with patch('subprocess.run',side_effect=run),patch.object(board,'required_submodules',return_value=False):
                 with self.assertRaises(subprocess.CalledProcessError):board.install_module_staged('vendor','a'*40,destination,root,'python','git')
             self.assertFalse(destination.exists());self.assertEqual((root/'keep').read_text(),'untouched')
             self.assertFalse(list(destination.parent.glob('.zew-module-stage-*')))
@@ -402,3 +402,17 @@ class DependencyTests(unittest.TestCase):
 if __name__ == '__main__':
     unittest.main()
 
+
+class SubmodulePolicyTests(unittest.TestCase):
+    def test_optional_repository_submodules_are_not_mandatory(self):
+        result = subprocess.CompletedProcess([], 0, 'manifest:\n  projects:\n    - name: mcuboot\n', '')
+        with patch('subprocess.run', return_value=result):
+            self.assertFalse(board.required_submodules('mcuboot', Path('.'), 'python'))
+
+    def test_explicit_west_submodules_require_reviewed_provider(self):
+        result = subprocess.CompletedProcess([], 0, 'manifest:\n  projects:\n    - name: vendor\n      submodules: true\n', '')
+        with patch('subprocess.run', return_value=result) as run:
+            with self.assertRaisesRegex(ValueError, 'reviewed submodule provider'):
+                board.install_module_staged('vendor', 'a'*40, Path('unused'), Path('.'), 'python', 'git')
+            self.assertEqual(run.call_count, 1)
+            self.assertNotIn('fetch', run.call_args.args[0])
