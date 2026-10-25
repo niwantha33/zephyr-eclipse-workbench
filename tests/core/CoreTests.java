@@ -80,6 +80,18 @@ public final class CoreTests {
             var capture = runner.run(fixture("capture"), ROOT, Duration.ofSeconds(15), () -> false, line -> {});
             check(capture.truncated() && capture.output().length() <= 2_000_000, "capture limit bounds memory");
             check(capture.requireSuccess() != null, "large successful build output remains successful");
+            var commandsScanner = new BuildHostRequirements.CommandScanner();
+            var oversizedCommands = runner.run(fixture("largecommands"), ROOT, Duration.ofSeconds(20),
+                    () -> false, commandsScanner);
+            oversizedCommands.requireSuccess();
+            check(oversizedCommands.truncated(), "large Ninja listing exceeds bounded capture without failing");
+            check(commandsScanner.missing().equals(Set.of("ESPTOOL")),
+                    "late missing executable is detected after two-megabyte capture limit");
+            var badCommandsScanner = new BuildHostRequirements.CommandScanner();
+            var badCommands = runner.run(fixture("largecommands", "fail"), ROOT, Duration.ofSeconds(20),
+                    () -> false, badCommandsScanner);
+            rejects(IOException.class, badCommands::requireSuccess,
+                    "failed Ninja command listing remains a hard failure when output exceeds capture limit");
             rejects(IOException.class, capture::requireCompleteOutput, "truncated discovery protocol rejected");
             rejects(IOException.class, () -> runner.run(fixture("sleep"), ROOT, Duration.ofMillis(250), () -> false, line -> {}), "hung tool timeout");
             rejects(InterruptedIOException.class, () -> runner.run(fixture("sleep"), ROOT, Duration.ofSeconds(10), () -> true, line -> {}), "cancel before launch");
