@@ -71,18 +71,13 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 throw new IOException("Native DSF-GDB currently supports only OpenOCD-backed targets. "
                         + "This board declares " + runner.group(1)
                         + ". External Debug Server remains available; other backends need verified integration.");
-            // A global installation can serve many projects, but the exact
-            // board picks its own compatible OpenOCD distribution. Require
-            // West's runner metadata to match what the managed build chose.
+            // West supports runtime tool overrides. Old build metadata can name a
+            // removed installation; bind the validated shared tool without changing
+            // runners.yaml, recompiling firmware, or issuing a flash operation.
             var selectedOpenOcd = SharedDebugTools.select(settings.getProperty("board"), settings)
                     .orElseThrow(() -> io.github.niwantha33.zew.core.OpenOcdRegistry
                             .missing(settings.getProperty("board")));
-            if (!io.github.niwantha33.zew.core.OpenOcdRegistry
-                    .recordedInRunnerYaml(selectedOpenOcd, yaml))
-                throw new IOException("This build has stale or incompatible OpenOCD runner settings."
-                    + " Rebuild the selected exact board to record the shared "
-                    + selectedOpenOcd.provider() + " OpenOCD executable and scripts."
-                    + " No firmware was changed.");
+            plan = io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(plan, selectedOpenOcd);
             var gdbEntry = CONFIG_GDB.matcher(yaml);
             if (!gdbEntry.find() || gdbEntry.group(1).isBlank())
                 throw new IOException("Zephyr runner configuration does not declare an architecture-correct GDB.");

@@ -49,10 +49,13 @@ target script directories. Espressif also requires `esp_usb_jtag.cfg` and
    for a usable `openocd.exe` and matching scripts.
 3. `Zephyr > Build Application` configures the chosen provider in CMake and
    generated `zephyr/runners.yaml` without changing global PATH.
-4. `Zephyr > Debug Application` validates exact tool/script matching in the
-   build and launches West + CDT DSF-GDB. No auto-flash occurs.
-5. After switching providers, rebuild the selected target so its CMake and
-   West runner metadata use the newly selected tool.
+4. `Zephyr > Debug Application` validates the selected provider and its matching
+   executable/scripts, then passes them to West using `--openocd` and
+   `--openocd-search` before launching CDT DSF-GDB. No auto-flash occurs.
+5. After selecting or moving a compatible tool installation, Debug uses it
+   immediately, including for existing builds with old tool paths. No firmware
+   rebuild or runner YAML modification is required. Board identity, build
+   receipt, artifacts and architecture-correct GDB checks still apply.
 
 ## Safety
 

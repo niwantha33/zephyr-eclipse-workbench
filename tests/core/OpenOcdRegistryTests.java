@@ -76,6 +76,28 @@ public final class OpenOcdRegistryTests {
                           .replace("- " + selected.scripts().toString().replace('\\','/'), "- C:/wrong/scripts")),
                     "wrong scripts must block Debug");
 
+            var oldPlan = new io.github.niwantha33.zew.core.TargetOperations.Plan(
+                    "debugserver", "esp32s3_devkitc/esp32s3/procpu", temp,
+                    java.util.List.of("debugserver", "--build-dir", temp.toString(), "--no-rebuild"));
+            var bound = io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(oldPlan, selected);
+            check(bound.westArguments().subList(4, 8).equals(java.util.List.of(
+                    "--openocd", selected.executable().toString().replace('\\', '/'),
+                    "--openocd-search", selected.scripts().toString().replace('\\', '/'))),
+                    "old metadata overridden by explicit matching executable/scripts");
+            check(oldPlan.westArguments().size() == 4 && bound.westArguments().contains("--no-rebuild"),
+                    "override preserves immutable original and no-rebuild");
+            try {
+                io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(oldPlan,
+                        OpenOcdRegistry.select("nucleo_f446re", auto).orElseThrow());
+                throw new AssertionError("incompatible provider accepted");
+            } catch (java.io.IOException expected) { assertions++; }
+            try {
+                io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(
+                        new io.github.niwantha33.zew.core.TargetOperations.Plan("flash", oldPlan.board(), temp,
+                                java.util.List.of("flash")), selected);
+                throw new AssertionError("flash plan accepted");
+            } catch (java.io.IOException expected) { assertions++; }
+
             Path incomplete = fake(temp.resolve("incomplete"), false, false);
             check(OpenOcdRegistry.fromExecutable(Provider.ESPRESSIF, incomplete, "incomplete").isEmpty(),
                     "incomplete vendor fork rejected");
