@@ -23,6 +23,12 @@ public final class DebugServerDiagnosticsTests {
         yes(wrongOpenOcd.describe("esp32s3_devkitc/esp32s3/procpu", 3333, 1)
                 .contains("Espressif-compatible OpenOCD"), "Explains incompatible OpenOCD script");
 
+        var noExecutable = new DebugServerDiagnostics();
+        noExecutable.accept("FATAL ERROR: required program openocd not found; install it or add its location to PATH");
+        yes(noExecutable.describe("esp32s3_devkitc/esp32s3/procpu", 3333, 1)
+                .contains("Installing the EIM GUI alone is insufficient"),
+                "Missing OpenOCD is a tool-install problem, not a JTAG wiring failure");
+
         var port = new DebugServerDiagnostics();
         port.accept("Error: address already in use");
         yes(port.describe("stm32f4_disco", 3333, 1).contains("GDB TCP port is occupied"),
