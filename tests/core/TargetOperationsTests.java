@@ -45,6 +45,7 @@ public final class TargetOperationsTests {
             Files.delete(zephyr.resolve("runners.yaml"));
             rejects(() -> TargetOperations.prepare(build, board, "flash", null), "runner config missing must fail");
             Files.writeString(build.resolve(".zew-built-target"), "qemu_x86/atom");
+            Files.writeString(zephyr.resolve(".config"), "CONFIG_X86=y\nCONFIG_BOARD_TARGET=\"qemu_x86/atom\"\n");
             check(TargetOperations.prepare(build, "qemu_x86/atom", "run", null).westArguments().contains("run"), "QEMU operation retained");
             rejects(() -> TargetOperations.prepare(build, board, "flash", null), "cross-target stale receipt rejected");
             System.out.println("TargetOperationsTests PASS: " + checks + " checks");
