@@ -323,6 +323,34 @@ def module_dependencies(path):
     return depends
 
 
+def stage_module(name, revision, destination, workspace, python, git):
+    """Fetch a single pinned West project into a sibling stage before activation."""
+    from urllib.parse import urlparse
+    url = subprocess.check_output([str(python), '-m', 'west', 'list', '--all', name, '-f', '{url}'],
+                                  cwd=workspace, text=True, timeout=120).strip()
+    parsed = urlparse(url)
+    if (parsed.scheme != 'https' or parsed.hostname != 'github.com' or parsed.username
+            or parsed.query or parsed.fragment or not re.fullmatch(r'/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', parsed.path)):
+        raise ValueError('West module has no reviewed GitHub HTTPS source: ' + name)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if any(parent.is_symlink() for parent in [destination, *destination.parents]):
+        raise ValueError('Refusing symlinked West module destination: ' + str(destination))
+    with tempfile.TemporaryDirectory(prefix='.zew-module-stage-', dir=destination.parent) as temporary:
+        staged = Path(temporary) / 'source'
+        staged.mkdir()
+        for args in (['init'], ['config', 'core.longpaths', 'true'], ['remote', 'add', 'origin', url],
+                     ['fetch', '--depth', '1', 'origin', revision], ['checkout', '--detach', 'FETCH_HEAD']):
+            subprocess.run([str(git), '-C', str(staged), *args], cwd=workspace, check=True,
+                           timeout=1200, stdin=subprocess.DEVNULL)
+        if git_revision(git, staged) != revision:
+            raise ValueError('Staged West module revision mismatch: ' + name)
+        if (staged / '.gitmodules').is_file():
+            raise ValueError('Module requires a reviewed submodule provider: ' + name)
+        # Verify its dependency metadata before it becomes discoverable.
+        module_dependencies(staged)
+        staged.rename(destination)
+
+
 def prepare_modules(plan_data, workspace, python, git):
     """Install pinned direct and transitive Zephyr module dependencies."""
     pending = list(plan_data['modules'])
@@ -345,8 +373,7 @@ def prepare_modules(plan_data, workspace, python, git):
             setup.log('Reusing pinned West module: ' + name)
         else:
             setup.log('Installing pinned West module: ' + name)
-            subprocess.run([str(python), '-m', 'west', 'update', name], cwd=workspace, check=True,
-                           timeout=1200, stdin=subprocess.DEVNULL)
+            stage_module(name, revision, destination, workspace, python, git)
             if not destination.is_dir() or git_revision(git, destination) != revision:
                 raise ValueError('West module revision verification failed: ' + name)
         selected.append(name)
@@ -460,13 +487,12 @@ def main(argv=None):
         return 0
     if os.name != 'nt':
         raise ValueError('Automatic compiler preparation supports managed Windows x64. No changes were made.')
-    prepare_compiler(root, sdk, details['compiler'], details['asset'])
-    prepare_modules(details, workspace, sys.executable, args.git)
-    activate_modules(details, workspace, sys.executable)
-    if details['signing']:
-        install_signing_tools(root, workspace, sys.executable, details['manifest'])
-    if details['vendor'] == 'espressif' and details['soc'] == 'esp32s3':
-        legacy.install_python_tools(root)
+    # Load only the sibling bundled implementation (embedded Python excludes cwd).
+    engine_spec = importlib.util.spec_from_file_location('zew_dependency_engine', HERE / 'dependency_engine.py')
+    engine = importlib.util.module_from_spec(engine_spec)
+    engine_spec.loader.exec_module(engine)
+    context = engine.Context(sys.modules[__name__], details, root, sdk, workspace, sys.executable, args.git)
+    engine.DependencyResolver().prepare(context, [args.require_host_tool] if args.require_host_tool else [])
     setup.log('READY — pinned SDK, West revisions, active modules and signing tools verified')
     return 0
 

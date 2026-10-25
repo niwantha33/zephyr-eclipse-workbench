@@ -15,7 +15,7 @@ final class BoardTools {
     // packed plug-in. Python must see all sibling helpers in the same directory.
     // Keep this inventory in sync with scripts/verify_site.py.
     private static final List<String> PYTHON_TOOLS = List.of(
-        "board_dependencies.py", "board_tools.py", "hardware_catalog.py",
+        "board_dependencies.py", "dependency_engine.py", "board_tools.py", "hardware_catalog.py",
         "setup.py", "managed_sitecustomize.py",
         "sdk-toolchains-windows-1.0.1.json", "esp32s3-python-lock.json",
         "mcuboot-python-lock.json"

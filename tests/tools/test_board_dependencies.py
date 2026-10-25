@@ -371,3 +371,32 @@ class DependencyTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class StagedModuleTests(unittest.TestCase):
+    def test_interrupted_fetch_cannot_activate_partial_module(self):
+        with tempfile.TemporaryDirectory() as home:
+            workspace = Path(home); destination = workspace / 'modules/hal/test'
+            def command(args, **kwargs):
+                if 'fetch' in args:
+                    raise subprocess.CalledProcessError(1, args)
+                return subprocess.CompletedProcess(args, 0)
+            with patch('subprocess.check_output', return_value='https://github.com/zephyrproject-rtos/hal_test\n'), patch('subprocess.run', side_effect=command):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    board.stage_module('hal_test', 'a'*40, destination, workspace, 'python', 'git')
+            self.assertFalse(destination.exists())
+            self.assertEqual(list(destination.parent.iterdir()), [])
+
+    def test_unapproved_module_origin_rejected_before_git(self):
+        with tempfile.TemporaryDirectory() as home:
+            workspace = Path(home)
+            with patch('subprocess.check_output', return_value='https://unreviewed.example/hal'), patch('subprocess.run') as run:
+                with self.assertRaisesRegex(ValueError, 'reviewed GitHub'):
+                    board.stage_module('hal', 'a'*40, workspace / 'hal', workspace, 'python', 'git')
+                run.assert_not_called()
+
+    def test_staged_module_verified_before_atomic_activation(self):
+        with tempfile.TemporaryDirectory() as home:
+            workspace = Path(home); destination = workspace / 'modules/hal/test'
+            with patch('subprocess.check_output', return_value='https://github.com/zephyrproject-rtos/hal_test'), patch('subprocess.run'), patch.object(board, 'git_revision', return_value='a'*40):
+                board.stage_module('hal_test', 'a'*40, destination, workspace, 'python', 'git')
+            self.assertTrue(destination.is_dir())

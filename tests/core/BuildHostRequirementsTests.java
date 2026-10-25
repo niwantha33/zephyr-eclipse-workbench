@@ -23,7 +23,7 @@ public class BuildHostRequirementsTests {
             Files.writeString(ninja, "# sample cmake target\nrule BUILD\n"
                     + "  command = python IMGTOOL-NOTFOUND sign --version 0.0.0+0\n"
                     + "  command2 = gperf-NOTFOUND\n");
-            check(BuildHostRequirements.missingInGeneratedBuild(temp).equals(Set.of("IMGTOOL")),
+            check(BuildHostRequirements.missingInGeneratedBuild(temp).equals(Set.of("IMGTOOL", "GPERF")),
                     "Must detect imgtool used in a generated command");
             Files.writeString(ninja, "rule BUILD\n  command = IMGTOOL-NOTFOUND gperf-NOTFOUND GPERF-NOTFOUND\n");
             check(BuildHostRequirements.missingInGeneratedBuild(temp).equals(Set.of("IMGTOOL", "GPERF")),
