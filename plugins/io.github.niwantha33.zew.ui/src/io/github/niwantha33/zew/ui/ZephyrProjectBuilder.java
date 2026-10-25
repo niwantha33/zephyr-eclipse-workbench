@@ -62,7 +62,8 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
         String[] stage = {"Load project"};
         try (var stream = console.newMessageStream();
-             var session = BuildSession.acquire(Path.of(ProjectContext.settings(getProject()).getProperty("zew.setupRoot")))) {
+             var session = BuildSession.acquire(Path.of(ProjectContext.settings(getProject()).getProperty("zew.setupRoot")),
+                 monitor::isCanceled, Duration.ofMinutes(45), stream::println)) {
             var settings = ProjectContext.settings(getProject());
             Path project = getProject().getLocation().toFile().toPath().toRealPath();
             String board = settings.getProperty("board");

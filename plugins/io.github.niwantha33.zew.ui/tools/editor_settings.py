@@ -119,6 +119,9 @@ def probe(compiler, flags, language, directory, sdk):
 
 
 def collect(project, build, sdk):
+    # Windows short-name temp roots and symlinked project locations must use
+    # the same canonical spelling as compilation database paths.
+    project, build, sdk = project.resolve(), build.resolve(), sdk.resolve()
     database = build / 'compile_commands.json'
     if database.stat().st_size > 32 * LIMIT: raise ValueError('Compilation database exceeds limit')
     entries = json.loads(database.read_text(encoding='utf-8-sig'))

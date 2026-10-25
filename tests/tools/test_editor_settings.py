@@ -28,8 +28,8 @@ class EditorTests(unittest.TestCase):
         flags, includes, forced, macros = editor.preprocess_flags(['-I', 'inc', '-DVALUE=3', '-UOLD',
                 '-imacros', 'config.h', '-include', 'forced.h', '-m32', '-std=c11', '-o', 'out.o', '-c', 'main.c',
                 '-fplugin=NEVER', '-specs=NEVER'], Path('/work'))
-        self.assertIn('/work/inc', includes); self.assertEqual(macros, ['/work/config.h'])
-        self.assertEqual(forced, ['/work/forced.h']); self.assertIn('-m32', flags)
+        self.assertIn(str(Path('/work/inc').resolve()), includes); self.assertEqual(macros, [str(Path('/work/config.h').resolve())])
+        self.assertEqual(forced, [str(Path('/work/forced.h').resolve())]); self.assertIn('-m32', flags)
         self.assertFalse(any('NEVER' in a or a in ('-o', '-c', 'main.c') for a in flags))
 
     def test_compiler_outside_selected_sdk_rejected(self):

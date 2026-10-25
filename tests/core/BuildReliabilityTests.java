@@ -16,11 +16,17 @@ public class BuildReliabilityTests {
             Files.writeString(build.resolve("zephyr/.config"), "CONFIG_ARM=y\nCONFIG_KERNEL_BIN_NAME=\"firmware\"\nCONFIG_BUILD_OUTPUT_BIN=y\nCONFIG_BUILD_OUTPUT_HEX=y\n");
             Files.writeString(build.resolve("CMakeCache.txt"), "CMAKE_C_COMPILER:FILEPATH=C:/SDK with spaces/arm-zephyr-eabi-gcc.exe\n");
             BuildArtifacts.verifyArchitecture(build);
-            Files.writeString(build.resolve("zephyr/firmware.elf"), "elf");
+            Files.write(build.resolve("zephyr/firmware.elf"), new byte[] {0x7f, 'E', 'L', 'F'});
             rejects(() -> BuildArtifacts.verify(build), "ELF alone must not pass when BIN and HEX required");
             Files.writeString(build.resolve("zephyr/firmware.bin"), "bin");
             Files.writeString(build.resolve("zephyr/firmware.hex"), "hex");
             BuildArtifacts.verify(build);
+            Files.writeString(build.resolve("CMakeCache.txt"), "BYPRODUCT_KERNEL_SIGNED_BIN_NAME:FILEPATH=" + build.resolve("zephyr/firmware.signed.bin") + "\n");
+            rejects(() -> BuildArtifacts.verify(build), "configured signed byproduct must exist");
+            Files.writeString(build.resolve("zephyr/firmware.signed.bin"), "signed-image");
+            BuildArtifacts.verify(build);
+            Files.writeString(build.resolve("CMakeCache.txt"), "BYPRODUCT_KERNEL_SIGNED_BIN_NAME:FILEPATH=" + root.resolve("user.bin") + "\n");
+            rejects(() -> BuildArtifacts.required(build), "byproducts cannot leave managed build");
             Files.writeString(build.resolve("CMakeCache.txt"), "CMAKE_C_COMPILER:FILEPATH=C:/sdk/riscv64-zephyr-elf-gcc.exe\n");
             rejects(() -> BuildArtifacts.verifyArchitecture(build), "wrong architecture must fail");
             Files.writeString(build.resolve("zephyr/.config"), "CONFIG_KERNEL_BIN_NAME=\"../user\"\n");
@@ -37,6 +43,8 @@ public class BuildReliabilityTests {
                 Path other = root.resolve("other"); Files.createDirectory(other);
                 try (var independent = BuildSession.acquire(other)) { check(independent != null, "independent environment allowed"); }
             }
+            rejects(() -> BuildSession.acquire(root, () -> true, java.time.Duration.ofSeconds(1), ignored -> {}),
+                "cancelled waiting must stop before taking a session");
             try (var retry = BuildSession.acquire(root)) { check(retry != null, "session releases after use"); }
             check(BuildHostRequirements.missingInCommands("python IMGTOOL-NOTFOUND sign\n").equals(Set.of("IMGTOOL")), "required default command detected");
             check(BuildHostRequirements.missingInCommands("gcc main.c\n").isEmpty(), "ordinary source compile does not require repair");

@@ -9,14 +9,14 @@ reported separately and does not imply hardware validation.
 `board_dependencies.py` resolves the exact target with the pinned Zephyr 4.4
 hardware catalogue and West manifest. `dependency_engine.py` owns ordered,
 code-defined providers: compiler, pinned West modules and activation, Python
-utilities, and a registry of host capabilities. Adding a reviewed host capability
+utilities, and a registry of host capabilities (IMGTOOL and ESPTOOL). Adding a reviewed host capability
 does not require changes to the Eclipse build loop. Unrecognised mandatory
 capabilities fail before installation. Metadata is never interpreted as commands.
 
 The compiler provider reuses the approved SDK asset lock and verifies the
 compiler's `-dumpmachine` result. The generated Kconfig and CMake compiler are
-cross-checked before compilation. HAL selection remains a bootstrap heuristic
-from SoC metadata, with the existing reviewed aliases. Ambiguous architectures
+cross-checked before compilation. HAL selection uses the current exact-target metadata resolver, closest matching
+SoC paths and declared module references. Ambiguous architectures
 fail closed. This does not claim support for all upstream SoCs.
 
 The module provider prepares transitive `zephyr/module.yml` dependencies,
@@ -42,14 +42,15 @@ final install directories are preserved and rejected rather than overwritten.
 
 Eclipse holds an OS file lock for the entire shared environment build session.
 Independent environments may build concurrently. Projects sharing a mutable West
-environment serialize; contention gives an actionable retry message. A second
+environment serialize; contention waits automatically with progress, cancellation and a 45-minute bound. A second
 cross-process provider lock also protects standalone CI provisioning. Process
 exit releases locks after cancellation or termination.
 
 Configure-only preflight remains in place. Ninja `-t commands` inspects commands
 reachable from the default build graph without executing them. Optional targets
 outside that graph do not require tools. The recovery registry permits one
-attempt per capability with a two-capability budget. Unknown tools and ordinary
+attempt per capability with a two-capability budget. Discovered capabilities are remembered in the
+verified per-target evidence record so repeat builds retain their dependency plan. Unknown tools and ordinary
 C/C++ compilation failures never cause guessed downloads or repeated builds.
 After provisioning, CMake reconfigures with only the corresponding tool cache
 entry unset. No pristine deletion is needed for host-tool recovery.
@@ -64,7 +65,10 @@ existing path, after output verification.
 
 ## Automated evidence
 
-Pure tests require no network. They cover provider selection, unsupported tools,
+Pure tests require no network. CI installs version-pinned test-only metadata
+dependencies in its disposable runner Python; product provisioning still uses
+reviewed hash-locked packages. Windows unit tests use the full runner Python for
+venv-based fixtures, while all firmware provisioning/builds use embedded Python. They cover provider selection, unsupported tools,
 architecture mismatch, stable dependency records, interrupted stages, dirty and
 wrong-revision modules, process lock contention and release, independent
 environments, migration of signing paths, bounded recovery, nested Ninja rules,
@@ -96,7 +100,7 @@ from untrusted CI caches; completed verified archives are reused within the job.
 ## Explicit limitations
 
 Full sysbuild/multi-image orchestration, arbitrary user toolchains, module
-submodules, host capabilities beyond reviewed IMGTOOL, and every Zephyr SoC are
+submodules, host capabilities beyond reviewed IMGTOOL/ESPTOOL, and every Zephyr SoC are
 outside the verified managed profile. Missing dependencies that cannot be
 identified before a failed configure stop with the original diagnostic; there
 is no catch-all log-driven repair. The bootstrap architecture resolver still

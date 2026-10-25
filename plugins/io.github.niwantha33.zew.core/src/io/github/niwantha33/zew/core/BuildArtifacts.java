@@ -62,6 +62,12 @@ public final class BuildArtifacts {
         for (Path output : required(build)) {
             if (!Files.isRegularFile(output) || Files.size(output) == 0)
                 throw new IOException("Mandatory firmware output missing or empty: " + output + ". Inspect image generation/signing diagnostics.");
+            if (output.getFileName().toString().endsWith(".elf")) {
+                try (var input = Files.newInputStream(output)) {
+                    if (!java.util.Arrays.equals(input.readNBytes(4), new byte[] {0x7f, 'E', 'L', 'F'}))
+                        throw new IOException("Firmware ELF header is invalid: " + output);
+                }
+            }
             if (!output.toRealPath().startsWith(realBuild))
                 throw new IOException("Firmware output escapes managed build directory: " + output);
         }

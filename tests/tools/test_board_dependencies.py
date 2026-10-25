@@ -23,7 +23,7 @@ class DependencyTests(unittest.TestCase):
     def test_jar_entry_extract_requires_all_sibling_files(self):
         """A single FileLocator extraction must not reach the Windows builder."""
         tool_names = (
-            'board_dependencies.py', 'board_tools.py', 'hardware_catalog.py', 'target_metadata.py',
+            'board_dependencies.py', 'dependency_engine.py', 'board_tools.py', 'hardware_catalog.py', 'target_metadata.py',
             'setup.py', 'managed_sitecustomize.py',
             'sdk-toolchains-windows-1.0.1.json', 'esp32s3-python-lock.json',
             'mcuboot-python-lock.json',

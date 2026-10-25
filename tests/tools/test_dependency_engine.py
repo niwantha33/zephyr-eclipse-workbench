@@ -123,3 +123,27 @@ class EngineTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+class EvidenceTests(unittest.TestCase):
+    context = EngineTests.context
+    def test_corrupt_evidence_rejected_before_mutation(self):
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            engine.DependencyResolver([], {}).prepare(self.context(root))
+            state = next((root / '.zew-dependency-state').glob('*.json'))
+            evidence = json.loads(state.read_text()); evidence['soc'] = 'tampered'
+            state.write_text(json.dumps(evidence))
+            with self.assertRaisesRegex(engine.DependencyError, 'corrupt'):
+                engine.DependencyResolver([], {}).prepare(self.context(root))
+
+    def test_generated_host_capability_is_remembered_on_repeated_build(self):
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            def ctx():
+                value = self.context(root)
+                value.details['manifest'] = {'mcuboot': ('a'*40, Path('bootloader/mcuboot'))}
+                return value
+            provider = types.SimpleNamespace(name='IMGTOOL', prepare=lambda value: value.record('host-tool', 'IMGTOOL'))
+            resolver = engine.DependencyResolver([], {'IMGTOOL': provider})
+            initial = resolver.prepare(ctx(), ['IMGTOOL'])
+            self.assertEqual(initial, resolver.prepare(ctx()))
