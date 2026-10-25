@@ -43,7 +43,7 @@ public final class ZephyrDebugHandler extends AbstractHandler {
                     // All tool and module provisioning stays in the existing
                     // verified ZephyrProjectBuilder; only after it succeeds can
                     // the native GDB launch be configured.
-                    project.build(IncrementalProjectBuilder.FULL_BUILD, Map.of(), monitor);
+                    project.build(IncrementalProjectBuilder.FULL_BUILD, Activator.ID + ".zephyrBuilder", Map.of(), monitor);
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     var settings = ProjectContext.settings(project);
                     if (!board.equals(settings.getProperty("board")))
