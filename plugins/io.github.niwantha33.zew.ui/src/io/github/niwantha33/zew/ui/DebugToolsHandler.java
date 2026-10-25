@@ -106,13 +106,16 @@ public final class DebugToolsHandler extends AbstractHandler {
                 Label status = statuses.get(entry.getKey());
                 if (status == null || status.isDisposed()) continue;
                 if (value.isBlank()) {
-                    status.setText("Automatic discovery at build time; no explicit override.");
+                    status.setText(entry.getKey() == OpenOcdRegistry.Provider.TI
+                            ? "Select a TI-specific executable when required; no unsafe generic fallback."
+                            : "Automatic discovery at build time; no explicit override.");
                     continue;
                 }
                 OpenOcdRegistry.Provider provider = entry.getKey();
                 var found = OpenOcdRegistry.fromExecutable(provider, safePath(value), "User selected");
                 if (found.isPresent()) {
-                    status.setText("Verified executable and scripts: " + found.get().scripts());
+                    status.setText("Executable and scripts found: " + found.get().scripts()
+                            + " (runtime/probe validation still required)");
                 } else {
                     status.setText("Invalid or incomplete OpenOCD distribution: missing binary or matching scripts.");
                     valid = false;
