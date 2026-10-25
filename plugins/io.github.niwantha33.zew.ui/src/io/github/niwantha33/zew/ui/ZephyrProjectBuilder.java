@@ -101,6 +101,23 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     "-DCMAKE_MAKE_PROGRAM:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("tools.ninja")),
                     "-DPython3_EXECUTABLE:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("python"))));
             if (!clean && "true".equals(settings.getProperty("zew.modules.none"))) command.add("-DZEPHYR_MODULES=");
+            if (!clean && io.github.niwantha33.zew.core.EspressifOpenOcd.appliesTo(board)) {
+                var tool = EspressifDebugSetup.find(board);
+                if (tool.isPresent()) {
+                    // Upstream Zephyr's CMake passes both settings into
+                    // runners.yaml. It is not enough to prepend PATH only at
+                    // launch time: the old build may contain OPENOCD-NOTFOUND.
+                    var install = tool.get();
+                    command.add("-DOPENOCD:FILEPATH=" + WestCommands.cmakePath(install.executable().toString()));
+                    command.add("-DOPENOCD_DEFAULT_PATH:PATH=" + WestCommands.cmakePath(install.scripts().toString()));
+                    stream.println("Espressif OpenOCD discovered: " + install.executable());
+                    stream.println("OpenOCD target scripts: " + install.scripts());
+                } else {
+                    // Compilation and serial flashing are still valid without
+                    // JTAG tooling. Native Debug will show an actionable error.
+                    stream.println("Optional native JTAG Debug: Espressif OpenOCD not installed in the standard EIM tools location.");
+                }
+            }
             stream.println("Workbench " + Activator.getDefault().getBundle().getVersion() + " | " + getProject().getName());
             stream.println("Exact board target: " + board + " | independent output: " + buildDirectory);
             monitor.setTaskName(clean ? "Clean Zephyr project" : "Build Zephyr project");

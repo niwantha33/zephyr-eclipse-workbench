@@ -25,6 +25,35 @@ Espressif-compatible OpenOCD and matching scripts, configured in the
 This must be configured as a reviewed/pinned tool provider in the
 managed installer before promising zero-configuration native Debug.
 
+## New managed-tool discovery
+
+When the chosen board identifies an ESP32 family SoC, Workbench now scans the
+standard Espressif tools installation under
+`%USERPROFILE%\\.espressif\\tools\\openocd-esp32\\<version>` and the
+optional `IDF_TOOLS_PATH` root. It accepts a tool only if both the executable
+and Espressif USB-JTAG/target scripts exist, then configures the exact project
+build through `-DOPENOCD:FILEPATH=...` and `-DOPENOCD_DEFAULT_PATH:PATH=...`.
+The resulting `zephyr/runners.yaml` binds West to the executable and scripts;
+Eclipse does not need to modify global PATH or replace the system SDK.
+
+Installing the Espressif Installation Manager GUI alone does not install the
+OpenOCD executable. Finish an ESP-IDF tool installation in EIM with OpenOCD
+selected (or use a supported pre-existing tool installation). If no complete
+installation is found, native Debug fails **before spawning West**, with
+instructions that explain the difference. Firmware builds and serial flashes
+remain independent of the optional hardware debugger.
+
+For a quick Windows inspection:
+
+```powershell
+Get-ChildItem "$env:USERPROFILE\\.espressif\\tools\\openocd-esp32" -Filter openocd.exe -Recurse -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty FullName
+```
+
+This is **discovery**, not a claim that Workbench installs OpenOCD
+automatically. Automatic pinned vendor-tool provisioning, WinUSB/JTAG driver
+validation, and physical debugging acceptance remain separate release gates.
+
 ## Current Workbench contract
 
 1. Project-specific build and ELF are verified.

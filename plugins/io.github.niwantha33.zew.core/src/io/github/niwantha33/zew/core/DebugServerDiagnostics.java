@@ -26,7 +26,15 @@ public final class DebugServerDiagnostics {
         String log = String.join("\n", recent);
         String lower = log.toLowerCase(Locale.ROOT);
         String diagnosis;
-        if (lower.contains("libusb_error_not_found") || lower.contains("libusb_error_access")
+        if (lower.contains("required program openocd not found")
+                || lower.contains("openocd: command not found")
+                || lower.contains("openocd is not recognized")) {
+            diagnosis = "Espressif OpenOCD executable is not installed or cannot be located. "
+                    + "Installing the EIM GUI alone is insufficient. Complete an ESP-IDF "
+                    + "tools installation with OpenOCD selected. The Workbench can detect "
+                    + "a complete installation under %USERPROFILE%\\\\.espressif\\\\tools "
+                    + "or IDF_TOOLS_PATH after rebuilding the selected project.";
+        } else if (lower.contains("libusb_error_not_found") || lower.contains("libusb_error_access")
                 || lower.contains("unable to open ftdi device") || lower.contains("no device found")
                 || lower.contains("no matching usb device") || lower.contains("usb device not found")) {
             diagnosis = "OpenOCD could not access the JTAG USB interface. On ESP32-S3, "
