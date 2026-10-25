@@ -63,7 +63,7 @@ public final class TargetOperations {
         if (action.equals("run")) {
             args.addAll(List.of("build", "--build-dir", WestCommands.cmakePath(build.toString()), "--target", "run"));
         } else {
-            args.addAll(List.of(action, "--build-dir", WestCommands.cmakePath(build.toString()), "--skip-rebuild"));
+            args.addAll(List.of(action, "--build-dir", WestCommands.cmakePath(build.toString()), "--no-rebuild"));
             if (!runner.isBlank()) args.addAll(List.of("--runner", runner));
         }
         return new Plan(action, exactBoard, build, args);
