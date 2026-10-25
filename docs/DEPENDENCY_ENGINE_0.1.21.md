@@ -96,7 +96,9 @@ Its Windows job creates a fresh pinned embedded CPython 3.13.7, Git 2.50.1,
 Zephyr 4.4.0 and SDK 1.0.1 installation using the same setup helper as Eclipse.
 It resolves exact targets from that checkout, builds sequentially to reuse
 compilers/modules, repeats builds and checks dependency records and source hashes.
-It performs a TI clean/rebuild and exercises unsigned MCUboot image generation
+It probes real SDK compiler builtins/generated headers for every target, injects
+and restores a TI source compile error without dependency mutation, performs TI
+clean/rebuild and pristine/rebuild, and exercises unsigned MCUboot image generation
 on Nordic without generating keys. Each subprocess has a bounded timeout; the
 job has a 100-minute limit. Individual archives retain existing size/hash limits.
 No additional unpinned pip dependency installation or global environment changes

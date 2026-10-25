@@ -135,6 +135,8 @@ def main():
         run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
         # Shared Java verifier is compiled by scripts/test_core.py in this job.
         run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', '--base64', verify_argument], workspace, env)
+        run([python, root / 'installer/editor_settings.py', '--project', app, '--build', build,
+             '--sdk', root / 'sdk', '--output', build / 'editor.tsv'], workspace, env)
         if label == 'mcuboot' and not (build / 'zephyr/zephyr.signed.bin').is_file():
             raise ValueError('Non-Espressif MCUboot image was not generated')
         state = sorted((root / '.zew-dependency-state').glob('*.json'))
@@ -147,9 +149,27 @@ def main():
             run([python, '-m', 'west', 'build', '-d', build_arg, '-t', 'clean'], workspace, env)
             run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
             run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', '--base64', verify_argument], workspace, env)
+        if label == 'ti':
+            # Real compiler failure must stay a compiler failure. No provider
+            # is run in this phase, and source/evidence are restored afterwards.
+            original_source = (app / 'src/main.c').read_bytes()
+            try:
+                (app / 'src/main.c').write_bytes(original_source + b'\n#error ZEW_EXPECTED_SOURCE_FAILURE\n')
+                failed = subprocess.run([str(python), '-m', 'west', 'build', '-d', build_arg],
+                                        cwd=workspace, env=env, timeout=300, stdin=subprocess.DEVNULL)
+                if failed.returncode == 0:
+                    raise ValueError('Compiler error incorrectly reported as success')
+            finally:
+                (app / 'src/main.c').write_bytes(original_source)
+            if any(Path(p).read_bytes() != data for p, data in fingerprint.items()):
+                raise ValueError('Source compilation failure mutated dependencies')
+            pristine = [item for item in configure if item != '--cmake-only']
+            pristine.insert(4, '--pristine=always')
+            run(pristine, workspace, env)
+            run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', '--base64', verify_argument], workspace, env)
         if hashlib.sha256((app / 'src/main.c').read_bytes()).hexdigest() != source_hash:
             raise ValueError('Application source changed')
-        results.append(dict(target=target, scenario=label, firmware_build_verified=True))
+        results.append(dict(target=target, scenario=label, firmware_build_verified=True, editor_metadata_verified=True))
         (REPO / 'windows-firmware-results.json').write_text(json.dumps(results, indent=2))
     print(json.dumps(results, indent=2))
 

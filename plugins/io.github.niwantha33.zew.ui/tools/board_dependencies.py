@@ -169,6 +169,10 @@ def plan(board, workspace, python, application=None, git="git"):
                                        text=True, timeout=30).strip()
     if revision != PINNED_ZEPHYR:
         raise ValueError('Dependency preparation requires the pinned managed Zephyr 4.4.0 checkout')
+    dirty = subprocess.check_output([str(git), '-C', str(zephyr), 'status', '--porcelain', '--untracked-files=normal'],
+                                   text=True, timeout=30).strip()
+    if dirty:
+        raise ValueError('Managed Zephyr checkout has local changes; preserved. Select a separate managed setup or restore it explicitly.')
     metadata = metadata_provider()
     info = metadata.describe(zephyr, board)
     soc, vendor = info['soc'], info['vendor']
