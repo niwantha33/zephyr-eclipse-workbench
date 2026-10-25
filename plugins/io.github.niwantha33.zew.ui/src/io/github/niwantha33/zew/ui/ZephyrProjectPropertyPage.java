@@ -122,13 +122,22 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
                     hardware.stream().map(row -> row[0]).distinct().sorted()).toArray(String[]::new));
             vendor.select(0);
             fillSocs();
-            search.setText(originalBoard);
+            // A verified ROM chip mismatch can suggest a SoC filter only.
+            // Exact board maker, revision and CPU still require user selection.
+            String suggested = project.getSessionProperty(ZephyrChipMismatchRecovery.SUGGESTED_SOC);
+            search.setText(suggested == null ? originalBoard : suggested);
             filterTargets();
-            for (TableItem item : targets.getItems()) {
-                if (((String[]) item.getData())[6].equals(originalBoard)) {
-                    targets.setSelection(item);
-                    break;
+            if (suggested == null) {
+                for (TableItem item : targets.getItems()) {
+                    if (((String[]) item.getData())[6].equals(originalBoard)) {
+                        targets.setSelection(item);
+                        break;
+                    }
                 }
+            } else {
+                setMessage("Detected " + suggested.toUpperCase(Locale.ROOT)
+                    + ": choose your actual board/CPU from the filtered hardware catalogue."
+                    + " The chip alone cannot identify the exact PCB.", org.eclipse.jface.dialogs.IMessageProvider.INFORMATION);
             }
             validateSelection();
         } catch (Exception error) {
