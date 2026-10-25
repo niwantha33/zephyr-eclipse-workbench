@@ -29,6 +29,17 @@ public final class DebugServerDiagnosticsTests {
         yes(result.contains("West exited 1"), "Retain actual exit status");
         yes(result.contains("No flash was requested"), "No false flashing claim");
 
+        var access = new DebugServerDiagnostics();
+        access.accept("Error: libusb_open() failed with LIBUSB_ERROR_ACCESS");
+        access.accept("Error: esp_usb_jtag: could not find or open device!");
+        String accessMessage = access.describe("esp32s3_devkitc/esp32s3/procpu", 65516, 1);
+        yes(accessMessage.contains("already claimed"), "Access denied includes possible ownership conflict");
+        yes(accessMessage.contains("Changing TCP ports does not release"), "Port fallback is not USB recovery");
+        yes(accessMessage.contains("Stop only the identified stale server"), "Never propose killing all debuggers");
+        var busy = new DebugServerDiagnostics();
+        busy.accept("Error: LIBUSB_ERROR_BUSY");
+        yes(busy.describe("nucleo_f446re", 3333, 1).contains("already claimed"), "Busy probe shares ownership guidance");
+
         var wrongOpenOcd = new DebugServerDiagnostics();
         wrongOpenOcd.accept("Error: couldn't find interface/esp_usb_jtag.cfg");
         yes(wrongOpenOcd.describe("esp32s3_devkitc/esp32s3/procpu", 3333, 1)

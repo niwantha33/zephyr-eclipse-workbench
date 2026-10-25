@@ -23,18 +23,22 @@ import org.eclipse.ui.handlers.HandlerUtil;
 public final class ZephyrDebugHandler extends AbstractHandler {
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
         IProject project = SelectedProject.from(event);
-        Shell shell = HandlerUtil.getActiveShell(event);
+        start(project, HandlerUtil.getActiveShell(event));
+        return null;
+    }
+
+    static void start(IProject project, Shell shell) {
         if (project == null || !project.isAccessible()) {
             MessageDialog.openInformation(shell, "Zephyr Debug",
                 "Select an imported Zephyr project or open one of its source files.");
-            return null;
+            return;
         }
         final String board;
         try {
             board = ProjectContext.settings(project).getProperty("board");
         } catch (Exception ex) {
             MessageDialog.openError(shell, "Zephyr Debug", "Project setup is incomplete: " + ex.getMessage());
-            return null;
+            return;
         }
         Job job = new Job("Prepare Zephyr Debug — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
@@ -69,7 +73,6 @@ public final class ZephyrDebugHandler extends AbstractHandler {
         };
         job.setUser(true);
         job.schedule();
-        return null;
     }
 
     private static void openDebugConfiguration(IProject project, Shell shell) throws Exception {
@@ -93,6 +96,9 @@ public final class ZephyrDebugHandler extends AbstractHandler {
             copy.setAttribute(ZephyrNativeDebugDelegate.PORT, 3333);
             config = copy.doSave();
         }
+        var mapped = config.getWorkingCopy();
+        mapped.setMappedResources(new org.eclipse.core.resources.IResource[] {project});
+        config = mapped.doSave();
         // One Debug click performs the build and starts the managed source-level
         // debugger. Advanced users can still edit the saved configuration in
         // Eclipse's standard Debug Configurations dialog.

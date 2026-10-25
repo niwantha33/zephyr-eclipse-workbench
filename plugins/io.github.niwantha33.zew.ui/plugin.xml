@@ -43,6 +43,30 @@
         sourceLocatorId="org.eclipse.cdt.debug.core.sourceLocator"
         sourcePathComputerId="org.eclipse.cdt.debug.core.sourcePathComputer"/>
   </extension>
+  <extension point="org.eclipse.core.expressions.propertyTesters">
+    <propertyTester id="io.github.niwantha33.zew.ui.projectTester"
+        type="org.eclipse.core.resources.IResource" namespace="io.github.niwantha33.zew.ui"
+        properties="isImportedProject" class="io.github.niwantha33.zew.ui.ZephyrProjectTester"/>
+  </extension>
+  <extension point="org.eclipse.debug.ui.launchShortcuts">
+    <shortcut id="io.github.niwantha33.zew.ui.debugShortcut" label="Zephyr Application"
+        modes="debug" class="io.github.niwantha33.zew.ui.ZephyrDebugShortcut">
+      <contextualLaunch>
+        <enablement>
+          <with variable="selection">
+            <count value="1"/>
+            <iterate ifEmpty="false">
+              <adapt type="org.eclipse.core.resources.IResource">
+                <test property="io.github.niwantha33.zew.ui.isImportedProject"
+                    value="true" forcePluginActivation="true"/>
+              </adapt>
+            </iterate>
+          </with>
+        </enablement>
+      </contextualLaunch>
+      <configurationType id="io.github.niwantha33.zew.ui.launchType"/>
+    </shortcut>
+  </extension>
   <extension point="org.eclipse.debug.ui.launchConfigurationTabGroups">
     <launchConfigurationTabGroup id="io.github.niwantha33.zew.ui.launchTabs"
         type="io.github.niwantha33.zew.ui.launchType"
@@ -126,7 +150,6 @@
     <menuContribution locationURI="toolbar:org.eclipse.ui.main.toolbar?after=additions">
       <toolbar id="io.github.niwantha33.zew.ui.targetActions">
         <command commandId="io.github.niwantha33.zew.flash" icon="icons/flash.png" label="Flash Zephyr firmware" style="push" tooltip="Flash selected Zephyr project"/>
-        <command commandId="io.github.niwantha33.zew.debug" icon="icons/debug.png" label="Debug Zephyr application" style="push" tooltip="Debug selected Zephyr project using CDT GDB"/>
       </toolbar>
     </menuContribution>
   </extension>
