@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 root = Path(__file__).resolve().parents[1]
+os.environ['ZEW_TEST_PYTHON'] = sys.executable
 subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/tools', '-v'], check=True, cwd=root, timeout=90)
 out = root / 'build-core-tests'
 out.mkdir(exist_ok=True)

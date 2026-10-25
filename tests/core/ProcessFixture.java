@@ -9,6 +9,7 @@ public final class ProcessFixture {
         System.setOut(new java.io.PrintStream(System.out, true, java.nio.charset.StandardCharsets.UTF_8));
         System.setErr(new java.io.PrintStream(System.err, true, java.nio.charset.StandardCharsets.UTF_8));
         switch (args[0]) {
+            case "unicode" -> System.out.println("Ω");
             case "echo" -> { for (int i = 1; i < args.length; i++) System.out.println(args[i]); }
             case "environment" -> { for (int i = 1; i < args.length; i++) System.out.println(System.getenv(args[i])); }
             case "fail" -> { System.err.println("intentional error"); System.exit(7); }
