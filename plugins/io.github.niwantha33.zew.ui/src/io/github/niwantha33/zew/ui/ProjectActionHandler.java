@@ -2,6 +2,7 @@
 package io.github.niwantha33.zew.ui;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
@@ -15,6 +16,8 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.swt.widgets.Shell;
+import io.github.niwantha33.zew.core.EspressifFlashSafety;
 import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.IConsole;
 import org.eclipse.ui.console.MessageConsole;
@@ -41,6 +44,7 @@ public final class ProjectActionHandler extends AbstractHandler {
         action = action.substring(action.lastIndexOf('.') + 1);
         if (!Set.of("run", "flash", "debugserver").contains(action)) return null;
         final String operation = action;
+        final Shell targetShell = HandlerUtil.getActiveShell(event);
         final String originalBoard;
         try {
             originalBoard = ProjectContext.settings(project).getProperty("board");
@@ -78,10 +82,25 @@ public final class ProjectActionHandler extends AbstractHandler {
                     var plan = TargetOperations.prepare(output, board, operation, "");
                     ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
                     stream.println("Verified firmware directory: " + plan.buildDirectory());
-                    stream.println("Runner: board-defined West default; --skip-rebuild; no unapproved runner override.");
+                    stream.println("Runner: board-defined West default; firmware preflight required before programming.");
+                    // ESP32's Zephyr runner otherwise invokes esptool with a
+                    // null device and scans every COM port. Never allow it to
+                    // touch an unrelated connected board. Verify the ROM's
+                    // chip identity on precisely the chosen serial port.
+                    String verifiedPort = null;
+                    if (operation.equals("flash") && EspressifFlashSafety.isEsp32Runner(plan.buildDirectory())) {
+                        verifiedPort = EspressifSerialProbe.selectAndVerify(targetShell, board,
+                                settings, monitor::isCanceled, stream::println);
+                    }
                     if (operation.equals("debugserver"))
                         stream.println("External GDB server only. Use the native Debug action for source breakpoints.");
-                    new ProcessRunner().run(plan.command(settings.getProperty("python")),
+                    var command = new ArrayList<>(plan.command(settings.getProperty("python")));
+                    if (verifiedPort != null) {
+                        command.add("--");
+                        command.add("--esp-device");
+                        command.add(verifiedPort);
+                    }
+                    new ProcessRunner().run(command,
                         Path.of(settings.getProperty("workspace")),
                         operation.equals("debugserver") ? Duration.ofHours(8) : Duration.ofMinutes(15),
                         monitor::isCanceled, stream::println,
