@@ -139,6 +139,7 @@ for p in bundles:
                     raise SystemExit('Missing packaged ' + cmd + ' toolbar icon')
             for cls in ('ZephyrNativeDebugDelegate', 'ZephyrDebugHandler',
                         'SelectedProject', 'ZephyrBuildHandler', 'ZephyrArtifactsHandler',
+                        'ZephyrChipMismatchRecovery',
                         'ZephyrQuickStartHandler'):
                 if 'io/github/niwantha33/zew/ui/' + cls + '.class' not in z.namelist():
                     raise SystemExit('Missing native Debug class: ' + cls)
