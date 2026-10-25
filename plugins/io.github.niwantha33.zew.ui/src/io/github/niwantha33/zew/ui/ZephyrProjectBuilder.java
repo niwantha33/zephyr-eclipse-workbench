@@ -55,6 +55,21 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         });
         return changed[0];
     }
+    /**
+     * `ninja -t commands` may emit more than ProcessRunner's 2 MB
+     * diagnostic-capture cap. Inspect every line while retaining only the
+     * detected missing-tool identifiers. Preserve nonzero exit failures.
+     */
+    private static java.util.Set<String> inspectRequiredHostTools(
+            ProcessRunner runner, List<String> command, Path workspace,
+            IProgressMonitor monitor, Map<String, String> environment)
+            throws java.io.IOException, InterruptedException {
+        var scanner = new BuildHostRequirements.CommandScanner();
+        runner.run(command, workspace, Duration.ofMinutes(2),
+                monitor::isCanceled, scanner, environment).requireSuccess();
+        return scanner.missing();
+    }
+
     @Override protected void clean(IProgressMonitor monitor) throws CoreException { run(true, monitor); }
     private void run(boolean clean, IProgressMonitor monitor) throws CoreException {
         var console = new MessageConsole("Zephyr — " + getProject().getName(), null);
@@ -111,9 +126,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 runner.run(configure, workspace, Duration.ofMinutes(15),
                         monitor::isCanceled, log, environment).requireSuccess();
                 var inspectCommands = List.of(settings.getProperty("tools.ninja"), "-C", paths.build(), "-t", "commands");
-                String commands = runner.run(inspectCommands, workspace, Duration.ofMinutes(2),
-                    monitor::isCanceled, ignored -> {}, environment).requireCompleteOutput();
-                var missing = BuildHostRequirements.missingInCommands(commands);
+                var missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
                 var recovery = new BuildRecovery(Map.of("IMGTOOL", () ->
                     BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "IMGTOOL"),
                     "ESPTOOL", () -> BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "ESPTOOL")), 2);
@@ -131,9 +144,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     stage[0] = "Refresh target configuration";
                     runner.run(refresh, workspace, Duration.ofMinutes(15),
                             monitor::isCanceled, log, environment).requireSuccess();
-                    commands = runner.run(inspectCommands, workspace, Duration.ofMinutes(2),
-                        monitor::isCanceled, ignored -> {}, environment).requireCompleteOutput();
-                    missing = BuildHostRequirements.missingInCommands(commands);
+                    missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
                 }
                 BuildArtifacts.verifyArchitecture(buildDirectory);
                 stream.println("Preflight: generated build commands have no unresolved host tool placeholders.");
