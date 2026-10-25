@@ -16,7 +16,6 @@ import org.eclipse.debug.core.ILaunchConfiguration;
 import org.eclipse.debug.core.ILaunchManager;
 import org.eclipse.debug.ui.DebugUITools;
 import org.eclipse.jface.dialogs.MessageDialog;
-import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.handlers.HandlerUtil;
 
@@ -94,7 +93,9 @@ public final class ZephyrDebugHandler extends AbstractHandler {
             copy.setAttribute(ZephyrNativeDebugDelegate.PORT, 3333);
             config = copy.doSave();
         }
-        DebugUITools.openLaunchConfigurationDialogOnGroup(shell, new StructuredSelection(config),
-                "org.eclipse.debug.ui.launchGroup.debug");
+        // One Debug click performs the build and starts the managed source-level
+        // debugger. Advanced users can still edit the saved configuration in
+        // Eclipse's standard Debug Configurations dialog.
+        DebugUITools.launch(config, ILaunchManager.DEBUG_MODE);
     }
 }
