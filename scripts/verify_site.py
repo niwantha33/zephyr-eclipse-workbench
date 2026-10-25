@@ -124,7 +124,8 @@ for p in bundles:
                     raise SystemExit('Missing Zephyr ' + mode + ' launch delegate')
             for command_id, handler_class in (('build', 'ZephyrBuildHandler'),
                                               ('rebuild', 'ZephyrBuildHandler'),
-                                              ('artifacts', 'ZephyrArtifactsHandler')):
+                                              ('artifacts', 'ZephyrArtifactsHandler'),
+                                              ('quickStart', 'ZephyrQuickStartHandler')):
                 registered = plugin.findall("./extension[@point='org.eclipse.ui.handlers']/handler")
                 if not any(item.attrib.get('commandId') == 'io.github.niwantha33.zew.' + command_id
                            and item.attrib.get('class', '').endswith('.' + handler_class)
@@ -137,7 +138,8 @@ for p in bundles:
                 if 'icons/' + cmd + '.png' not in z.namelist():
                     raise SystemExit('Missing packaged ' + cmd + ' toolbar icon')
             for cls in ('ZephyrNativeDebugDelegate', 'ZephyrDebugHandler',
-                        'SelectedProject', 'ZephyrBuildHandler', 'ZephyrArtifactsHandler'):
+                        'SelectedProject', 'ZephyrBuildHandler', 'ZephyrArtifactsHandler',
+                        'ZephyrQuickStartHandler'):
                 if 'io/github/niwantha33/zew/ui/' + cls + '.class' not in z.namelist():
                     raise SystemExit('Missing native Debug class: ' + cls)
             if any(item.attrib.get('commandId', '').endswith('.selectCpu')
