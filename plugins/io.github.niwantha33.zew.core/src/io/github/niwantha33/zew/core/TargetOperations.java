@@ -26,6 +26,21 @@ public final class TargetOperations {
         }
     }
 
+    /** Bind a compatible shared tool at launch time, including builds made before tool selection. */
+    public static Plan withOpenOcd(Plan plan, OpenOcdRegistry.Installation tool) throws IOException {
+        if (!plan.action().equals("debugserver"))
+            throw new IOException("OpenOCD debug override requires a debugserver plan.");
+        if (tool.provider() != OpenOcdRegistry.providerFor(plan.board()))
+            throw new IOException("OpenOCD provider does not match the selected board.");
+        var verified = OpenOcdRegistry.fromExecutable(tool.provider(), tool.executable(), tool.origin());
+        if (verified.isEmpty() || !verified.get().scripts().equals(tool.scripts()))
+            throw new IOException("Selected OpenOCD executable or matching scripts are no longer available.");
+        var args = new ArrayList<>(plan.westArguments());
+        args.addAll(List.of("--openocd", WestCommands.cmakePath(tool.executable().toString()),
+                "--openocd-search", WestCommands.cmakePath(tool.scripts().toString())));
+        return new Plan(plan.action(), plan.board(), plan.buildDirectory(), args);
+    }
+
     public static Plan prepare(Path directory, String exactBoard, String action, String selectedRunner) throws IOException {
         if (directory == null || exactBoard == null || exactBoard.isBlank() || action == null || !ACTIONS.contains(action))
             throw new IOException("Select a valid imported target and supported runner action.");
