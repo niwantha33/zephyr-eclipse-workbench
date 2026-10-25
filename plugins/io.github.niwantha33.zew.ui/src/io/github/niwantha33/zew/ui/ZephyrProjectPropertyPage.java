@@ -124,7 +124,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
             fillSocs();
             // A verified ROM chip mismatch can suggest a SoC filter only.
             // Exact board maker, revision and CPU still require user selection.
-            String suggested = project.getSessionProperty(ZephyrChipMismatchRecovery.SUGGESTED_SOC);
+            String suggested = (String) project.getSessionProperty(ZephyrChipMismatchRecovery.SUGGESTED_SOC);
             search.setText(suggested == null ? originalBoard : suggested);
             filterTargets();
             if (suggested == null) {
