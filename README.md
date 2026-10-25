@@ -52,6 +52,7 @@ This section describes the historical 0.1.11 baseline. Current dependency prepar
 ## Start here
 
 - [One-click project setup, build, firmware output, Flash and Debug workflow](docs/ONE_CLICK_WORKFLOW.md)
+- [Global, cross-vendor OpenOCD tool manager](docs/SHARED_OPENOCD_TOOLS.md)
 - [Build, install locally and use the development slice](docs/DEVELOPMENT.md)
 - [Set up workbench updates once](docs/UPDATE_CHANNEL.md)
 - [Detect and reuse tools with Tools Manager](docs/TOOLS_MANAGER.md)
