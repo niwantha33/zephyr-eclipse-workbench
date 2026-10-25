@@ -12,6 +12,11 @@ public class BuildReliabilityTests {
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("zew reliability Ω ");
         try {
+            String encoded = java.util.Base64.getEncoder().encodeToString("C:/project Ω".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            String truth = java.util.Base64.getEncoder().encodeToString("true".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            var paths = BuildPaths.parse("ZEW_PATHS_1\t" + String.join("\t", encoded, encoded, encoded, encoded, truth));
+            check(paths.application().equals("C:/project Ω") && paths.freshConfiguration(), "path protocol preserves Unicode without shell parsing");
+            rejects(() -> BuildPaths.parse("ZEW_PATHS_1\tinvalid"), "malformed path protocol rejected");
             Path build = root.resolve("project/.zew-build/target"); Files.createDirectories(build.resolve("zephyr"));
             Files.writeString(build.resolve("zephyr/.config"), "CONFIG_ARM=y\nCONFIG_KERNEL_BIN_NAME=\"firmware\"\nCONFIG_BUILD_OUTPUT_BIN=y\nCONFIG_BUILD_OUTPUT_HEX=y\n");
             Files.writeString(build.resolve("CMakeCache.txt"), "CMAKE_C_COMPILER:FILEPATH=C:/SDK with spaces/arm-zephyr-eabi-gcc.exe\n");

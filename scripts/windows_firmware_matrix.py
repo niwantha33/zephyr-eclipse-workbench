@@ -6,6 +6,7 @@ Not an end-user installer. One fresh environment, sequential targets, a 45-minut
 subprocess limit, bounded verified archives, no user keys or hardware access.
 """
 import argparse
+import base64
 import hashlib
 import importlib.util
 import json
@@ -89,7 +90,7 @@ def main():
         raise ValueError('CI managed environment is not ready')
     workspace = root / 'workspace'
     ninja = root / 'python/Scripts/ninja.exe'
-    env['PATH'] = os.pathsep.join(map(str, [root / 'python', root / 'python/Scripts', root / 'git/cmd'])) + os.pathsep + env.get('PATH', '')
+    env['PATH'] = os.pathsep.join(map(str, [root / 'python', root / 'python/Scripts', root / 'git/cmd', root / 'sdk/hosttools/bin', root / 'sdk/hosttools/usr/bin'])) + os.pathsep + env.get('PATH', '')
     env.update(ZEPHYR_BASE=(workspace / 'zephyr').as_posix(), ZEPHYR_TOOLCHAIN_VARIANT='zephyr',
                ZEPHYR_SDK_INSTALL_DIR=(root / 'sdk').as_posix())
     text = run([python, root / 'installer/hardware_catalog.py', '--zephyr', workspace / 'zephyr'], root, env, capture=True)
@@ -111,32 +112,41 @@ def main():
         (app / 'prj.conf').write_text('CONFIG_BOOTLOADER_MCUBOOT=y\nCONFIG_MCUBOOT_GENERATE_UNSIGNED_IMAGE=y\nCONFIG_BUILD_OUTPUT_BIN=y\n' if label == 'mcuboot' else '')
         source_hash = hashlib.sha256((app / 'src/main.c').read_bytes()).hexdigest()
         build = app / '.zew-build/ci'
+        protocol = run([python, root / 'installer/build_paths.py', '--application', app, '--build', build,
+                        '--workspace', workspace, '--sdk', root / 'sdk'], workspace, env, capture=True)
+        cells = protocol.strip().split('\t')
+        if cells[0] != 'ZEW_PATHS_1' or len(cells) != 6:
+            raise ValueError('Invalid managed path adapter output')
+        app_arg, build_arg, workspace_arg, sdk_arg, fresh = [base64.b64decode(cell).decode('utf-8') for cell in cells[1:]]
+        env['ZEPHYR_BASE'] = workspace_arg + '/zephyr'
+        env['ZEPHYR_SDK_INSTALL_DIR'] = sdk_arg
+        verify_argument = base64.b64encode(str(build).encode('utf-8')).decode('ascii')
         prepare = [python, '-u', root / 'installer/board_dependencies.py', '--root', root, '--sdk', root / 'sdk',
                    '--workspace', workspace, '--git', root / 'git/cmd/git.exe', '--board', target, '--application', app]
         run(prepare, workspace, env)
-        configure = [python, '-m', 'west', 'build', '--cmake-only', '-b', target, '-d', build.as_posix(), app.as_posix(), '--',
+        configure = [python, '-m', 'west', 'build', '--cmake-only', '-b', target, '-d', build_arg, app_arg, '--',
                      '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DCMAKE_MAKE_PROGRAM:FILEPATH=' + ninja.as_posix(),
                      '-DPython3_EXECUTABLE:FILEPATH=' + python.as_posix()]
         run(configure, workspace, env)
-        commands = run([ninja, '-C', build, '-t', 'commands'], workspace, env, capture=True)
+        commands = run([ninja, '-C', build_arg, '-t', 'commands'], workspace, env, capture=True)
         if 'IMGTOOL-NOTFOUND' in commands:
             run([*prepare, '--require-host-tool', 'IMGTOOL'], workspace, env)
             run([*configure, '-UIMGTOOL'], workspace, env)
-        run([python, '-m', 'west', 'build', '-d', build.as_posix()], workspace, env)
+        run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
         # Shared Java verifier is compiled by scripts/test_core.py in this job.
-        run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', build], workspace, env)
+        run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', '--base64', verify_argument], workspace, env)
         if label == 'mcuboot' and not (build / 'zephyr/zephyr.signed.bin').is_file():
             raise ValueError('Non-Espressif MCUboot image was not generated')
         state = sorted((root / '.zew-dependency-state').glob('*.json'))
         fingerprint = {str(p):p.read_bytes() for p in state}
         run(prepare, workspace, env)
-        run([python, '-m', 'west', 'build', '-d', build.as_posix()], workspace, env)
+        run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
         if any(Path(p).read_bytes() != data for p, data in fingerprint.items()):
             raise ValueError('Second build changed verified dependency provenance')
         if label == 'ti':
-            run([python, '-m', 'west', 'build', '-d', build.as_posix(), '-t', 'clean'], workspace, env)
-            run([python, '-m', 'west', 'build', '-d', build.as_posix()], workspace, env)
-            run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', build], workspace, env)
+            run([python, '-m', 'west', 'build', '-d', build_arg, '-t', 'clean'], workspace, env)
+            run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
+            run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', '--base64', verify_argument], workspace, env)
         if hashlib.sha256((app / 'src/main.c').read_bytes()).hexdigest() != source_hash:
             raise ValueError('Application source changed')
         results.append(dict(target=target, scenario=label, firmware_build_verified=True))

@@ -46,7 +46,7 @@ for p in bundles:
             for helper in ('setup.py', 'managed_sitecustomize.py'):
                 if z.read('tools/' + helper) != (root / 'plugins/io.github.niwantha33.zew.ui/tools' / helper).read_bytes():
                     raise SystemExit('Packaged helper differs from verified source: ' + helper)
-            for helper in ('hardware_catalog.py', 'editor_settings.py', 'board_tools.py', 'board_dependencies.py', 'dependency_engine.py', 'target_metadata.py'):
+            for helper in ('hardware_catalog.py', 'editor_settings.py', 'board_tools.py', 'board_dependencies.py', 'dependency_engine.py', 'build_paths.py', 'target_metadata.py'):
                 compile(z.read('tools/' + helper), 'tools/' + helper, 'exec')
                 if z.read('tools/' + helper) != (root / 'plugins/io.github.niwantha33.zew.ui/tools' / helper).read_bytes():
                     raise SystemExit('Packaged helper differs from source: ' + helper)
@@ -87,7 +87,7 @@ for p in bundles:
                              b'hardware_catalog.py'):
                 if required not in board_class:
                     raise SystemExit('Board-tools sibling staging missing from compiled builder')
-            for helper in ('board_dependencies.py', 'dependency_engine.py', 'board_tools.py', 'hardware_catalog.py', 'target_metadata.py',
+            for helper in ('board_dependencies.py', 'dependency_engine.py', 'build_paths.py', 'board_tools.py', 'hardware_catalog.py', 'target_metadata.py',
                            'setup.py', 'managed_sitecustomize.py',
                            'sdk-toolchains-windows-1.0.1.json', 'esp32s3-python-lock.json',
                            'mcuboot-python-lock.json'):

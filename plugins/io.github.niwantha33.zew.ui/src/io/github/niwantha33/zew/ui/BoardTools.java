@@ -15,7 +15,7 @@ final class BoardTools {
     // packed plug-in. Python must see all sibling helpers in the same directory.
     // Keep this inventory in sync with scripts/verify_site.py.
     private static final List<String> PYTHON_TOOLS = List.of(
-        "board_dependencies.py", "dependency_engine.py", "board_tools.py", "hardware_catalog.py", "target_metadata.py",
+        "board_dependencies.py", "dependency_engine.py", "build_paths.py", "board_tools.py", "hardware_catalog.py", "target_metadata.py",
         "setup.py", "managed_sitecustomize.py",
         "sdk-toolchains-windows-1.0.1.json", "esp32s3-python-lock.json",
         "mcuboot-python-lock.json"
@@ -70,6 +70,22 @@ final class BoardTools {
             monitor.subTask("Waiting for shared Zephyr tool preparation");
             if (System.nanoTime() >= deadline) throw new java.io.IOException("Timed out waiting for shared Zephyr tool preparation");
             Thread.sleep(200);
+        }
+    }
+
+    static io.github.niwantha33.zew.core.BuildPaths buildPaths(Properties settings, java.nio.file.Path build,
+            Map<String, String> environment, IProgressMonitor monitor) throws Exception {
+        java.nio.file.Path root = java.nio.file.Path.of(settings.getProperty("zew.setupRoot"));
+        if (!Platform.OS_WIN32.equals(Platform.getOS())) return new io.github.niwantha33.zew.core.BuildPaths(
+            settings.getProperty("application"), build.toString(), settings.getProperty("workspace"), settings.getProperty("tools.sdk"), false);
+        try (var channel = FileChannel.open(root.resolve(".zew-install.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                var lock = acquireInstallLock(channel, monitor, ignored -> {})) {
+            var helper = stageTools(root).getParent().resolve("build_paths.py");
+            String protocol = new ProcessRunner().run(List.of(settings.getProperty("python"), helper.toString(),
+                "--application", settings.getProperty("application"), "--build", build.toString(),
+                "--workspace", settings.getProperty("workspace"), "--sdk", settings.getProperty("tools.sdk")),
+                root, Duration.ofMinutes(2), monitor::isCanceled, ignored -> {}, environment).requireCompleteOutput();
+            return io.github.niwantha33.zew.core.BuildPaths.parse(protocol);
         }
     }
 

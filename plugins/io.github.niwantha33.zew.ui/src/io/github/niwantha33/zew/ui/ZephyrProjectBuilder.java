@@ -76,10 +76,13 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 stream.println("No configured build exists for " + board + "; nothing to clean.");
                 return;
             }
+            var paths = BoardTools.buildPaths(settings, buildDirectory, environment, monitor);
+            environment.put("ZEPHYR_BASE", paths.workspace() + "/zephyr");
+            environment.put("ZEPHYR_SDK_INSTALL_DIR", paths.sdk());
             var command = new ArrayList<>(List.of(settings.getProperty("python"), "-m", "west", "build",
-                    "--build-dir", WestCommands.cmakePath(buildDirectory.toString())));
+                    "--build-dir", WestCommands.cmakePath(paths.build())));
             if (clean) command.addAll(List.of("--target", "clean"));
-            else command.addAll(List.of("--board", board, WestCommands.cmakePath(project.toString()), "--", "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON",
+            else command.addAll(List.of("--board", board, WestCommands.cmakePath(paths.application()), "--", "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON",
                     "-DCMAKE_MAKE_PROGRAM:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("tools.ninja")),
                     "-DPython3_EXECUTABLE:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("python"))));
             if (!clean && "true".equals(settings.getProperty("zew.modules.none"))) command.add("-DZEPHYR_MODULES=");
@@ -88,7 +91,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             monitor.setTaskName(clean ? "Clean Zephyr project" : "Build Zephyr project");
             BuildDiagnostics.clear(getProject());
             var runner = new ProcessRunner();
-            var workspace = Path.of(settings.getProperty("workspace"));
+            var workspace = Path.of(paths.workspace());
             java.util.function.Consumer<String> log = line -> {
                 stream.println(line);
                 BuildDiagnostics.accept(getProject(), buildDirectory, line);
@@ -99,11 +102,15 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 // tools marked NOTFOUND, so it is not authoritative.
                 var configure = new ArrayList<>(command);
                 configure.add(4, "--cmake-only");
+                if (paths.freshConfiguration()) {
+                    stream.println("Refreshing this managed target for a verified Windows short-path alias.");
+                    configure.add(5, "--pristine=always");
+                }
                 stream.println("Preflight: Zephyr configure-only; checking actual host tool dependencies.");
                 stage[0] = "Configure Zephyr";
                 runner.run(configure, workspace, Duration.ofMinutes(15),
                         monitor::isCanceled, log, environment).requireSuccess();
-                var inspectCommands = List.of(settings.getProperty("tools.ninja"), "-C", buildDirectory.toString(), "-t", "commands");
+                var inspectCommands = List.of(settings.getProperty("tools.ninja"), "-C", paths.build(), "-t", "commands");
                 String commands = runner.run(inspectCommands, workspace, Duration.ofMinutes(2),
                     monitor::isCanceled, ignored -> {}, environment).requireCompleteOutput();
                 var missing = BuildHostRequirements.missingInCommands(commands);
@@ -117,6 +124,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     // Reconfigure after provisioning; no pristine deletion is needed.
                     // Force CMake to discard only stale host-tool cache entries.
                     configure.remove("-DZEPHYR_MODULES="); command.remove("-DZEPHYR_MODULES=");
+                    configure.remove("--pristine=always");
                     var refresh = new ArrayList<>(configure);
                     refresh.add("-UZEPHYR_MODULES");
                     for (String tool : missing) refresh.add("-U" + tool);
@@ -134,7 +142,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             // Preflight already supplied all CMake arguments. Repeating them
             // here makes West configure twice on every build.
             var compile = clean ? command : List.of(settings.getProperty("python"), "-m", "west", "build",
-                "--build-dir", WestCommands.cmakePath(buildDirectory.toString()));
+                "--build-dir", WestCommands.cmakePath(paths.build()));
             runner.run(compile, workspace, Duration.ofMinutes(30), monitor::isCanceled, log, environment).requireSuccess();
             stage[0] = "Verify configured firmware outputs";
             if (!clean) BuildArtifacts.verify(buildDirectory);
