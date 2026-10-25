@@ -64,6 +64,25 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                     ProjectContext.buildDirectory(project, settings), settings.getProperty("board"),
                     "debugserver", "");
             String yaml = Files.readString(plan.buildDirectory().resolve("zephyr/runners.yaml"), StandardCharsets.UTF_8);
+            if (io.github.niwantha33.zew.core.EspressifOpenOcd.appliesTo(settings.getProperty("board"))) {
+                var installed = EspressifDebugSetup.find(settings.getProperty("board"))
+                    .orElseThrow(() -> io.github.niwantha33.zew.core.EspressifOpenOcd
+                        .missingTools(settings.getProperty("board")));
+                // CMake must record the full executable and ESP-specific script
+                // root in the selected build. Never fall back to a generic
+                // PATH OpenOCD or use a stale generated runner receipt.
+                String configuredExe = io.github.niwantha33.zew.core.WestCommands
+                        .cmakePath(installed.executable().toString());
+                String configuredScripts = io.github.niwantha33.zew.core.WestCommands
+                        .cmakePath(installed.scripts().toString());
+                if (!yaml.contains("openocd: " + configuredExe)
+                        || !yaml.contains("- " + configuredScripts)) {
+                    throw new IOException("The selected Zephyr build does not reference the installed "
+                        + "Espressif OpenOCD executable and scripts. Build the project again "
+                        + "to refresh its runners.yaml before native Debug. "
+                        + "No firmware was changed.");
+                }
+            }
             var runner = DEFAULT_DEBUG_RUNNER.matcher(yaml);
             if (!runner.find())
                 throw new IOException("This board has no declared default debug runner in generated runners.yaml.");
