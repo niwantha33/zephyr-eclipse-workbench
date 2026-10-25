@@ -125,6 +125,7 @@ for p in bundles:
             for command_id, handler_class in (('build', 'ZephyrBuildHandler'),
                                               ('rebuild', 'ZephyrBuildHandler'),
                                               ('artifacts', 'ZephyrArtifactsHandler'),
+                                              ('debugTools', 'DebugToolsHandler'),
                                               ('quickStart', 'ZephyrQuickStartHandler')):
                 registered = plugin.findall("./extension[@point='org.eclipse.ui.handlers']/handler")
                 if not any(item.attrib.get('commandId') == 'io.github.niwantha33.zew.' + command_id
@@ -139,6 +140,7 @@ for p in bundles:
                     raise SystemExit('Missing packaged ' + cmd + ' toolbar icon')
             for cls in ('ZephyrNativeDebugDelegate', 'ZephyrDebugHandler',
                         'SelectedProject', 'ZephyrBuildHandler', 'ZephyrArtifactsHandler',
+                        'DebugToolsHandler', 'SharedDebugTools',
                         'ZephyrChipMismatchRecovery',
                         'ZephyrQuickStartHandler'):
                 if 'io/github/niwantha33/zew/ui/' + cls + '.class' not in z.namelist():
