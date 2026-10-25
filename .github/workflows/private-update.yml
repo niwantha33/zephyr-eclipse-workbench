@@ -56,8 +56,51 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3 west==1.5.0
       - name: Run all core and Python dependency regression tests
         run: python3 scripts/test_core.py
+      # Tycho's plain qualifier can be identical on different main commits
+      # (previously 198002010000). Choose a monotonically increasing qualifier
+      # from the immutable update channel, then force it for the whole reactor.
+      # The publish job is serialized by the workflow concurrency group.
+      - name: Derive strictly newer p2 qualifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin refs/heads/updates:refs/remotes/origin/updates
+          git show refs/remotes/origin/updates:channel.properties > "$RUNNER_TEMP/current-channel.properties"
+          python3 - <<'PY'
+          import datetime
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          root = ET.parse("pom.xml").getroot()
+          maven_version = root.find("{http://maven.apache.org/POM/4.0.0}version").text
+          if not re.fullmatch(r"\d+\.\d+\.\d+-SNAPSHOT", maven_version or ""):
+              raise SystemExit("Source project must declare a numeric SNAPSHOT version")
+          base = maven_version.removesuffix("-SNAPSHOT")
+          source = tuple(map(int, base.split(".")))
+          channel = Path(os.environ["RUNNER_TEMP"], "current-channel.properties").read_text(encoding="utf-8")
+          match = re.search(r"(?m)^version=(\d+\.\d+\.\d+\.\d{8,14})$", channel)
+          if not match:
+              raise SystemExit("Update channel is missing a valid numeric version")
+          previous = match.group(1)
+          published = tuple(map(int, previous.split(".")))
+          if source < published[:3]:
+              raise SystemExit(f"Source {base} is older than published {previous}; refusing downgrade")
+          stamp = int(datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S"))
+          qualifier = max(stamp, published[3] + 1) if source == published[:3] else stamp
+          if not re.fullmatch(r"\d{8,14}", str(qualifier)):
+              raise SystemExit("Monotonic build qualifier exceeds supported width")
+          target = f"{base}.{qualifier}"
+          if tuple(map(int, target.split("."))) <= published:
+              raise SystemExit("Computed version would not advance the update channel")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"ZEW_RELEASE_QUALIFIER={qualifier}\n")
+              env.write(f"ZEW_RELEASE_VERSION={target}\n")
+          print(f"Publishing candidate {target} (current channel: {previous})")
+          PY
       - name: Build clean Tycho p2 update site
-        run: mvn --batch-mode --no-transfer-progress clean verify
+        run: mvn --batch-mode --no-transfer-progress "-DforceContextQualifier=${ZEW_RELEASE_QUALIFIER}" clean verify
       - name: Verify packaged p2 site before publication
         run: python3 scripts/verify_site.py
       - name: Publish release and channel as one fast-forward operation
@@ -85,6 +128,10 @@ jobs:
           print(version)
           PY
           )"
+          if [ "$VERSION" != "$ZEW_RELEASE_VERSION" ]; then
+            echo "Built feature version $VERSION does not match reserved $ZEW_RELEASE_VERSION" >&2
+            exit 1
+          fi
           # A PR merge is only valid if this job is still publishing the tip of
           # main. Never publish an older completed build over a newer commit.
           git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
