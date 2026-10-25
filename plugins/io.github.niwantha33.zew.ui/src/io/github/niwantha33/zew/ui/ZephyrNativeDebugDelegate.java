@@ -5,7 +5,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
-import java.net.Socket;
+import java.net.ServerSocket;
+import io.github.niwantha33.zew.core.DebugPorts;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -48,8 +49,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             Pattern.compile("(?m)^debug-runner:\\s*([A-Za-z0-9_+.-]+)\\s*$");
     private static final Pattern CONFIG_GDB =
             Pattern.compile("(?m)^\\s+gdb:\\s*(.*?)\\s*$");
-    private static final Pattern CUSTOM_PORT =
-            Pattern.compile("--gdb-port(?:=|\\s+)([0-9]{2,5})");
+    private static final String TCL_PORT = PORT + ".tcl";
+    private static final String TELNET_PORT = PORT + ".telnet";
 
     private record Parameters(io.github.niwantha33.zew.core.TargetOperations.Plan plan,
                               String gdb, Path elf, int port, java.util.Properties settings) {}
@@ -92,10 +93,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 throw new IOException("Matching ELF debug symbols are missing: " + elf);
             int port = configuration.getAttribute(PORT, 3333);
             if (port < 1024 || port > 65535) throw new IOException("GDB TCP port must be 1024..65535.");
-            var configuredPort = CUSTOM_PORT.matcher(yaml);
-            if (configuredPort.find() && Integer.parseInt(configuredPort.group(1)) != port)
-                throw new IOException("Zephyr runner sets GDB port " + configuredPort.group(1)
-                        + "; set the Debug Configurations port to match before launching.");
+            plan = new DebugPorts(port, configuration.getAttribute(TCL_PORT, 6333),
+                    configuration.getAttribute(TELNET_PORT, 4444)).apply(plan);
             return new Parameters(plan, gdb, elf, port, settings);
         } catch (Exception error) {
             if (error instanceof CoreException core) throw core;
@@ -106,10 +105,15 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
     @Override public ILaunch getLaunch(ILaunchConfiguration configuration, String mode) throws CoreException {
         if (!ILaunchManager.DEBUG_MODE.equals(mode))
             throw failure("Use Debug mode for source-level debugging.", null);
-        var params = prepare(configuration);
-        // Populate CDT's own launch attributes before its DSF-GDB launch
-        // factory runs. Preserve user-created launch configurations across updates.
+        // Select endpoints before constructing either the West plan or CDT launch.
+        final DebugPorts ports;
+        try { ports = DebugPorts.select(configuration.getAttribute(PORT, 3333)); }
+        catch (IOException error) { throw failure("Unable to allocate debug server ports: " + error.getMessage(), error); }
         var working = configuration.getWorkingCopy();
+        working.setAttribute(PORT, ports.gdb());
+        working.setAttribute(TCL_PORT, ports.tcl());
+        working.setAttribute(TELNET_PORT, ports.telnet());
+        var params = prepare(working);
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROJECT_NAME,
                 configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, ""));
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROGRAM_NAME, params.elf().toString());
@@ -119,25 +123,25 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 IGDBLaunchConfigurationConstants.DEBUGGER_MODE_REMOTE);
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_REMOTE_TCP, true);
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_HOST, "127.0.0.1");
-        working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_PORT, Integer.toString(params.port()));
+        working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_PORT, Integer.toString(ports.gdb()));
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUG_NAME, params.gdb());
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_NON_STOP, false);
-        working.doSave();
-        return super.getLaunch(configuration, mode);
+        return super.getLaunch(working.doSave(), mode);
     }
 
     @Override public void launch(ILaunchConfiguration configuration, String mode, ILaunch launch,
                                  IProgressMonitor monitor) throws CoreException {
         if (!ILaunchManager.DEBUG_MODE.equals(mode)) throw failure("Not a Debug launch.", null);
+        configuration = launch.getLaunchConfiguration();
         var params = prepare(configuration);
         TargetOperationGuard.Lease lease = null;
         ManagedServer session = null;
         try {
             if (monitor.isCanceled()) return;
             lease = TargetOperationGuard.acquire("debugserver");
-            if (isListening(params.port()))
+            if (portOccupied(params.port()))
                 throw new IOException("GDB TCP port " + params.port() + " is already in use. "
-                        + "Close the other GDB server; never attach to an unknown server.");
+                        + "Another process claimed the allocated port during startup. Retry Debug to select free ports.");
             var builder = new ProcessBuilder(params.plan().command(params.settings().getProperty("python")));
             builder.directory(Path.of(params.settings().getProperty("workspace")).toFile());
             builder.environment().putAll(ProjectContext.environment(params.settings()));
@@ -153,6 +157,11 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                             + " Delete unused breakpoints to leave a slot for stepping."
                             + " This does not repair invalid flash mappings or flash firmware.");
                 }
+            }
+            try (var info = console.newMessageStream()) {
+                info.println("Debug endpoints: GDB=" + params.port()
+                        + ", TCL=" + configuration.getAttribute(TCL_PORT, 6333)
+                        + ", Telnet=" + configuration.getAttribute(TELNET_PORT, 4444));
             }
             Process server = builder.start();
             session = new ManagedServer(server, console.newMessageStream(), lease, launch);
@@ -189,11 +198,12 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         }
     }
 
-    private static boolean isListening(int port) {
-        try (var socket = new Socket()) {
-            socket.connect(new InetSocketAddress("127.0.0.1", port), 250);
-            return true;
-        } catch (IOException ignored) { return false; }
+    private static boolean portOccupied(int port) {
+        try (var socket = new ServerSocket()) {
+            socket.setReuseAddress(false);
+            socket.bind(new InetSocketAddress(port));
+            return false;
+        } catch (IOException busy) { return true; }
     }
 
     private static CoreException failure(String message, Throwable cause) {
@@ -208,6 +218,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         private final AtomicBoolean closed = new AtomicBoolean();
         private final DebugServerDiagnostics diagnostics = new DebugServerDiagnostics();
         private volatile Thread logThread;
+        private final java.util.Set<ProcessHandle> ownedChildren = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
         String diagnose(String board, int port, Integer exitCode) {
             return diagnostics.describe(board, port, exitCode);
@@ -229,6 +240,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                         new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = input.readLine()) != null) {
+                        ownedChildren.addAll(process.descendants().toList());
                         diagnostics.accept(line);
                         if (!closed.get()) stream.println(line);
                     }
@@ -251,11 +263,14 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         @Override public void close() {
             if (!closed.compareAndSet(false, true)) return;
             DebugPlugin.getDefault().getLaunchManager().removeLaunchListener(this);
+            ownedChildren.addAll(process.descendants().toList());
+            for (var child : ownedChildren) if (child.isAlive()) child.destroy();
             process.destroy();
             try { if (!process.waitFor(1500, TimeUnit.MILLISECONDS)) process.destroyForcibly(); }
             catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt(); process.destroyForcibly();
             }
+            for (var child : ownedChildren) if (child.isAlive()) child.destroyForcibly();
             try { stream.close(); } catch (IOException ignored) {}
             lease.close();
         }

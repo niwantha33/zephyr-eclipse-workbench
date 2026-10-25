@@ -115,3 +115,25 @@ the same build. This is separate from source-level ELF debug information.
 References: Zephyr v4.4.0 `scripts/west_commands/runners/openocd.py`
 (`--cmd-pre-init`), OpenOCD 0.12 GDB configuration (`gdb_breakpoint_override`),
 and Espressif's JTAG Tips and Quirks (`esp appimage_offset`).
+
+## Native Debug port conflicts and cleanup
+
+Native Debug selects distinct available GDB, TCL and Telnet ports before creating
+the CDT launch. If the preferred GDB port (normally 3333), TCL 6333 or Telnet 4444
+is occupied, another available port is selected automatically. The saved launch
+configuration supplies the same GDB endpoint to CDT and West; all three endpoints
+are printed in the console. Selection checks socket binding, never sends a dummy
+connection to another debugger. Existing runner port arguments are overridden at
+launch time, without changing the build metadata. This applies to all supported
+native OpenOCD vendor providers.
+
+On termination or launch failure, cleanup stops the owned West process and the
+OpenOCD descendants observed while it was running. It does not kill processes by
+name or port. An old server from a different IDE or previous Eclipse instance is
+left alone; it may still own the physical USB/JTAG probe even when a new TCP port
+is available. The existing one-physical-operation guard remains in effect.
+
+Ports are released after selection so OpenOCD can bind them. Another process can
+claim one in that interval; startup reports a bind failure instead of connecting
+to an unknown server. Retry Debug to select free endpoints. Physical Windows
+termination/relaunch validation remains required.
