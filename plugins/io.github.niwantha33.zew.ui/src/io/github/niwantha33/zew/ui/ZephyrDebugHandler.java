@@ -44,7 +44,8 @@ public final class ZephyrDebugHandler extends AbstractHandler {
             if (type == null) throw new java.io.IOException("Zephyr launch extension is not installed.");
             ILaunchConfiguration config = null;
             for (ILaunchConfiguration candidate : manager.getLaunchConfigurations(type)) {
-                if (Objects.equals(project.getName(), candidate.getAttribute(ZephyrLaunchDelegate.PROJECT, ""))) {
+                if (Objects.equals(project.getName(), candidate.getAttribute(ZephyrLaunchDelegate.PROJECT, ""))
+                        && "debug".equals(candidate.getAttribute(ZephyrLaunchDelegate.ACTION, ""))) {
                     config = candidate;
                     break;
                 }
