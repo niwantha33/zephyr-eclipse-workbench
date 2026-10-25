@@ -169,6 +169,10 @@ def plan(board, workspace, python, application=None, git="git"):
                                        text=True, timeout=30).strip()
     if revision != PINNED_ZEPHYR:
         raise ValueError('Dependency preparation requires the pinned managed Zephyr 4.4.0 checkout')
+    dirty = subprocess.check_output([str(git), '-C', str(zephyr), 'status', '--porcelain', '--untracked-files=normal'],
+                                   text=True, timeout=30).strip()
+    if dirty:
+        raise ValueError('Managed Zephyr checkout has local changes; preserved. Select a separate managed setup or restore it explicitly.')
     metadata = metadata_provider()
     info = metadata.describe(zephyr, board)
     soc, vendor = info['soc'], info['vendor']
@@ -209,25 +213,46 @@ def module_dependencies(path):
     return depends
 
 
+def required_submodules(name, workspace, python):
+    """Repository .gitmodules can be optional; only the West declaration requires them."""
+    import yaml
+    result = subprocess.run([str(python), '-m', 'west', 'manifest', '--resolve'], cwd=workspace,
+                            check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+    if len(result.stdout) > 16 * 1024 * 1024:
+        raise ValueError('Resolved West manifest exceeds inspection limit')
+    document = yaml.safe_load(result.stdout)
+    projects = document.get('manifest', {}).get('projects', []) if isinstance(document, dict) else []
+    found = [project for project in projects if project.get('name') == name]
+    if len(found) != 1:
+        raise ValueError('Cannot resolve required submodule policy for pinned project: ' + name)
+    policy = found[0].get('submodules', False)
+    if not isinstance(policy, (bool, list)):
+        raise ValueError('Invalid West submodule policy: ' + name)
+    return bool(policy)
+
+
 def install_module_staged(name, revision, destination, workspace, python, git):
     """Publish only a complete checkout; cancellation cannot leave a partial live module."""
+    if required_submodules(name, workspace, python):
+        raise ValueError('Pinned West project requires a reviewed submodule provider: ' + name)
     result = subprocess.run([str(python), '-m', 'west', 'list', '--all', name, '-f', '{url}'],
                             cwd=workspace, check=True, text=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, timeout=60)
     url = result.stdout.strip()
     parsed = urllib.parse.urlparse(url)
-    if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or '\n' in url:
+    if parsed.scheme != 'https' or parsed.hostname != 'github.com' or parsed.username or parsed.password or parsed.query or parsed.fragment or '\n' in url:
         raise ValueError('Module must have a resolved credential-free HTTPS source: ' + name)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.zew-module-stage-', dir=destination.parent) as temporary:
         stage = Path(temporary) / 'source'; stage.mkdir()
         def run(arguments):
-            subprocess.run([str(git), '-c', 'core.longpaths=true', *arguments], cwd=stage,
+            subprocess.run([str(git), '-c', 'core.longpaths=true', '-c', 'fetch.recurseSubmodules=false', '-c', 'submodule.recurse=false', *arguments], cwd=stage,
                            check=True, timeout=1200, stdin=subprocess.DEVNULL)
         setup.log('Staging pinned West module: ' + name)
         run(['init']); run(['remote', 'add', 'origin', url])
         run(['fetch', '--depth', '1', 'origin', revision]); run(['checkout', '--detach', 'FETCH_HEAD'])
         if git_revision(git, stage) != revision: raise ValueError('Staged module revision mismatch: ' + name)
+        module_dependencies(stage)
         # Never replace an installation made concurrently or a user's directory.
         if destination.exists(): raise ValueError('Module destination appeared during preparation; preserved: ' + name)
         stage.rename(destination)
@@ -366,13 +391,11 @@ def main(argv=None):
         return 0
     if os.name != 'nt':
         raise ValueError('Automatic compiler preparation supports managed Windows x64. No changes were made.')
-    prepare_compiler(root, sdk, details['compiler'], details['asset'])
-    prepare_modules(details, workspace, sys.executable, args.git)
-    activate_modules(details, workspace, sys.executable)
-    if details['signing']:
-        install_signing_tools(root, workspace, sys.executable, details['manifest'])
-    if 'hal_espressif' in details['modules'] or args.require_host_tool == 'ESPTOOL':
-        legacy.install_python_tools(root)
+    engine_spec = importlib.util.spec_from_file_location('zew_dependency_engine', HERE / 'dependency_engine.py')
+    engine = importlib.util.module_from_spec(engine_spec)
+    engine_spec.loader.exec_module(engine)
+    context = engine.Context(sys.modules[__name__], details, root, sdk, workspace, sys.executable, args.git)
+    engine.DependencyResolver().prepare(context, [args.require_host_tool] if args.require_host_tool else [])
     setup.log('READY — pinned SDK, West revisions, active modules and signing tools verified')
     return 0
 

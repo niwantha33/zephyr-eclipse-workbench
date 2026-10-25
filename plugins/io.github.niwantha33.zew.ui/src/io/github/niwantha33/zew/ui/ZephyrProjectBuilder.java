@@ -23,6 +23,9 @@ import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.MessageConsole;
 
 import io.github.niwantha33.zew.core.BuildHostRequirements;
+import io.github.niwantha33.zew.core.BuildArtifacts;
+import io.github.niwantha33.zew.core.BuildRecovery;
+import io.github.niwantha33.zew.core.BuildSession;
 import io.github.niwantha33.zew.core.ProcessRunner;
 import io.github.niwantha33.zew.core.WestCommands;
 import io.github.niwantha33.zew.core.WorkbenchConfig;
@@ -57,22 +60,29 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         var console = new MessageConsole("Zephyr — " + getProject().getName(), null);
         ConsolePlugin.getDefault().getConsoleManager().addConsoles(new org.eclipse.ui.console.IConsole[] {console});
         ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
-        try (var stream = console.newMessageStream()) {
+        String[] stage = {"Load project"};
+        try (var stream = console.newMessageStream();
+             var session = BuildSession.acquire(Path.of(ProjectContext.settings(getProject()).getProperty("zew.setupRoot")),
+                 monitor::isCanceled, Duration.ofMinutes(45), stream::println)) {
             var settings = ProjectContext.settings(getProject());
             Path project = getProject().getLocation().toFile().toPath().toRealPath();
             String board = settings.getProperty("board");
             Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
             var environment = ProjectContext.environment(settings);
             monitor.beginTask(clean ? "Clean Zephyr project" : "Prepare tools and build Zephyr project", IProgressMonitor.UNKNOWN);
+            stage[0] = "Prepare dependencies";
             if (!clean) BoardTools.prepare(settings, environment, monitor, stream::println);
             if (clean && !Files.isRegularFile(buildDirectory.resolve("CMakeCache.txt"))) {
                 stream.println("No configured build exists for " + board + "; nothing to clean.");
                 return;
             }
+            var paths = BoardTools.buildPaths(settings, buildDirectory, environment, monitor);
+            environment.put("ZEPHYR_BASE", paths.workspace() + "/zephyr");
+            environment.put("ZEPHYR_SDK_INSTALL_DIR", paths.sdk());
             var command = new ArrayList<>(List.of(settings.getProperty("python"), "-m", "west", "build",
-                    "--build-dir", WestCommands.cmakePath(buildDirectory.toString())));
+                    "--build-dir", WestCommands.cmakePath(paths.build())));
             if (clean) command.addAll(List.of("--target", "clean"));
-            else command.addAll(List.of("--board", board, WestCommands.cmakePath(project.toString()), "--", "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON",
+            else command.addAll(List.of("--board", board, WestCommands.cmakePath(paths.application()), "--", "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON",
                     "-DCMAKE_MAKE_PROGRAM:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("tools.ninja")),
                     "-DPython3_EXECUTABLE:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("python"))));
             if (!clean && "true".equals(settings.getProperty("zew.modules.none"))) command.add("-DZEPHYR_MODULES=");
@@ -81,7 +91,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             monitor.setTaskName(clean ? "Clean Zephyr project" : "Build Zephyr project");
             BuildDiagnostics.clear(getProject());
             var runner = new ProcessRunner();
-            var workspace = Path.of(settings.getProperty("workspace"));
+            var workspace = Path.of(paths.workspace());
             java.util.function.Consumer<String> log = line -> {
                 stream.println(line);
                 BuildDiagnostics.accept(getProject(), buildDirectory, line);
@@ -92,54 +102,62 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 // tools marked NOTFOUND, so it is not authoritative.
                 var configure = new ArrayList<>(command);
                 configure.add(4, "--cmake-only");
+                if (paths.freshConfiguration()) {
+                    stream.println("Refreshing this managed target for a verified Windows short-path alias.");
+                    configure.add(5, "--pristine=always");
+                }
                 stream.println("Preflight: Zephyr configure-only; checking actual host tool dependencies.");
+                stage[0] = "Configure Zephyr";
                 runner.run(configure, workspace, Duration.ofMinutes(15),
                         monitor::isCanceled, log, environment).requireSuccess();
-                var missing = BuildHostRequirements.missingInGeneratedBuild(buildDirectory);
-                boolean installedHostTool = false;
-                for (String tool : new java.util.TreeSet<>(missing)) {
-                    if (java.util.Set.of("IMGTOOL", "ESPTOOL").contains(tool)) {
-                        stream.println("Build requires " + tool + "; preparing its pinned host-tool provider.");
-                        BoardTools.prepareHostTool(settings, environment, monitor, stream::println, tool);
-                        installedHostTool = true;
-                    }
-                }
-                if (installedHostTool) {
-                    // Installed modules must be visible even for an old minimal starter.
+                var inspectCommands = List.of(settings.getProperty("tools.ninja"), "-C", paths.build(), "-t", "commands");
+                String commands = runner.run(inspectCommands, workspace, Duration.ofMinutes(2),
+                    monitor::isCanceled, ignored -> {}, environment).requireCompleteOutput();
+                var missing = BuildHostRequirements.missingInCommands(commands);
+                var recovery = new BuildRecovery(Map.of("IMGTOOL", () ->
+                    BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "IMGTOOL"),
+                    "ESPTOOL", () -> BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "ESPTOOL")), 2);
+                while (!missing.isEmpty()) {
+                    stage[0] = "Recover required build tools";
+                    stream.println("Preparing mandatory host tools: " + missing);
+                    recovery.repair(missing);
+                    // Reconfigure after provisioning; no pristine deletion is needed.
+                    // Force CMake to discard only stale host-tool cache entries.
                     configure.remove("-DZEPHYR_MODULES="); command.remove("-DZEPHYR_MODULES=");
-                    // Old CMakeCache can retain IMGTOOL-NOTFOUND, and module
-                    // discovery happens at configure time. Regenerate only
-                    // this project's independent .zew-build target directory.
-                    var fresh = new ArrayList<>(configure);
-                    fresh.add(5, "--pristine=always");
-                    stream.println("Preflight: refreshing generated build rules for the newly activated module.");
-                    runner.run(fresh, workspace, Duration.ofMinutes(15),
+                    configure.remove("--pristine=always");
+                    var refresh = new ArrayList<>(configure);
+                    refresh.add("-UZEPHYR_MODULES");
+                    for (String tool : missing) refresh.add("-U" + tool);
+                    stage[0] = "Refresh target configuration";
+                    runner.run(refresh, workspace, Duration.ofMinutes(15),
                             monitor::isCanceled, log, environment).requireSuccess();
-                    missing = BuildHostRequirements.missingInGeneratedBuild(buildDirectory);
+                    commands = runner.run(inspectCommands, workspace, Duration.ofMinutes(2),
+                        monitor::isCanceled, ignored -> {}, environment).requireCompleteOutput();
+                    missing = BuildHostRequirements.missingInCommands(commands);
                 }
-                if (!missing.isEmpty()) {
-                    throw new java.io.IOException("Zephyr generated build requires unresolved host tools: "
-                        + String.join(", ", new java.util.TreeSet<>(missing))
-                        + ". This managed profile has no reviewed pinned provider; "
-                        + "the tool was not guessed or downloaded.");
-                }
+                BuildArtifacts.verifyArchitecture(buildDirectory);
                 stream.println("Preflight: generated build commands have no unresolved host tool placeholders.");
             }
-            runner.run(command, workspace, Duration.ofMinutes(30), monitor::isCanceled, log, environment).requireSuccess();
-            if (!clean && !Files.isRegularFile(buildDirectory.resolve("zephyr/zephyr.elf"))) throw new java.io.IOException("Expected firmware output is missing at " + buildDirectory);
+            stage[0] = clean ? "Clean" : "Compile and generate firmware";
+            // Preflight already supplied all CMake arguments. Repeating them
+            // here makes West configure twice on every build.
+            var compile = clean ? command : List.of(settings.getProperty("python"), "-m", "west", "build",
+                "--build-dir", WestCommands.cmakePath(paths.build()));
+            runner.run(compile, workspace, Duration.ofMinutes(30), monitor::isCanceled, log, environment).requireSuccess();
+            stage[0] = "Verify configured firmware outputs";
+            if (!clean) BuildArtifacts.verify(buildDirectory);
             if (!clean) {
                 Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
                 EditorIntegration.schedule(getProject());
             }
-            stream.println(clean ? "Clean completed." : "Firmware build verified.");
+            stream.println(clean ? "Clean completed." : "BUILD SUCCESS — configured firmware outputs verified.");
             getProject().refreshLocal(IResource.DEPTH_INFINITE, monitor);
             var output = getProject().getFolder(".zew-build"); if (output.exists()) output.setDerived(true, monitor);
         } catch (java.io.InterruptedIOException error) { throw new CoreException(Status.CANCEL_STATUS); }
         catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new CoreException(Status.CANCEL_STATUS); }
-        catch (Exception error) { throw new CoreException(new Status(IStatus.ERROR, Activator.ID, error.getMessage(), error)); }
+        catch (Exception error) { throw new CoreException(new Status(IStatus.ERROR, Activator.ID, stage[0] + " failed: " + error.getMessage(), error)); }
         finally { monitor.done(); }
     }
 }
-
 
 

@@ -19,7 +19,12 @@ public final class ProcessRunner {
     private static final int MAX_CAPTURE = 2_000_000;
     public record Result(int exitCode, String output, boolean truncated) {
         public String requireSuccess() throws IOException {
-            if (exitCode != 0) throw new IOException("Tool exited with code " + exitCode + ". See the Zephyr console.");
+            if (exitCode != 0) {
+                String detail = output.length() <= 4000 ? output : output.substring(output.length() - 4000);
+                throw new IOException("Tool exited with code " + exitCode + ". See the Zephyr console."
+                    + (detail.isBlank() ? "" : "\n" + detail.strip())
+                    + (truncated ? "\nCaptured output was truncated; the console retains the full stream." : ""));
+            }
             return output;
         }
         public String requireCompleteOutput() throws IOException {

@@ -129,7 +129,7 @@ def source_build_command(python, source, output):
     # verified source directory to this one isolated build process.
     wrapper = ('import sys,runpy;source=sys.argv.pop(1);sys.path.insert(0,source);'
                'runpy.run_path(source+"/setup.py",run_name="__main__")')
-    return [python, '-I', '-c', wrapper, str(source), 'bdist_wheel', '--dist-dir', str(output)]
+    return [python, '-I', '-X', 'utf8', '-c', wrapper, str(source), 'bdist_wheel', '--dist-dir', str(output)]
 
 
 def build_source_wheel(package, cache, environment):

@@ -23,7 +23,7 @@ class DependencyTests(unittest.TestCase):
     def test_jar_entry_extract_requires_all_sibling_files(self):
         """A single FileLocator extraction must not reach the Windows builder."""
         tool_names = (
-            'board_dependencies.py', 'board_tools.py', 'hardware_catalog.py', 'target_metadata.py',
+            'board_dependencies.py', 'dependency_engine.py', 'build_paths.py', 'board_tools.py', 'hardware_catalog.py', 'target_metadata.py',
             'setup.py', 'managed_sitecustomize.py',
             'sdk-toolchains-windows-1.0.1.json', 'esp32s3-python-lock.json',
             'mcuboot-python-lock.json',
@@ -261,7 +261,7 @@ class DependencyTests(unittest.TestCase):
             venv.EnvBuilder(with_pip=False).create(runtime)
             python = runtime / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
             sites = Path(subprocess.check_output(
-                [str(python), '-I', '-c', 'import site;print(site.getsitepackages()[0])'],
+                [str(python), '-I', '-X', 'utf8', '-c', 'import site;print(site.getsitepackages()[0])'],
                 text=True).strip())
             managed_site = runtime / 'Lib/site-packages'
             managed_site.mkdir(parents=True, exist_ok=True)
@@ -280,14 +280,14 @@ class DependencyTests(unittest.TestCase):
             (dependencies / '.zew-ready').write_text(board.hashlib.sha256(lock).hexdigest() + '\n')
             mapping = managed_site / 'zew-mcuboot.pth'
             mapping.write_text(str(dependencies) + '\n')
-            before = subprocess.run([str(python), '-I', str(entry)], capture_output=True, text=True)
+            before = subprocess.run([str(python), '-I', '-X', 'utf8', str(entry)], capture_output=True, text=True)
             self.assertNotEqual(before.returncode, 0)
             manifest = {'mcuboot': ('a' * 40, Path('bootloader/mcuboot'))}
             with patch.object(board.sys, 'version_info', (3, 13)):
                 board.install_signing_tools(root, root / 'workspace', python, manifest)
                 # Retry reuses dependencies and the upgraded mapping.
                 board.install_signing_tools(root, root / 'workspace', python, manifest)
-            after = subprocess.run([str(python), '-I', str(entry)], capture_output=True, text=True)
+            after = subprocess.run([str(python), '-I', '-X', 'utf8', str(entry)], capture_output=True, text=True)
             self.assertEqual(after.returncode, 0, after.stderr)
             self.assertEqual(after.stdout.strip(), 'pinned-imgtool-ok')
 
@@ -360,7 +360,7 @@ class DependencyTests(unittest.TestCase):
                 if 'init' in command:(stage/'.git').mkdir()
                 if 'checkout' in command:(stage/'payload').write_text('verified source')
                 return type('Result',(),{'returncode':0})()
-            with patch('subprocess.run',side_effect=run),patch.object(board,'git_revision',return_value=revision):
+            with patch('subprocess.run',side_effect=run),patch.object(board,'git_revision',return_value=revision),patch.object(board,'required_submodules',return_value=False):
                 board.install_module_staged('vendor',revision,destination,root,'python','git')
             self.assertEqual((destination/'payload').read_text(),'verified source')
             self.assertFalse(list(destination.parent.glob('.zew-module-stage-*')))
@@ -372,7 +372,7 @@ class DependencyTests(unittest.TestCase):
                 if command[1:3]==['-m','west']:return type('Result',(),{'stdout':'https://github.com/zephyrproject-rtos/hal_ti.git\n'})()
                 if 'fetch' in command:raise subprocess.CalledProcessError(1,command)
                 return type('Result',(),{'returncode':0})()
-            with patch('subprocess.run',side_effect=run):
+            with patch('subprocess.run',side_effect=run),patch.object(board,'required_submodules',return_value=False):
                 with self.assertRaises(subprocess.CalledProcessError):board.install_module_staged('vendor','a'*40,destination,root,'python','git')
             self.assertFalse(destination.exists());self.assertEqual((root/'keep').read_text(),'untouched')
             self.assertFalse(list(destination.parent.glob('.zew-module-stage-*')))
@@ -402,3 +402,17 @@ class DependencyTests(unittest.TestCase):
 if __name__ == '__main__':
     unittest.main()
 
+
+class SubmodulePolicyTests(unittest.TestCase):
+    def test_optional_repository_submodules_are_not_mandatory(self):
+        result = subprocess.CompletedProcess([], 0, 'manifest:\n  projects:\n    - name: mcuboot\n', '')
+        with patch('subprocess.run', return_value=result):
+            self.assertFalse(board.required_submodules('mcuboot', Path('.'), 'python'))
+
+    def test_explicit_west_submodules_require_reviewed_provider(self):
+        result = subprocess.CompletedProcess([], 0, 'manifest:\n  projects:\n    - name: vendor\n      submodules: true\n', '')
+        with patch('subprocess.run', return_value=result) as run:
+            with self.assertRaisesRegex(ValueError, 'reviewed submodule provider'):
+                board.install_module_staged('vendor', 'a'*40, Path('unused'), Path('.'), 'python', 'git')
+            self.assertEqual(run.call_count, 1)
+            self.assertNotIn('fetch', run.call_args.args[0])

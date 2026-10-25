@@ -28,8 +28,8 @@ class EditorTests(unittest.TestCase):
         flags, includes, forced, macros = editor.preprocess_flags(['-I', 'inc', '-DVALUE=3', '-UOLD',
                 '-imacros', 'config.h', '-include', 'forced.h', '-m32', '-std=c11', '-o', 'out.o', '-c', 'main.c',
                 '-fplugin=NEVER', '-specs=NEVER'], Path('/work'))
-        self.assertIn('/work/inc', includes); self.assertEqual(macros, ['/work/config.h'])
-        self.assertEqual(forced, ['/work/forced.h']); self.assertIn('-m32', flags)
+        self.assertIn(str(Path('/work/inc').resolve()), includes); self.assertEqual(macros, [str(Path('/work/config.h').resolve())])
+        self.assertEqual(forced, [str(Path('/work/forced.h').resolve())]); self.assertIn('-m32', flags)
         self.assertFalse(any('NEVER' in a or a in ('-o', '-c', 'main.c') for a in flags))
 
     def test_compiler_outside_selected_sdk_rejected(self):
@@ -37,7 +37,7 @@ class EditorTests(unittest.TestCase):
 
     def test_application_filter_duplicate_and_probe_cache(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); build = root / '.zew-build/first'; build.mkdir(parents=True)
+            root = Path(directory).resolve(); build = root / '.zew-build/first'; build.mkdir(parents=True)
             entries = [{'directory': str(root), 'file': str(root / file), 'arguments': ['gcc', '-Iinclude', '-c', file]}
                        for file in ['src/a.c', 'src/b.c', '.zew-build/first/generated.c']]
             database = build / 'compile_commands.json'; database.write_text(json.dumps(entries))
@@ -49,20 +49,20 @@ class EditorTests(unittest.TestCase):
 
     def test_response_file_depth_and_expansion(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); (root / 'flags.rsp').write_text('-I "include path" -DVALUE=9')
+            root = Path(directory).resolve(); (root / 'flags.rsp').write_text('-I "include path" -DVALUE=9')
             self.assertEqual(editor.expand_response(['@flags.rsp'], root), ['-I', 'include path', '-DVALUE=9'])
             (root / 'cycle.rsp').write_text('@cycle.rsp')
             self.assertRaises(ValueError, editor.expand_response, ['@cycle.rsp'], root)
 
     def test_no_application_commands_cannot_write_success(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); (root / 'compile_commands.json').write_text('[]')
+            root = Path(directory).resolve(); (root / 'compile_commands.json').write_text('[]')
             self.assertRaises(ValueError, editor.collect, root, root, root / 'sdk')
 
     @unittest.skipUnless(shutil.which('gcc'), 'Requires an installed GCC for the real probe')
     def test_real_compiler_generated_config_builtins_and_headers(self):
         with tempfile.TemporaryDirectory(prefix='editor Ω ') as directory:
-            root = Path(directory); source = root / 'src/main.c'; source.parent.mkdir(); source.write_text('int main(void){return 0;}')
+            root = Path(directory).resolve(); source = root / 'src/main.c'; source.parent.mkdir(); source.write_text('int main(void){return 0;}')
             build = root / '.zew-build/first'; build.mkdir(parents=True)
             (root / 'include').mkdir(); (build / 'autoconf.h').write_text('#define CONFIG_ZEW_TEST 73\n')
             compiler = Path(shutil.which('gcc')).resolve(); sdk = compiler.parent.parent

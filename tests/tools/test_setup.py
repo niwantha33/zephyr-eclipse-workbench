@@ -143,7 +143,7 @@ with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
         with tempfile.TemporaryDirectory(prefix='isolated source Ω ') as directory:
             root = Path(directory); source, package = self.source_fixture(root)
             output = root / 'old-output'; output.mkdir()
-            old = subprocess.run([sys.executable, '-I', '-c', 'import runpy;runpy.run_path("setup.py",run_name="__main__")',
+            old = subprocess.run([sys.executable, '-I', '-S', '-X', 'utf8', '-c', 'import runpy;runpy.run_path("setup.py",run_name="__main__")',
                                   'bdist_wheel', '--dist-dir', output], cwd=source, text=True,
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=20)
             self.assertNotEqual(old.returncode, 0); self.assertIn("No module named 'docopt'", old.stdout)
@@ -208,7 +208,7 @@ with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'environment.properties'
             setup.write_properties({'python': r'C:\User Ω\python.exe'}, path)
-            self.assertIn(r'C\:\\User Ω\\python.exe', path.read_text())
+            self.assertIn(r'C\:\\User Ω\\python.exe', path.read_text(encoding='utf-8'))
             self.assertFalse(path.with_suffix('.partial').exists())
 
     def test_failed_build_cannot_mark_environment_ready(self):
@@ -247,12 +247,12 @@ with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
             python = runtime / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
             # Add just the embedded runtime directory, reproducing ._pth's
             # explicit search path; -I excludes the script directory and cwd.
-            sites = subprocess.check_output([str(python), '-I', '-c',
+            sites = subprocess.check_output([str(python), '-I', '-X', 'utf8', '-c',
                     'import site;print(site.getsitepackages()[0])'], text=True).strip()
             Path(sites).mkdir(parents=True, exist_ok=True)
             (Path(sites) / 'zew-test.pth').write_text(str(root / 'python') + '\n', encoding='utf-8')
             def execute(script):
-                return subprocess.run([str(python), '-I', str(script)], cwd=root,
+                return subprocess.run([str(python), '-I', '-X', 'utf8', str(script)], cwd=root,
                                       text=True, capture_output=True, timeout=20)
             before = execute(board)
             self.assertNotEqual(before.returncode, 0)
@@ -308,3 +308,24 @@ if __name__ == '__main__':
 
 
 
+
+class DownloadRecoveryTests(unittest.TestCase):
+    def test_interrupted_download_retries_and_only_activates_verified_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = {'file': 'test.whl', 'size': 4, 'sha256': hashlib.sha256(b'good').hexdigest(),
+                        'url': 'https://files.pythonhosted.org/test.whl'}
+            class Response:
+                url = artifact['url']
+                def __init__(self, interrupted): self.interrupted, self.reads = interrupted, 0
+                def __enter__(self): return self
+                def __exit__(self, *unused): pass
+                def read(self, size):
+                    self.reads += 1
+                    if self.interrupted and self.reads == 2: raise OSError('connection lost')
+                    return (b'go' if self.interrupted else b'good') if self.reads == 1 else b''
+            with patch.object(setup.urllib.request, 'urlopen', side_effect=[Response(True), Response(False)]) as request, patch.object(setup.time, 'sleep'):
+                result = setup.fetch(artifact, root)
+            self.assertEqual(request.call_count, 2)
+            self.assertEqual(result.read_bytes(), b'good')
+            self.assertFalse((root / 'test.whl.partial').exists())

@@ -61,10 +61,20 @@ public final class CoreTests {
             check(System.getenv("ZEW_TOOL_TEST") == null, "selected environment does not mutate parent process");
             var echo = runner.run(fixture("echo", "hello world", "$(touch NEVER)", "Ω"), ROOT, Duration.ofSeconds(10), () -> false, line -> {});
             check(echo.requireSuccess().contains("$(touch NEVER)"), "literal arguments are not shell evaluated");
-            check(echo.output().contains("Ω"), "UTF-8 process output");
+            var unicode = runner.run(fixture("unicode"), ROOT, Duration.ofSeconds(10), () -> false, line -> {});
+            check(unicode.requireSuccess().contains("Ω"), "UTF-8 process output: " + unicode.output());
+            String python = System.getenv("ZEW_TEST_PYTHON");
+            if (python != null) {
+                var pythonUnicode = runner.run(List.of(python, "-I", "-X", "utf8", "-c",
+                    "import sys;print(sys.argv[1])", "Ω"), ROOT, Duration.ofSeconds(10), () -> false, line -> {});
+                check(pythonUnicode.requireSuccess().strip().equals("Ω"), "Unicode tool arguments survive native process launch: " + pythonUnicode.output());
+            }
             var failure = runner.run(fixture("fail"), ROOT, Duration.ofSeconds(10), () -> false, line -> {});
             check(failure.exitCode() == 7, "nonzero exit status preserved");
             rejects(IOException.class, failure::requireSuccess, "failed tools cannot report success");
+            try { failure.requireSuccess(); } catch (IOException error) {
+                check(error.getMessage().contains("intentional error"), "original tool diagnostics survive failed discovery/compile stages");
+            }
             var flood = runner.run(fixture("flood"), ROOT, Duration.ofSeconds(15), () -> false, line -> {});
             check(flood.exitCode() == 0 && flood.output().contains("line-9999"), "large merged output does not deadlock");
             var capture = runner.run(fixture("capture"), ROOT, Duration.ofSeconds(15), () -> false, line -> {});
