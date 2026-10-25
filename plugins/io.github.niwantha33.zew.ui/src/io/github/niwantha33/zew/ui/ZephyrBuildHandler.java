@@ -36,7 +36,7 @@ public final class ZephyrBuildHandler extends AbstractHandler {
         Job job = new Job((pristine ? "Pristine Rebuild" : "Build") + " Zephyr — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 try {
-                    project.build(IncrementalProjectBuilder.FULL_BUILD,
+                    project.build(IncrementalProjectBuilder.FULL_BUILD, Activator.ID + ".zephyrBuilder",
                         pristine ? Map.of("zew.pristine", "true") : Map.of(), monitor);
                     return monitor.isCanceled() ? Status.CANCEL_STATUS : Status.OK_STATUS;
                 } catch (org.eclipse.core.runtime.CoreException ex) {
