@@ -34,3 +34,4 @@ subprocess.run([tool('java'), '-cp', str(out), 'ProjectTests'], check=True, cwd=
 subprocess.run([tool('java'), '-cp', str(out), 'BuildHostRequirementsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'BuildReliabilityTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'TargetOperationsTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'EspressifFlashSafetyTests'], check=True, cwd=root, timeout=90)

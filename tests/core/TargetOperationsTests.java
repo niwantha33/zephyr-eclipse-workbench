@@ -28,10 +28,10 @@ public final class TargetOperationsTests {
             Files.writeString(zephyr.resolve(".config"), "CONFIG_XTENSA=y\nCONFIG_KERNEL_BIN_NAME=\"zephyr\"\n");
             Files.write(zephyr.resolve("zephyr.elf"), new byte[] {0x7f,'E','L','F',1});
             var flash = TargetOperations.prepare(build, board, "flash", null);
-            check(flash.westArguments().equals(List.of("flash", "--build-dir", build.toRealPath().toString().replace('\\','/'), "--skip-rebuild")), "exact build and skip-rebuild");
+            check(flash.westArguments().equals(List.of("flash", "--build-dir", build.toRealPath().toString().replace('\\','/'), "--no-rebuild")), "exact build and skip-rebuild");
             check(flash.command("C:/Python Ω/python.exe").subList(0,3).equals(List.of("C:/Python Ω/python.exe", "-m", "west")), "managed interpreter retained");
             check(TargetOperations.prepare(build, board, "flash", "esptool").westArguments().containsAll(List.of("--runner", "esptool")), "explicit runner argument");
-            check(TargetOperations.prepare(build, board, "debugserver", "openocd").westArguments().contains("--skip-rebuild"), "debugserver uses selected build without rebuilding");
+            check(TargetOperations.prepare(build, board, "debugserver", "openocd").westArguments().contains("--no-rebuild"), "debugserver uses selected build without rebuilding");
             rejects(() -> TargetOperations.prepare(build, "esp32s3_devkitc/esp32s3/appcpu", "flash", null), "wrong CPU must fail");
             rejects(() -> TargetOperations.prepare(build, board, "flash", "--erase"), "runner flag injection must fail");
             rejects(() -> TargetOperations.prepare(build, board, "flash", "esptool --erase"), "runner whitespace injection must fail");
