@@ -72,6 +72,9 @@ public final class CoreTests {
             var failure = runner.run(fixture("fail"), ROOT, Duration.ofSeconds(10), () -> false, line -> {});
             check(failure.exitCode() == 7, "nonzero exit status preserved");
             rejects(IOException.class, failure::requireSuccess, "failed tools cannot report success");
+            try { failure.requireSuccess(); } catch (IOException error) {
+                check(error.getMessage().contains("intentional error"), "original tool diagnostics survive failed discovery/compile stages");
+            }
             var flood = runner.run(fixture("flood"), ROOT, Duration.ofSeconds(15), () -> false, line -> {});
             check(flood.exitCode() == 0 && flood.output().contains("line-9999"), "large merged output does not deadlock");
             var capture = runner.run(fixture("capture"), ROOT, Duration.ofSeconds(15), () -> false, line -> {});

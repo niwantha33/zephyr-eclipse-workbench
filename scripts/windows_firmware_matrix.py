@@ -68,6 +68,14 @@ def bootstrap(root):
     return root / 'python/python.exe'
 
 
+def select_target(rows, board, soc, core=None):
+    selected = [r[6] for r in rows if r[3] == board and r[2] == soc and r[4] == 'default'
+                and (core is None or r[5].endswith('/' + core))]
+    if len(selected) != 1:
+        raise ValueError('Pinned board metadata did not uniquely resolve ' + board + '/' + soc + ': ' + repr(selected))
+    return selected[0]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -95,16 +103,15 @@ def main():
                ZEPHYR_SDK_INSTALL_DIR=(root / 'sdk').as_posix())
     text = run([python, root / 'installer/hardware_catalog.py', '--zephyr', workspace / 'zephyr'], root, env, capture=True)
     rows = [line.split('\t') for line in text.splitlines() if len(line.split('\t')) == 7]
-    targets = [('ti', 'lp_mspm0g3507', None), ('stm32', 'nucleo_f446re', None),
-               ('nordic', 'nrf52840dk', None), ('xtensa', 'esp32s3_devkitc', 'procpu'),
-               ('riscv', 'esp32c3_devkitm', None), ('mcuboot', 'nrf52840dk', None)]
+    targets = [('ti', 'lp_mspm0g3507', 'mspm0g3507', None),
+               ('stm32', 'nucleo_f446re', 'stm32f446xx', None),
+               ('nordic', 'nrf52840dk', 'nrf52840', None),
+               ('xtensa', 'esp32s3_devkitc', 'esp32s3', 'procpu'),
+               ('riscv', 'esp32c3_devkitm', 'esp32c3', None),
+               ('mcuboot', 'nrf52840dk', 'nrf52840', None)]
     results = []
-    for label, board, core in targets:
-        selected = [r[6] for r in rows if r[3] == board and r[4] == 'default'
-                    and (core is None or r[5].endswith('/' + core))]
-        if len(selected) != 1:
-            raise ValueError('Pinned board metadata did not uniquely resolve ' + board + ': ' + repr(selected))
-        target = selected[0]
+    for label, board, soc, core in targets:
+        target = select_target(rows, board, soc, core)
         app = root / 'projects' / ('matrix ' + label + ' Ω')
         app.mkdir(parents=True); (app / 'src').mkdir()
         (app / 'src/main.c').write_text('#include <zephyr/kernel.h>\nint main(void) { return 0; }\n')
