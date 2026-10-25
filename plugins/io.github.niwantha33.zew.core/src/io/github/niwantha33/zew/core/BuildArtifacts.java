@@ -49,7 +49,10 @@ public final class BuildArtifacts {
                 Path output = Path.of(value);
                 if (!output.isAbsolute()) output = build.resolve(output);
                 output = output.toAbsolutePath().normalize();
-                if (!output.startsWith(build.toAbsolutePath().normalize()))
+                // CMake may record verified Windows short aliases. Compare
+                // filesystem identities, not different spellings of one path.
+                output = output.getParent().toRealPath().resolve(output.getFileName());
+                if (!output.startsWith(build.toRealPath()))
                     throw new IOException("Configured image byproduct escapes this build: " + value);
                 outputs.add(output);
             }

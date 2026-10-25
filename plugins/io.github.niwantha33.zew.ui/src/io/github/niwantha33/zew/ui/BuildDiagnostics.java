@@ -13,9 +13,9 @@ final class BuildDiagnostics {
     static void accept(IProject project, Path build, String line) {
         var match = COMPILER.matcher(line); if (!match.matches()) return;
         try {
-            Path root = project.getLocation().toFile().toPath().toAbsolutePath().normalize();
+            Path root = project.getLocation().toFile().toPath().toRealPath();
             Path source = Path.of(match.group(1)); if (!source.isAbsolute()) source = build.resolve(source);
-            source = source.toAbsolutePath().normalize();
+            source = java.nio.file.Files.exists(source) ? source.toRealPath() : source.toAbsolutePath().normalize();
             IResource resource = project;
             if (source.startsWith(root)) {
                 var file = project.getFile(root.relativize(source).toString());
