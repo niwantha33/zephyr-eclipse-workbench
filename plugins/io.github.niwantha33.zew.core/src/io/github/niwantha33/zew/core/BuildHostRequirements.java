@@ -23,6 +23,28 @@ public final class BuildHostRequirements {
         return Set.copyOf(missing);
     }
 
+    /**
+     * Scan the output of `ninja -t commands` incrementally. A large Zephyr
+     * configuration can emit several megabytes of commands: accumulating the
+     * complete output in ProcessRunner is unnecessary and can exceed its
+     * bounded diagnostic capture buffer.
+     *
+     * One ProcessRunner reader thread calls accept(); read missing() only after
+     * the command has exited and its output reader has joined.
+     */
+    public static final class CommandScanner implements java.util.function.Consumer<String> {
+        private final Set<String> missing = new LinkedHashSet<>();
+
+        @Override public void accept(String commandLine) {
+            var matcher = MISSING.matcher(commandLine.toUpperCase(Locale.ROOT));
+            while (matcher.find()) missing.add(matcher.group(1));
+        }
+
+        public Set<String> missing() {
+            return Set.copyOf(missing);
+        }
+    }
+
     public static Set<String> missingInGeneratedBuild(Path directory)throws IOException{
         Path root=directory.toRealPath();var files=new ArrayDeque<Path>();files.add(root.resolve("build.ninja"));
         var visited=new HashSet<Path>();var bindings=new HashMap<String,List<String>>();var commands=new ArrayDeque<String>();long bytes=0;
