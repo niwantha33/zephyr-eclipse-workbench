@@ -40,11 +40,15 @@ public final class ProjectActionHandler extends AbstractHandler {
                     try (var stream = console.newMessageStream();
                          var lease = TargetOperationGuard.acquire(action)) {
                         monitor.beginTask("Zephyr " + action + " (cancel in Progress view)", IProgressMonitor.UNKNOWN);
+                        // Revalidate after acquiring the physical guard: queued jobs must
+                        // not flash a firmware image replaced while they were waiting.
+                        var currentPlan = io.github.niwantha33.zew.core.TargetOperations.prepare(
+                                plan.buildDirectory(), plan.board(), action, "");
                         stream.println("Exact board: " + plan.board());
-                        stream.println("Verified build: " + plan.buildDirectory());
+                        stream.println("Verified build: " + currentPlan.buildDirectory());
                         stream.println("Runner: Zephyr build's default (resolved by West; probe not independently verified)");
                         if (action.equals("debugserver")) stream.println("External GDB server only. Eclipse source-level debugging is not yet available.");
-                        new ProcessRunner().run(plan.command(settings.getProperty("python")),
+                        new ProcessRunner().run(currentPlan.command(settings.getProperty("python")),
                             Path.of(settings.getProperty("workspace")), Duration.ofHours(8), monitor::isCanceled,
                             stream::println, ProjectContext.environment(settings)).requireSuccess();
                         stream.println(action.equals("flash") ? "West flash command completed successfully; independent read-back verification was not performed."
