@@ -41,6 +41,14 @@ public final class TargetOperations {
             throw new IOException("Missing verified build receipt or CMake configuration. Build this exact target first.");
         if (!Files.readString(receipt, StandardCharsets.UTF_8).equals(exactBoard))
             throw new IOException("Build receipt does not match the selected exact board/CPU: " + exactBoard);
+        // When generated Kconfig exposes the canonical qualified target, cross-check
+        // it as well as the receipt. A failed reconfigure can leave an old receipt
+        // beside a newer CMake configuration; such a build must never be flashed.
+        String configuredTarget = BuildArtifacts.configuration(build).getOrDefault("CONFIG_BOARD_TARGET", "");
+        if (configuredTarget.startsWith("\"") && configuredTarget.endsWith("\"") && configuredTarget.length() >= 2)
+            configuredTarget = configuredTarget.substring(1, configuredTarget.length() - 1);
+        if (!configuredTarget.isBlank() && !configuredTarget.equals(exactBoard))
+            throw new IOException("Configured Zephyr board target conflicts with build receipt: " + configuredTarget);
         if (action.equals("run") && !exactBoard.startsWith("qemu_"))
             throw new IOException("Run in Emulator requires a QEMU target. Use Flash for physical hardware.");
         if (!action.equals("run")) {
