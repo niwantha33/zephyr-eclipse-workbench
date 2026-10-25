@@ -183,18 +183,33 @@ class DependencyTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'requires unavailable West project'):
                     board.prepare_modules(plan, workspace, 'python', 'git')
 
-    def test_imgtool_is_required_for_esp32_and_explicit_mcuboot(self):
+    def test_imgtool_preflight_is_vendor_neutral(self):
         with tempfile.TemporaryDirectory() as home:
             application = Path(home)
-            self.assertTrue(board.requires_imgtool('espressif', application))
+            # The SoC vendor does not imply image signing. Implicit board
+            # defaults are detected from generated Zephyr build rules.
+            self.assertFalse(board.requires_imgtool('espressif', application))
             self.assertFalse(board.requires_imgtool('ti', application))
             (application / 'prj.conf').write_text('CONFIG_BOOTLOADER_MCUBOOT=n\n')
             self.assertFalse(board.requires_imgtool('ti', application))
             (application / 'prj.conf').write_text('CONFIG_BOOTLOADER_MCUBOOT=y\n')
-            self.assertTrue(board.requires_imgtool('ti', application))
+            for vendor in ('ti', 'st', 'nordic', 'nxp', 'espressif', 'silabs'):
+                self.assertTrue(board.requires_imgtool(vendor, application))
             (application / 'prj.conf').write_text('# CONFIG_BOOTLOADER_MCUBOOT=y\n')
             (application / 'sysbuild.conf').write_text('SB_CONFIG_BOOTLOADER_MCUBOOT=y\n')
             self.assertTrue(board.requires_imgtool('st', application))
+
+    def test_required_imgtool_flag_is_shared_for_all_boards(self):
+        with tempfile.TemporaryDirectory() as home:
+            workspace = Path(home)
+            # Verify the source contract stays board-independent: the host
+            # provider is selected through a missing generated requirement.
+            import inspect
+            source = inspect.getsource(board.main)
+            self.assertIn("args.require_host_tool == 'IMGTOOL'", source)
+            self.assertIn("details['modules'].append('mcuboot')", source)
+            self.assertIn("details['signing'] = True", source)
+            self.assertNotIn("details['vendor'] == 'espressif' and details['signing']", source)
 
     def test_mcuboot_python_wheels_have_exact_pins(self):
         lock = json.loads((TOOLS / 'mcuboot-python-lock.json').read_text())
