@@ -15,6 +15,11 @@ public final class ProcessFixture {
             case "fail" -> { System.err.println("intentional error"); System.exit(7); }
             case "flood" -> { for (int i=0; i<10000; i++) { System.out.println("line-" + i); System.err.println("error-" + i); } }
             case "capture" -> { for (int i=0; i<50000; i++) System.out.println("012345678901234567890123456789012345678901234567890123456789"); }
+            case "largecommands" -> {
+                for (int i=0; i<50000; i++) System.out.println("arm-zephyr-eabi-gcc -Iincluded -DTEST -c source/path/project" + i + ".c");
+                System.out.println("python ESPTOOL-NOTFOUND write_flash");
+                if (args.length > 1 && args[1].equals("fail")) System.exit(7);
+            }
             case "sleep" -> Thread.sleep(60_000);
             case "child" -> {
                 String java = Path.of(System.getProperty("java.home"), "bin", System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win") ? "java.exe" : "java").toString();
