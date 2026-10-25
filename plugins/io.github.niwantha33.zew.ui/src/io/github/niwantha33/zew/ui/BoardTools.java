@@ -17,7 +17,8 @@ final class BoardTools {
     private static final List<String> PYTHON_TOOLS = List.of(
         "board_dependencies.py", "board_tools.py", "hardware_catalog.py",
         "setup.py", "managed_sitecustomize.py",
-        "sdk-toolchains-windows-1.0.1.json", "esp32s3-python-lock.json"
+        "sdk-toolchains-windows-1.0.1.json", "esp32s3-python-lock.json",
+        "mcuboot-python-lock.json"
     );
 
     private static java.nio.file.Path stageTools(java.nio.file.Path root) throws Exception {
@@ -71,7 +72,8 @@ final class BoardTools {
             output.accept("Resolving board, SoC, CPU, required compiler and pinned West modules. Existing application, SDK tools and modules are preserved.");
             new ProcessRunner().run(List.of(settings.getProperty("python"), "-u", helper.toString(), "--root", root.toString(),
                 "--sdk", settings.getProperty("tools.sdk"), "--workspace", settings.getProperty("workspace"),
-                "--git", settings.getProperty("tools.git"), "--board", board), root, Duration.ofMinutes(40), monitor::isCanceled,
+                "--git", settings.getProperty("tools.git"), "--board", board,
+                "--application", settings.getProperty("application")), root, Duration.ofMinutes(40), monitor::isCanceled,
                 line -> { monitor.subTask(line); output.accept(line); }, environment).requireSuccess();
         }
     }

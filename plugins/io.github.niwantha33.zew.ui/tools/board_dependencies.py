@@ -7,6 +7,7 @@ Never edit application sources, replace existing SDK toolchains, fetch blobs, or
 update a module past the West manifest's immutable revision.
 """
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -176,7 +177,90 @@ def modules_for(vendor, compiler, manifest):
     return names
 
 
-def plan(board, workspace, python):
+
+def requires_imgtool(vendor, application=None):
+    """Detect boards and applications that need MCUboot's image tool.
+
+    Zephyr ESP32 image generation may require imgtool for an unsigned image.
+    Other targets request it explicitly through MCUboot Kconfig.
+    """
+    if vendor == 'espressif':
+        return True
+    if application is None:
+        return False
+    app = Path(application)
+    if not app.is_dir():
+        raise ValueError('Zephyr application directory is missing: ' + str(app))
+    configuration = [app / 'prj.conf', app / 'sysbuild.conf']
+    configuration += list((app / 'boards').glob('*.conf'))
+    configuration += list((app / 'sysbuild').glob('*.conf'))
+    enabled = re.compile(
+        r'^\s*(?:CONFIG_BOOTLOADER_MCUBOOT|SB_CONFIG_BOOTLOADER_MCUBOOT)\s*=\s*y\s*(?:#.*)?$',
+        re.MULTILINE)
+    for file in configuration:
+        if file.is_file() and enabled.search(file.read_text(encoding='utf-8', errors='replace')):
+            return True
+    return False
+
+
+def install_signing_tools(root, workspace, python, manifest):
+    """Provision pinned imgtool Python dependencies without replacing old tools."""
+    if 'mcuboot' not in manifest:
+        raise ValueError('Pinned Zephyr manifest is missing the mcuboot signing project')
+    _, relative = manifest['mcuboot']
+    imgtool = workspace / relative / 'scripts' / 'imgtool.py'
+    if not imgtool.is_file():
+        raise ValueError('Pinned MCUboot module does not provide scripts/imgtool.py: ' + str(imgtool))
+    lock_path = HERE / 'mcuboot-python-lock.json'
+    source = lock_path.read_bytes()
+    lock = json.loads(source)
+    if lock.get('schema') != 1 or lock.get('python') != '3.13' or lock.get('platform') != 'win_amd64':
+        raise ValueError('Unsupported pinned MCUboot signing dependency lock')
+    if sys.version_info[:2] != (3, 13):
+        raise ValueError('MCUboot signing requires the managed CPython 3.13 runtime')
+    packages = lock.get('packages', [])
+    expected = {'cbor2', 'cffi', 'click', 'cryptography', 'intelhex', 'pycparser', 'pyyaml'}
+    if {p.get('name', '').lower() for p in packages} != expected:
+        raise ValueError('Pinned MCUboot signing dependency set is incomplete')
+    digest = hashlib.sha256(source).hexdigest()
+    destination = root / 'board-python' / 'mcuboot'
+    proof = destination / '.zew-ready'
+    if proof.is_file():
+        if proof.read_text(encoding='utf-8').strip() != digest:
+            raise ValueError('Existing MCUboot signing environment has a different pin; preserved: ' + str(destination))
+        setup.log('Reusing pinned MCUboot imgtool Python dependencies')
+    else:
+        if destination.exists() or destination.is_symlink():
+            raise ValueError('Incomplete MCUboot signing environment preserved: ' + str(destination))
+        cache = root / 'cache'
+        cache.mkdir(parents=True, exist_ok=True)
+        archives = [setup.fetch(package, cache) for package in packages]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='.zew-imgtool-stage-', dir=destination.parent) as temporary:
+            stage = Path(temporary) / 'packages'
+            subprocess.run([str(python), '-m', 'pip', 'install', '--no-index', '--no-deps',
+                            '--no-build-isolation', '--disable-pip-version-check',
+                            '--target', str(stage), *map(str, archives)],
+                           check=True, timeout=600, stdin=subprocess.DEVNULL)
+            subprocess.run([str(python), '-c',
+                            'import sys;sys.path.insert(0,sys.argv[1]);import cbor2,cffi,click,cryptography,intelhex,yaml',
+                            str(stage)], check=True, timeout=30, stdin=subprocess.DEVNULL)
+            (stage / '.zew-ready').write_text(digest + '\n', encoding='utf-8')
+            stage.rename(destination)
+    site = root / 'python' / 'Lib' / 'site-packages'
+    if not site.is_dir():
+        raise ValueError('Managed Python site-packages is missing: ' + str(site))
+    mapping = site / 'zew-mcuboot.pth'
+    value = str(destination) + '\n'
+    if mapping.exists() and mapping.read_text(encoding='utf-8') != value:
+        raise ValueError('Conflicting MCUboot Python path mapping preserved: ' + str(mapping))
+    mapping.write_text(value, encoding='utf-8')
+    subprocess.run([str(python), str(imgtool), '--help'], check=True,
+                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                   text=True, timeout=30, stdin=subprocess.DEVNULL)
+    setup.log('READY — pinned MCUboot imgtool is runnable: ' + str(imgtool))
+
+def plan(board, workspace, python, application=None):
     checked_board(board)
     zephyr = workspace / 'zephyr'
     revision = subprocess.check_output(['git', '-C', str(zephyr), 'rev-parse', 'HEAD'],
@@ -199,8 +283,13 @@ def plan(board, workspace, python):
         raise ValueError('No reviewed Windows Zephyr SDK compiler for ' + compiler)
     manifest = manifest_projects(python, workspace)
     names = modules_for(vendor, compiler, manifest)
+    signing = requires_imgtool(vendor, application)
+    if signing:
+        if 'mcuboot' not in manifest:
+            raise ValueError('MCUboot signing is needed but its pinned West module is unavailable')
+        names.append('mcuboot')
     return {'board': board, 'soc': soc, 'vendor': vendor, 'compiler': compiler,
-            'modules': names, 'manifest': manifest, 'asset': assets['assets'][compiler]}
+            'signing': signing, 'modules': names, 'manifest': manifest, 'asset': assets['assets'][compiler]}
 
 
 def git_revision(git, path):
@@ -339,10 +428,11 @@ def main(argv=None):
     parser.add_argument('--workspace', required=True, type=Path)
     parser.add_argument('--git', required=True)
     parser.add_argument('--board', required=True)
+    parser.add_argument('--application', type=Path, help='Project configuration used for optional MCUboot signing')
     parser.add_argument('--plan', action='store_true', help='Report plan only, without modifying files')
     args = parser.parse_args(argv)
     root, sdk, workspace = args.root.resolve(), args.sdk.resolve(), args.workspace.resolve()
-    details = plan(args.board, workspace, sys.executable)
+    details = plan(args.board, workspace, sys.executable, args.application)
     setup.log('Selected: ' + details['board'] + ' | SoC=' + details['soc'] +
               ' | chip vendor=' + details['vendor'])
     setup.log('Compiler: ' + details['compiler'] + ' | pinned West modules: ' +
@@ -354,9 +444,11 @@ def main(argv=None):
     prepare_compiler(root, sdk, details['compiler'], details['asset'])
     prepare_modules(details, workspace, sys.executable, args.git)
     activate_modules(details, workspace, sys.executable)
+    if details['signing']:
+        install_signing_tools(root, workspace, sys.executable, details['manifest'])
     if details['vendor'] == 'espressif' and details['soc'] == 'esp32s3':
         legacy.install_python_tools(root)
-    setup.log('READY — pinned SDK, West revisions and active CMake module discovery verified')
+    setup.log('READY — pinned SDK, West revisions, active modules and signing tools verified')
     return 0
 
 

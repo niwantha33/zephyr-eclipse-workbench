@@ -63,6 +63,14 @@ for p in bundles:
                 raise SystemExit('Invalid ESP32-S3 Python lock')
             if z.read('tools/esp32s3-python-lock.json') != (root / 'plugins/io.github.niwantha33.zew.ui/tools/esp32s3-python-lock.json').read_bytes():
                 raise SystemExit('Board dependency lock differs from source')
+            signing_lock = json.loads(z.read('tools/mcuboot-python-lock.json'))
+            if (signing_lock['schema'], signing_lock['python'], signing_lock['platform']) != (1, '3.13', 'win_amd64'):
+                raise SystemExit('Invalid MCUboot dependency lock')
+            for package in signing_lock['packages']:
+                if len(package['sha256']) != 64 or package['size'] <= 0 or not package['url'].startswith('https://files.pythonhosted.org/'):
+                    raise SystemExit('Malformed MCUboot dependency: ' + package['name'])
+            if z.read('tools/mcuboot-python-lock.json') != (root / 'plugins/io.github.niwantha33.zew.ui/tools/mcuboot-python-lock.json').read_bytes():
+                raise SystemExit('Packaged MCUboot dependency lock differs from verified source')
             lock = json.loads(z.read('tools/setup-lock.json'))
             if lock['profile'] != 'first-build-win-x64' or any(p['review'] != 'approved-build-use' for p in lock['packages']):
                 raise SystemExit('Setup profile or package review is incomplete.')
@@ -81,7 +89,8 @@ for p in bundles:
                     raise SystemExit('Board-tools sibling staging missing from compiled builder')
             for helper in ('board_dependencies.py', 'board_tools.py', 'hardware_catalog.py',
                            'setup.py', 'managed_sitecustomize.py',
-                           'sdk-toolchains-windows-1.0.1.json', 'esp32s3-python-lock.json'):
+                           'sdk-toolchains-windows-1.0.1.json', 'esp32s3-python-lock.json',
+                           'mcuboot-python-lock.json'):
                 if 'tools/' + helper not in z.namelist():
                     raise SystemExit('Required bundled board helper missing: ' + helper)
             if 'io/github/niwantha33/zew/ui/ToolsDialog.class' not in z.namelist():
