@@ -146,6 +146,14 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                     + configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, ""), null);
             ConsolePlugin.getDefault().getConsoleManager().addConsoles(new IConsole[] {console});
             ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
+            if (io.github.niwantha33.zew.core.OpenOcdRegistry.providerFor(params.plan().board())
+                    == io.github.niwantha33.zew.core.OpenOcdRegistry.Provider.ESPRESSIF) {
+                try (var info = console.newMessageStream()) {
+                    info.println("Espressif Debug uses hardware breakpoints; available slots depend on the CPU."
+                            + " Delete unused breakpoints to leave a slot for stepping."
+                            + " This does not repair invalid flash mappings or flash firmware.");
+                }
+            }
             Process server = builder.start();
             session = new ManagedServer(server, console.newMessageStream(), lease, launch);
             lease = null; // ManagedServer now owns this physical operation.
@@ -156,7 +164,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             boolean ready = false;
             while (System.nanoTime() < deadline && server.isAlive()) {
                 if (monitor.isCanceled()) throw new java.io.InterruptedIOException("Debug session cancelled.");
-                if (isListening(params.port())) { ready = true; break; }
+                if (session.diagnostics.isListening(params.port())) { ready = true; break; }
                 Thread.sleep(100);
             }
             if (!ready || !server.isAlive()) {

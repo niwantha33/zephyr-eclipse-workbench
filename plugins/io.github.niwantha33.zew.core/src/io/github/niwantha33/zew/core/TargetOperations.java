@@ -48,6 +48,11 @@ public final class TargetOperations {
         var args = new ArrayList<>(plan.westArguments());
         args.addAll(List.of("--openocd", WestCommands.cmakePath(tool.executable().toString()),
                 "--openocd-search", WestCommands.cmakePath(tool.scripts().toString())));
+        // ESP Zephyr images can lack an IDF partition table, leaving OpenOCD's
+        // IROM/DROM maps empty. Never try to patch instructions in unmapped flash.
+        // Use real CPU breakpoints, with the hardware's finite slot limit.
+        if (tool.provider() == OpenOcdRegistry.Provider.ESPRESSIF)
+            args.addAll(List.of("--cmd-pre-init", "gdb_breakpoint_override hard"));
         return new Plan(plan.action(), plan.board(), plan.buildDirectory(), args);
     }
 

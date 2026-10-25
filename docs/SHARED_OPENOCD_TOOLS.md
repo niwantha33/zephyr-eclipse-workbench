@@ -82,3 +82,36 @@ existing configuration. Flash and emulator launches do not receive debug overrid
 Offline regression fixtures cover Espressif, STM32, Nordic, NXP, Renesas,
 Microchip, Silicon Labs and TI provider selection. These fixtures do not prove
 physical probe or board support.
+
+## Espressif flash mapping and breakpoint failures
+
+Native Debug waits for the owned OpenOCD process to report its GDB listening
+port. It does not open a disposable GDB connection; this previously caused an
+apparent rejected connection before CDT connected.
+
+Espressif OpenOCD launches use `--cmd-pre-init "gdb_breakpoint_override hard"`.
+This keeps ordinary Eclipse breakpoints on CPU hardware resources when OpenOCD
+cannot reconstruct IROM/DROM maps from a Zephyr image. Hardware slots are limited;
+remove unused breakpoints and leave a slot for stepping. Other providers retain
+their existing breakpoint policy. The console explicitly reports this policy.
+
+This is a breakpoint workaround, not a flash-image or partition-layout repair.
+`Application image is invalid`, zero-sized IROM/DROM banks and `appimage_offset`
+warnings require checking the exact firmware image/layout already on the board.
+Debug does not program firmware. Flash the selected build using its board runner
+before debugging if that exact image is not already installed. Do not guess an
+application offset: derive it from that build's bootloader/partition/image metadata
+and the actual flash contents. A PC in boot ROM (for example `0x40000400`) has no
+application source line; use a hardware breakpoint in `main` after checking that
+the flashed image matches the selected ELF.
+
+`No module named usb` while importing `rtsflash` is separate from an OpenOCD
+launch which reaches its GDB listener. PyUSB belongs to that runner's Python
+dependencies; it is not an ESP32 JTAG driver. `No symbols for Zephyr` / missing
+`_kernel_thread_info_offsets` can mean thread metadata was not built. For thread
+inspection enable `CONFIG_DEBUG_THREAD_INFO=y` where supported, rebuild and flash
+the same build. This is separate from source-level ELF debug information.
+
+References: Zephyr v4.4.0 `scripts/west_commands/runners/openocd.py`
+(`--cmd-pre-init`), OpenOCD 0.12 GDB configuration (`gdb_breakpoint_override`),
+and Espressif's JTAG Tips and Quirks (`esp appimage_offset`).

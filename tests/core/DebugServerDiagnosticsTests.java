@@ -10,6 +10,17 @@ public final class DebugServerDiagnosticsTests {
         checks++;
     }
     public static void main(String[] args) {
+        var readiness = new DebugServerDiagnostics();
+        readiness.accept("-- runners.openocd: OpenOCD GDB server running on port 3333; no thread info available");
+        yes(!readiness.isListening(3333), "West announcement does not prove OpenOCD is listening");
+        readiness.accept("Info : Listening on port 6333 for tcl connections");
+        yes(!readiness.isListening(6333), "TCL endpoint is not GDB readiness");
+        readiness.accept("Info : Listening on port 3333 for gdb connections");
+        yes(readiness.isListening(3333), "Owned OpenOCD GDB readiness without a dummy connection");
+        yes(!readiness.isListening(4444), "Readiness must match configured port");
+        for (int i = 0; i < 100; ++i) readiness.accept("later output");
+        yes(readiness.isListening(3333), "Readiness survives diagnostic ring eviction");
+
         var missingJtag = new DebugServerDiagnostics();
         missingJtag.accept("Error: libusb_error_not_found");
         String result = missingJtag.describe("esp32s3_devkitc/esp32s3/procpu", 3333, 1);
