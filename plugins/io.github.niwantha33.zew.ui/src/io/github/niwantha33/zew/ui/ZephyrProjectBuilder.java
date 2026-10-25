@@ -117,11 +117,12 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 } else {
                     stream.println("Optional hardware debug tool not found for this board."
                         + " Open Zephyr > Manage Debug Tools to select a compatible shared OpenOCD installation.");
-                    // Explicitly clear old stale optional CMake tool selection.
-                    // Otherwise switching providers can retain a wrong vendor
-                    // debugger in the same target cache.
-                    command.add("-UOPENOCD");
-                    command.add("-UOPENOCD_DEFAULT_PATH");
+                    // Explicit empty settings also prevent CMake's
+                    // find_program from silently choosing an incompatible
+                    // OpenOCD from a user/system PATH. Building firmware is
+                    // still allowed without a hardware debugger installed.
+                    command.add("-DOPENOCD:FILEPATH=");
+                    command.add("-DOPENOCD_DEFAULT_PATH:PATH=");
                 }
             }
             stream.println("Workbench " + Activator.getDefault().getBundle().getVersion() + " | " + getProject().getName());
