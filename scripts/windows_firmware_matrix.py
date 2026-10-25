@@ -112,7 +112,7 @@ def main():
         (app / 'prj.conf').write_text('CONFIG_BOOTLOADER_MCUBOOT=y\nCONFIG_MCUBOOT_GENERATE_UNSIGNED_IMAGE=y\nCONFIG_BUILD_OUTPUT_BIN=y\n' if label == 'mcuboot' else '')
         source_hash = hashlib.sha256((app / 'src/main.c').read_bytes()).hexdigest()
         build = app / '.zew-build/ci'
-        protocol = run([python, root / 'installer/build_paths.py', '--application', app, '--build', build,
+        protocol = run([python, root / 'installer/build_paths.py', '--root', root, '--application', app, '--build', build,
                         '--workspace', workspace, '--sdk', root / 'sdk'], workspace, env, capture=True)
         cells = protocol.strip().split('\t')
         if cells[0] != 'ZEW_PATHS_1' or len(cells) != 6:

@@ -27,21 +27,23 @@ class BuildPathTests(unittest.TestCase):
             self.assertEqual(result[0], root.resolve().as_posix())
             self.assertEqual(result[-1], 'false')
 
-    def test_unsupported_short_path_preserves_source(self):
+    def test_unsupported_setup_path_preserves_source(self):
         with tempfile.TemporaryDirectory(prefix='source with spaces ') as home:
             root = Path(home); source = root / 'main.c'; source.write_text('USER SOURCE')
-            with patch.object(paths, 'short_name', return_value=str(root)):
-                with self.assertRaisesRegex(ValueError, 'no verified space-free ASCII alias'):
-                    paths.tool_path(root, windows=True)
+            with self.assertRaisesRegex(ValueError, 'ASCII path without spaces'):
+                paths.tool_path(root, windows=True)
             self.assertEqual(source.read_text(), 'USER SOURCE')
 
-    @unittest.skipUnless(os.name == 'nt', 'requires native Windows short-name API')
-    def test_native_alias_resolves_to_original_directory(self):
-        with tempfile.TemporaryDirectory(prefix='build paths Ω ') as home:
-            root = Path(home).resolve()
-            alias = paths.tool_path(root)
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows junction API')
+    def test_native_alias_resolves_to_original_directory_and_reuses(self):
+        with tempfile.TemporaryDirectory(prefix='zew-paths-') as home:
+            root = Path(home).resolve(); target = root / 'source with spaces Ω'; target.mkdir()
+            (target / 'main.c').write_text('USER SOURCE')
+            alias = paths.tool_path(target, root)
             self.assertFalse(paths.requires_alias(alias))
-            self.assertEqual(Path(alias).resolve(), root)
+            self.assertEqual(Path(alias).resolve(), target)
+            self.assertEqual(paths.tool_path(target, root), alias)
+            self.assertEqual((target / 'main.c').read_text(), 'USER SOURCE')
 
     @unittest.skipIf(os.name == 'nt', 'symlink creation may require Windows privileges')
     def test_symlinked_build_output_cannot_escape_application(self):

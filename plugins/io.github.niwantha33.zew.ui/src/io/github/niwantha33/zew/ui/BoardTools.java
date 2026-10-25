@@ -82,7 +82,7 @@ final class BoardTools {
                 var lock = acquireInstallLock(channel, monitor, ignored -> {})) {
             var helper = stageTools(root).getParent().resolve("build_paths.py");
             String protocol = new ProcessRunner().run(List.of(settings.getProperty("python"), helper.toString(),
-                "--application", settings.getProperty("application"), "--build", build.toString(),
+                "--root", root.toString(), "--application", settings.getProperty("application"), "--build", build.toString(),
                 "--workspace", settings.getProperty("workspace"), "--sdk", settings.getProperty("tools.sdk")),
                 root, Duration.ofMinutes(2), monitor::isCanceled, ignored -> {}, environment).requireCompleteOutput();
             return io.github.niwantha33.zew.core.BuildPaths.parse(protocol);

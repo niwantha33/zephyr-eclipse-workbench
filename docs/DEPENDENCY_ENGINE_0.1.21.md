@@ -67,14 +67,16 @@ existing path, after output verification.
 ## Windows path handling
 
 The real Windows matrix exposed Zephyr 4.4 Kconfig splitting a space-containing
-application path. The shared path adapter uses GetShortPathNameW and verifies
-that the alias resolves to the original directory. Eclipse retains original
-project/output locations and canonicalizes compilation database paths for CDT.
-No source files are copied or moved, no links are created, and no volume settings
-are changed. An old long-path CMake cache is refreshed only within that target's
-managed output directory. Volumes without usable ASCII short names fail with an
-explicit path limitation; they require an ASCII path without spaces. Thus path
-support is a tested managed capability, not a claim about every Windows volume.
+application path. CMake expands Windows short names, so they cannot fix that
+upstream limitation. The shared path adapter instead creates a native private
+directory junction beneath the managed setup and verifies its target before
+reuse. Eclipse retains original project/output locations and canonicalizes
+compilation database paths and diagnostics. No source files are copied or moved,
+no shell or administrator privilege is needed, and no volume settings change.
+Only tool-owned empty/junction entries are removed on staging failure; targets
+are never deleted. Conflicting aliases fail closed. The managed setup root must
+be ASCII without spaces for this profile. An old long-path CMake cache is
+refreshed only within that target's managed output directory.
 The CI verifier transports the path as base64 to avoid the Java launcher's native
 command-line code page, then validates original Unicode paths through Java NIO.
 
