@@ -3,35 +3,47 @@ package io.github.niwantha33.zew.core;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.nio.file.*;
+import java.util.*;
 import java.util.regex.Pattern;
 
-/**
- * Detect missing host executables in *generated build commands*, not in
- * CMakeCache where optional, unused tools may legitimately be NOTFOUND.
- * No vendor table or guessed target architecture is involved.
- */
+/** Inspect executable Ninja bindings, including referenced rule files and variables. */
 public final class BuildHostRequirements {
-    private static final Pattern MISSING =
-        Pattern.compile("(?<![A-Za-z0-9_])([A-Z][A-Z0-9_]*)-NOTFOUND(?![A-Za-z0-9_])");
-    private static final long MAX_NINJA_BYTES = 32L * 1024L * 1024L;
-
-    private BuildHostRequirements() {}
-
-    public static Set<String> missingInGeneratedBuild(Path buildDirectory) throws IOException {
-        Path ninja = buildDirectory.resolve("build.ninja");
-        if (!Files.isRegularFile(ninja)) {
-            throw new IOException("Zephyr configure-only preflight did not produce build.ninja: " + ninja);
+    private static final Pattern MISSING=Pattern.compile("(?<![A-Za-z0-9_])([A-Z][A-Z0-9_]*)-NOTFOUND(?![A-Za-z0-9_])");
+    private static final Pattern ASSIGN=Pattern.compile("^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*)$");
+    private static final Pattern VARIABLE=Pattern.compile("(?<!\\$)\\$(?:\\{([A-Za-z_][A-Za-z0-9_]*)}|([A-Za-z_][A-Za-z0-9_]*))");
+    private BuildHostRequirements(){}
+    public static Set<String> missingInGeneratedBuild(Path directory)throws IOException{
+        Path root=directory.toRealPath();var files=new ArrayDeque<Path>();files.add(root.resolve("build.ninja"));
+        var visited=new HashSet<Path>();var bindings=new HashMap<String,List<String>>();var commands=new ArrayDeque<String>();long bytes=0;
+        while(!files.isEmpty()){
+            Path file=files.removeFirst();
+            if(!Files.isRegularFile(file))throw new IOException("Configure-only preflight is missing generated Ninja file: "+file);
+            file=file.toRealPath();if(!file.startsWith(root))throw new IOException("Generated Ninja include leaves the independent build directory: "+file);
+            if(!visited.add(file))continue;
+            if(visited.size()>128||(bytes+=Files.size(file))>32L*1024*1024)throw new IOException("Generated Ninja metadata exceeds preflight inspection limit");
+            String text=Files.readString(file,StandardCharsets.UTF_8).replaceAll("\\$\\r?\\n[ \\t]*", "");
+            for(String line:text.lines().toList()){
+                if(line.stripLeading().startsWith("#"))continue;
+                String trimmed=line.trim();
+                if(trimmed.startsWith("include ")||trimmed.startsWith("subninja ")){
+                    String path=trimmed.substring(trimmed.indexOf(' ')+1).trim().replace("$ "," ").replace("$:",":").replace("$$","$");
+                    if(path.contains("$"))throw new IOException("Unresolved variable in generated Ninja include: "+path);
+                    files.add(root.resolve(path).normalize());continue;
+                }
+                var assignment=ASSIGN.matcher(line);if(!assignment.matches())continue;
+                String name=assignment.group(1),value=assignment.group(2);bindings.computeIfAbsent(name,k->new ArrayList<>()).add(value);
+                if(name.equalsIgnoreCase("command"))commands.add(value);
+            }
         }
-        if (Files.size(ninja) > MAX_NINJA_BYTES) {
-            throw new IOException("Zephyr generated build.ninja exceeds the preflight inspection limit: " + ninja);
+        var missing=new LinkedHashSet<String>();var expanded=new HashSet<String>();
+        while(!commands.isEmpty()){
+            String value=commands.removeFirst();var matcher=MISSING.matcher(value);while(matcher.find())missing.add(matcher.group(1));
+            var variables=VARIABLE.matcher(value);while(variables.find()){
+                String name=variables.group(1)!=null?variables.group(1):variables.group(2);
+                if(expanded.add(name))commands.addAll(bindings.getOrDefault(name,List.of()));
+            }
         }
-        var matcher = MISSING.matcher(Files.readString(ninja, StandardCharsets.UTF_8));
-        var missing = new LinkedHashSet<String>();
-        while (matcher.find()) missing.add(matcher.group(1));
         return Set.copyOf(missing);
     }
 }

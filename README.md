@@ -4,16 +4,11 @@ An Eclipse-based development environment for Zephyr applications across semicond
 
 ## Project status
 
-0.1.13 adds [automatic ESP32-S3 compiler/esptool/HAL preparation and an existing-project CPU selector](docs/ESP32S3_REPAIR_0.1.13.md).
+0.1.20 adds [shared board/CPU dependency repair](docs/CROSS_VENDOR_REPAIR_0.1.20.md). Compiler selection uses the exact target's architecture and defaults; HAL selection uses the selected SoC metadata and pinned West manifest. The MCUboot isolated-runtime repair from 0.1.19 is retained.
 
+Use the native project Properties > Zephyr page to select an exact board/core, then build through Eclipse. Missing supported compiler, HAL and build-host dependencies are prepared automatically. Each project keeps its independent build output.
 
-The 0.1.12 preview integrates project-specific builds, resolved hardware selection, CDT build settings and West runner commands. See [the exact workflow and remaining boundaries](docs/PROJECT_WORKFLOW_0.1.12.md).
-
-
-Development slices implemented: environment checks, qualified-board selection, application builds, and a private click-to-install workbench update client. The user has exercised the earlier plug-in on Windows and reported a successful build. Automated checks and packaging run on Linux; the new interactive update flow and hardware execution still need desktop validation. This is not a stable release.
-The repository remains private during development; public publication is a separate future action.
-
-The required workflow is: Install / Manage Zephyr Tools, File > New > Zephyr Project (new or existing), vendor/SoC/board/core selection, native Eclipse editing/build/run/debug, and click-to-install update notifications. See [the guided workflow specification](docs/GUIDED_WORKFLOW.md); these capabilities are not all implemented in the current prototype.
+This is a development preview. Automated regression, upstream target metadata checks and p2 packaging run on Linux. Native Windows execution and physical flashing/debugging require separate validation.
 
 ## Scope
 
@@ -50,18 +45,9 @@ bound to the verified managed Windows x64 environment. New source projects are
 portable and protected against overwrite. Each application has an isolated
 build directory, and the existing HelloZephyr build cache is retained.
 
-**Board limitation:** the managed installer presently includes the x86 compiler
-for `qemu_x86/atom` only. General vendor/SoC/core selection, external
-toolchain installation, CDT indexing, running/flashing and on-target debugging
-are still pending and are *not* presented as working.
+This section describes the historical 0.1.11 baseline. Current dependency preparation and validation are described in the [0.1.20 repair notes](docs/CROSS_VENDOR_REPAIR_0.1.20.md).
 
-See [Project workflow 0.1.11](docs/PROJECT_WORKFLOW_0.1.11.md).
-
-**Updates:** A source merge is not an Eclipse installation update. The IDE
-tracks the private `updates` branch's pinned p2 channel; it will continue
-showing 0.1.10 until a verified 0.1.11 site has been published there.
-Use the [private update publishing and recovery guide](docs/PRIVATE_UPDATE_PUBLISH.md)
-when publishing a new workbench build.
+**Updates:** A source merge is separate from an Eclipse installation update. Use the Workbench update command and restart Eclipse after installation. The update channel points to an immutable, verified p2 release.
 
 ## Start here
 
@@ -87,4 +73,5 @@ Original workbench material is licensed under [Apache-2.0](LICENSE), unless a mo
 The core workflow must use open-source software permitting commercial use without mandatory licence fees. Proprietary blobs and closed utilities are excluded from that workflow; some board features may therefore be unavailable. Exact dependency and firmware-feature audits are pending. See [the policy](docs/LICENSING.md).
 
 This is an independent integration project. Upstream sources: [Zephyr](https://github.com/zephyrproject-rtos/zephyr) and [Eclipse Embedded CDT](https://eclipse-embed-cdt.github.io/).
+
 

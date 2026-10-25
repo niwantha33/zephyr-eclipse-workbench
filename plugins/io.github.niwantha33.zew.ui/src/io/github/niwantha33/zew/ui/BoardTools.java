@@ -15,7 +15,7 @@ final class BoardTools {
     // packed plug-in. Python must see all sibling helpers in the same directory.
     // Keep this inventory in sync with scripts/verify_site.py.
     private static final List<String> PYTHON_TOOLS = List.of(
-        "board_dependencies.py", "board_tools.py", "hardware_catalog.py",
+        "board_dependencies.py", "board_tools.py", "hardware_catalog.py", "target_metadata.py",
         "setup.py", "managed_sitecustomize.py",
         "sdk-toolchains-windows-1.0.1.json", "esp32s3-python-lock.json",
         "mcuboot-python-lock.json"
@@ -59,13 +59,27 @@ final class BoardTools {
         return directory.resolve("board_dependencies.py");
     }
 
+    private static java.nio.channels.FileLock acquireInstallLock(FileChannel channel, IProgressMonitor monitor,
+            Consumer<String> output) throws Exception {
+        long deadline = System.nanoTime() + Duration.ofMinutes(45).toNanos(); boolean announced = false;
+        while (true) {
+            if (monitor.isCanceled()) throw new java.io.InterruptedIOException("Dependency preparation cancelled while waiting for shared tools");
+            try { var lock = channel.tryLock(); if (lock != null) return lock; }
+            catch (java.nio.channels.OverlappingFileLockException busy) { /* Another project in this Eclipse owns it. */ }
+            if (!announced) { output.accept("Another project is preparing this tool environment; waiting automatically. Cancel in Progress if needed."); announced = true; }
+            monitor.subTask("Waiting for shared Zephyr tool preparation");
+            if (System.nanoTime() >= deadline) throw new java.io.IOException("Timed out waiting for shared Zephyr tool preparation");
+            Thread.sleep(200);
+        }
+    }
+
     static void prepare(Properties settings, Map<String, String> environment, IProgressMonitor monitor, Consumer<String> output) throws Exception {
         prepareFor(settings, environment, monitor, output, null);
     }
 
     static void prepareHostTool(Properties settings, Map<String, String> environment, IProgressMonitor monitor,
             Consumer<String> output, String tool) throws Exception {
-        if (!"IMGTOOL".equals(tool)) throw new java.io.IOException("Unsupported required build host tool: " + tool);
+        if (!Set.of("IMGTOOL", "ESPTOOL").contains(tool)) throw new java.io.IOException("Unsupported required build host tool: " + tool);
         prepareFor(settings, environment, monitor, output, tool);
     }
 
@@ -77,13 +91,10 @@ final class BoardTools {
         }
         String board = settings.getProperty("board");
         if (board == null || board.isBlank()) throw new java.io.IOException("Set an exact project board target in Project Properties > Zephyr.");
-        if (board.equals("qemu_x86/atom")) {
-            if (requiredHostTool != null) throw new java.io.IOException("Host-tool auto-install is not available for the minimal x86 starter; use a full managed hardware target");
-            return; // The managed starter already installed its pinned x86 compiler.
-        }
+        if (board.equals("qemu_x86/atom") && requiredHostTool == null) return; // Existing minimal starter, unless an actual generated rule requires a tool.
         java.nio.file.Path root = java.nio.file.Path.of(settings.getProperty("zew.setupRoot"));
         try (var channel = FileChannel.open(root.resolve(".zew-install.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-                var lock = channel.tryLock()) {
+                var lock = acquireInstallLock(channel, monitor, output)) {
             if (lock == null) throw new java.io.IOException("Another project is preparing this tool environment. Wait for it to finish, then build again.");
             var helper = stageTools(root);
             output.accept("Resolving board, SoC, CPU, required compiler and pinned West modules. Existing application, SDK tools and modules are preserved.");
@@ -97,3 +108,4 @@ final class BoardTools {
         }
     }
 }
+

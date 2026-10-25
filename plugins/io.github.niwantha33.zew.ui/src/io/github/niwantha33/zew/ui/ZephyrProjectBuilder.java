@@ -96,9 +96,17 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 runner.run(configure, workspace, Duration.ofMinutes(15),
                         monitor::isCanceled, log, environment).requireSuccess();
                 var missing = BuildHostRequirements.missingInGeneratedBuild(buildDirectory);
-                if (missing.contains("IMGTOOL")) {
-                    stream.println("Build requires IMGTOOL; installing pinned MCUboot host dependencies through Workbench.");
-                    BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "IMGTOOL");
+                boolean installedHostTool = false;
+                for (String tool : new java.util.TreeSet<>(missing)) {
+                    if (java.util.Set.of("IMGTOOL", "ESPTOOL").contains(tool)) {
+                        stream.println("Build requires " + tool + "; preparing its pinned host-tool provider.");
+                        BoardTools.prepareHostTool(settings, environment, monitor, stream::println, tool);
+                        installedHostTool = true;
+                    }
+                }
+                if (installedHostTool) {
+                    // Installed modules must be visible even for an old minimal starter.
+                    configure.remove("-DZEPHYR_MODULES="); command.remove("-DZEPHYR_MODULES=");
                     // Old CMakeCache can retain IMGTOOL-NOTFOUND, and module
                     // discovery happens at configure time. Regenerate only
                     // this project's independent .zew-build target directory.
@@ -132,5 +140,6 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         finally { monitor.done(); }
     }
 }
+
 
 

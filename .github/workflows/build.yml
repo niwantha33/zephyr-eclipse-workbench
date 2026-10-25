@@ -31,6 +31,8 @@ jobs:
           test -d "$JAVA_HOME_21_X64"
           echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
           echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+      - name: Install pinned test metadata dependencies
+        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3 west==1.5.0
       - name: Exercise process and command core
         run: python3 scripts/test_core.py
       - name: Build plug-ins and p2 repository
@@ -44,3 +46,4 @@ jobs:
           path: releng/repository/target/repository/
           if-no-files-found: error
           retention-days: 7
+

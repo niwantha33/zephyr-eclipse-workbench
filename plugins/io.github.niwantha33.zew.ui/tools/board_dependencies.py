@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('zew_board_tools', HERE / 'board_tools.py')
@@ -26,16 +27,6 @@ PINNED_ZEPHYR = '684c9e8f32e4373a21098559f748f06915f950c9'
 PINNED_SDK = '1.0.1'
 BOARD_PATTERN = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.@/+\-]{0,255}$')
 SHA_PATTERN = re.compile(r'^[a-f0-9]{40}$')
-# SoC metadata supplies the chip vendor, independently of the board vendor.
-HAL_ALIASES = {'st': 'stm32', 'nordic': 'nordic', 'ti': 'ti',
-               'espressif': 'espressif', 'nxp': 'nxp', 'silabs': 'silabs'}
-CPU_FAMILIES = (
-    (re.compile(r'CPU_CORTEX|\bARM(?:64)?\b|\bARMV[6789]'), 'arm'),
-    (re.compile(r'\bRISCV\b|\bRISC_V\b'), 'riscv'),
-    (re.compile(r'\bXTENSA\b'), 'xtensa'),
-    (re.compile(r'\bX86(?:_64)?\b'), 'x86'),
-    (re.compile(r'\bARC(?:64)?\b'), 'arc'),
-)
 
 
 def checked_board(board):
@@ -43,94 +34,6 @@ def checked_board(board):
         raise ValueError('Invalid exact Zephyr board qualifier')
     return board
 
-
-def soc_metadata(zephyr, soc):
-    """Locate both the SoC and its CPU series in the checkout's own YAML."""
-    import yaml
-
-    def matching_series(value, series=None):
-        if isinstance(value, list):
-            for item in value:
-                result = matching_series(item, series)
-                if result is not None:
-                    return result
-        elif isinstance(value, dict):
-            if value.get('name') == soc and series is not None:
-                return series
-            for key, child in value.items():
-                if key == 'series' and isinstance(child, list):
-                    for entry in child:
-                        result = matching_series(entry, entry.get('name'))
-                        if result is not None:
-                            return result
-                else:
-                    result = matching_series(child, series)
-                    if result is not None:
-                        return result
-        return None
-
-    matches = []
-    for path in (zephyr / 'soc').rglob('soc.yml'):
-        series = matching_series(yaml.safe_load(path.read_text(encoding='utf-8')))
-        if series is not None:
-            folder = path.parent / series
-            matches.append((path.parent, folder if folder.is_dir() else path.parent))
-    if len(matches) != 1:
-        raise ValueError('Cannot unambiguously resolve SoC ' + soc + ' from the pinned Zephyr tree')
-    relative = matches[0][0].relative_to(zephyr / 'soc')
-    return relative.parts[0], matches[0][1]
-
-
-def architecture(vendor, soc, folder, qualifier):
-    """Derive compiler from the selected SoC series and exact core qualifier.
-
-    Mixed ARM/RISC-V SoCs must select a core explicitly; an ambiguous or
-    unsupported core fails closed instead of silently installing ARM tools.
-    """
-    chip = soc.lower()
-    core = qualifier.lower().split('/')[-1]
-    if vendor == 'espressif':
-        if chip in ('esp32', 'esp32s2', 'esp32s3'):
-            return 'xtensa-espressif_' + chip + '_zephyr-elf'
-        if chip.startswith(('esp32c', 'esp32h', 'esp32p')):
-            return 'riscv64-zephyr-elf'
-    chunks = []
-    for source in folder.rglob('Kconfig*'):
-        if source.is_file():
-            chunks.append(source.read_text(encoding='utf-8', errors='replace'))
-    all_text = '\n'.join(chunks)
-    flags = set()
-    for regex, family in CPU_FAMILIES:
-        if regex.search(all_text):
-            flags.add(family)
-    if re.search(r'\bARM64\b|\bAARCH64\b', all_text):
-        flags.add('aarch64')
-    if 'aarch64' in flags and 'arm' in flags:
-        # Cortex-A/M can coexist in one family; there is no safe universal default.
-        raise ValueError('Multiple ARM core widths found: select a supported CPU cluster for ' + qualifier)
-    if len(flags) > 1:
-        if core in ('cpuflpr', 'lpcore') and 'riscv' in flags:
-            return 'riscv64-zephyr-elf'
-        if core in ('cpuapp', 'cpunet', 'cpuppr') and 'arm' in flags:
-            return 'arm-zephyr-eabi'
-        raise ValueError('Mixed architectures in SoC series; cannot determine compiler for ' + qualifier)
-    if flags == {'arm'}:
-        return 'arm-zephyr-eabi'
-    if flags == {'aarch64'}:
-        return 'aarch64-zephyr-elf'
-    if flags == {'riscv'}:
-        return 'riscv64-zephyr-elf'
-    if flags == {'x86'}:
-        return 'x86_64-zephyr-elf'
-    if flags == {'arc'}:
-        return 'arc-zephyr-elf'
-    if flags == {'xtensa'}:
-        # Xtensa toolchains are core-specific, not interchangeable.
-        raise ValueError('No uniquely identified Xtensa CPU compiler for ' + qualifier)
-    if vendor == 'ti' and chip.startswith('mspm0'):
-        return 'arm-zephyr-eabi'
-    raise ValueError('CPU architecture cannot be confirmed for ' + soc + '/' + qualifier
-                     + '. Application and SDK were preserved.')
 
 def manifest_projects(python, workspace):
     command = [str(python), '-m', 'west', 'list', '--all', '-f', '{name}\t{revision}\t{path}']
@@ -151,29 +54,20 @@ def manifest_projects(python, workspace):
     return rows
 
 
-def modules_for(vendor, compiler, manifest):
-    """Plan pinned CPU support before the selected SoC vendor HAL.
+def metadata_provider():
+    spec = importlib.util.spec_from_file_location('zew_target_metadata', HERE / 'target_metadata.py')
+    provider = importlib.util.module_from_spec(spec); spec.loader.exec_module(provider)
+    return provider
 
-    Zephyr 4.2+ uses cmsis_6 for Cortex-M, while the legacy cmsis
-    module remains useful for Cortex-A/R and vendor-HAL compatibility.
-    Installing both on 32-bit ARM also handles mixed-profile trees
-    without guessing from the vendor name.
-    """
+
+def modules_for(vendor, compiler, manifest, info):
     names = []
     if compiler == 'arm-zephyr-eabi':
         for name in ('cmsis_6', 'cmsis'):
-            if name not in manifest:
-                raise ValueError('Required ARM module is missing from pinned West manifest: ' + name)
+            if name not in manifest: raise ValueError('Required ARM module is missing from pinned West manifest: ' + name)
             names.append(name)
-    alias = HAL_ALIASES.get(vendor, vendor)
-    found_hal = False
-    for candidate in ('hal_' + alias, 'hal_' + vendor):
-        if candidate in manifest:
-            names.append(candidate)
-            found_hal = True
-            break
-    if vendor in HAL_ALIASES and not found_hal:
-        raise ValueError('Selected vendor HAL is missing from West manifest: hal_' + alias)
+    for name in metadata_provider().hal_modules(info, manifest):
+        if name not in names: names.append(name)
     return names
 
 
@@ -268,36 +162,28 @@ def install_signing_tools(root, workspace, python, manifest):
                          + '):\n' + (result.stderr or result.stdout or 'No diagnostic output').strip())
     setup.log('READY — pinned MCUboot imgtool is runnable: ' + str(imgtool))
 
-def plan(board, workspace, python, application=None):
+def plan(board, workspace, python, application=None, git="git"):
     checked_board(board)
     zephyr = workspace / 'zephyr'
-    revision = subprocess.check_output(['git', '-C', str(zephyr), 'rev-parse', 'HEAD'],
+    revision = subprocess.check_output([str(git), '-C', str(zephyr), 'rev-parse', 'HEAD'],
                                        text=True, timeout=30).strip()
     if revision != PINNED_ZEPHYR:
         raise ValueError('Dependency preparation requires the pinned managed Zephyr 4.4.0 checkout')
-    spec = importlib.util.spec_from_file_location('zew_hardware_catalog', HERE / 'hardware_catalog.py')
-    catalogue = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(catalogue)
-    matches = [row for row in catalogue.catalogue(zephyr) if row[6] == board]
-    if len(matches) != 1:
-        raise ValueError('Board qualifier not found in this Zephyr checkout: ' + board)
-    soc = matches[0][2]
-    if soc == '-':
-        raise ValueError('Selected board has no unique SoC: ' + board)
-    vendor, folder = soc_metadata(zephyr, soc)
-    compiler = architecture(vendor, soc, folder, board.split('/', 1)[-1])
+    metadata = metadata_provider()
+    info = metadata.describe(zephyr, board)
+    soc, vendor = info['soc'], info['vendor']
     assets = json.loads((HERE / 'sdk-toolchains-windows-1.0.1.json').read_text())
-    if assets.get('sdk_version') != PINNED_SDK or compiler not in assets['assets']:
-        raise ValueError('No reviewed Windows Zephyr SDK compiler for ' + compiler)
+    if assets.get('sdk_version') != PINNED_SDK: raise ValueError('Unexpected SDK artifact inventory version')
+    compiler = metadata.compiler(info, assets['assets'], application)
     manifest = manifest_projects(python, workspace)
-    names = modules_for(vendor, compiler, manifest)
+    names = modules_for(vendor, compiler, manifest, info)
     signing = requires_imgtool(vendor, application)
     if signing:
         if 'mcuboot' not in manifest:
             raise ValueError('MCUboot signing is needed but its pinned West module is unavailable')
         names.append('mcuboot')
     return {'board': board, 'soc': soc, 'vendor': vendor, 'compiler': compiler,
-            'signing': signing, 'modules': names, 'manifest': manifest, 'asset': assets['assets'][compiler]}
+            'architecture': info['arch'], 'signing': signing, 'modules': names, 'manifest': manifest, 'asset': assets['assets'][compiler]}
 
 
 def git_revision(git, path):
@@ -323,6 +209,30 @@ def module_dependencies(path):
     return depends
 
 
+def install_module_staged(name, revision, destination, workspace, python, git):
+    """Publish only a complete checkout; cancellation cannot leave a partial live module."""
+    result = subprocess.run([str(python), '-m', 'west', 'list', '--all', name, '-f', '{url}'],
+                            cwd=workspace, check=True, text=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, timeout=60)
+    url = result.stdout.strip()
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or '\n' in url:
+        raise ValueError('Module must have a resolved credential-free HTTPS source: ' + name)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.zew-module-stage-', dir=destination.parent) as temporary:
+        stage = Path(temporary) / 'source'; stage.mkdir()
+        def run(arguments):
+            subprocess.run([str(git), '-c', 'core.longpaths=true', *arguments], cwd=stage,
+                           check=True, timeout=1200, stdin=subprocess.DEVNULL)
+        setup.log('Staging pinned West module: ' + name)
+        run(['init']); run(['remote', 'add', 'origin', url])
+        run(['fetch', '--depth', '1', 'origin', revision]); run(['checkout', '--detach', 'FETCH_HEAD'])
+        if git_revision(git, stage) != revision: raise ValueError('Staged module revision mismatch: ' + name)
+        # Never replace an installation made concurrently or a user's directory.
+        if destination.exists(): raise ValueError('Module destination appeared during preparation; preserved: ' + name)
+        stage.rename(destination)
+
+
 def prepare_modules(plan_data, workspace, python, git):
     """Install pinned direct and transitive Zephyr module dependencies."""
     pending = list(plan_data['modules'])
@@ -337,18 +247,14 @@ def prepare_modules(plan_data, workspace, python, git):
         if not SHA_PATTERN.fullmatch(revision):
             raise ValueError('Selected West module lacks a pinned SHA: ' + name)
         destination = workspace / relative
-        if destination.is_symlink():
+        if destination.is_symlink() or not destination.resolve().is_relative_to(workspace.resolve()):
             raise ValueError('Refusing symlinked module path: ' + str(destination))
         if destination.exists():
             if not (destination / '.git').exists() or git_revision(git, destination) != revision:
                 raise ValueError('Existing module differs from pinned West manifest; preserved: ' + str(destination))
             setup.log('Reusing pinned West module: ' + name)
         else:
-            setup.log('Installing pinned West module: ' + name)
-            subprocess.run([str(python), '-m', 'west', 'update', name], cwd=workspace, check=True,
-                           timeout=1200, stdin=subprocess.DEVNULL)
-            if not destination.is_dir() or git_revision(git, destination) != revision:
-                raise ValueError('West module revision verification failed: ' + name)
+            install_module_staged(name, revision, destination, workspace, python, git)
         selected.append(name)
         for required in module_dependencies(destination):
             if required not in plan_data['manifest']:
@@ -387,7 +293,7 @@ def activate_modules(plan_data, workspace, python):
     value = ','.join(filter(None, (previous, overrides)))
     setup.log('Activating required pinned West modules: ' + ', '.join(missing))
     subprocess.run([str(python), '-m', 'west', 'config', '--local',
-                    'manifest.project-filter', value],
+                    '--', 'manifest.project-filter', value],
                    cwd=workspace, check=True, text=True, timeout=30)
     active_after = active_projects(python, workspace)
     still_missing = [name for name in required if name not in active_after]
@@ -437,12 +343,12 @@ def main(argv=None):
     parser.add_argument('--git', required=True)
     parser.add_argument('--board', required=True)
     parser.add_argument('--application', type=Path, help='Project configuration used for optional MCUboot signing')
-    parser.add_argument('--require-host-tool', choices=('IMGTOOL',),
+    parser.add_argument('--require-host-tool', choices=('IMGTOOL', 'ESPTOOL'),
                         help='Resolved requirement from the generated CMake build rules')
     parser.add_argument('--plan', action='store_true', help='Report plan only, without modifying files')
     args = parser.parse_args(argv)
     root, sdk, workspace = args.root.resolve(), args.sdk.resolve(), args.workspace.resolve()
-    details = plan(args.board, workspace, sys.executable, args.application)
+    details = plan(args.board, workspace, sys.executable, args.application, args.git)
     if args.require_host_tool == 'IMGTOOL':
         # This request comes from Zephyr's actual generated build commands,
         # not from a vendor name. Install the pinned module with its host
@@ -465,7 +371,7 @@ def main(argv=None):
     activate_modules(details, workspace, sys.executable)
     if details['signing']:
         install_signing_tools(root, workspace, sys.executable, details['manifest'])
-    if details['vendor'] == 'espressif' and details['soc'] == 'esp32s3':
+    if 'hal_espressif' in details['modules'] or args.require_host_tool == 'ESPTOOL':
         legacy.install_python_tools(root)
     setup.log('READY — pinned SDK, West revisions, active modules and signing tools verified')
     return 0
@@ -477,3 +383,4 @@ if __name__ == '__main__':
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         setup.log('FAILED — ' + str(exc))
         raise SystemExit(1)
+
