@@ -98,6 +98,25 @@ public final class OpenOcdRegistryTests {
                 throw new AssertionError("flash plan accepted");
             } catch (java.io.IOException expected) { assertions++; }
 
+            for (String board : java.util.List.of("nucleo_f446re/stm32f446xx", "nrf52840dk/nrf52840",
+                    "frdm_k64f/mk64f12", "ek_ra6m3/r7fa6m3ah3cfc", "sam_e70_xplained/same70q21",
+                    "slstk3701a/efm32gg11b820f2048gl192", "mspm0l1306_evk")) {
+                var tool = OpenOcdRegistry.select(board, manual).orElseThrow();
+                var vendorPlan = new io.github.niwantha33.zew.core.TargetOperations.Plan(
+                        "debugserver", board, temp, oldPlan.westArguments());
+                check(io.github.niwantha33.zew.core.TargetOperations.usesOpenOcdDebugServer(
+                        vendorPlan, "debug-runner: openocd\n"), board + " OpenOCD runner recognized");
+                check(io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(vendorPlan, tool)
+                        .westArguments().contains(tool.executable().toString().replace('\\', '/')),
+                        board + " binds matching shared provider");
+                check(!io.github.niwantha33.zew.core.TargetOperations.usesOpenOcdDebugServer(
+                        vendorPlan, "debug-runner: jlink\n"), board + " preserves alternative runner");
+            }
+            check(!io.github.niwantha33.zew.core.TargetOperations.usesOpenOcdDebugServer(
+                    new io.github.niwantha33.zew.core.TargetOperations.Plan("flash", oldPlan.board(), temp,
+                            java.util.List.of("flash")), "debug-runner: openocd\n"),
+                    "flash never receives debug overrides");
+
             Path incomplete = fake(temp.resolve("incomplete"), false, false);
             check(OpenOcdRegistry.fromExecutable(Provider.ESPRESSIF, incomplete, "incomplete").isEmpty(),
                     "incomplete vendor fork rejected");

@@ -72,3 +72,13 @@ target script directories. Espressif also requires `esp_usb_jtag.cfg` and
 Further information:
 - https://docs.zephyrproject.org/latest/develop/flash_debug/host-tools.html
 - https://docs.zephyrproject.org/latest/boards/espressif/common/openocd-debugging.html
+
+## Cross-vendor debug launch policy
+
+Native CDT Debug and External Debug Server share the same runtime OpenOCD binding.
+The generated debug runner chooses whether this policy applies: OpenOCD targets
+use the board-compatible shared provider; J-Link and other runners keep their
+existing configuration. Flash and emulator launches do not receive debug overrides.
+Offline regression fixtures cover Espressif, STM32, Nordic, NXP, Renesas,
+Microchip, Silicon Labs and TI provider selection. These fixtures do not prove
+physical probe or board support.

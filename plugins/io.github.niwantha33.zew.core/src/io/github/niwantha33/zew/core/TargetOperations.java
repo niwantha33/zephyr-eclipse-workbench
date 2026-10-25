@@ -26,6 +26,16 @@ public final class TargetOperations {
         }
     }
 
+    /** Other debug runners retain their own tool and transport configuration. */
+    public static boolean usesOpenOcdDebugServer(Plan plan, String yaml) {
+        if (!"debugserver".equals(plan.action()) || yaml == null) return false;
+        int explicit = plan.westArguments().indexOf("--runner");
+        if (explicit >= 0) return explicit + 1 < plan.westArguments().size()
+                && "openocd".equals(plan.westArguments().get(explicit + 1));
+        return java.util.regex.Pattern.compile("(?m)^debug-runner:[ \t]*['\"]?openocd['\"]?[ \t]*$")
+                .matcher(yaml).find();
+    }
+
     /** Bind a compatible shared tool at launch time, including builds made before tool selection. */
     public static Plan withOpenOcd(Plan plan, OpenOcdRegistry.Installation tool) throws IOException {
         if (!plan.action().equals("debugserver"))
