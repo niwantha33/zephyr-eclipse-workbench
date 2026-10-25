@@ -32,8 +32,8 @@ Zephyr's upstream commands. Hardware programming is an explicit, confirmed actio
 - **Zephyr > Flash Application**: show the selected board for user confirmation;
   prepare/build automatically, then flash using the selected Zephyr build's
   generated runner configuration and `west flash --skip-rebuild`.
-- **Zephyr > Debug Application**: prepare/build automatically, then open a
-  real Eclipse CDT DSF-GDB Debug Configuration. The initial managed native
+- **Zephyr > Debug Application**: prepare/build automatically, then start a
+  real Eclipse CDT DSF-GDB session using the saved Debug Configuration. The initial managed native
   debug backend remains **OpenOCD only**; unsupported debug runners are rejected,
   not treated as universal.
 
