@@ -27,8 +27,13 @@
   <extension point="org.eclipse.debug.core.launchConfigurationTypes">
     <launchConfigurationType id="io.github.niwantha33.zew.ui.launchType"
         name="Zephyr Application" modes="run,debug"
-        delegate="io.github.niwantha33.zew.ui.ZephyrLaunchDelegate"
         public="true"/>
+  </extension>
+  <extension point="org.eclipse.debug.core.launchDelegates">
+    <launchDelegate id="io.github.niwantha33.zew.ui.runRunner"
+        type="io.github.niwantha33.zew.ui.launchType" modes="run"
+        delegate="io.github.niwantha33.zew.ui.ZephyrLaunchDelegate"
+        name="Zephyr Runner"/>
   </extension>
   <extension point="org.eclipse.debug.core.launchDelegates">
     <launchDelegate id="io.github.niwantha33.zew.ui.nativeDsfDebug"
