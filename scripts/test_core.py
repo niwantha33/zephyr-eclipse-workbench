@@ -37,3 +37,4 @@ subprocess.run([tool('java'), '-cp', str(out), 'TargetOperationsTests'], check=T
 subprocess.run([tool('java'), '-cp', str(out), 'EspressifFlashSafetyTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DebugServerDiagnosticsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'EspressifOpenOcdTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'OpenOcdRegistryTests'], check=True, cwd=root, timeout=90)

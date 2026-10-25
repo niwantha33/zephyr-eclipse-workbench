@@ -64,25 +64,6 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                     ProjectContext.buildDirectory(project, settings), settings.getProperty("board"),
                     "debugserver", "");
             String yaml = Files.readString(plan.buildDirectory().resolve("zephyr/runners.yaml"), StandardCharsets.UTF_8);
-            if (io.github.niwantha33.zew.core.EspressifOpenOcd.appliesTo(settings.getProperty("board"))) {
-                var installed = EspressifDebugSetup.find(settings.getProperty("board"))
-                    .orElseThrow(() -> io.github.niwantha33.zew.core.EspressifOpenOcd
-                        .missingTools(settings.getProperty("board")));
-                // CMake must record the full executable and ESP-specific script
-                // root in the selected build. Never fall back to a generic
-                // PATH OpenOCD or use a stale generated runner receipt.
-                String configuredExe = io.github.niwantha33.zew.core.WestCommands
-                        .cmakePath(installed.executable().toString());
-                String configuredScripts = io.github.niwantha33.zew.core.WestCommands
-                        .cmakePath(installed.scripts().toString());
-                if (!yaml.contains("openocd: " + configuredExe)
-                        || !yaml.contains("- " + configuredScripts)) {
-                    throw new IOException("The selected Zephyr build does not reference the installed "
-                        + "Espressif OpenOCD executable and scripts. Build the project again "
-                        + "to refresh its runners.yaml before native Debug. "
-                        + "No firmware was changed.");
-                }
-            }
             var runner = DEFAULT_DEBUG_RUNNER.matcher(yaml);
             if (!runner.find())
                 throw new IOException("This board has no declared default debug runner in generated runners.yaml.");
@@ -90,6 +71,18 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 throw new IOException("Native DSF-GDB currently supports only OpenOCD-backed targets. "
                         + "This board declares " + runner.group(1)
                         + ". External Debug Server remains available; other backends need verified integration.");
+            // A global installation can serve many projects, but the exact
+            // board picks its own compatible OpenOCD distribution. Require
+            // West's runner metadata to match what the managed build chose.
+            var selectedOpenOcd = SharedDebugTools.select(settings.getProperty("board"), settings)
+                    .orElseThrow(() -> io.github.niwantha33.zew.core.OpenOcdRegistry
+                            .missing(settings.getProperty("board")));
+            if (!io.github.niwantha33.zew.core.OpenOcdRegistry
+                    .recordedInRunnerYaml(selectedOpenOcd, yaml))
+                throw new IOException("This build has stale or incompatible OpenOCD runner settings."
+                    + " Rebuild the selected exact board to record the shared "
+                    + selectedOpenOcd.provider() + " OpenOCD executable and scripts."
+                    + " No firmware was changed.");
             var gdbEntry = CONFIG_GDB.matcher(yaml);
             if (!gdbEntry.find() || gdbEntry.group(1).isBlank())
                 throw new IOException("Zephyr runner configuration does not declare an architecture-correct GDB.");
