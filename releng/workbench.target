@@ -12,6 +12,7 @@
       <unit id="org.eclipse.cdt.core" version="9.3.200.202607131546"/>
       <unit id="org.eclipse.cdt.debug.core" version="0.0.0"/>
       <unit id="org.eclipse.cdt.dsf.gdb" version="0.0.0"/>
+      <unit id="org.eclipse.cdt.dsf.gdb.ui" version="0.0.0"/>
     </location>
   </locations>
 </target>
