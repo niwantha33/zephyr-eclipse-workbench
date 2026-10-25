@@ -84,6 +84,8 @@ public final class OpenOcdRegistryTests {
                     "--openocd", selected.executable().toString().replace('\\', '/'),
                     "--openocd-search", selected.scripts().toString().replace('\\', '/'))),
                     "old metadata overridden by explicit matching executable/scripts");
+            check(bound.westArguments().contains("gdb_breakpoint_override hard"),
+                    "Espressif avoids software breakpoint writes to unmapped flash");
             check(oldPlan.westArguments().size() == 4 && bound.westArguments().contains("--no-rebuild"),
                     "override preserves immutable original and no-rebuild");
             try {
@@ -109,6 +111,9 @@ public final class OpenOcdRegistryTests {
                 check(io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(vendorPlan, tool)
                         .westArguments().contains(tool.executable().toString().replace('\\', '/')),
                         board + " binds matching shared provider");
+                check(!io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(vendorPlan, tool)
+                        .westArguments().contains("gdb_breakpoint_override hard"),
+                        board + " retains native breakpoint policy");
                 check(!io.github.niwantha33.zew.core.TargetOperations.usesOpenOcdDebugServer(
                         vendorPlan, "debug-runner: jlink\n"), board + " preserves alternative runner");
             }

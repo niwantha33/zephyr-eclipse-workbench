@@ -12,14 +12,23 @@ import java.util.Locale;
 public final class DebugServerDiagnostics {
     private static final int LINES = 40;
     private static final int MAX_LINE = 500;
+    private final java.util.Set<Integer> listeningPorts = new java.util.HashSet<>();
     private final ArrayDeque<String> recent = new ArrayDeque<>();
 
     public synchronized void accept(String line) {
         if (line == null) return;
+        var listening = java.util.regex.Pattern.compile(
+                "^Info\\s*:\\s*Listening on port ([0-9]{1,5}) for gdb connections\\s*$").matcher(line);
+        if (listening.matches()) listeningPorts.add(Integer.parseInt(listening.group(1)));
         String clean = line.replace('\r', ' ').replace('\0', ' ');
         if (clean.length() > MAX_LINE) clean = clean.substring(0, MAX_LINE) + " [truncated]";
         if (recent.size() == LINES) recent.removeFirst();
         recent.addLast(clean);
+    }
+
+    /** Read the owned server's output; never consume its first GDB connection. */
+    public synchronized boolean isListening(int port) {
+        return listeningPorts.contains(port);
     }
 
     public synchronized String describe(String board, int port, Integer exitCode) {
