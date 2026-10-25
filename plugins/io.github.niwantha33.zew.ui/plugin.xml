@@ -64,6 +64,7 @@
     <command id="io.github.niwantha33.zew.editor" name="Refresh C/C++ Editor Settings" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.quickStart" name="Start a Zephyr Project" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.setup" name="Set Up Zephyr" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.debugTools" name="Manage Shared OpenOCD Debug Tools" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tools" name="Install / Manage Zephyr Tools" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.about" name="About Zephyr Workbench" categoryId="io.github.niwantha33.zew.commands"/>
     <category id="io.github.niwantha33.zew.commands" name="Zephyr Workbench"/>
@@ -83,6 +84,7 @@
     <handler commandId="io.github.niwantha33.zew.editor" class="io.github.niwantha33.zew.ui.EditorHandler"/>
     <handler commandId="io.github.niwantha33.zew.quickStart" class="io.github.niwantha33.zew.ui.ZephyrQuickStartHandler"/>
     <handler commandId="io.github.niwantha33.zew.setup" class="io.github.niwantha33.zew.ui.SetupHandler"/>
+    <handler commandId="io.github.niwantha33.zew.debugTools" class="io.github.niwantha33.zew.ui.DebugToolsHandler"/>
     <handler commandId="io.github.niwantha33.zew.tools" class="io.github.niwantha33.zew.ui.ToolsHandler"/>
     <handler commandId="io.github.niwantha33.zew.about" class="io.github.niwantha33.zew.ui.VersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.checkUpdates" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
@@ -99,6 +101,7 @@
         <command commandId="io.github.niwantha33.zew.quickStart" label="Start Here — Create Zephyr Project..." style="push"/>
         <command commandId="io.github.niwantha33.zew.setup" label="Set Up Zephyr..." style="push"/>
         <command commandId="io.github.niwantha33.zew.tools" label="Install / Manage Zephyr Tools..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.debugTools" label="Manage Shared OpenOCD Debug Tools..." style="push"/>
         <separator name="tools" visible="true"/>
         <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
         <separator name="build" visible="true"/>
