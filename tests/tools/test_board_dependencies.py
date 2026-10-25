@@ -261,7 +261,7 @@ class DependencyTests(unittest.TestCase):
             venv.EnvBuilder(with_pip=False).create(runtime)
             python = runtime / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
             sites = Path(subprocess.check_output(
-                [str(python), '-I', '-c', 'import site;print(site.getsitepackages()[0])'],
+                [str(python), '-I', '-X', 'utf8', '-c', 'import site;print(site.getsitepackages()[0])'],
                 text=True).strip())
             managed_site = runtime / 'Lib/site-packages'
             managed_site.mkdir(parents=True, exist_ok=True)
@@ -280,14 +280,14 @@ class DependencyTests(unittest.TestCase):
             (dependencies / '.zew-ready').write_text(board.hashlib.sha256(lock).hexdigest() + '\n')
             mapping = managed_site / 'zew-mcuboot.pth'
             mapping.write_text(str(dependencies) + '\n')
-            before = subprocess.run([str(python), '-I', str(entry)], capture_output=True, text=True)
+            before = subprocess.run([str(python), '-I', '-X', 'utf8', str(entry)], capture_output=True, text=True)
             self.assertNotEqual(before.returncode, 0)
             manifest = {'mcuboot': ('a' * 40, Path('bootloader/mcuboot'))}
             with patch.object(board.sys, 'version_info', (3, 13)):
                 board.install_signing_tools(root, root / 'workspace', python, manifest)
                 # Retry reuses dependencies and the upgraded mapping.
                 board.install_signing_tools(root, root / 'workspace', python, manifest)
-            after = subprocess.run([str(python), '-I', str(entry)], capture_output=True, text=True)
+            after = subprocess.run([str(python), '-I', '-X', 'utf8', str(entry)], capture_output=True, text=True)
             self.assertEqual(after.returncode, 0, after.stderr)
             self.assertEqual(after.stdout.strip(), 'pinned-imgtool-ok')
 

@@ -46,7 +46,8 @@ environment serialize; contention waits automatically with progress, cancellatio
 cross-process provider lock also protects standalone CI provisioning. Process
 exit releases locks after cancellation or termination.
 
-Configure-only preflight remains in place. Ninja `-t commands` inspects commands
+Configure-only preflight remains in place. Compilation then omits repeated
+CMake arguments so West does not perform a redundant second configure. Ninja `-t commands` inspects commands
 reachable from the default build graph without executing them. Optional targets
 outside that graph do not require tools. The recovery registry permits one
 attempt per capability with a two-capability budget. Discovered capabilities are remembered in the

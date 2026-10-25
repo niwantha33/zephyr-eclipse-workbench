@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 
 class DependencyError(ValueError):
@@ -69,6 +70,17 @@ class Context:
 
     def record(self, kind, name, **proof):
         self.evidence.append(dict(kind=kind, name=name, mandatory=True, **proof))
+
+
+class RuntimeProvider:
+    name = 'runtime-support'
+
+    def prepare(self, ctx):
+        ctx.backend.setup.install_runtime_support(ctx.root)
+        for stream in (sys.stdout, sys.stderr):
+            if hasattr(stream, 'reconfigure'):
+                stream.reconfigure(encoding='utf-8', errors='backslashreplace')
+        ctx.record('runtime', 'managed-python', version=sys.version.split()[0])
 
 
 class CompilerProvider:
@@ -149,7 +161,7 @@ class RecoveryManager:
 
 class DependencyResolver:
     def __init__(self, bootstrap=None, host_tools=None):
-        self.bootstrap = bootstrap if bootstrap is not None else [CompilerProvider(), WestModuleProvider(), PythonPackageProvider()]
+        self.bootstrap = bootstrap if bootstrap is not None else [RuntimeProvider(), CompilerProvider(), WestModuleProvider(), PythonPackageProvider()]
         self.host_tools = host_tools if host_tools is not None else {'IMGTOOL': HostToolProvider('IMGTOOL', signing_provider),
                                                                          'ESPTOOL': HostToolProvider('ESPTOOL', lambda ctx: ctx.backend.legacy.install_python_tools(ctx.root))}
 

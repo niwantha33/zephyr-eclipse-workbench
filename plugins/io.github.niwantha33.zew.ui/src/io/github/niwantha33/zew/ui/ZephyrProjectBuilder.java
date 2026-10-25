@@ -131,7 +131,11 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 stream.println("Preflight: generated build commands have no unresolved host tool placeholders.");
             }
             stage[0] = clean ? "Clean" : "Compile and generate firmware";
-            runner.run(command, workspace, Duration.ofMinutes(30), monitor::isCanceled, log, environment).requireSuccess();
+            // Preflight already supplied all CMake arguments. Repeating them
+            // here makes West configure twice on every build.
+            var compile = clean ? command : List.of(settings.getProperty("python"), "-m", "west", "build",
+                "--build-dir", WestCommands.cmakePath(buildDirectory.toString()));
+            runner.run(compile, workspace, Duration.ofMinutes(30), monitor::isCanceled, log, environment).requireSuccess();
             stage[0] = "Verify configured firmware outputs";
             if (!clean) BuildArtifacts.verify(buildDirectory);
             if (!clean) {

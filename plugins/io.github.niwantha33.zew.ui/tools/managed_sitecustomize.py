@@ -19,4 +19,9 @@ def configure():
             sys.path.insert(0, directory)
 
 
+# Managed child processes stream diagnostics into the Eclipse UTF-8 console.
+# ._pth isolation ignores environment encoding variables on Windows.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, 'reconfigure'):
+        stream.reconfigure(encoding='utf-8', errors='backslashreplace')
 configure()
