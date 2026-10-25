@@ -181,11 +181,10 @@ def modules_for(vendor, compiler, manifest):
 def requires_imgtool(vendor, application=None):
     """Detect boards and applications that need MCUboot's image tool.
 
-    Zephyr ESP32 image generation may require imgtool for an unsigned image.
-    Other targets request it explicitly through MCUboot Kconfig.
+    Apply the same logic to every SoC. Explicit MCUboot configuration is
+    prepared up front; implicit board defaults are detected from Zephyr's
+    generated build rules during the configure-only preflight.
     """
-    if vendor == 'espressif':
-        return True
     if application is None:
         return False
     app = Path(application)
@@ -429,10 +428,21 @@ def main(argv=None):
     parser.add_argument('--git', required=True)
     parser.add_argument('--board', required=True)
     parser.add_argument('--application', type=Path, help='Project configuration used for optional MCUboot signing')
+    parser.add_argument('--require-host-tool', choices=('IMGTOOL',),
+                        help='Resolved requirement from the generated CMake build rules')
     parser.add_argument('--plan', action='store_true', help='Report plan only, without modifying files')
     args = parser.parse_args(argv)
     root, sdk, workspace = args.root.resolve(), args.sdk.resolve(), args.workspace.resolve()
     details = plan(args.board, workspace, sys.executable, args.application)
+    if args.require_host_tool == 'IMGTOOL':
+        # This request comes from Zephyr's actual generated build commands,
+        # not from a vendor name. Install the pinned module with its host
+        # dependencies even when the application does not mention MCUboot.
+        if 'mcuboot' not in details['manifest']:
+            raise ValueError('Required IMGTOOL has no pinned MCUboot source in this West manifest')
+        if 'mcuboot' not in details['modules']:
+            details['modules'].append('mcuboot')
+        details['signing'] = True
     setup.log('Selected: ' + details['board'] + ' | SoC=' + details['soc'] +
               ' | chip vendor=' + details['vendor'])
     setup.log('Compiler: ' + details['compiler'] + ' | pinned West modules: ' +

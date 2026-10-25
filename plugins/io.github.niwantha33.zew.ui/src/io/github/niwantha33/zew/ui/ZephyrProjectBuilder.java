@@ -22,6 +22,7 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.MessageConsole;
 
+import io.github.niwantha33.zew.core.BuildHostRequirements;
 import io.github.niwantha33.zew.core.ProcessRunner;
 import io.github.niwantha33.zew.core.WestCommands;
 import io.github.niwantha33.zew.core.WorkbenchConfig;
@@ -79,7 +80,44 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             stream.println("Exact board target: " + board + " | independent output: " + buildDirectory);
             monitor.setTaskName(clean ? "Clean Zephyr project" : "Build Zephyr project");
             BuildDiagnostics.clear(getProject());
-            new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofMinutes(30), monitor::isCanceled, line -> { stream.println(line); BuildDiagnostics.accept(getProject(), buildDirectory, line); }, environment).requireSuccess();
+            var runner = new ProcessRunner();
+            var workspace = Path.of(settings.getProperty("workspace"));
+            java.util.function.Consumer<String> log = line -> {
+                stream.println(line);
+                BuildDiagnostics.accept(getProject(), buildDirectory, line);
+            };
+            if (!clean) {
+                // Resolve real build requirements from Zephyr's configured
+                // Ninja commands. CMakeCache alone contains harmless optional
+                // tools marked NOTFOUND, so it is not authoritative.
+                var configure = new ArrayList<>(command);
+                configure.add(4, "--cmake-only");
+                stream.println("Preflight: Zephyr configure-only; checking actual host tool dependencies.");
+                runner.run(configure, workspace, Duration.ofMinutes(15),
+                        monitor::isCanceled, log, environment).requireSuccess();
+                var missing = BuildHostRequirements.missingInGeneratedBuild(buildDirectory);
+                if (missing.contains("IMGTOOL")) {
+                    stream.println("Build requires IMGTOOL; installing pinned MCUboot host dependencies through Workbench.");
+                    BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "IMGTOOL");
+                    // Old CMakeCache can retain IMGTOOL-NOTFOUND, and module
+                    // discovery happens at configure time. Regenerate only
+                    // this project's independent .zew-build target directory.
+                    var fresh = new ArrayList<>(configure);
+                    fresh.add(5, "--pristine=always");
+                    stream.println("Preflight: refreshing generated build rules for the newly activated module.");
+                    runner.run(fresh, workspace, Duration.ofMinutes(15),
+                            monitor::isCanceled, log, environment).requireSuccess();
+                    missing = BuildHostRequirements.missingInGeneratedBuild(buildDirectory);
+                }
+                if (!missing.isEmpty()) {
+                    throw new java.io.IOException("Zephyr generated build requires unresolved host tools: "
+                        + String.join(", ", new java.util.TreeSet<>(missing))
+                        + ". This managed profile has no reviewed pinned provider; "
+                        + "the tool was not guessed or downloaded.");
+                }
+                stream.println("Preflight: generated build commands have no unresolved host tool placeholders.");
+            }
+            runner.run(command, workspace, Duration.ofMinutes(30), monitor::isCanceled, log, environment).requireSuccess();
             if (!clean && !Files.isRegularFile(buildDirectory.resolve("zephyr/zephyr.elf"))) throw new java.io.IOException("Expected firmware output is missing at " + buildDirectory);
             if (!clean) {
                 Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
