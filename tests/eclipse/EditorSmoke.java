@@ -33,6 +33,43 @@ public final class EditorSmoke implements IApplication {
         project.open(null); project.refreshLocal(IResource.DEPTH_INFINITE, null);
         var parsed = EditorSettings.parse(Files.readString(fixture.resolve(".zew-build/first/editor-settings.tsv"), StandardCharsets.UTF_8));
         var ui = Platform.getBundle("io.github.niwantha33.zew.ui");
+        // Query native shortcuts without starting a debugger or programming hardware.
+        var flashShortcut = (org.eclipse.debug.ui.ILaunchShortcut2) ui.loadClass(
+                "io.github.niwantha33.zew.ui.ZephyrFlashShortcut").getConstructor().newInstance();
+        var debugShortcut = (org.eclipse.debug.ui.ILaunchShortcut2) ui.loadClass(
+                "io.github.niwantha33.zew.ui.ZephyrDebugShortcut").getConstructor().newInstance();
+        var selection = new org.eclipse.jface.viewers.StructuredSelection(project.getFile("src/main.c"));
+        var setupProperty = new QualifiedName("io.github.niwantha33.zew.ui", "setupRoot");
+        String savedSetup = project.getPersistentProperty(setupProperty);
+        var launchManager = org.eclipse.debug.core.DebugPlugin.getDefault().getLaunchManager();
+        var type = launchManager.getLaunchConfigurationType("io.github.niwantha33.zew.ui.launchType");
+        org.eclipse.debug.core.ILaunchConfiguration flashConfig = null, debugConfig = null;
+        try {
+            project.setPersistentProperty(setupProperty, null);
+            check(flashShortcut.getLaunchableResource(selection) == null,
+                    "ordinary C project is not treated as an imported Zephyr Flash target");
+            project.setPersistentProperty(setupProperty, fixture.toString());
+            check(project.equals(flashShortcut.getLaunchableResource(selection)),
+                    "Flash shortcut resolves editor source selection to imported project");
+            var flashCopy = type.newInstance(null, launchManager.generateLaunchConfigurationName("Smoke Flash"));
+            flashCopy.setAttribute("io.github.niwantha33.zew.ui.launch.project", project.getName());
+            flashCopy.setAttribute("io.github.niwantha33.zew.ui.launch.action", "flash");
+            flashConfig = flashCopy.doSave();
+            var debugCopy = type.newInstance(null, launchManager.generateLaunchConfigurationName("Smoke Debug"));
+            debugCopy.setAttribute("io.github.niwantha33.zew.ui.launch.project", project.getName());
+            debugCopy.setAttribute("io.github.niwantha33.zew.ui.launch.action", "debug");
+            debugConfig = debugCopy.doSave();
+            var flashes = Arrays.asList(flashShortcut.getLaunchConfigurations(selection));
+            var debugs = Arrays.asList(debugShortcut.getLaunchConfigurations(selection));
+            check(flashes.contains(flashConfig) && !flashes.contains(debugConfig),
+                    "Run Flash discovery excludes native Debug configurations");
+            check(debugs.contains(debugConfig) && !debugs.contains(flashConfig),
+                    "Debug discovery excludes firmware programming configurations");
+        } finally {
+            if (flashConfig != null) flashConfig.delete();
+            if (debugConfig != null) debugConfig.delete();
+            project.setPersistentProperty(setupProperty, savedSetup);
+        }
         var apply = ui.loadClass("io.github.niwantha33.zew.ui.CdtEditor").getMethod("apply", IProject.class, EditorSettings.class, IProgressMonitor.class);
         // The dedicated post-build refresh uses the workspace root rule.
         if (args.length < 2 || !args[1].equals("verify")) workspace.run(m -> {

@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
     run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java'])
     jar = temporary / 'editor-smoke.jar'
     with zipfile.ZipFile(jar, 'w') as z:
-        z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nBundle-ManifestVersion: 2\nBundle-SymbolicName: zew.editor.smoke;singleton:=true\nBundle-Version: 1.0.0\nRequire-Bundle: org.eclipse.equinox.app,org.eclipse.core.runtime,org.eclipse.core.resources,org.eclipse.cdt.core,io.github.niwantha33.zew.core\n\n')
+        z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nBundle-ManifestVersion: 2\nBundle-SymbolicName: zew.editor.smoke;singleton:=true\nBundle-Version: 1.0.0\nRequire-Bundle: org.eclipse.equinox.app,org.eclipse.core.runtime,org.eclipse.core.resources,org.eclipse.cdt.core,org.eclipse.debug.ui,org.eclipse.jface,io.github.niwantha33.zew.core\n\n')
         z.writestr('plugin.xml', '<plugin><extension point="org.eclipse.core.runtime.applications" id="run"><application><run class="zew.smoke.EditorSmoke"/></application></extension></plugin>')
         for path in classes.rglob('*.class'): z.write(path, path.relative_to(classes).as_posix())
     config = eclipse / 'configuration/config.ini'; original = config.read_text()

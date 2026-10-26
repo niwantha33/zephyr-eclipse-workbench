@@ -17,7 +17,7 @@ import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.PlatformUI;
 
 /** Standard Eclipse Debug As / toolbar integration, using the same managed CDT launch. */
-public final class ZephyrDebugShortcut implements ILaunchShortcut2 {
+public class ZephyrDebugShortcut implements ILaunchShortcut2 {
     static IProject project(Object value) {
         IResource resource = value instanceof IResource direct ? direct : Adapters.adapt(value, IResource.class);
         if (resource == null) return null;
@@ -34,8 +34,10 @@ public final class ZephyrDebugShortcut implements ILaunchShortcut2 {
     private IProject project(IEditorPart editor) {
         return editor == null ? null : project(editor.getEditorInput());
     }
-    private void start(IProject project, String mode) {
-        if (!ILaunchManager.DEBUG_MODE.equals(mode)) return;
+    protected String supportedMode() { return ILaunchManager.DEBUG_MODE; }
+    protected String action() { return "debug"; }
+    protected void start(IProject project, String mode) {
+        if (!supportedMode().equals(mode)) return;
         var window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
         ZephyrDebugHandler.start(project, window == null ? null : window.getShell());
     }
@@ -60,7 +62,7 @@ public final class ZephyrDebugShortcut implements ILaunchShortcut2 {
     private boolean matches(ILaunchConfiguration config, IProject project) {
         try {
             return project.getName().equals(config.getAttribute(ZephyrLaunchDelegate.PROJECT, ""))
-                    && "debug".equals(config.getAttribute(ZephyrLaunchDelegate.ACTION, ""));
+                    && action().equals(config.getAttribute(ZephyrLaunchDelegate.ACTION, ""));
         } catch (CoreException error) { return false; }
     }
 }

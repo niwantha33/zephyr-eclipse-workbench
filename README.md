@@ -77,3 +77,5 @@ The core workflow must use open-source software permitting commercial use withou
 This is an independent integration project. Upstream sources: [Zephyr](https://github.com/zephyrproject-rtos/zephyr) and [Eclipse Embedded CDT](https://eclipse-embed-cdt.github.io/).
 
 
+
+Native Eclipse Run/Debug controls, CCS/other-IDE adapter boundaries and the editor improvement roadmap are described in [IDE integration](docs/IDE_INTEGRATION.md).

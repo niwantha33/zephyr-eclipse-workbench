@@ -145,11 +145,16 @@ for p in bundles:
                 raise SystemExit('Debug shortcut is not associated with the managed CDT launch type')
             if shortcut.find("contextualLaunch/enablement") is None:
                 raise SystemExit('Debug shortcut lacks project-sensitive enablement')
+            flash = plugin.find("./extension[@point='org.eclipse.debug.ui.launchShortcuts']/shortcut[@id='io.github.niwantha33.zew.ui.flashShortcut']")
+            if flash is None or flash.attrib.get('modes') != 'run' or flash.attrib.get('label') != 'Zephyr Flash':
+                raise SystemExit('Native Run As > Zephyr Flash shortcut missing or exposes Debug mode')
+            if flash.find("configurationType[@id='io.github.niwantha33.zew.ui.launchType']") is None or flash.find("contextualLaunch/enablement") is None:
+                raise SystemExit('Flash shortcut lacks managed configuration or project enablement')
             toolbar = plugin.findall("./extension[@point='org.eclipse.ui.menus']/menuContribution/toolbar/command")
-            if any(item.attrib.get('commandId') == 'io.github.niwantha33.zew.debug' for item in toolbar):
-                raise SystemExit('Duplicate custom Debug toolbar button; use native Eclipse Debug')
+            if any(item.attrib.get('commandId') in ('io.github.niwantha33.zew.debug', 'io.github.niwantha33.zew.flash') for item in toolbar):
+                raise SystemExit('Duplicate custom Flash/Debug toolbar button; use native Eclipse launch controls')
             for cls in ('ZephyrNativeDebugDelegate', 'ZephyrDebugHandler',
-                        'ZephyrDebugShortcut', 'ZephyrProjectTester',
+                        'ZephyrDebugShortcut', 'ZephyrFlashShortcut', 'ZephyrProjectTester',
                         'SelectedProject', 'ZephyrBuildHandler', 'ZephyrArtifactsHandler',
                         'DebugToolsHandler', 'SharedDebugTools',
                         'ZephyrChipMismatchRecovery',
