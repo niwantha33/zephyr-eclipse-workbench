@@ -66,6 +66,23 @@
       </contextualLaunch>
       <configurationType id="io.github.niwantha33.zew.ui.launchType"/>
     </shortcut>
+    <shortcut id="io.github.niwantha33.zew.ui.flashShortcut" label="Zephyr Flash"
+        modes="run" class="io.github.niwantha33.zew.ui.ZephyrFlashShortcut">
+      <contextualLaunch>
+        <enablement>
+          <with variable="selection">
+            <count value="1"/>
+            <iterate ifEmpty="false">
+              <adapt type="org.eclipse.core.resources.IResource">
+                <test property="io.github.niwantha33.zew.ui.isImportedProject"
+                    value="true" forcePluginActivation="true"/>
+              </adapt>
+            </iterate>
+          </with>
+        </enablement>
+      </contextualLaunch>
+      <configurationType id="io.github.niwantha33.zew.ui.launchType"/>
+    </shortcut>
   </extension>
   <extension point="org.eclipse.debug.ui.launchConfigurationTabGroups">
     <launchConfigurationTabGroup id="io.github.niwantha33.zew.ui.launchTabs"
@@ -144,13 +161,6 @@
         <separator name="about" visible="true"/>
         <command commandId="io.github.niwantha33.zew.about" label="About Zephyr Workbench..." style="push"/>
       </menu>
-    </menuContribution>
-  </extension>
-  <extension point="org.eclipse.ui.menus">
-    <menuContribution locationURI="toolbar:org.eclipse.ui.main.toolbar?after=additions">
-      <toolbar id="io.github.niwantha33.zew.ui.targetActions">
-        <command commandId="io.github.niwantha33.zew.flash" icon="icons/flash.png" label="Flash Zephyr firmware" style="push" tooltip="Flash selected Zephyr project"/>
-      </toolbar>
     </menuContribution>
   </extension>
 </plugin>
