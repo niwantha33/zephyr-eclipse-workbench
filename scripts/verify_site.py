@@ -151,8 +151,16 @@ for p in bundles:
             if flash.find("configurationType[@id='io.github.niwantha33.zew.ui.launchType']") is None or flash.find("contextualLaunch/enablement") is None:
                 raise SystemExit('Flash shortcut lacks managed configuration or project enablement')
             toolbar = plugin.findall("./extension[@point='org.eclipse.ui.menus']/menuContribution/toolbar/command")
-            if any(item.attrib.get('commandId') in ('io.github.niwantha33.zew.debug', 'io.github.niwantha33.zew.flash') for item in toolbar):
-                raise SystemExit('Duplicate custom Flash/Debug toolbar button; use native Eclipse launch controls')
+            if any(item.attrib.get('commandId') == 'io.github.niwantha33.zew.debug' for item in toolbar):
+                raise SystemExit('Duplicate Debug toolbar button; retain the native green bug control')
+            for command in ('org.eclipse.ui.project.buildProject', 'io.github.niwantha33.zew.flash'):
+                if sum(item.attrib.get('commandId') == command for item in toolbar) != 1:
+                    raise SystemExit('Visible Build/Flash command missing or duplicated: ' + command)
+            for adaptable in ('org.eclipse.core.resources.IResource', 'org.eclipse.debug.core.model.IDebugElement',
+                              'org.eclipse.debug.core.ILaunch', 'org.eclipse.debug.core.model.IProcess'):
+                factory = plugin.find("./extension[@point='org.eclipse.core.runtime.adapters']/factory[@adaptableType='" + adaptable + "']")
+                if factory is None or factory.find("adapter[@type='org.eclipse.debug.ui.actions.ILaunchable']") is None:
+                    raise SystemExit('Native launchable-selection marker is missing: ' + adaptable)
             for cls in ('ZephyrNativeDebugDelegate', 'ZephyrDebugHandler',
                         'ZephyrDebugShortcut', 'ZephyrFlashShortcut', 'ZephyrProjectTester',
                         'SelectedProject', 'ZephyrBuildHandler', 'ZephyrArtifactsHandler',

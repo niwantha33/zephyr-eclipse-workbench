@@ -4,9 +4,7 @@ package io.github.niwantha33.zew.ui;
 import java.util.Arrays;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
-import org.eclipse.core.runtime.Adapters;
 import org.eclipse.core.runtime.CoreException;
-import org.eclipse.core.runtime.QualifiedName;
 import org.eclipse.debug.core.DebugPlugin;
 import org.eclipse.debug.core.ILaunchConfiguration;
 import org.eclipse.debug.core.ILaunchManager;
@@ -19,13 +17,7 @@ import org.eclipse.ui.PlatformUI;
 /** Standard Eclipse Debug As / toolbar integration, using the same managed CDT launch. */
 public class ZephyrDebugShortcut implements ILaunchShortcut2 {
     static IProject project(Object value) {
-        IResource resource = value instanceof IResource direct ? direct : Adapters.adapt(value, IResource.class);
-        if (resource == null) return null;
-        IProject project = resource.getProject();
-        try {
-            return project.isAccessible() && project.getPersistentProperty(
-                    new QualifiedName(Activator.ID, "setupRoot")) != null ? project : null;
-        } catch (CoreException ignored) { return null; }
+        return SelectedProject.importedProject(value);
     }
     private IProject project(ISelection selection) {
         return selection instanceof IStructuredSelection items && items.size() == 1
