@@ -149,9 +149,9 @@ launching and launch history; the normal Debug button can repeat a saved launch.
 Eclipse's launch preference controls whether the main button follows the current
 selection or repeats the last launch, as it does for other CDT applications.
 
-The duplicate Zephyr Debug and Flash toolbar buttons have been removed. Choose
-Run As > Zephyr Flash to create/use the explicit Flash launch in Eclipse's native
-Run history. Other Run configurations retain their behavior, and Debug does not
+The duplicate Debug button is removed. A visible native Build hammer and an
+explicit Flash button are contributed to the main toolbar in all perspectives.
+The Flash button and Run As > Zephyr Flash both use the same saved native launch. Other Run configurations retain their behavior, and Debug does not
 silently flash firmware. See [IDE integration](IDE_INTEGRATION.md) for the shared
 Flash preflight and cross-IDE compatibility boundaries.
 

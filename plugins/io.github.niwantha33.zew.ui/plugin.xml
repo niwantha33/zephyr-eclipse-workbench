@@ -45,8 +45,22 @@
   </extension>
   <extension point="org.eclipse.core.expressions.propertyTesters">
     <propertyTester id="io.github.niwantha33.zew.ui.projectTester"
-        type="org.eclipse.core.resources.IResource" namespace="io.github.niwantha33.zew.ui"
+        type="java.lang.Object" namespace="io.github.niwantha33.zew.ui"
         properties="isImportedProject" class="io.github.niwantha33.zew.ui.ZephyrProjectTester"/>
+  </extension>
+  <extension point="org.eclipse.core.runtime.adapters">
+    <factory adaptableType="org.eclipse.core.resources.IResource" class="">
+      <adapter type="org.eclipse.debug.ui.actions.ILaunchable"/>
+    </factory>
+    <factory adaptableType="org.eclipse.debug.core.model.IDebugElement" class="">
+      <adapter type="org.eclipse.debug.ui.actions.ILaunchable"/>
+    </factory>
+    <factory adaptableType="org.eclipse.debug.core.ILaunch" class="">
+      <adapter type="org.eclipse.debug.ui.actions.ILaunchable"/>
+    </factory>
+    <factory adaptableType="org.eclipse.debug.core.model.IProcess" class="">
+      <adapter type="org.eclipse.debug.ui.actions.ILaunchable"/>
+    </factory>
   </extension>
   <extension point="org.eclipse.debug.ui.launchShortcuts">
     <shortcut id="io.github.niwantha33.zew.ui.debugShortcut" label="Zephyr Application"
@@ -56,10 +70,8 @@
           <with variable="selection">
             <count value="1"/>
             <iterate ifEmpty="false">
-              <adapt type="org.eclipse.core.resources.IResource">
-                <test property="io.github.niwantha33.zew.ui.isImportedProject"
-                    value="true" forcePluginActivation="true"/>
-              </adapt>
+              <test property="io.github.niwantha33.zew.ui.isImportedProject"
+                  value="true" forcePluginActivation="true"/>
             </iterate>
           </with>
         </enablement>
@@ -73,10 +85,8 @@
           <with variable="selection">
             <count value="1"/>
             <iterate ifEmpty="false">
-              <adapt type="org.eclipse.core.resources.IResource">
-                <test property="io.github.niwantha33.zew.ui.isImportedProject"
-                    value="true" forcePluginActivation="true"/>
-              </adapt>
+              <test property="io.github.niwantha33.zew.ui.isImportedProject"
+                  value="true" forcePluginActivation="true"/>
             </iterate>
           </with>
         </enablement>
@@ -118,6 +128,16 @@
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
   </extension>
   <extension point="org.eclipse.ui.handlers">
+    <handler commandId="org.eclipse.ui.project.buildProject" class="io.github.niwantha33.zew.ui.ZephyrBuildHandler">
+      <activeWhen>
+        <with variable="selection">
+          <count value="1"/>
+          <iterate ifEmpty="false">
+            <test property="io.github.niwantha33.zew.ui.isImportedProject" value="true" forcePluginActivation="true"/>
+          </iterate>
+        </with>
+      </activeWhen>
+    </handler>
     <handler commandId="io.github.niwantha33.zew.debugserver" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.debug" class="io.github.niwantha33.zew.ui.ZephyrDebugHandler"/>
     <handler commandId="io.github.niwantha33.zew.flash" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
@@ -161,6 +181,17 @@
         <separator name="about" visible="true"/>
         <command commandId="io.github.niwantha33.zew.about" label="About Zephyr Workbench..." style="push"/>
       </menu>
+    </menuContribution>
+  </extension>
+  <extension point="org.eclipse.ui.menus">
+    <menuContribution locationURI="toolbar:org.eclipse.ui.main.toolbar?after=additions">
+      <toolbar id="io.github.niwantha33.zew.ui.buildAndFlash">
+        <command commandId="org.eclipse.ui.project.buildProject"
+            icon="platform:/plugin/org.eclipse.cdt.ui/icons/elcl16/build_exec.png"
+            label="Build Project" tooltip="Build selected project using its Eclipse builder" style="push"/>
+        <command commandId="io.github.niwantha33.zew.flash" icon="icons/flash.png"
+            label="Flash Zephyr firmware" tooltip="Build and flash the selected Zephyr project" style="push"/>
+      </toolbar>
     </menuContribution>
   </extension>
 </plugin>

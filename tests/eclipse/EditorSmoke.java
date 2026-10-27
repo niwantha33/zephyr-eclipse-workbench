@@ -49,6 +49,8 @@ public final class EditorSmoke implements IApplication {
             check(flashShortcut.getLaunchableResource(selection) == null,
                     "ordinary C project is not treated as an imported Zephyr Flash target");
             project.setPersistentProperty(setupProperty, fixture.toString());
+            check(Platform.getAdapterManager().hasAdapter(project, "org.eclipse.debug.ui.actions.ILaunchable"),
+                    "managed project participates in native launch selection");
             check(project.equals(flashShortcut.getLaunchableResource(selection)),
                     "Flash shortcut resolves editor source selection to imported project");
             var flashCopy = type.newInstance(null, launchManager.generateLaunchConfigurationName("Smoke Flash"));
@@ -59,6 +61,41 @@ public final class EditorSmoke implements IApplication {
             debugCopy.setAttribute("io.github.niwantha33.zew.ui.launch.project", project.getName());
             debugCopy.setAttribute("io.github.niwantha33.zew.ui.launch.action", "debug");
             debugConfig = debugCopy.doSave();
+            var launch = new org.eclipse.debug.core.Launch(debugConfig, "debug", null);
+            var frame = (org.eclipse.debug.core.model.IDebugElement) java.lang.reflect.Proxy.newProxyInstance(
+                    getClass().getClassLoader(), new Class<?>[] {org.eclipse.debug.core.model.IDebugElement.class},
+                    (proxy, method, arguments) -> method.getName().equals("getLaunch") ? launch : null);
+            var debugSelection = new org.eclipse.jface.viewers.StructuredSelection(frame);
+            check(project.equals(debugShortcut.getLaunchableResource(debugSelection)),
+                    "Debug view stack-frame context resolves the managed project without a source editor");
+            check(project.equals(flashShortcut.getLaunchableResource(new org.eclipse.jface.viewers.StructuredSelection(launch))),
+                    "Flash resolves the selected managed launch instead of guessing a project");
+            check(Platform.getAdapterManager().hasAdapter(frame, "org.eclipse.debug.ui.actions.ILaunchable"),
+                    "managed debug element is launchable by native toolbar");
+            var handlers = Platform.getExtensionRegistry().getConfigurationElementsFor("org.eclipse.ui.handlers");
+            var nativeBuild = Arrays.stream(handlers).filter(element -> element.getContributor().getName()
+                    .equals("io.github.niwantha33.zew.ui") && "org.eclipse.ui.project.buildProject".equals(
+                            element.getAttribute("commandId"))).findFirst().orElseThrow();
+            var expression = org.eclipse.core.expressions.ExpressionConverter.getDefault().perform(
+                    nativeBuild.getChildren("activeWhen")[0].getChildren()[0]);
+            var contextForBuild = new org.eclipse.core.expressions.EvaluationContext(null, frame);
+            contextForBuild.addVariable("selection", java.util.List.of(frame));
+            check(expression.evaluate(contextForBuild) == org.eclipse.core.expressions.EvaluationResult.TRUE,
+                    "native Build handler activates for the managed Debug view selection");
+            contextForBuild.addVariable("selection", java.util.List.of(workspace.getRoot().getProject("UnmanagedSmoke")));
+            check(expression.evaluate(contextForBuild) == org.eclipse.core.expressions.EvaluationResult.FALSE,
+                    "native Build handler does not replace other projects' normal behavior");
+            var toolbarCommands = Arrays.stream(Platform.getExtensionRegistry().getConfigurationElementsFor("org.eclipse.ui.menus"))
+                    .filter(element -> element.getContributor().getName().equals("io.github.niwantha33.zew.ui")
+                            && element.getAttribute("locationURI").startsWith("toolbar:"))
+                    .flatMap(element -> Arrays.stream(element.getChildren("toolbar")))
+                    .flatMap(element -> Arrays.stream(element.getChildren("command")))
+                    .map(element -> element.getAttribute("commandId")).toList();
+            check(toolbarCommands.contains("org.eclipse.ui.project.buildProject")
+                    && toolbarCommands.contains("io.github.niwantha33.zew.flash"),
+                    "installed toolbar contributes visible native Build and explicit Flash commands");
+            check(!toolbarCommands.contains("io.github.niwantha33.zew.debug"),
+                    "installed toolbar retains Eclipse's own Debug control without a duplicate");
             var flashes = Arrays.asList(flashShortcut.getLaunchConfigurations(selection));
             var debugs = Arrays.asList(debugShortcut.getLaunchConfigurations(selection));
             check(flashes.contains(flashConfig) && !flashes.contains(debugConfig),

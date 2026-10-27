@@ -57,6 +57,9 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
 
     private Parameters prepare(ILaunchConfiguration configuration) throws CoreException {
         try {
+            if (!"debug".equals(configuration.getAttribute(ZephyrLaunchDelegate.ACTION, "debug")))
+                throw new IOException("This saved configuration is not a Debug action. "
+                        + "Choose Debug As > Zephyr Application for the selected project.");
             String projectName = configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, "");
             var project = ResourcesPlugin.getWorkspace().getRoot().getProject(projectName);
             if (!project.isAccessible()) throw new IOException("Select an open imported Zephyr project.");

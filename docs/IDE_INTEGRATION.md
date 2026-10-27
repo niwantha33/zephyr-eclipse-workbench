@@ -6,14 +6,14 @@ Status: Eclipse launch integration implemented in this change; cross-IDE adapter
 
 | Task | Eclipse control | Behavior |
 |---|---|---|
-| Flash | Run dropdown / Run As > Zephyr Flash | Saved Run configuration; prepare/build exact selected target, confirmation, board runner and existing ESP32 selected-port/chip-match preflight |
+| Flash | Visible Flash button; also Run As > Zephyr Flash | Saved Run configuration; prepare/build exact selected target, confirmation, board runner and existing ESP32 selected-port/chip-match preflight |
 | Debug | Debug dropdown / Debug As > Zephyr Application | Saved native CDT DSF-GDB configuration, managed OpenOCD and exact ELF |
-| Build | Project > Build Project | Existing Zephyr builder; compiler diagnostics in Problems |
+| Build | Visible hammer / Project > Build Project | Existing Zephyr builder; compiler diagnostics in Problems |
 | Stop | Eclipse Terminate | Native launch process termination, owned child cleanup |
 
-The first launch may require choosing the named shortcut. Subsequent main-button behavior follows Eclipse's own launch preferences/history. The Run control is not globally rebound: other applications and QEMU configurations retain their own Run actions. Flash and Debug shortcuts find only configurations with the matching project and action. Flash is explicitly selected and confirmed; Debug does not implicitly program firmware.
+The first launch may require choosing the named shortcut. Subsequent main-button behavior follows Eclipse's own launch preferences/history. A native launchable-selection adapter and shared project resolver cover resources, editors, managed launches, processes and Debug elements. The Run control is not globally rebound: other applications and QEMU configurations retain their own Run actions. Flash and Debug shortcuts find only configurations with the matching project and action. Flash is explicitly selected and confirmed; Debug does not implicitly program firmware.
 
-Both Zephyr menu Flash and native Run Flash enter the same native delegate, including repeated launches from Run history. Native Flash rebuilds before validating the build receipt and firmware artifacts. ESP32 serial selection and non-programming chip identity check run before any programming command. Other vendors retain their board-defined West runner. Duplicate custom Flash/Debug toolbar buttons are removed. Existing configurations remain available.
+Both Zephyr menu Flash and native Run Flash enter the same native delegate, including repeated launches from Run history. Native Flash rebuilds before validating the build receipt and firmware artifacts. ESP32 serial selection and non-programming chip identity check run before any programming command. Other vendors retain their board-defined West runner. A visible Flash button enters that same native launch workflow. The hammer contributes Eclipse's standard Build Project command, using the native CDT image. A project-sensitive Zephyr handler resolves managed Debug-view selections; other projects retain the normal Eclipse Build handler. Debug stays on the standard green bug control. Existing configurations remain available.
 
 ## Host compatibility
 
@@ -67,3 +67,19 @@ Priorities, in order:
 - clangd query-driver/configuration: https://clangd.llvm.org/config
 
 Research checked 2026-10-26. Vendor host compatibility remains unverified until a versioned adapter and the required tests exist.
+
+## ROM download mode is not an icon-binding failure
+
+The reported screenshot shows `boot:0x0 (DOWNLOAD(USB/UART0))`,
+`pro cpu reset by JTAG` and `waiting for download`, with a PC in ESP32-S3 ROM.
+That is evidence of a ROM download state, not successful execution of the flashed
+application. Source lookup for ROM addresses does not provide the application's
+C source. Do not infer a broken source path or a completed flash from that view.
+
+Stop Debug and close the COM terminal before flashing. Release BOOT/GPIO0, press
+EN/RESET (or power-cycle), flash the selected build and inspect the complete flash
+log, then debug that build. Whether the terminal's control signals, a boot strap
+or reset behavior caused the download state requires board-side verification.
+Never blindly modify reset registers, eFuses or another vendor's reset sequence
+to address this UI symptom. See Espressif's boot-mode documentation:
+https://docs.espressif.com/projects/esptool/en/latest/esp32s3/advanced-topics/boot-mode-selection.html
