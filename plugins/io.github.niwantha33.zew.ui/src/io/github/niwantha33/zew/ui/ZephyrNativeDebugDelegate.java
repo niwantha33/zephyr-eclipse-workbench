@@ -38,12 +38,11 @@ import org.eclipse.ui.console.MessageConsoleStream;
 /**
  * An actual CDT DSF-GDB launch, not a West shell named "Debug".
  *
- * Initially supports OpenOCD's verified local GDB TCP endpoint only. Other
- * runners remain explicitly unavailable until their transport and lifecycle
- * contracts are integrated. Never auto-flashes: West debugserver + CDT remote
+ * Supports board-declared OpenOCD, J-Link and pyOCD local GDB servers. Never auto-flashes: West debugserver + CDT remote
  * GDB connect with symbols from this exact independent build.
  */
 public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
+    public static final String RUNNER = Activator.ID + ".launch.debugRunner";
     public static final String PORT = Activator.ID + ".launch.gdbPort";
     private static final Pattern DEFAULT_DEBUG_RUNNER =
             Pattern.compile("(?m)^debug-runner:\\s*([A-Za-z0-9_+.-]+)\\s*$");
@@ -68,13 +67,10 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                     ProjectContext.buildDirectory(project, settings), settings.getProperty("board"),
                     "debugserver", "");
             String yaml = Files.readString(plan.buildDirectory().resolve("zephyr/runners.yaml"), StandardCharsets.UTF_8);
-            var runner = DEFAULT_DEBUG_RUNNER.matcher(yaml);
-            if (!runner.find())
-                throw new IOException("This board has no declared default debug runner in generated runners.yaml.");
-            if (!runner.group(1).equals("openocd"))
-                throw new IOException("Native DSF-GDB currently supports only OpenOCD-backed targets. "
-                        + "This board declares " + runner.group(1)
-                        + ". External Debug Server remains available; other backends need verified integration.");
+            String runner = io.github.niwantha33.zew.core.DebugBackend.select(yaml,
+                    configuration.getAttribute(RUNNER, ""));
+            plan = io.github.niwantha33.zew.core.TargetOperations.prepare(
+                    plan.buildDirectory(), plan.board(), "debugserver", runner);
             // West supports runtime tool overrides. Old build metadata can name a
             // removed installation; bind the validated shared tool without changing
             // runners.yaml, recompiling firmware, or issuing a flash operation.
@@ -97,7 +93,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             int port = configuration.getAttribute(PORT, 3333);
             if (port < 1024 || port > 65535) throw new IOException("GDB TCP port must be 1024..65535.");
             plan = new DebugPorts(port, configuration.getAttribute(TCL_PORT, 6333),
-                    configuration.getAttribute(TELNET_PORT, 4444)).apply(plan);
+                    configuration.getAttribute(TELNET_PORT, 4444)).apply(plan, runner);
             return new Parameters(plan, gdb, elf, port, settings);
         } catch (Exception error) {
             if (error instanceof CoreException core) throw core;
@@ -167,7 +163,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                         + ", Telnet=" + configuration.getAttribute(TELNET_PORT, 4444));
             }
             Process server = builder.start();
-            session = new ManagedServer(server, console.newMessageStream(), lease, launch);
+            session = new ManagedServer(server, console.newMessageStream(), lease, launch, params.port(),
+                    params.plan().westArguments().get(params.plan().westArguments().indexOf("--runner") + 1));
             lease = null; // ManagedServer now owns this physical operation.
             var owned = session;
             server.onExit().thenRun(() -> { owned.awaitLogDrain(1500); owned.close(); });
@@ -219,7 +216,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         private final TargetOperationGuard.Lease lease;
         private final ILaunch launch;
         private final AtomicBoolean closed = new AtomicBoolean();
-        private final DebugServerDiagnostics diagnostics = new DebugServerDiagnostics();
+        private final DebugServerDiagnostics diagnostics;
         private volatile Thread logThread;
         private final java.util.Set<ProcessHandle> ownedChildren = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
@@ -234,7 +231,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             catch (InterruptedException error) { Thread.currentThread().interrupt(); }
         }
 
-        ManagedServer(Process process, MessageConsoleStream stream, TargetOperationGuard.Lease lease, ILaunch launch) {
+        ManagedServer(Process process, MessageConsoleStream stream, TargetOperationGuard.Lease lease, ILaunch launch, int port, String runner) {
+            this.diagnostics = new DebugServerDiagnostics(port, runner);
             this.process = process; this.stream = stream; this.lease = lease; this.launch = launch;
         }
         void startLogPump() {
@@ -248,7 +246,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                         if (!closed.get()) stream.println(line);
                     }
                 } catch (IOException ignored) { /* exit/terminate closes the stream */ }
-            }, "zew-owned-openocd-output");
+            }, "zew-owned-debugserver-output");
             reader.setDaemon(true);
             logThread = reader;
             reader.start();

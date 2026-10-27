@@ -36,6 +36,7 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
         private Text project;
         private Combo action;
         private Text port;
+        private Combo runner;
         public MainTab(boolean debugMode) { this.debugMode = debugMode; }
         @Override public void createControl(Composite parent) {
             var group = new Composite(parent, SWT.NONE);
@@ -66,14 +67,20 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
                     project.setText(((IProject) dialog.getResult()[0]).getName());
             });
             if (debugMode) {
+                new Label(group, SWT.NONE).setText("Debug runner");
+                runner = new Combo(group, SWT.READ_ONLY);
+                runner.setItems(new String[] {"Board default", "openocd", "jlink", "pyocd"});
+                runner.select(0);
+                runner.addListener(SWT.Selection, e -> updateLaunchConfigurationDialog());
+                new Label(group, SWT.NONE);
                 new Label(group, SWT.NONE).setText("GDB TCP port");
                 port = new Text(group, SWT.BORDER);
                 port.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
                 port.addModifyListener(e -> updateLaunchConfigurationDialog());
                 new Label(group, SWT.NONE);
-                new Label(group, SWT.WRAP).setText("Native CDT DSF-GDB. Supported backend: OpenOCD on localhost. "
+                new Label(group, SWT.WRAP).setText("Native CDT DSF-GDB. Backends: OpenOCD, SEGGER J-Link and pyOCD on localhost. "
                         + "The selected Zephyr build supplies its matching GDB and ELF. "
-                        + "This attaches to an owned OpenOCD debug server; it does not reflash firmware.");
+                        + "This attaches to an owned debug server; it does not reflash firmware.");
             } else {
                 new Label(group, SWT.NONE).setText("Runner action");
                 action = new Combo(group, SWT.READ_ONLY);
@@ -94,6 +101,8 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
             try {
                 project.setText(configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, ""));
                 if (debugMode) {
+                    String backend = configuration.getAttribute(ZephyrNativeDebugDelegate.RUNNER, "");
+                    runner.select(switch (backend) { case "openocd" -> 1; case "jlink" -> 2; case "pyocd" -> 3; default -> 0; });
                     port.setText(Integer.toString(configuration.getAttribute(ZephyrNativeDebugDelegate.PORT, 3333)));
                 } else {
                     String current = configuration.getAttribute(ZephyrLaunchDelegate.ACTION, "run");
@@ -104,6 +113,8 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
         @Override public void performApply(ILaunchConfigurationWorkingCopy configuration) {
             configuration.setAttribute(ZephyrLaunchDelegate.PROJECT, project.getText().trim());
             if (debugMode) {
+                configuration.setAttribute(ZephyrNativeDebugDelegate.RUNNER,
+                        runner.getSelectionIndex() > 0 ? runner.getText() : "");
                 configuration.setAttribute(ZephyrLaunchDelegate.ACTION, "debug");
                 try { configuration.setAttribute(ZephyrNativeDebugDelegate.PORT, Integer.parseInt(port.getText().trim())); }
                 catch (NumberFormatException ignored) { configuration.setAttribute(ZephyrNativeDebugDelegate.PORT, -1); }

@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 
 HERE = Path(__file__).resolve().parent
@@ -231,6 +232,30 @@ def required_submodules(name, workspace, python):
     return bool(policy)
 
 
+def publish_module(stage, destination):
+    """Retry transient Windows directory locks without replacing live modules."""
+    for attempt in range(6):
+        # lexists also protects dangling links; Windows rename does not replace
+        # directories, and no fallback copies files into a live module.
+        if os.path.lexists(destination):
+            raise ValueError('Module destination appeared during preparation; preserved: ' + str(destination))
+        try:
+            stage.rename(destination)
+            return
+        except OSError as error:
+            if getattr(error, 'winerror', None) not in (5, 32, 33):
+                raise
+            if attempt == 5:
+                raise OSError(
+                    'Windows kept the verified module folder locked after 6 publish attempts: '
+                    + str(destination)
+                    + '. Close tools using this folder and retry Build. Check folder permissions '
+                    + 'and security software if the failure persists. No existing module was replaced.'
+                ) from error
+            setup.log('Windows module folder is busy; retrying publish: ' + destination.name)
+            time.sleep(0.1 * (2 ** attempt))
+
+
 def install_module_staged(name, revision, destination, workspace, python, git):
     """Publish only a complete checkout; cancellation cannot leave a partial live module."""
     if required_submodules(name, workspace, python):
@@ -254,8 +279,7 @@ def install_module_staged(name, revision, destination, workspace, python, git):
         if git_revision(git, stage) != revision: raise ValueError('Staged module revision mismatch: ' + name)
         module_dependencies(stage)
         # Never replace an installation made concurrently or a user's directory.
-        if destination.exists(): raise ValueError('Module destination appeared during preparation; preserved: ' + name)
-        stage.rename(destination)
+        publish_module(stage, destination)
 
 
 def prepare_modules(plan_data, workspace, python, git):
