@@ -43,9 +43,18 @@ public record DebugPorts(int gdb, int tcl, int telnet) {
     }
     public TargetOperations.Plan apply(TargetOperations.Plan plan) throws IOException {
         if (!plan.action().equals("debugserver")) throw new IOException("Debug endpoints require debugserver.");
+        return apply(plan, "openocd");
+    }
+    public TargetOperations.Plan apply(TargetOperations.Plan plan, String runner) throws IOException {
+        if (!plan.action().equals("debugserver")) throw new IOException("Debug endpoints require debugserver.");
         var args = new ArrayList<>(plan.westArguments());
-        args.addAll(List.of("--gdb-port", Integer.toString(gdb), "--tcl-port", Integer.toString(tcl),
-                "--telnet-port", Integer.toString(telnet)));
+        args.addAll(List.of("--gdb-port", Integer.toString(gdb)));
+        switch (runner) {
+            case "openocd" -> args.addAll(List.of("--tcl-port", Integer.toString(tcl), "--telnet-port", Integer.toString(telnet)));
+            case "jlink" -> args.addAll(List.of("--rtt-port", Integer.toString(telnet)));
+            case "pyocd" -> args.addAll(List.of("--telnet-port", Integer.toString(telnet)));
+            default -> throw new IOException("Unsupported native debug runner: " + runner);
+        }
         return new TargetOperations.Plan(plan.action(), plan.board(), plan.buildDirectory(), args);
     }
 }

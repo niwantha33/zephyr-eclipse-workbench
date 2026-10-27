@@ -15,11 +15,21 @@ public final class DebugServerDiagnostics {
     private final java.util.Set<Integer> listeningPorts = new java.util.HashSet<>();
     private final ArrayDeque<String> recent = new ArrayDeque<>();
 
+    private final int expectedPort;
+    private final String runner;
+    public DebugServerDiagnostics() { this(0, ""); }
+    public DebugServerDiagnostics(int expectedPort, String runner) { this.expectedPort = expectedPort; this.runner = runner; }
+
     public synchronized void accept(String line) {
         if (line == null) return;
         var listening = java.util.regex.Pattern.compile(
                 "^Info\\s*:\\s*Listening on port ([0-9]{1,5}) for gdb connections\\s*$").matcher(line);
         if (listening.matches()) listeningPorts.add(Integer.parseInt(listening.group(1)));
+        // Match actual server readiness, never West's pre-start "running" announcement.
+        if (runner.equals("jlink") && expectedPort > 0 && line.trim().matches("Waiting for GDB connection\\.\\.\\."))
+            listeningPorts.add(expectedPort);
+        var pyocd = java.util.regex.Pattern.compile(".*GDB server started at port ([0-9]{1,5}).*").matcher(line);
+        if (runner.equals("pyocd") && pyocd.matches()) listeningPorts.add(Integer.parseInt(pyocd.group(1)));
         String clean = line.replace('\r', ' ').replace('\0', ' ');
         if (clean.length() > MAX_LINE) clean = clean.substring(0, MAX_LINE) + " [truncated]";
         if (recent.size() == LINES) recent.removeFirst();
@@ -72,7 +82,7 @@ public final class DebugServerDiagnostics {
             diagnosis = "OpenOCD could not establish a JTAG session with the target. "
                     + "Check the debug probe/USB JTAG wiring, target power and board-specific configuration.";
         } else {
-            diagnosis = "OpenOCD did not publish a usable GDB endpoint. "
+            diagnosis = "Debug server did not publish a usable GDB endpoint. "
                     + "Check its output for runner configuration, JTAG device access, and the correct OpenOCD installation.";
         }
         String status = "GDB startup failed for " + board + " on localhost:" + port
