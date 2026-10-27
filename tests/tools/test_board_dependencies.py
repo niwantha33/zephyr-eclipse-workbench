@@ -365,6 +365,57 @@ class DependencyTests(unittest.TestCase):
             self.assertEqual((destination/'payload').read_text(),'verified source')
             self.assertFalse(list(destination.parent.glob('.zew-module-stage-*')))
 
+    def test_windows_module_publish_retries_lock_without_refetch(self):
+        with tempfile.TemporaryDirectory() as home:
+            stage = Path(home) / 'stage'; stage.mkdir()
+            (stage / 'payload').write_text('verified')
+            destination = Path(home) / 'vendor'
+            original = Path.rename
+            calls = []
+            def rename(source, target):
+                calls.append(target)
+                if len(calls) < 3:
+                    error = PermissionError('locked'); error.winerror = 5
+                    raise error
+                return original(source, target)
+            with patch.object(Path, 'rename', rename), patch.object(board.time, 'sleep') as sleep:
+                board.publish_module(stage, destination)
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(sleep.call_count, 2)
+            self.assertEqual((destination / 'payload').read_text(), 'verified')
+
+    def test_persistent_windows_lock_is_bounded_and_keeps_source(self):
+        with tempfile.TemporaryDirectory() as home:
+            stage = Path(home) / 'stage'; stage.mkdir()
+            destination = Path(home) / 'vendor'
+            error = PermissionError('locked'); error.winerror = 32
+            with patch.object(Path, 'rename', side_effect=error) as rename, patch.object(board.time, 'sleep'):
+                with self.assertRaisesRegex(OSError, '6 publish attempts'):
+                    board.publish_module(stage, destination)
+            self.assertEqual(rename.call_count, 6)
+            self.assertTrue(stage.is_dir())
+            self.assertFalse(destination.exists())
+
+    def test_publish_preserves_destination_that_appears_between_retries(self):
+        with tempfile.TemporaryDirectory() as home:
+            stage = Path(home) / 'stage'; stage.mkdir()
+            destination = Path(home) / 'vendor'
+            error = PermissionError('locked'); error.winerror = 5
+            def concurrent_install(delay):
+                destination.mkdir(); (destination / 'user').write_text('keep')
+            with patch.object(Path, 'rename', side_effect=error) as rename, patch.object(board.time, 'sleep', side_effect=concurrent_install):
+                with self.assertRaisesRegex(ValueError, 'preserved'):
+                    board.publish_module(stage, destination)
+            self.assertEqual(rename.call_count, 1)
+            self.assertEqual((destination / 'user').read_text(), 'keep')
+
+    def test_non_windows_publish_failure_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as home:
+            with patch.object(Path, 'rename', side_effect=PermissionError('permissions')), patch.object(board.time, 'sleep') as sleep:
+                with self.assertRaises(PermissionError):
+                    board.publish_module(Path(home) / 'stage', Path(home) / 'vendor')
+                sleep.assert_not_called()
+
     def test_cancelled_or_failed_fetch_leaves_no_live_partial_module(self):
         with tempfile.TemporaryDirectory() as home:
             root=Path(home);destination=root/'modules/hal/vendor';(root/'keep').write_text('untouched')
