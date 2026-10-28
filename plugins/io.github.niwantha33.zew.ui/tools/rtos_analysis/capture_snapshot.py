@@ -96,8 +96,14 @@ class GdbMI:
                 self.process.kill()
                 self.process.wait(timeout=2)
             self.reader.join(timeout=2)
-            self.process.stdin.close()
-            self.process.stdout.close()
+            # A buffered Windows pipe may report EINVAL again while closing
+            # after its child exits. Preserve the original capture error and
+            # still close both handles.
+            for stream in (self.process.stdin, self.process.stdout):
+                try:
+                    stream.close()
+                except (OSError, ValueError):
+                    pass
 
 
 def read_snapshot(gdb: Path, elf: Path, port: int, duration: float,

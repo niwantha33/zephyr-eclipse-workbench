@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 MODULE = Path(__file__).resolve().parents[2] / 'plugins/io.github.niwantha33.zew.ui/tools/rtos_analysis/capture_snapshot.py'
 spec = importlib.util.spec_from_file_location('capture_snapshot', MODULE)
@@ -114,6 +114,25 @@ class SnapshotTests(unittest.TestCase):
                         session.close()
                 self.assertIn('-gdb-exit', log.read_text())
                 self.assertIsNotNone(self.children[-1].poll())
+
+    def test_windows_pipe_close_error_preserves_original_failure(self):
+        fake, _ = self.fake_gdb('eof')
+        with fake:
+            session = subject.GdbMI(self.gdb, self.build / 'zephyr/zephyr.elf', 10)
+            pipe = session.process.stdin
+            wrapped = Mock(wraps=pipe)
+
+            def invalid_close():
+                pipe.close()
+                raise OSError(22, 'Invalid argument')
+
+            wrapped.close.side_effect = invalid_close
+            session.process.stdin = wrapped
+            with patch.object(subject, 'GdbMI', return_value=session):
+                with self.assertRaisesRegex(RuntimeError, 'GDB exited'):
+                    subject.read_snapshot(self.gdb, self.build / 'zephyr/zephyr.elf', 3335, 0.05, 10)
+            self.assertTrue(session.process.stdout.closed)
+            self.assertIsNotNone(session.process.poll())
 
     def test_rejects_invalid_duration_and_port(self):
         elf, metadata = subject.validate(self.build, self.z, self.gdb)
