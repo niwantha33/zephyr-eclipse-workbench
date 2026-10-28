@@ -39,7 +39,9 @@ def capture(gdb: Path, elf: Path, metadata: Path, destination: Path, port: int,
     destination.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.zew-capture-', dir=destination) as temporary:
         stage = Path(temporary)
-        binary = stage / 'channel0_0'
+        ctf = stage / 'ctf'
+        ctf.mkdir()
+        binary = ctf / 'channel0_0'
         # The script is interpreted by GDB, not by the shell. repr() quotes paths
         # for Python embedded in GDB and prevents paths becoming GDB commands.
         script = stage / 'capture.gdb'
@@ -70,7 +72,8 @@ quit
                                 text=True, errors='replace', timeout=timeout, check=False)
         if result.returncode != 0 or not binary.is_file() or binary.stat().st_size == 0:
             raise RuntimeError('GDB trace capture failed:\n' + result.stdout[-6000:])
-        shutil.copyfile(metadata, stage / 'metadata')
+        script.unlink()
+        shutil.copyfile(metadata, ctf / 'metadata')
         timeline = Path(__file__).with_name('Zephyr_RTOS_Timeline.xml')
         shutil.copyfile(timeline, stage / 'Zephyr_RTOS_Timeline.xml')
         receipt = {'elf_sha256': hashlib.sha256(elf.read_bytes()).hexdigest(),

@@ -10,11 +10,15 @@ import io.github.niwantha33.zew.core.ProjectProfile;
 import io.github.niwantha33.zew.core.WestCommands;
 
 final class ProjectContext {
+    static final QualifiedName BUILD_CONFIGURATION = new QualifiedName(Activator.ID, "buildConfiguration");
+
     static Properties settings(IProject project) throws Exception {
         String root = project.getPersistentProperty(new QualifiedName(Activator.ID, "setupRoot"));
         if (root == null) throw new java.io.IOException("Import this application using File > Import > Zephyr first.");
         Properties settings = load(Path.of(root));
         settings.setProperty("zew.setupRoot", root);
+        settings.setProperty("zew.buildConfiguration", io.github.niwantha33.zew.core.BuildConfiguration
+                .fromId(project.getPersistentProperty(BUILD_CONFIGURATION)).id());
         Path application = project.getLocation().toFile().toPath();
         if (Files.isRegularFile(application.resolve(".zew/project.json"))) {
             settings.setProperty("board", ProjectProfile.read(application).board());
@@ -36,10 +40,12 @@ final class ProjectContext {
     }
     static Path buildDirectory(IProject project, Properties settings) throws Exception {
         Path application = project.getLocation().toFile().toPath();
-        if (!Files.isRegularFile(application.resolve(".zew/project.json"))
+        var profile = io.github.niwantha33.zew.core.BuildConfiguration.fromId(settings.getProperty("zew.buildConfiguration"));
+        if (profile == io.github.niwantha33.zew.core.BuildConfiguration.DEFAULT
+                && !Files.isRegularFile(application.resolve(".zew/project.json"))
                 && Files.isRegularFile(application.resolve(".zew-build/first/CMakeCache.txt"))) return application.resolve(".zew-build/first");
         return WestCommands.buildDirectory(new io.github.niwantha33.zew.core.WorkbenchConfig(
-                Path.of(settings.getProperty("python")), Path.of(settings.getProperty("workspace")), application, settings.getProperty("board")));
+                Path.of(settings.getProperty("python")), Path.of(settings.getProperty("workspace")), application, settings.getProperty("board")), profile);
     }
     static Properties load(Path root) throws Exception {
         if (!Files.isRegularFile(root.resolve(".zew-ready"))) throw new java.io.IOException("Complete Set Up Zephyr or select a ready environment.");

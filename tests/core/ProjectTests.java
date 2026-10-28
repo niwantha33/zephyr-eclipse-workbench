@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import java.nio.file.*;
 import io.github.niwantha33.zew.core.ProjectProfile;
+import io.github.niwantha33.zew.core.BuildConfiguration;
+import io.github.niwantha33.zew.core.WestCommands;
+import io.github.niwantha33.zew.core.WorkbenchConfig;
 public final class ProjectTests {
     static int checks;
     static void check(boolean value) { if (!value) throw new AssertionError(); checks++; }
@@ -38,6 +41,21 @@ public final class ProjectTests {
             check(Files.readString(imported.resolve("prj.conf")).equals("CONFIG_TEST=y\n"));
             rejects(() -> new ProjectProfile("qemu_x86/atom").replace(imported, "old/stale"));
             check(ProjectProfile.read(imported).board().equals("esp32s3_devkitc/esp32s3/procpu"));
+            var config = new WorkbenchConfig(root.resolve("python"), root.resolve("workspace"), imported, "lp_mspm0g3507/mspm0g3507");
+            Path originalBuild = WestCommands.buildDirectory(config);
+            check(WestCommands.buildDirectory(config, BuildConfiguration.DEFAULT).equals(originalBuild));
+            check(!WestCommands.buildDirectory(config, BuildConfiguration.DEBUG).equals(originalBuild));
+            check(!WestCommands.buildDirectory(config, BuildConfiguration.RELEASE).equals(
+                    WestCommands.buildDirectory(config, BuildConfiguration.DEBUG)));
+            check(BuildConfiguration.fromId(null) == BuildConfiguration.DEFAULT);
+            rejects(() -> BuildConfiguration.fromId("../debug"));
+            check(BuildConfiguration.DEBUG.cmakeArguments().contains("-DCONFIG_DEBUG_OPTIMIZATIONS=y"));
+            Path build = root.resolve("verify-config"); Files.createDirectories(build.resolve("zephyr"));
+            Files.writeString(build.resolve("zephyr/.config"), "CONFIG_DEBUG_OPTIMIZATIONS=y\n");
+            BuildConfiguration.DEBUG.verify(build);
+            rejects(() -> BuildConfiguration.RELEASE.verify(build));
+            Files.writeString(build.resolve("zephyr/.config"), "CONFIG_SPEED_OPTIMIZATIONS=y\n");
+            BuildConfiguration.RELEASE.verify(build);
             System.out.println("Passed " + checks + " portable project checks.");
         } finally { try (var paths = Files.walk(root)) { for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) Files.delete(path); } }
     }

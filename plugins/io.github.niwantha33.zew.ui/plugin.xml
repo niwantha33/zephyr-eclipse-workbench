@@ -108,6 +108,7 @@
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="io.github.niwantha33.zew.trace" name="Capture RTOS Trace" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugserver" name="Start Debug Server" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debug" name="Debug Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.flash" name="Flash Application" categoryId="io.github.niwantha33.zew.commands"/>
@@ -138,6 +139,7 @@
         </with>
       </activeWhen>
     </handler>
+    <handler commandId="io.github.niwantha33.zew.trace" class="io.github.niwantha33.zew.ui.ZephyrTraceHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugserver" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.debug" class="io.github.niwantha33.zew.ui.ZephyrDebugHandler"/>
     <handler commandId="io.github.niwantha33.zew.flash" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
@@ -175,6 +177,7 @@
         <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debug" label="Debug Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace (Preview)..." style="push"/>
         <separator name="updates" visible="true"/>
         <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check for Workbench Updates..." style="push"/>
         <command commandId="io.github.niwantha33.zew.updateConnection" label="Configure Workbench Updates..." style="push"/>

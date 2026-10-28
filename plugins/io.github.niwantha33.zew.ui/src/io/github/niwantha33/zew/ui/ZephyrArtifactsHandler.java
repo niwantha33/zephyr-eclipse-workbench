@@ -50,6 +50,8 @@ public final class ZephyrArtifactsHandler extends AbstractHandler {
                     var details = new StringBuilder()
                         .append("Project: ").append(project.getName())
                         .append("\nExact board: ").append(settings.getProperty("board"))
+                        .append("\nConfiguration: ").append(io.github.niwantha33.zew.core.BuildConfiguration
+                                .fromId(settings.getProperty("zew.buildConfiguration")).label())
                         .append("\nBuild folder: ").append(build)
                         .append("\n\nVerified firmware output:\n");
                     for (Path file : files) {
@@ -65,6 +67,7 @@ public final class ZephyrArtifactsHandler extends AbstractHandler {
                                     .append(": ").append(s.substring(kind.length() + 1).trim()).append("\n"));
                         }
                     }
+                    details.append("\nGenerated configuration: ").append(build.resolve("zephyr/.config"));
                     details.append("\nThe same build directory is used by West Flash and Debug.");
                     if (shell != null) shell.getDisplay().asyncExec(() -> {
                         if (shell.isDisposed()) return;

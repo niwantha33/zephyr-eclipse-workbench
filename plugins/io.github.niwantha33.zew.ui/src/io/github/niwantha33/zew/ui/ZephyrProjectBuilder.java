@@ -82,6 +82,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             var settings = ProjectContext.settings(getProject());
             Path project = getProject().getLocation().toFile().toPath().toRealPath();
             String board = settings.getProperty("board");
+            var configuration = io.github.niwantha33.zew.core.BuildConfiguration.fromId(settings.getProperty("zew.buildConfiguration"));
             Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
             var environment = ProjectContext.environment(settings);
             monitor.beginTask(clean ? "Clean Zephyr project" : "Prepare tools and build Zephyr project", IProgressMonitor.UNKNOWN);
@@ -100,6 +101,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             else command.addAll(List.of("--board", board, WestCommands.cmakePath(paths.application()), "--", "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON",
                     "-DCMAKE_MAKE_PROGRAM:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("tools.ninja")),
                     "-DPython3_EXECUTABLE:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("python"))));
+            if (!clean) command.addAll(configuration.cmakeArguments());
             if (!clean && "true".equals(settings.getProperty("zew.modules.none"))) command.add("-DZEPHYR_MODULES=");
             if (!clean) {
                 // One shared OpenOCD tool registry serves every imported project.
@@ -126,7 +128,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 }
             }
             stream.println("Workbench " + Activator.getDefault().getBundle().getVersion() + " | " + getProject().getName());
-            stream.println("Exact board target: " + board + " | independent output: " + buildDirectory);
+            stream.println("Exact board target: " + board + " | configuration: " + configuration.label() + " | independent output: " + buildDirectory);
             monitor.setTaskName(clean ? "Clean Zephyr project" : "Build Zephyr project");
             BuildDiagnostics.clear(getProject());
             var runner = new ProcessRunner();
@@ -180,7 +182,10 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 "--build-dir", WestCommands.cmakePath(paths.build()));
             runner.run(compile, workspace, Duration.ofMinutes(30), monitor::isCanceled, log, environment).requireSuccess();
             stage[0] = "Verify configured firmware outputs";
-            if (!clean) BuildArtifacts.verify(buildDirectory);
+            if (!clean) {
+                BuildArtifacts.verify(buildDirectory);
+                configuration.verify(buildDirectory);
+            }
             if (!clean) {
                 Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
                 EditorIntegration.schedule(getProject());
