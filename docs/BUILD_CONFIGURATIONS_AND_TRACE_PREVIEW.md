@@ -28,6 +28,6 @@ and temporary tools is best-effort; another IDE may still own the probe.
 This preview does not verify target firmware/ELF identity or buffer fullness,
 and does not auto-flash, auto-configure, auto-import the trace, provide rich
 state analysis or support every debug runner. It only supports board-declared
-OpenOCD and a GDB with Python support. Non-OpenOCD runners receive guidance,
-not a fabricated claim of support. Probe, memory and transport support varies
+OpenOCD and a GDB with MI support (embedded Python is not required).
+Non-OpenOCD runners receive guidance, not a fabricated claim of support. Probe, memory and transport support varies
 by target; Windows and physical target validation remain outstanding.
