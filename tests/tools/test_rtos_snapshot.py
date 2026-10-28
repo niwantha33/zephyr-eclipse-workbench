@@ -16,7 +16,7 @@ spec.loader.exec_module(subject)
 
 class SnapshotTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(prefix='RTOS capture Ω ')
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.build = self.root / 'build'
@@ -47,7 +47,9 @@ class SnapshotTests(unittest.TestCase):
             self.assertIn('--interpreter=mi2', command)
             self.assertIn('set auto-load off', command)
             self.assertNotIn('-x', command)
-            self.assertEqual(command[-1], str(self.build / 'zephyr/zephyr.elf'))
+            # Windows may expand RUNNER~1 to runneradmin when validate() resolves
+            # the ELF. Compare file identity rather than path spelling.
+            self.assertTrue(Path(command[-1]).samefile(self.build / 'zephyr/zephyr.elf'))
             child = real_popen([sys.executable, str(fake), behavior, str(pos),
                                 str(capacity), str(log)], **kwargs)
             self.children.append(child)
@@ -99,8 +101,17 @@ class SnapshotTests(unittest.TestCase):
         for behavior in ('timeout', 'stuck'):
             with self.subTest(behavior=behavior):
                 fake, log = self.fake_gdb(behavior)
-                with fake, self.assertRaisesRegex(RuntimeError, 'Timed out'):
-                    subject.read_snapshot(self.gdb, self.build / 'zephyr/zephyr.elf', 3335, 0.05, 0.2)
+                with fake:
+                    session = subject.GdbMI(self.gdb, self.build / 'zephyr/zephyr.elf', 10)
+                    try:
+                        # First prove that the child has started. The short
+                        # response timeout must not measure Windows process startup.
+                        session.command('-gdb-version')
+                        session.deadline = subject.time.monotonic() + 0.05
+                        with self.assertRaisesRegex(RuntimeError, 'Timed out'):
+                            session.command('-gdb-set remotetimeout 5')
+                    finally:
+                        session.close()
                 self.assertIn('-gdb-exit', log.read_text())
                 self.assertIsNotNone(self.children[-1].poll())
 
@@ -120,6 +131,9 @@ for line in sys.stdin:
     token, command = re.match(r"(\d+)(.*)", line.strip()).groups()
     with open(log, 'a') as out:
         out.write(json.dumps(command) + '\n')
+    if command == '-gdb-version':
+        print(token + '^done', flush=True)
+        continue
     if behavior == 'stuck':
         continue
     if command == '-gdb-exit':

@@ -13,9 +13,10 @@ spec = importlib.util.spec_from_file_location('cmake_setup_helper', ROOT / 'plug
 setup = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(setup)
 CMAKE = os.environ.get('ZEW_TEST_CMAKE') or shutil.which('cmake')
+NINJA = shutil.which('ninja')
 
 
-@unittest.skipUnless(CMAKE, 'Set ZEW_TEST_CMAKE or install CMake to exercise its parser')
+@unittest.skipUnless(CMAKE and NINJA, 'Install CMake and Ninja to exercise the CMake parser')
 class CMakePathTests(unittest.TestCase):
     def test_windows_macro_escape_and_same_cache_recovery(self):
         with tempfile.TemporaryDirectory(prefix='cmake Windows Ω ') as directory:
@@ -30,7 +31,11 @@ zephyr_custom_target_shared(menuconfig "${Python3_EXECUTABLE}" "${TEST_NINJA}")
             python = r'C:\Sandbox\Zephyr Setup Ω\python\python.exe'
             ninja = r'C:\Sandbox\Zephyr Setup Ω\python\Scripts\ninja.exe'
             def configure(build, definitions):
-                return subprocess.run([CMAKE, '-S', str(source), '-B', str(build), *definitions],
+                # This parser fixture has no compiled languages. Avoid the host
+                # default Visual Studio generator and its installation discovery.
+                return subprocess.run([CMAKE, '-G', 'Ninja',
+                                       '-DCMAKE_MAKE_PROGRAM:FILEPATH=' + setup.cmake_path(NINJA),
+                                       '-S', str(source), '-B', str(build), *definitions],
                                       text=True, capture_output=True, timeout=30)
             failed = configure(root / 'retry', ['-DPython3_EXECUTABLE=' + python, '-DTEST_NINJA=' + ninja])
             self.assertNotEqual(failed.returncode, 0)
