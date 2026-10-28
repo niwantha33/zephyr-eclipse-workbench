@@ -1,0 +1,93 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<tmfxml>
+  <!--Single-core Zephyr CTF scheduling view. Scheduled intervals include interrupt time; this is not exclusive CPU accounting. Switched-out does not distinguish Ready from Sleeping. The IRQ lane is for non-nested interrupts such as this demo. Import only for matching Zephyr CTF event fields.-->
+  <stateProvider id="zew.zephyr.scheduling" version="1">
+    <head>
+      <label value="Zephyr scheduling"/>
+    </head>
+    <eventHandler eventName="thread_create">
+      <stateChange>
+        <stateAttribute type="constant" value="Threads"/>
+        <stateAttribute type="eventField" value="thread_id"/>
+        <stateAttribute type="constant" value="Name"/>
+        <stateValue type="eventField" value="name"/>
+      </stateChange>
+      <stateChange>
+        <stateAttribute type="constant" value="Threads"/>
+        <stateAttribute type="eventField" value="thread_id"/>
+        <stateValue type="int" value="0"/>
+      </stateChange>
+    </eventHandler>
+    <eventHandler eventName="thread_name_set">
+      <stateChange>
+        <stateAttribute type="constant" value="Threads"/>
+        <stateAttribute type="eventField" value="thread_id"/>
+        <stateAttribute type="constant" value="Name"/>
+        <stateValue type="eventField" value="name"/>
+      </stateChange>
+    </eventHandler>
+    <eventHandler eventName="thread_switched_in">
+      <stateChange>
+        <stateAttribute type="constant" value="Threads"/>
+        <stateAttribute type="eventField" value="thread_id"/>
+        <stateAttribute type="constant" value="Name"/>
+        <stateValue type="eventField" value="name"/>
+      </stateChange>
+      <stateChange>
+        <stateAttribute type="constant" value="Threads"/>
+        <stateAttribute type="eventField" value="thread_id"/>
+        <stateValue type="int" value="1"/>
+      </stateChange>
+    </eventHandler>
+    <eventHandler eventName="thread_switched_out">
+      <stateChange>
+        <stateAttribute type="constant" value="Threads"/>
+        <stateAttribute type="eventField" value="thread_id"/>
+        <stateAttribute type="constant" value="Name"/>
+        <stateValue type="eventField" value="name"/>
+      </stateChange>
+      <stateChange>
+        <stateAttribute type="constant" value="Threads"/>
+        <stateAttribute type="eventField" value="thread_id"/>
+        <stateValue type="int" value="0"/>
+      </stateChange>
+    </eventHandler>
+    <eventHandler eventName="isr_enter">
+      <stateChange>
+        <stateAttribute type="constant" value="Interrupts"/>
+        <stateAttribute type="constant" value="ISR (non-nested)"/>
+        <stateValue type="int" value="2"/>
+      </stateChange>
+    </eventHandler>
+    <eventHandler eventName="isr_exit">
+      <stateChange>
+        <stateAttribute type="constant" value="Interrupts"/>
+        <stateAttribute type="constant" value="ISR (non-nested)"/>
+        <stateValue type="int" value="0"/>
+      </stateChange>
+    </eventHandler>
+    <eventHandler eventName="isr_exit_to_scheduler">
+      <stateChange>
+        <stateAttribute type="constant" value="Interrupts"/>
+        <stateAttribute type="constant" value="ISR (non-nested)"/>
+        <stateValue type="int" value="0"/>
+      </stateChange>
+    </eventHandler>
+  </stateProvider>
+  <timeGraphView id="zew.zephyr.scheduling.timeline">
+    <head>
+      <analysis id="zew.zephyr.scheduling"/>
+      <label value="Zephyr RTOS timeline"/>
+    </head>
+    <definedValue name="Not scheduled" value="0" color="#D1D5DB"/>
+    <definedValue name="Scheduled (includes ISR time)" value="1" color="#22A06B"/>
+    <definedValue name="Interrupt active" value="2" color="#E06C3A"/>
+    <entry path="Threads/*">
+      <display type="self"/>
+      <name type="constant" value="Name"/>
+    </entry>
+    <entry path="Interrupts/*">
+      <display type="self"/>
+    </entry>
+  </timeGraphView>
+</tmfxml>
