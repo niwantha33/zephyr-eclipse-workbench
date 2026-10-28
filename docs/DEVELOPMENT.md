@@ -1,5 +1,10 @@
 # Building the first development slice
 
+Historical initial development notes. For installation and the current workflow,
+start with the [fresh-install guide](FRESH_INSTALL.md). The current source has
+features implemented after this initial slice; the current CI workflows and
+target files are authoritative for build commands and dependency versions.
+
 This source implements environment preferences, workspace diagnostics, board-name discovery with explicit qualified-target entry, incremental/pristine builds, a streaming Eclipse console and cancellation. It does not yet implement the full v0.1 milestone.
 
 ## Build prerequisites

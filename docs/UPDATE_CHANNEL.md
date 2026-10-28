@@ -1,5 +1,9 @@
 # Workbench updates: first private development release
 
+Historical initial updater notes. For the current public preview, use the
+[fresh-install and update guide](FRESH_INSTALL.md). This repository is now public;
+select public access in Configure Workbench Updates. No GitHub token is needed.
+
 The workbench can now check its private GitHub update channel, download and verify
 the selected release, and open Eclipse's normal installation wizard. This updates
 our plug-ins only. Tools installation and the project wizard are later slices.

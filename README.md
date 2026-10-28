@@ -2,13 +2,30 @@
 
 An Eclipse-based development environment for Zephyr applications across semiconductor vendors.
 
+## Install from the beginning
+
+Install **Eclipse IDE for Embedded C/C++ Developers** first. Then install the
+Workbench `_p2.zip` from [GitHub Releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases)
+through **Help > Install New Software > Add > Archive**, restart Eclipse, and
+select **Zephyr > Set Up Zephyr**. The Source code ZIP is not the plug-in installer.
+
+Follow the [fresh-install guide](docs/FRESH_INSTALL.md) for the exact Windows
+file, setup order, updates, probe tools and optional Trace Compass installation.
+
 ## Project status
 
-0.1.20 adds [shared board/CPU dependency repair](docs/CROSS_VENDOR_REPAIR_0.1.20.md). Compiler selection uses the exact target's architecture and defaults; HAL selection uses the selected SoC metadata and pinned West manifest. The MCUboot isolated-runtime repair from 0.1.19 is retained.
+0.1.21 includes shared target dependency repair, native flash/debug integration,
+separate Debug/Release build profiles and an OpenOCD CTF RAM snapshot preview.
+See the [build and trace guide](docs/BUILD_CONFIGURATIONS_AND_TRACE_PREVIEW.md)
+and the [RTOS analysis roadmap](docs/RTOS_ANALYSIS_ROADMAP.md).
 
 Use the native project Properties > Zephyr page to select an exact board/core, then build through Eclipse. Missing supported compiler, HAL and build-host dependencies are prepared automatically. Each project keeps its independent build output.
 
-This is a development preview. Automated regression, upstream target metadata checks and p2 packaging run on Linux. Native Windows execution and physical flashing/debugging require separate validation.
+This is a development preview. Eclipse/p2 packaging and native Windows regression
+tests pass, along with six Windows firmware build cases across TI, STM32,
+Nordic and Espressif, including MCUboot. MSPM0 snapshot capture and timeline
+viewing were observed on physical hardware. These results do not establish
+all-vendor hardware support or completion of the clean-machine desktop tests.
 
 ## Scope
 
@@ -24,7 +41,7 @@ This is a development preview. Automated regression, upstream target metadata ch
 
 Vendor presence does not imply support for every chip or peripheral. Physical execution requires a compatible board, connection, probe, and vendor tools where applicable.
 
-## Initial baseline
+## Historical initial baseline
 
 | Item | Baseline | Evidence |
 |---|---|---|
