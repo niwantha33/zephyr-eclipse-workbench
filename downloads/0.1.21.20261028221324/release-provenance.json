@@ -1,0 +1,11 @@
+{
+  "version": "0.1.21.20261028221324",
+  "source_commit": "867a51ef717222ad217715e69842f7b0c22ee7cf",
+  "published_p2_commit": "d1b1b753f5f07ccbacfdfe574fb4b53c2d9fb3aa",
+  "published_directory": "releases/0.1.21.20261028221324",
+  "channel_snapshot": "schema=1\nfeature=io.github.niwantha33.zew.feature.feature.group\nversion=0.1.21.20261028221324\nrevision=d1b1b753f5f07ccbacfdfe574fb4b53c2d9fb3aa\ndirectory=releases/0.1.21.20261028221324\nnotes=Development preview: cross-vendor board dependencies, project properties and native run configurations. Windows hardware and desktop validation pending.\nfiles=8\nfile.0.path=artifacts.jar\nfile.0.size=1143\nfile.0.sha256=d91152a6ebb697aa56e0713b32cb00a8d50ffa694945011043485e2b43d9d0ab\nfile.1.path=artifacts.xml.xz\nfile.1.size=1060\nfile.1.sha256=0a01bd8b778bfe181d70eaa0376ca43c369410c994fd021724f65c5e5855e6c0\nfile.2.path=content.jar\nfile.2.size=3528\nfile.2.sha256=97831ee5f6a5a89bf0a6c6b1f8169f55cd5a51006309f14281897662199d964c\nfile.3.path=content.xml.xz\nfile.3.size=3156\nfile.3.sha256=a5b991fc9eb423b229372fc9ee6f6d69d93712f5827df4c1c2080cc5b2c2ff99\nfile.4.path=features/io.github.niwantha33.zew.feature_0.1.21.20261028221324.jar\nfile.4.size=4682\nfile.4.sha256=73bf281edca674c541fba49134c198f788572ed0535277235f4f8d3383c3df9e\nfile.5.path=p2.index\nfile.5.size=172\nfile.5.sha256=aa9401bb2aa74dae6e56a0830f2624e0c16a0d19ce3b35893e83c9a0a239543b\nfile.6.path=plugins/io.github.niwantha33.zew.core_0.1.21.20261028221324.jar\nfile.6.size=97819\nfile.6.sha256=6bc0d7a4aaa0c308657f4f4479b6677474c3229948053e722f7f0272adb5850c\nfile.7.path=plugins/io.github.niwantha33.zew.ui_0.1.21.20261028221324.jar\nfile.7.size=378891\nfile.7.sha256=e5d7a226be9c006c9309f7475231e53d5dffe1c1e2472da8832fede954576b0a\n",
+  "archive": "Zephyr_Eclipse_Workbench_0.1.21.20261028221324_p2.zip",
+  "source_ci": "https://github.com/niwantha33/zephyr-eclipse-workbench/actions/runs/40776803685",
+  "publish_ci": "https://github.com/niwantha33/zephyr-eclipse-workbench/actions/runs/40778220872",
+  "hardware_validation": "MSPM0 RAM snapshot and timeline observed; other target tracing not validated"
+}
