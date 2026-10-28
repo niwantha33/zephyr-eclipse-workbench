@@ -8,14 +8,139 @@ It resets and resumes the target, then leaves it halted after capture.
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import hashlib
 import json
 import os
 from pathlib import Path
+import queue
+import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
+
+
+class GdbMI:
+    """Small synchronous MI client; Python runs here, never inside GDB."""
+
+    def __init__(self, gdb: Path, elf: Path, timeout: float):
+        self.deadline = time.monotonic() + timeout
+        self.token = 0
+        self.records = queue.Queue()
+        self.log = deque(maxlen=40)
+        self.process = subprocess.Popen(
+            [str(gdb), '--nx', '--quiet', '--interpreter=mi2',
+             '-iex', 'set auto-load off', str(elf)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding='utf-8', errors='replace', bufsize=1)
+        self.reader = threading.Thread(target=self._read, daemon=True)
+        self.reader.start()
+
+    def _read(self):
+        try:
+            for line in self.process.stdout:
+                self.records.put(line.rstrip('\r\n'))
+        finally:
+            self.records.put(None)
+
+    def command(self, command: str) -> str:
+        self.token += 1
+        prefix = f'{self.token}^'
+        try:
+            self.process.stdin.write(f'{self.token}{command}\n')
+            self.process.stdin.flush()
+        except (OSError, ValueError) as exc:
+            raise RuntimeError('GDB closed its command connection') from exc
+        while True:
+            remaining = self.deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError('Timed out waiting for GDB: ' + command)
+            try:
+                line = self.records.get(timeout=remaining)
+            except queue.Empty as exc:
+                raise RuntimeError('Timed out waiting for GDB: ' + command) from exc
+            if line is None:
+                raise RuntimeError('GDB exited before completing ' + command + '\n' + '\n'.join(self.log))
+            self.log.append(line[:512])
+            if not line.startswith(prefix):
+                continue  # Stream output and asynchronous notifications are not replies.
+            result = line[len(prefix):]
+            kind = result.split(',', 1)[0]
+            if kind not in ('done', 'connected', 'exit'):
+                raise RuntimeError('GDB command failed: ' + command + '\n' + result)
+            return result
+
+    def integer(self, expression: str) -> int:
+        result = self.command('-data-evaluate-expression ' + json.dumps(expression))
+        match = re.search(r'(?:^|,)value="([^"\\]*)"', result)
+        if not match:
+            raise RuntimeError('GDB did not return a numeric value for ' + expression)
+        try:
+            return int(match.group(1), 0)
+        except ValueError as exc:
+            raise RuntimeError('Invalid GDB numeric value: ' + match.group(1)) from exc
+
+    def close(self):
+        # Do not wait for a debugger reply during failure cleanup.
+        try:
+            if self.process.poll() is None:
+                self.process.stdin.write(f'{self.token + 1}-gdb-exit\n')
+                self.process.stdin.flush()
+                self.process.wait(timeout=2)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+        finally:
+            if self.process.poll() is None:
+                self.process.kill()
+                self.process.wait(timeout=2)
+            self.reader.join(timeout=2)
+            # A buffered Windows pipe may report EINVAL again while closing
+            # after its child exits. Preserve the original capture error and
+            # still close both handles.
+            for stream in (self.process.stdin, self.process.stdout):
+                try:
+                    stream.close()
+                except (OSError, ValueError):
+                    pass
+
+
+def read_snapshot(gdb: Path, elf: Path, port: int, duration: float,
+                  timeout: float) -> tuple[bytes, int, str]:
+    session = GdbMI(gdb, elf, timeout + duration)
+    try:
+        session.command('-gdb-set remotetimeout 5')
+        session.command(f'-target-select extended-remote localhost:{port}')
+        session.command('-interpreter-exec console "monitor reset halt"')
+        # Check symbols before running the target, so missing configuration has
+        # an actionable error rather than an apparently successful empty capture.
+        size = session.integer('sizeof(ram_tracing)')
+        address = session.integer('(unsigned long)&ram_tracing[0]')
+        session.integer("'tracing_backend_ram.c'::pos")
+        session.command('-interpreter-exec console "monitor resume"')
+        time.sleep(duration)
+        session.command('-interpreter-exec console "monitor halt"')
+        pos = session.integer("'tracing_backend_ram.c'::pos")
+        if not 0 < pos <= size:
+            raise RuntimeError(f'Invalid or empty RAM trace: {pos} / {size}')
+        # Read bounded chunks. Require each whole requested range, since GDB MI
+        # may otherwise return only readable fragments of an address range.
+        data = bytearray()
+        for offset in range(0, pos, 1024):
+            count = min(1024, pos - offset)
+            result = session.command(f'-data-read-memory-bytes {address + offset:#x} {count}')
+            blocks = re.findall(r'\{begin="(0x[0-9a-fA-F]+)",offset="[^"\\]*",end="(0x[0-9a-fA-F]+)",contents="([0-9a-fA-F]*)"\}', result)
+            if len(blocks) != 1:
+                raise RuntimeError('GDB returned incomplete RAM trace memory')
+            begin, end, contents = blocks[0]
+            block = bytes.fromhex(contents)
+            if int(begin, 16) != address + offset or int(end, 16) != address + offset + count or len(block) != count:
+                raise RuntimeError('GDB returned incomplete RAM trace memory')
+            data.extend(block)
+        return bytes(data), size, '\n'.join(session.log)[-6000:]
+    finally:
+        session.close()
 
 
 def validate(build: Path, zephyr: Path, gdb: Path) -> tuple[Path, Path]:
@@ -42,47 +167,22 @@ def capture(gdb: Path, elf: Path, metadata: Path, destination: Path, port: int,
         ctf = stage / 'ctf'
         ctf.mkdir()
         binary = ctf / 'channel0_0'
-        # The script is interpreted by GDB, not by the shell. repr() quotes paths
-        # for Python embedded in GDB and prevents paths becoming GDB commands.
-        script = stage / 'capture.gdb'
-        script.write_text('''set pagination off
-set confirm off
-set remotetimeout 5
-python
-import gdb, time
-gdb.execute("target extended-remote localhost:%d")
-gdb.execute("monitor reset halt")
-gdb.execute("monitor resume")
-time.sleep(%r)
-gdb.execute("monitor halt")
-size = int(gdb.parse_and_eval("sizeof(ram_tracing)"))
-pos = int(gdb.parse_and_eval("'tracing_backend_ram.c'::pos"))
-if not 0 < pos <= size:
-    raise gdb.GdbError("Invalid or empty RAM trace: %%s / %%s" %% (pos, size))
-address = int(gdb.parse_and_eval("(unsigned long)&ram_tracing[0]"))
-data = bytes(gdb.selected_inferior().read_memory(address, pos))
-with open(%r, "wb") as output:
-    output.write(data)
-print("ZEW_TRACE_BYTES=%%d CAPACITY=%%d" %% (pos, size))
-end
-quit
-''' % (port, duration, str(binary)), encoding='utf-8')
-        result = subprocess.run([str(gdb), '--nx', '--batch', '-x', str(script), str(elf)],
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, errors='replace', timeout=timeout, check=False)
-        if result.returncode != 0 or not binary.is_file() or binary.stat().st_size == 0:
-            raise RuntimeError('GDB trace capture failed:\n' + result.stdout[-6000:])
-        script.unlink()
+        try:
+            data, capacity, gdb_output = read_snapshot(gdb, elf, port, duration, timeout)
+        except RuntimeError as exc:
+            raise RuntimeError('GDB trace capture failed:\n' + str(exc)) from exc
+        binary.write_bytes(data)
         shutil.copyfile(metadata, ctf / 'metadata')
         timeline = Path(__file__).with_name('Zephyr_RTOS_Timeline.xml')
         shutil.copyfile(timeline, stage / 'Zephyr_RTOS_Timeline.xml')
         receipt = {'elf_sha256': hashlib.sha256(elf.read_bytes()).hexdigest(),
                    'metadata_sha256': hashlib.sha256(metadata.read_bytes()).hexdigest(),
                    'trace_bytes': binary.stat().st_size,
+                   'buffer_capacity': capacity,
                    'capture_seconds_requested': duration,
                    'capture_full': 'unknown',
                    'firmware_matches_elf': 'not verified',
-                   'gdb_output': result.stdout[-6000:]}
+                   'gdb_output': gdb_output}
         (stage / 'capture.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
         # A fresh directory for each snapshot prevents silently reusing an old trace.
         stamp = time.strftime('%Y%m%d-%H%M%S')

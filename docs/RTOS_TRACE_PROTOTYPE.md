@@ -13,8 +13,9 @@ runs it briefly, and leaves it halted. It does not detect which probe is in use,
 verify flashed firmware against the ELF, or determine whether the RAM buffer
 has filled. Do not interpret its output as a complete recording. A lost
 connection can leave the target running; stop the owned debug server and inspect
-the target. This prototype requires GDB with Python support and OpenOCD monitor
-commands. It has not been tested with hardware or on Windows in this change.
+the target. This prototype uses GDB/MI and OpenOCD monitor commands. Python runs
+in the Workbench helper; the SDK GDB does not need Python scripting support.
+It has not been tested with hardware or on Windows in this change.
 
 An example for a prepared MSPM0 build and an existing server on localhost:3335:
 
