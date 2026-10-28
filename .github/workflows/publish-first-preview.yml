@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: Apache-2.0
+# Release operation for the already-built 0.1.21 preview. No application rebuild.
+name: Publish verified 0.1.21 installation preview
+on:
+  push:
+    branches: [release/publish-preview-0.1.21]
+    paths:
+      - '.github/workflows/publish-first-preview.yml'
+      - '.github/release-notes/0.1.21-preview.1.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: publish-first-preview-0.1.21
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'niwantha33/zephyr-eclipse-workbench'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release operation
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Extract immutable published assets and tested source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/release-assets" "$RUNNER_TEMP/release-source"
+          git fetch --no-tags --depth=1 origin 8f7ba8e7d1b5e6ba6c4612eadc7baed106c4826f
+          git archive FETCH_HEAD downloads/0.1.21.20261028221324 | tar -x -C "$RUNNER_TEMP/release-assets"
+          git fetch --no-tags --depth=1 origin 867a51ef717222ad217715e69842f7b0c22ee7cf
+          git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/release-source"
+      - name: Verify checksums and installable p2 archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSETS="$RUNNER_TEMP/release-assets/downloads/0.1.21.20261028221324"
+          (cd "$ASSETS" && sha256sum -c SHA256SUMS.txt)
+          echo "c3f136023ace85432e54a95691ffadad92abcafaab7fe26e9d827a40788a1e65  $ASSETS/Zephyr_Eclipse_Workbench_0.1.21.20261028221324_p2.zip" | sha256sum -c -
+          python3 "$RUNNER_TEMP/release-source/scripts/verify_site.py" --archive "$ASSETS/Zephyr_Eclipse_Workbench_0.1.21.20261028221324_p2.zip"
+      - name: Publish preview with installation assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSETS="$RUNNER_TEMP/release-assets/downloads/0.1.21.20261028221324"
+          gh release create v0.1.21-preview.1 \
+            --repo niwantha33/zephyr-eclipse-workbench \
+            --target 867a51ef717222ad217715e69842f7b0c22ee7cf \
+            --title "0.1.21 Preview 1 — first installation and RTOS snapshots" \
+            --prerelease \
+            --notes-file .github/release-notes/0.1.21-preview.1.md \
+            "$ASSETS/START_HERE.md" \
+            "$ASSETS/Zephyr_Eclipse_Workbench_0.1.21.20261028221324_p2.zip" \
+            "$ASSETS/SHA256SUMS.txt" \
+            "$ASSETS/release-provenance.json" \
+            "$ASSETS/RTOS_ANALYSIS_ROADMAP.md"
+          gh release view v0.1.21-preview.1 --repo niwantha33/zephyr-eclipse-workbench --json url,tagName,isPrerelease,assets
