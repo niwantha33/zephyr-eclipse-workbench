@@ -37,6 +37,13 @@ public final class WestCommands {
         }
     }
 
+    /** Keep existing default outputs stable; named configurations have distinct caches. */
+    public static Path buildDirectory(WorkbenchConfig config, BuildConfiguration profile) {
+        Path normal = buildDirectory(config);
+        return profile == BuildConfiguration.DEFAULT ? normal
+                : normal.resolveSibling(normal.getFileName() + "-" + profile.id());
+    }
+
     public static List<String> build(WorkbenchConfig config, boolean pristine) {
         var args = new ArrayList<String>(List.of("build", "--build-dir", buildDirectory(config).toString(),
                 "--board", config.board()));
@@ -59,7 +66,7 @@ public final class WestCommands {
     public static Path parseZephyrPath(String output) {
         var lines = output.lines().map(String::trim).filter(s -> !s.isBlank()).toList();
         if (lines.size() != 1) throw new IllegalArgumentException("West returned an unexpected Zephyr project path.");
-        return Path.of(lines.getFirst()).toAbsolutePath().normalize();
+        return Path.of(lines.get(0)).toAbsolutePath().normalize();
     }
 }
 

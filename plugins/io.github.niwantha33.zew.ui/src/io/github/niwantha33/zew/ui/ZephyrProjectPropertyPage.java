@@ -36,7 +36,7 @@ import io.github.niwantha33.zew.core.ZephyrProjectFiles;
 /** Project Properties > Zephyr: real SoC/CPU board qualifiers from the active checkout. */
 public final class ZephyrProjectPropertyPage extends PropertyPage {
     private IProject project;
-    private Combo vendor, soc;
+    private Combo vendor, soc, buildConfiguration;
     private Text search;
     private Table targets;
     private Label current;
@@ -63,6 +63,21 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
         current = new Label(panel, SWT.WRAP);
         current.setText(originalBoard);
         current.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+        new Label(panel, SWT.NONE).setText("Build configuration");
+        buildConfiguration = new Combo(panel, SWT.READ_ONLY);
+        buildConfiguration.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        var profiles = io.github.niwantha33.zew.core.BuildConfiguration.values();
+        buildConfiguration.setItems(java.util.Arrays.stream(profiles).map(p -> p.label()).toArray(String[]::new));
+        try {
+            var selectedProfile = io.github.niwantha33.zew.core.BuildConfiguration.fromId(
+                    ProjectContext.settings(project).getProperty("zew.buildConfiguration"));
+            buildConfiguration.select(selectedProfile.ordinal());
+        } catch (Exception error) {
+            setErrorMessage("Invalid build configuration: " + error.getMessage());
+            setValid(false);
+            return panel;
+        }
+        new Label(panel, SWT.NONE);
         new Label(panel, SWT.NONE).setText("Chip vendor");
         vendor = new Combo(panel, SWT.READ_ONLY);
         vendor.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -88,7 +103,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
             column.setWidth(header.equals("Exact build target") ? 320 : 125);
         }
         var information = new Label(panel, SWT.WRAP);
-        information.setText("The selected target is saved per project. Build Project prepares matching SDK toolchains and pinned West modules automatically. Old build folders and application source are preserved.");
+        information.setText("Each configuration has its own build folder. Application settings keeps your existing build; Debug selects -Og, Release selects -O2. Build to generate the selected configuration. Project source is preserved.");
         information.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1));
         vendor.addListener(SWT.Selection, e -> { fillSocs(); filterTargets(); });
         soc.addListener(SWT.Selection, e -> filterTargets());
@@ -186,12 +201,16 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
     @Override public boolean performOk() {
         if (project == null || !isValid() || targets.getSelectionCount() != 1) return false;
         String selected = ((String[]) targets.getSelection()[0].getData())[6];
-        if (selected.equals(originalBoard)) return true;
+        int selectedIndex = buildConfiguration.getSelectionIndex();
+        if (selectedIndex < 0) return false;
+        var configuration = io.github.niwantha33.zew.core.BuildConfiguration.values()[selectedIndex];
         try {
             Path application = project.getLocation().toFile().toPath();
             ResourcesPlugin.getWorkspace().run(monitor -> {
                 try {
-                    if (Files.isRegularFile(application.resolve(".zew/project.json"))) {
+                    if (selected.equals(originalBoard)) {
+                        // Keep existing project profile untouched.
+                    } else if (Files.isRegularFile(application.resolve(".zew/project.json"))) {
                         new ProjectProfile(selected).replace(application, originalBoard);
                     } else if (Files.isRegularFile(application.resolve(".zew/project.properties"))) {
                         // Schema-1 legacy profiles remain intact for rollback. JSON wins on reload.
@@ -199,6 +218,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
                     } else {
                         throw new java.io.IOException("Project profile is missing; import this application again.");
                     }
+                    project.setPersistentProperty(ProjectContext.BUILD_CONFIGURATION, configuration.id());
                     project.refreshLocal(IResource.DEPTH_INFINITE, monitor);
                 } catch (Exception error) {
                     throw new org.eclipse.core.runtime.CoreException(new Status(IStatus.ERROR, Activator.ID, error.getMessage(), error));

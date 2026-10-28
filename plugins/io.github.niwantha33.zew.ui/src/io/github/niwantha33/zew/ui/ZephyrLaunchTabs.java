@@ -69,6 +69,7 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
             if (debugMode) {
                 new Label(group, SWT.NONE).setText("Debug runner");
                 runner = new Combo(group, SWT.READ_ONLY);
+                runner.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
                 runner.setItems(new String[] {"Board default", "openocd", "jlink", "pyocd"});
                 runner.select(0);
                 runner.addListener(SWT.Selection, e -> updateLaunchConfigurationDialog());
@@ -78,7 +79,11 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
                 port.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
                 port.addModifyListener(e -> updateLaunchConfigurationDialog());
                 new Label(group, SWT.NONE);
-                new Label(group, SWT.WRAP).setText("Native CDT DSF-GDB. Backends: OpenOCD, SEGGER J-Link and pyOCD on localhost. "
+                var description = new Label(group, SWT.WRAP);
+                var descriptionLayout = new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1);
+                descriptionLayout.widthHint = 480;
+                description.setLayoutData(descriptionLayout);
+                description.setText("Native CDT DSF-GDB. Backends: OpenOCD, SEGGER J-Link and pyOCD on localhost. "
                         + "The selected Zephyr build supplies its matching GDB and ELF. "
                         + "This attaches to an owned debug server; it does not reflash firmware.");
             } else {
@@ -89,7 +94,11 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
                 action.select(0);
                 action.addListener(SWT.Selection, e -> updateLaunchConfigurationDialog());
                 new Label(group, SWT.NONE);
-                new Label(group, SWT.WRAP).setText("Build the selected exact board target first. Eclipse owns process termination and console output. External Debug Server is not a native source-level debugger.");
+                var description = new Label(group, SWT.WRAP);
+                var descriptionLayout = new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1);
+                descriptionLayout.widthHint = 480;
+                description.setLayoutData(descriptionLayout);
+                description.setText("Build the selected exact board target first. Eclipse owns process termination and console output. External Debug Server is not a native source-level debugger.");
             }
         }
         @Override public void setDefaults(ILaunchConfigurationWorkingCopy configuration) {

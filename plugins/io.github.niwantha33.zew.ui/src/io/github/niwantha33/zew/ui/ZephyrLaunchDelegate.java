@@ -14,7 +14,7 @@ import org.eclipse.debug.core.DebugPlugin;
 import org.eclipse.debug.core.ILaunch;
 import org.eclipse.debug.core.ILaunchConfiguration;
 import org.eclipse.debug.core.ILaunchManager;
-import org.eclipse.debug.core.model.ILaunchConfigurationDelegate;
+import org.eclipse.debug.core.model.LaunchConfigurationDelegate;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
@@ -35,10 +35,18 @@ import io.github.niwantha33.zew.core.TargetOperations;
 import io.github.niwantha33.zew.core.EspressifFlashSafety;
 
 /** Native Run Configurations. Eclipse owns console output and process termination. */
-public final class ZephyrLaunchDelegate implements ILaunchConfigurationDelegate {
+public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
     public static final String TYPE = Activator.ID + ".launchType";
     public static final String PROJECT = Activator.ID + ".launch.project";
     public static final String ACTION = Activator.ID + ".launch.action";
+
+    @Override public boolean buildForLaunch(ILaunchConfiguration configuration, String mode,
+                                            IProgressMonitor monitor) throws CoreException {
+        // Flash preflight explicitly builds the selected project exactly once below.
+        // Suppress Eclipse's additional workspace-wide pre-launch build.
+        if ("flash".equals(configuration.getAttribute(ACTION, "run"))) return false;
+        return super.buildForLaunch(configuration, mode, monitor);
+    }
 
     @Override public void launch(ILaunchConfiguration configuration, String mode, ILaunch launch,
                                   IProgressMonitor monitor) throws CoreException {
@@ -105,6 +113,7 @@ public final class ZephyrLaunchDelegate implements ILaunchConfigurationDelegate 
     private FlashPlan prepareFlash(IProject project, Properties settings,
                                   IProgressMonitor monitor) throws Exception {
         String board = settings.getProperty("board");
+        String buildConfiguration = settings.getProperty("zew.buildConfiguration");
         var shell = new AtomicReference<Shell>();
         var confirmed = new AtomicBoolean();
         PlatformUI.getWorkbench().getDisplay().syncExec(() -> {
@@ -114,6 +123,7 @@ public final class ZephyrLaunchDelegate implements ILaunchConfigurationDelegate 
             confirmed.set(MessageDialog.openConfirm(shell.get(),
                     "Build and Flash — " + project.getName(),
                     "Build and program the selected board:\n\n" + board
+                            + "\nConfiguration: " + buildConfiguration
                             + "\n\nThis writes firmware using Zephyr's board runner. Continue?"));
         });
         if (!confirmed.get() || monitor.isCanceled()) return null;
@@ -127,10 +137,12 @@ public final class ZephyrLaunchDelegate implements ILaunchConfigurationDelegate 
                     Activator.ID + ".zephyrBuilder", Map.of(), monitor);
             if (monitor.isCanceled()) return null;
             settings = ProjectContext.settings(project);
-            if (!board.equals(settings.getProperty("board")))
-                throw new IOException("Board changed during preparation; Flash cancelled.");
+            if (!board.equals(settings.getProperty("board"))
+                    || !buildConfiguration.equals(settings.getProperty("zew.buildConfiguration")))
+                throw new IOException("Board or build configuration changed during preparation; Flash cancelled.");
             var plan = TargetOperations.prepare(
                     ProjectContext.buildDirectory(project, settings), board, "flash", "");
+            io.github.niwantha33.zew.core.BuildConfiguration.fromId(buildConfiguration).verify(plan.buildDirectory());
             var command = new ArrayList<>(plan.command(settings.getProperty("python")));
             if (EspressifFlashSafety.isEsp32Runner(plan.buildDirectory())) {
                 String port = EspressifSerialProbe.selectAndVerify(shell.get(), board, settings,
