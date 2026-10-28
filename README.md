@@ -18,6 +18,9 @@ file, setup order, updates, probe tools and optional Trace Compass installation.
 separate Debug/Release build profiles and an OpenOCD CTF RAM snapshot preview.
 See the [build and trace guide](docs/BUILD_CONFIGURATIONS_AND_TRACE_PREVIEW.md)
 and the [RTOS analysis roadmap](docs/RTOS_ANALYSIS_ROADMAP.md).
+The proposed [observability specification](docs/RTOS_OBSERVABILITY_SPEC.md)
+covers application logs, CPU charts, register analysis and fault/core-dump
+investigation; these expanded analysers are not yet implemented.
 
 Use the native project Properties > Zephyr page to select an exact board/core, then build through Eclipse. Missing supported compiler, HAL and build-host dependencies are prepared automatically. Each project keeps its independent build output.
 
