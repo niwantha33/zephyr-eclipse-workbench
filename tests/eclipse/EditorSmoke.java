@@ -119,6 +119,37 @@ public final class EditorSmoke implements IApplication {
                             return "DEBUG_INFO".equals(entry.getClass().getMethod("symbol").invoke(entry));
                         } catch (Exception error) { throw new IllegalStateException(error); }
                     }), "unconfigured Configuration Studio displays invalid source override");
+                    // Verify the actual installed native UX, not screenshots or
+                    // plugin.xml declarations. This must run on the SWT thread.
+                    var cls = view.getClass();
+                    var tabsField = cls.getDeclaredField("tabs");
+                    tabsField.setAccessible(true);
+                    var studioTabs = (org.eclipse.swt.widgets.TabFolder) tabsField.get(view);
+                    check(studioTabs.getItemCount() == 3
+                            && "Features".equals(studioTabs.getItem(0).getText())
+                            && "Hardware".equals(studioTabs.getItem(1).getText())
+                            && "Insights".equals(studioTabs.getItem(2).getText()),
+                            "native Configuration Studio has feature, hardware and insight workspaces");
+                    for (String fieldName : new String[]{"enableButton", "disableButton"}) {
+                        var field = cls.getDeclaredField(fieldName);
+                        field.setAccessible(true);
+                        var button = (org.eclipse.swt.widgets.Button) field.get(view);
+                        String expected = fieldName.equals("enableButton") ? "Enable" : "Disable";
+                        check(expected.equals(button.getText()) && !button.getEnabled(),
+                                "unconfigured Kconfig Studio exposes a safe " + expected + " action");
+                    }
+                    var listField = cls.getDeclaredField("options");
+                    listField.setAccessible(true);
+                    var featureTable = (org.eclipse.swt.widgets.Table) listField.get(view);
+                    check(featureTable.getColumnCount() == 4
+                            && featureTable.getMenu() != null
+                            && featureTable.getItemCount() > 0,
+                            "native configuration feature table supports a context menu");
+                    var overridesField = cls.getDeclaredField("changesMetric");
+                    overridesField.setAccessible(true);
+                    var overridesCount = (org.eclipse.swt.widgets.Label) overridesField.get(view);
+                    check(!"—".equals(overridesCount.getText()),
+                            "live project override summary is populated");
                 } catch (Exception error) { throw new IllegalStateException("Native Studio smoke failed", error); }
             });
         }
