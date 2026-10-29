@@ -163,6 +163,7 @@ public final class ConfigurationStudioView extends ViewPart {
             column.setText(header);
         }
         options.addListener(SWT.Selection, event -> describeSelected());
+        options.addListener(SWT.DefaultSelection, event -> openResource("prj.conf"));
         installContextMenu();
 
         Composite detail = new Composite(sash, SWT.NONE);
@@ -331,6 +332,8 @@ public final class ConfigurationStudioView extends ViewPart {
         definitionCache.clear();
         if (options == null || options.isDisposed()) return;
         if (project == null) {
+            hasGeneratedConfiguration = false;
+            updateMetrics();
             options.removeAll();
             describeSelected();
             help.setText("Open Zephyr > Configuration Studio with an application selected in Project Explorer.");
@@ -355,8 +358,10 @@ public final class ConfigurationStudioView extends ViewPart {
                 setupProblem = notConfigured.getMessage();
             }
             snapshot = ConfigurationStudioFiles.inspect(app, build, profile);
-            context.setText("CONFIGURATION STUDIO   •   " + project.getName() + "   •   "
-                    + board + "   •   " + snapshot.profile());
+            hasGeneratedConfiguration = build != null
+                    && Files.isRegularFile(build.resolve("zephyr/.config"));
+            context.setText(project.getName() + "   •   " + board + "   •   " + snapshot.profile());
+            updateMetrics();
             refreshOptions();
             tree.setText(snapshot.devicetree().isEmpty()
                     ? "No resolved Devicetree is available. Select the board in Project settings "
@@ -365,12 +370,12 @@ public final class ConfigurationStudioView extends ViewPart {
             if (build == null) {
                 long requested = snapshot.options().stream().filter(Option::overridden).count();
                 analysis.setText("Project: " + project.getName()
-                        + "\\nStatus: Environment or board not configured"
-                        + "\\nRequested settings in prj.conf: " + requested
-                        + "\\nNo effective Kconfig or hardware data is available yet."
-                        + "\\n\\nProject settings → choose the Zephyr installation and exact board."
-                        + "\\nBuild & validate → generate the effective Kconfig and Devicetree."
-                        + "\\n\\nYou can inspect prj.conf now and remove obsolete or invalid "
+                        + "\nStatus: Environment or board not configured"
+                        + "\nRequested settings in prj.conf: " + requested
+                        + "\nNo effective Kconfig or hardware data is available yet."
+                        + "\n\nProject settings → choose the Zephyr installation and exact board."
+                        + "\nBuild & validate → generate the effective Kconfig and Devicetree."
+                        + "\n\nYou can inspect prj.conf now and remove obsolete or invalid "
                         + "requests with the normal backup and change review.");
                 status.setText("Source-only mode: " + setupProblem
                         + "  •  Configure the project to enable validated setting changes.");
@@ -381,6 +386,8 @@ public final class ConfigurationStudioView extends ViewPart {
             }
         } catch (Exception error) {
             snapshot = null;
+            hasGeneratedConfiguration = false;
+            updateMetrics();
             options.removeAll();
             describeSelected();
             help.setText("Configuration cannot be loaded: " + error.getMessage());
@@ -390,6 +397,25 @@ public final class ConfigurationStudioView extends ViewPart {
         }
     }
 
+
+    private void updateMetrics() {
+        if (totalMetric == null || totalMetric.isDisposed()) return;
+        if (snapshot == null) {
+            totalMetric.setText("—");
+            changesMetric.setText("—");
+            issuesMetric.setText("—");
+            targetMetric.setText("Not selected");
+        } else {
+            long assigned = snapshot.options().stream().filter(Option::overridden).count();
+            long unresolved = snapshot.options().stream().filter(Option::unresolved).count();
+            totalMetric.setText(Integer.toString(snapshot.options().size()));
+            changesMetric.setText(Long.toString(assigned));
+            issuesMetric.setText(Long.toString(unresolved));
+            targetMetric.setText(hasGeneratedConfiguration ? "Available" : "Not built");
+        }
+        for (Label metric : new Label[] {totalMetric, changesMetric, issuesMetric, targetMetric})
+            metric.getParent().layout(true, true);
+    }
 
     private void refreshOptions() {
         if (options == null || options.isDisposed()) return;
@@ -412,7 +438,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (shown >= 750) continue;
                     TableItem row = new TableItem(options, SWT.NONE);
                     row.setText(new String[] {
-                            ConfigurationStudioPresentation.title(option.symbol()),
+                            ConfigurationStudioPresentation.title(option.symbol()) + "  ·  CONFIG_" + option.symbol(),
                             ConfigurationStudioPresentation.current(option),
                             ConfigurationStudioPresentation.requested(option),
                             ConfigurationStudioPresentation.review(option)
@@ -424,7 +450,7 @@ public final class ConfigurationStudioView extends ViewPart {
             }
             for (int i = 0; i < options.getColumnCount(); i++) {
                 options.getColumn(i).pack();
-                int cap = i == 0 ? 260 : 150;
+                int cap = i == 0 ? 365 : 140;
                 if (options.getColumn(i).getWidth() > cap) options.getColumn(i).setWidth(cap);
             }
             if (options.getItemCount() > 0) options.select(keepIndex >= 0 ? keepIndex : 0);
@@ -433,9 +459,9 @@ public final class ConfigurationStudioView extends ViewPart {
         }
         if (overview != null && !overview.isDisposed()) {
             overview.setText("Showing " + shown + " of " + matches + " matching settings"
-                    + "   •   " + total + " values from the selected build"
+                    + "   •   " + total + " values in this project"
                     + (shown < matches ? "   •   Narrow your search to see more" : "")
-                    + "   •   Select a feature for its explanation");
+                    + "   •   Double-click a setting to inspect its source");
         }
         describeSelected();
     }
@@ -456,9 +482,23 @@ public final class ConfigurationStudioView extends ViewPart {
             removeButton.setEnabled(o != null && o.requested() != null);
         }
         if (o == null) {
-            help.setText("No settings match the current search.");
+            detailTitle.setText("No setting selected");
+            detailMeta.setText("Search another name or choose a filter.");
+            detailNotice.setText("No configuration files will be changed.");
+            help.setText("Select a feature to inspect its Kconfig definition.");
+            detailTitle.getParent().layout(true, true);
             return;
         }
+        detailTitle.setText(ConfigurationStudioPresentation.title(o.symbol()));
+        detailMeta.setText("CONFIG_" + o.symbol() + "   •   Effective: "
+                + ConfigurationStudioPresentation.current(o)
+                + "   •   Requested: " + ConfigurationStudioPresentation.requested(o));
+        detailNotice.setText(o.unresolved()
+                ? "Needs review: this request is not resolved in the last generated .config."
+                : ConfigurationStudioPresentation.review(o).isBlank()
+                    ? "Changes take effect after a Zephyr configure/build."
+                    : "Requested value differs from the last build; rebuild to verify.");
+        detailTitle.getParent().layout(true, true);
         String explanation = switch (o.symbol()) {
             case "LOG" -> "Enables the Zephyr logging subsystem. Logging can increase firmware size and runtime work.";
             case "LOG_MODE_DEFERRED" -> "Queues log messages for deferred processing. Requires the logging subsystem.";
@@ -470,10 +510,7 @@ public final class ConfigurationStudioView extends ViewPart {
             default -> "No curated explanation for this option yet. Refer to its definition in the "
                     + "selected Zephyr checkout and upstream Kconfig help; the effective value is authoritative.";
         };
-        String base = ConfigurationStudioPresentation.title(o.symbol())
-                + "\n" + ConfigurationStudioPresentation.current(o)
-                + "   •   " + ConfigurationStudioPresentation.source(o)
-                + "\nTechnical option: CONFIG_" + o.symbol()
+        String base = "Source: " + ConfigurationStudioPresentation.source(o)
                 + "\nRequested in prj.conf: " + ConfigurationStudioPresentation.requested(o)
                 + (o.requestedLine() > 0 ? " (line " + o.requestedLine() + ")" : "")
                 + "\n\nWhat this setting does\n" + explanation
@@ -715,6 +752,8 @@ public final class ConfigurationStudioView extends ViewPart {
     @Override public void dispose() {
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
+        if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();
+        if (metricFont != null && !metricFont.isDisposed()) metricFont.dispose();
         super.dispose();
     }
 
