@@ -114,11 +114,16 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
 
     /** Starting a programmer process is not a completed Flash operation. */
     static void awaitFlash(Process process, IProgressMonitor monitor) throws IOException, InterruptedException {
-        while (!process.waitFor(100, TimeUnit.MILLISECONDS)) {
-            if (monitor.isCanceled()) {
-                process.destroy(); // lifecycle watcher also reaps this operation's children
-                throw new InterruptedIOException("Flash cancelled");
+        try {
+            while (!process.waitFor(100, TimeUnit.MILLISECONDS)) {
+                if (monitor.isCanceled()) {
+                    process.destroy(); // lifecycle watcher also reaps this operation's children
+                    throw new InterruptedIOException("Flash cancelled");
+                }
             }
+        } catch (InterruptedException interrupted) {
+            process.destroy();
+            throw interrupted;
         }
         if (monitor.isCanceled()) throw new InterruptedIOException("Flash cancelled");
         if (process.exitValue() != 0)

@@ -59,7 +59,17 @@ public final class OpenOcdMetadataSmoke {
         } catch (java.lang.reflect.InvocationTargetException expected) {
             if (!(expected.getCause() instanceof java.io.InterruptedIOException)) throw expected;
         } finally { if (waiting.isAlive()) waiting.destroyForcibly(); }
-        System.out.println("PASS flash lifecycle: wait for success, propagate programmer failure, cancel owned process");
+        Process interrupted = new ProcessBuilder(System.getenv("ZEW_TEST_PYTHON"), "-c", "import time;time.sleep(10)").start();
+        try {
+            Thread.currentThread().interrupt();
+            await.invoke(null, interrupted, new org.eclipse.core.runtime.NullProgressMonitor());
+            throw new AssertionError("Interrupted Flash reported success");
+        } catch (java.lang.reflect.InvocationTargetException expected) {
+            if (!(expected.getCause() instanceof InterruptedException)) throw expected;
+            Thread.interrupted();
+            if (!interrupted.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) throw new AssertionError("Interrupted programmer still running");
+        } finally { Thread.interrupted(); if (interrupted.isAlive()) interrupted.destroyForcibly(); }
+        System.out.println("PASS flash lifecycle: wait for success, propagate programmer failure, cancel and interrupt owned process");
     }
     private static void verifyFlashImage(org.osgi.framework.Bundle ui, Path fixture, String name, List<Region> regions) throws Exception {
         Path build = Files.createTempDirectory(fixture, "flash-metadata-");
