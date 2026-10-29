@@ -140,6 +140,25 @@ def main():
             run([*prepare, '--require-host-tool', 'IMGTOOL'], workspace, env)
             run([*configure, '-UIMGTOOL'], workspace, env)
         run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
+        if label == 'ti':
+            # Exercise the actual generated Kconfiglib environment for an
+            # MSPM0G3507 Zephyr build. No source or .config writes allowed.
+            kconfig_source = Path(build_arg) / 'zephyr/.config'
+            before_inspection = hashlib.sha256(kconfig_source.read_bytes()).digest()
+            inspected = run([python, REPO /
+                    'plugins/io.github.niwantha33.zew.ui/scripts/kconfig_inspect.py',
+                    '--build', build_arg, '--ninja', ninja, '--symbol', 'GPIO'],
+                    workspace, env, capture=True)
+            inspection_lines = inspected.splitlines()
+            if len(inspection_lines) < 2 or inspection_lines[0] != 'ZEW-KCONFIG-1':
+                raise ValueError('Real Zephyr Kconfiglib inspection did not return evaluated metadata')
+            fields = [base64.b64decode(x).decode('utf-8')
+                      for x in inspection_lines[1].split('\t')]
+            if len(fields) != 12 or fields[0] != 'GPIO' or fields[1] not in ('bool', 'tristate')                     or fields[3] not in ('n', 'm', 'y'):
+                raise ValueError('Real MSPM0 Kconfiglib symbol metadata is invalid')
+            if hashlib.sha256(kconfig_source.read_bytes()).digest() != before_inspection:
+                raise ValueError('Read-only Kconfiglib inspector changed generated .config')
+            print('PASS: MSPM0 generated Kconfiglib environment evaluated without source edits')
         # Shared Java verifier is compiled by scripts/test_core.py in this job.
         run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', '--base64', verify_argument], workspace, env)
         run([python, root / 'installer/editor_settings.py', '--project', app, '--build', build,
