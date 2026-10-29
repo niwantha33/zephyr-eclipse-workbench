@@ -34,15 +34,17 @@ public final class RemoteDebugSmoke {
         if (!value) throw new AssertionError(message);
         System.out.println("PASS live DSF: " + message);
     }
-    private static boolean suspended(DsfSession session, DsfServicesTracker services, IContainerDMContext container) throws Exception {
+    private static boolean suspended(DsfSession session, DsfServicesTracker services, IExecutionDMContext context) throws Exception {
         return RemoteDebugSmoke.<Boolean>ask(session, result -> {
-            result.setData(services.getService(IRunControl.class).isSuspended(container)); result.done();
+            result.setData(services.getService(IRunControl.class).isSuspended(context)); result.done();
         });
     }
-    private static void awaitState(DsfSession session, DsfServicesTracker services, IContainerDMContext container, boolean state) throws Exception {
+    private static void awaitState(DsfSession session, DsfServicesTracker services, IExecutionDMContext context, boolean state) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        while (suspended(session, services, container) != state) {
-            if (System.nanoTime() >= deadline) throw new AssertionError("Target did not become " + (state ? "suspended" : "running"));
+        while (suspended(session, services, context) != state) {
+            if (System.nanoTime() >= deadline)
+                throw new AssertionError("DSF execution context did not become "
+                        + (state ? "suspended" : "running") + ": " + context);
             Thread.sleep(50);
         }
     }
@@ -51,6 +53,7 @@ public final class RemoteDebugSmoke {
         if (port.isBlank()) throw new AssertionError("Native smoke requires an owned GDB server");
         var manager = DebugPlugin.getDefault().getLaunchManager();
         var type = manager.getLaunchConfigurationType("zew.editor.smoke.remote");
+        check(type != null, "test-only remote GDB launch type registered");
         var working = type.newInstance(null, manager.generateLaunchConfigurationName("Remote thread reliability smoke"));
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROJECT_NAME, "HelloZephyrEditorSmoke");
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROGRAM_NAME, fixture.resolve("remote-threads").toString());
@@ -99,6 +102,9 @@ public final class RemoteDebugSmoke {
                     "test relay actually withheld initial and worker creation notifications");
             boolean readyFrame = false;
             for (var thread : threads) {
+                // Process stop alone is insufficient: the DSF thread model may
+                // still be processing MI stopped events for newly discovered threads.
+                awaitState(session, tracker, thread, true);
                 IProcesses.IThreadDMData data = ask(session, result -> tracker.getService(IProcesses.class).getExecutionData(
                         DMContexts.getAncestorOfType(thread, IProcesses.IThreadDMContext.class), result));
                 check(!"0".equals(data.getId()) && data.getId() != null && !data.getId().isBlank(), "real thread identity: " + data.getId());
