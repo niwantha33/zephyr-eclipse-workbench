@@ -2,6 +2,7 @@
 package io.github.niwantha33.zew.ui;
 
 import org.eclipse.cdt.dsf.datamodel.IDMContext;
+import org.eclipse.cdt.dsf.debug.service.IStack;
 import org.eclipse.cdt.dsf.debug.service.command.ICommand;
 import org.eclipse.cdt.dsf.debug.service.command.ICommandControl;
 import org.eclipse.cdt.dsf.gdb.service.GdbDebugServicesFactory;
@@ -18,6 +19,9 @@ public final class ZephyrDebugServicesFactory extends GdbDebugServicesFactory {
         @Override public ICommand<MIInfo> createMITargetSelect(IDMContext context, String host, String port, boolean extended) {
             return super.createMITargetSelect(context, host, port, true);
         }
+    }
+    @Override protected IStack createStackService(DsfSession session) {
+        return new ZephyrStack(session);
     }
     @Override protected ICommandControl createCommandControl(DsfSession session, ILaunchConfiguration configuration) {
         if (compareVersionWith(GDB_7_12_VERSION) >= 0)
