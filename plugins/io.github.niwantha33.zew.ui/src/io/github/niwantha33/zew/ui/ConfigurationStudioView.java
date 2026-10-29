@@ -276,11 +276,13 @@ public final class ConfigurationStudioView extends ViewPart {
             default -> "No curated explanation for this option yet. Refer to its definition in the "
                     + "selected Zephyr checkout and upstream Kconfig help; the effective value is authoritative.";
         };
-        String base = "CONFIG_" + o.symbol()
-                + "\nEffective value: " + (o.effective() == null ? "unknown / configure failed" : o.effective())
-                + "\nRequested in prj.conf: " + (o.requested() == null ? "not explicitly set" : o.requested())
+        String base = ConfigurationStudioPresentation.title(o.symbol())
+                + "\n" + ConfigurationStudioPresentation.current(o)
+                + "   •   " + ConfigurationStudioPresentation.source(o)
+                + "\nTechnical option: CONFIG_" + o.symbol()
+                + "\nValue in prj.conf: " + (o.requested() == null ? "not explicitly set" : o.requested())
                 + (o.requestedLine() > 0 ? " (line " + o.requestedLine() + ")" : "")
-                + "\n\n" + explanation
+                + "\n\nWhat this setting does\n" + explanation
                 + (o.unresolved() ? "\n\nThis request has no corresponding entry in the last generated "
                         + ".config. It may be undefined or the generated configuration may be stale."
                         + " Examine Zephyr's Kconfig diagnostics before changing it." : "")
@@ -345,15 +347,26 @@ public final class ConfigurationStudioView extends ViewPart {
                                 + "Remove the invalid override or resolve Kconfig prerequisites before editing it.");
                 return;
             }
-            var dialog = new InputDialog(getSite().getShell(), "Kconfig value",
-                    "Enter the requested Kconfig value for CONFIG_" + current.symbol()
-                            + " (e.g. y, n, decimal, hexadecimal, or quoted string).\n"
-                            + "Zephyr validates dependencies during the next configure.",
-                    current.requested() != null ? current.requested() : current.effective(),
-                    text -> text == null || text.isBlank() || text.indexOf('\n') >= 0
-                            || text.indexOf('\r') >= 0 ? "Enter one nonempty line." : null);
-            if (dialog.open() != Window.OK) return;
-            value = dialog.getValue();
+            if ("y".equals(current.effective()) || "n".equals(current.effective())) {
+                var dialog = new MessageDialog(getSite().getShell(),
+                        "Configure " + ConfigurationStudioPresentation.title(current.symbol()),
+                        null, "Choose what you want.\n\n"
+                                + "Zephyr will check whether this choice is supported by the board.",
+                        MessageDialog.QUESTION, new String[] {"Turn on", "Turn off", "Cancel"}, 2);
+                int selected = dialog.open();
+                if (selected == 2 || selected < 0) return;
+                value = selected == 0 ? "y" : "n";
+            } else {
+                var dialog = new InputDialog(getSite().getShell(),
+                        "Configure " + ConfigurationStudioPresentation.title(current.symbol()),
+                        "Enter a value for CONFIG_" + current.symbol()
+                                + ".\nZephyr will check it during the next build.",
+                        current.requested() != null ? current.requested() : current.effective(),
+                        text -> text == null || text.isBlank() || text.indexOf('\n') >= 0
+                                || text.indexOf('\r') >= 0 ? "Enter one nonempty line." : null);
+                if (dialog.open() != Window.OK) return;
+                value = dialog.getValue();
+            }
         }
         try {
             Path app = project.getLocation().toFile().toPath();
