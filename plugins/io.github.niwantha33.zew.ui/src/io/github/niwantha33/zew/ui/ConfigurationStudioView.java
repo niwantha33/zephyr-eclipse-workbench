@@ -163,8 +163,14 @@ public final class ConfigurationStudioView extends ViewPart {
 
     public void displayProject(IProject selected, boolean hardware, String overlayPath) {
         if (selected == null || !selected.isAccessible()) return;
+        boolean changedProject = project != null && !project.equals(selected);
         project = selected;
         selectedOverlay = overlayPath == null ? "app.overlay" : overlayPath;
+        if (changedProject && category != null && !category.isDisposed()) {
+            category.select(0);
+            if (search != null && !search.isDisposed()) search.setText("");
+            filter = "";
+        }
         setPartName("Configuration — " + selected.getName());
         if (options != null && !options.isDisposed()) {
             reload();
