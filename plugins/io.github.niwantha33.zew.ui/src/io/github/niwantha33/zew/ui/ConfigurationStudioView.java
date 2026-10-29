@@ -19,6 +19,7 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
@@ -263,6 +264,19 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private void installContextMenu() {
+        // SWT does not select a table row merely because the user right-clicks it.
+        // Bind menu actions to the row under the pointer, never a stale selection.
+        options.addListener(SWT.MouseDown, event -> {
+            if (event.button != 3) return;
+            TableItem clicked = options.getItem(new Point(event.x, event.y));
+            if (clicked != null) {
+                options.setSelection(clicked);
+                describeSelected();
+            } else {
+                options.deselectAll();
+                describeSelected();
+            }
+        });
         Menu menu = new Menu(options);
         options.setMenu(menu);
         MenuItem copy = new MenuItem(menu, SWT.PUSH);
