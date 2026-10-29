@@ -235,6 +235,9 @@ public final class EditorSmoke implements IApplication {
         check("201703L".equals(cpp.getDefinedSymbols().get("__cplusplus")), "C++17 compiler mode visible");
         check(!cpp.getDefinedSymbols().containsKey("__EXCEPTIONS") && !cpp.getDefinedSymbols().containsKey("__GXX_RTTI"), "C++ exception/RTTI compiler flags preserved");
         check("11".equals(cpp.getDefinedSymbols().get("CPP_ONLY")) && !info.getDefinedSymbols().containsKey("CPP_ONLY"), "per-file C/C++ macros remain separate");
+        // Refresh resources after CDT Core Build transitions and preserve the
+        // upstream job synchronisation before verifying persisted index entries.
+        project.refreshLocal(IResource.DEPTH_INFINITE, new NullProgressMonitor());
         var manager = CCorePlugin.getIndexManager();
         // Native configuration jobs may have switched the active configuration during the import tests.
         org.eclipse.core.runtime.jobs.Job.getJobManager().join(
