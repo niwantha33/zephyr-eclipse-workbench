@@ -47,6 +47,7 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
+import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains.Domain;
@@ -72,7 +73,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private final java.util.Map<Domain, Text> peripheralInfo = new java.util.LinkedHashMap<>();
     private TableEditor inlineToggleEditor;
     private Composite inlineToggle;
-    private Table options;
+    private Table options, hardwareDevices;
+    private Text hardwareDescription;
     private Button enableButton, disableButton, editButton, removeButton;
     private Combo category;
     private TabFolder tabs;
@@ -301,8 +303,39 @@ public final class ConfigurationStudioView extends ViewPart {
                 + "and pinctrl overrides. The generated Devicetree below is read-only. "
                 + "Do not assume an enabled driver means the board has an enabled controller.");
         warning.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        tree = new Text(hardware, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
+        var hardwareSplit = new SashForm(hardware, SWT.VERTICAL);
+        hardwareSplit.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        var devicePanel = new Composite(hardwareSplit, SWT.NONE);
+        devicePanel.setLayout(new GridLayout(1, false));
+        var deviceTitle = new Label(devicePanel, SWT.NONE);
+        deviceTitle.setText("Detected hardware from the selected build");
+        deviceTitle.setFont(metricFont);
+        hardwareDevices = new Table(devicePanel, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL);
+        hardwareDevices.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        hardwareDevices.setHeaderVisible(true);
+        hardwareDevices.setLinesVisible(true);
+        for (String title : new String[] {"Device path", "Compatible", "State"}) {
+            var column = new TableColumn(hardwareDevices, SWT.LEFT);
+            column.setText(title);
+        }
+        hardwareDescription = new Text(devicePanel, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.BORDER);
+        GridData descriptionLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        descriptionLayout.heightHint = 112;
+        hardwareDescription.setLayoutData(descriptionLayout);
+        hardwareDescription.setText("Build the exact target to discover hardware from zephyr.dts.");
+        hardwareDevices.addListener(SWT.Selection, event -> {
+            if (hardwareDevices.getSelectionCount() != 0) {
+                var selected = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+                hardwareDescription.setText(DevicetreeHardware.explanation(selected));
+            }
+        });
+        var sourcePanel = new Composite(hardwareSplit, SWT.NONE);
+        sourcePanel.setLayout(new GridLayout(1, false));
+        var sourceCaption = new Label(sourcePanel, SWT.NONE);
+        sourceCaption.setText("Compiled Devicetree source (read-only)");
+        tree = new Text(sourcePanel, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        hardwareSplit.setWeights(new int[] {60, 40});
         action(hardware, "Open the selected application overlay…", this::openOverlay);
 
         Composite reports = tab(tabs, "Insights");
@@ -485,6 +518,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     ? "No resolved Devicetree is available. Select the board in Project settings "
                             + "and build to generate zephyr.dts. Existing overlays remain editable."
                     : snapshot.devicetree());
+            refreshHardware();
             if (build == null) {
                 long requested = snapshot.options().stream().filter(Option::overridden).count();
                 analysis.setText("Project: " + project.getName()
@@ -517,6 +551,35 @@ public final class ConfigurationStudioView extends ViewPart {
         }
     }
 
+
+    private void refreshHardware() {
+        if (hardwareDevices == null || hardwareDevices.isDisposed()) return;
+        hardwareDevices.setRedraw(false);
+        try {
+            hardwareDevices.removeAll();
+            if (snapshot != null) {
+                for (var device : DevicetreeHardware.inspect(snapshot.devicetree())) {
+                    if (device.compatible().isBlank() && !device.name().contains("@")) continue;
+                    var row = new TableItem(hardwareDevices, SWT.NONE);
+                    row.setText(new String[] {device.path(), device.compatible(),
+                            device.enabled() ? "Enabled" : device.status()});
+                    row.setData(device);
+                }
+            }
+            for (int i = 0; i < hardwareDevices.getColumnCount(); i++) {
+                hardwareDevices.getColumn(i).pack();
+                if (hardwareDevices.getColumn(i).getWidth() > (i == 0 ? 360 : 240))
+                    hardwareDevices.getColumn(i).setWidth(i == 0 ? 360 : 240);
+            }
+            if (hardwareDevices.getItemCount() > 0) {
+                hardwareDevices.select(0);
+                hardwareDescription.setText(DevicetreeHardware.explanation(
+                        (DevicetreeHardware.Device) hardwareDevices.getItem(0).getData()));
+            } else hardwareDescription.setText(
+                    "No devices parsed from generated zephyr.dts. Check target build and exact board."
+                    + "\nOnly the generated Devicetree is authoritative.");
+        } finally { hardwareDevices.setRedraw(true); }
+    }
 
     private void updateMetrics() {
         if (totalMetric == null || totalMetric.isDisposed()) return;
