@@ -5,6 +5,37 @@ Select an imported project in Project Explorer and open the command. This is
 a native Eclipse SWT/JFace view; no secondary browser, VS Code, tkinter or
 unmanaged Python installation is required.
 
+## Configuration Studio — native Eclipse workspace UX
+
+The Configuration Studio is now organised into **Features**, **Hardware** and
+**Insights** tabs, with a compact project/target header, native **Project
+settings** and **Build & validate** actions, and live summary metrics for
+available symbols, application overrides, requests needing review and the
+last generated build snapshot.
+
+The Features tab provides quick filters for **All features**, **My changes**,
+**Needs review** and **RTOS & tracing**; a category selector and search by
+feature name, `CONFIG_` symbol or requested value remain available. The
+feature grid includes readable names **and** exact technical symbols, effective
+values, requested overrides and validation status. A selected setting shows
+its name and status alongside source help and safe, visible **Enable**,
+**Disable**, **Edit value** and **Remove override** controls. The feature
+context menu offers copy-symbol, source opening and eligible on/off actions.
+Double-clicking an explicit override opens its original `prj.conf`; a
+different inherited feature remains in the inspector.
+
+A modified `prj.conf` newer than the generated `.config` is marked
+**Build required**. The **Needs review** filter includes both unresolved
+requests and requested/effective mismatches. These diagnostics are advisory;
+the actual Zephyr configure step remains authoritative. No build outcome or
+hardware setting is fabricated.
+
+Fonts and UI resources are owned and disposed by the native Eclipse view;
+the UI uses the host platform's SWT controls, not browser styling. Existing
+project source files, right-click project import behaviour, read-only
+generated files, optimistic edit checks and backup/confirmation paths are
+preserved.
+
 ## Configuration Studio context-menu workflow
 
 Right-click the **Zephyr project**, its Eclipse **.project** descriptor,
