@@ -52,7 +52,7 @@
   <extension point="org.eclipse.core.expressions.propertyTesters">
     <propertyTester id="io.github.niwantha33.zew.ui.projectTester"
         type="java.lang.Object" namespace="io.github.niwantha33.zew.ui"
-        properties="isImportedProject,isZephyrProject" class="io.github.niwantha33.zew.ui.ZephyrProjectTester"/>
+        properties="isImportedProject,isZephyrProject,isConfigurationStudioTarget" class="io.github.niwantha33.zew.ui.ZephyrProjectTester"/>
   </extension>
   <extension point="org.eclipse.core.runtime.adapters">
     <factory adaptableType="org.eclipse.core.resources.IResource" class="">
@@ -199,6 +199,26 @@
         <separator name="about" visible="true"/>
         <command commandId="io.github.niwantha33.zew.about" label="About Zephyr Workbench..." style="push"/>
       </menu>
+    </menuContribution>
+  </extension>
+  <!-- Project Explorer / Package Explorer: a focused right-click entry for
+       Zephyr projects and project configuration descriptors only. -->
+  <extension point="org.eclipse.ui.menus">
+    <menuContribution locationURI="popup:org.eclipse.ui.popup.any?after=additions" allPopups="false">
+      <command commandId="io.github.niwantha33.zew.configurationStudio"
+               label="Open Zephyr Configuration Studio..."
+               tooltip="Edit prj.conf in a friendly GUI or inspect compiled Devicetree"
+               style="push">
+        <visibleWhen checkEnabled="false">
+          <with variable="activeMenuSelection">
+            <count value="1"/>
+            <iterate ifEmpty="false">
+              <test property="io.github.niwantha33.zew.ui.isConfigurationStudioTarget"
+                    value="true" forcePluginActivation="true"/>
+            </iterate>
+          </with>
+        </visibleWhen>
+      </command>
     </menuContribution>
   </extension>
   <extension point="org.eclipse.ui.menus">
