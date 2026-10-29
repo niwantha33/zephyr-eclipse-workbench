@@ -17,6 +17,9 @@ import sys
 
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*$")
 _SYMBOL = re.compile(r"^[A-Z0-9_]{1,160}$")
+_GUICONFIG_ARG = re.compile(
+    r'''(?:^|\s)(?:"[^"\r\n]*guiconfig\.py"|'[^'\r\n]*guiconfig\.py'|[^\s"']*guiconfig\.py)(?=\s|$)''')
+_ROOT_ARG = re.compile(r'''\s*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s"']+))''')
 
 
 def unwrap(token):
@@ -41,26 +44,30 @@ def extract_command(output):
         # merges quoted script and environment boundaries. Locate the exact
         # generated cmake and guiconfig delimiters first; no shell commands
         # or arbitrary code from build.ninja are executed.
-        prefix, root_tail = line.split("guiconfig.py", 1)
+        script = _GUICONFIG_ARG.search(line)
+        if script is None:
+            failures.append("invalid generated guiconfig script argument")
+            continue
+        prefix, root_tail = line[:script.start()], line[script.end():]
         env_text = prefix.rsplit("-E env", 1)[1]
         try:
             env_tokens = shlex.split(env_text, posix=False)
-            root_tokens = shlex.split(root_tail.lstrip().lstrip(chr(34) + chr(39) + chr(92)), posix=False)
         except ValueError:
             failures.append("invalid generated Ninja command quoting")
             continue
         values = {}
         for token in env_tokens:
-            token = unwrap(token).strip("'\\"")
+            token = unwrap(token)
             if "=" not in token:
                 continue
             name, value = token.split("=", 1)
             if _ENV_NAME.fullmatch(name):
                 values[name] = value
-        if not root_tokens:
+        root = _ROOT_ARG.match(root_tail)
+        if root is None:
             failures.append("guiconfig command has no Kconfig root argument")
             continue
-        kroot = unwrap(root_tokens[0]).strip("'\\"")
+        kroot = next(value for value in root.groups() if value is not None)
         missing = [key for key in ("srctree", "KCONFIG_BINARY_DIR", "EDT_PICKLE")
                    if not values.get(key)]
         if missing:
