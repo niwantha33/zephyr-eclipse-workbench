@@ -408,6 +408,9 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
             applications.validateSelection();
             String completed = imported.isEmpty() ? "" : "\nAlready imported and retained: " + String.join(", ", imported.stream().map(IProject::getName).toList());
             MessageDialog.openError(getShell(), "Import Zephyr applications", message(error) + completed);
+            // A partial import changes the checked selection. Return to the list
+            // so the next attempt gets a fresh target/review step, not stale text.
+            getContainer().showPage(applications);
             return false;
         }
     }
