@@ -474,6 +474,14 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void openProjectSettings() {
         if (project == null) return;
+        if (!ZephyrProjectLifecycle.supports(project)) {
+            MessageDialog.openInformation(getSite().getShell(), "Existing Eclipse project",
+                    "This Zephyr application uses another Eclipse build system. "
+                    + "Configuration Studio can inspect prj.conf without taking over that builder. "
+                    + "For native West build and debug, use File > Import > Zephyr > "
+                    + "Existing Zephyr Application and complete the target setup.");
+            return;
+        }
         var dialog = org.eclipse.ui.dialogs.PreferencesUtil.createPropertyDialogOn(
                 getSite().getShell(), project, "io.github.niwantha33.zew.projectProperties", null, null);
         if (dialog != null && dialog.open() == Window.OK) reload();
