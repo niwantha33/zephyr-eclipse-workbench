@@ -544,6 +544,10 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void build() {
         if (project == null) return;
+        if (!ZephyrProjectLifecycle.supports(project)) {
+            openProjectSettings();
+            return;
+        }
         try {
             ProjectContext.settings(project);
         } catch (Exception notReady) {
