@@ -116,7 +116,7 @@ public final class ConfigurationStudioPresentation {
                 || title(option.symbol()).toUpperCase(Locale.ROOT).contains(search)
                 || option.requested() != null && option.requested().toUpperCase(Locale.ROOT).contains(search))) return false;
         if (MINE.equals(filter)) return option.overridden();
-        if (REVIEW.equals(filter)) return option.unresolved();
+        if (REVIEW.equals(filter)) return !review(option).isBlank();
         if (filter == null || ALL.equals(filter)) return true;
         return filter.equals(category(option.symbol()));
     }
