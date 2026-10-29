@@ -4,6 +4,7 @@ package io.github.niwantha33.zew.ui;
 import java.nio.file.Path;
 import java.util.regex.Pattern;
 import org.eclipse.core.resources.*;
+import io.github.niwantha33.zew.core.KconfigFailure;
 
 /** Own only our markers; never delete CDT or user diagnostics. */
 final class BuildDiagnostics {
@@ -12,6 +13,7 @@ final class BuildDiagnostics {
     static void clear(IProject project) throws Exception { project.deleteMarkers(TYPE, true, IResource.DEPTH_INFINITE); }
     static void accept(IProject project, Path build, String line) {
         var match = COMPILER.matcher(line); if (!match.matches()) return;
+        var kconfigIssue = KconfigFailure.parse(line);
         try {
             Path root = project.getLocation().toFile().toPath().toRealPath();
             Path source = Path.of(match.group(1)); if (!source.isAbsolute()) source = build.resolve(source);
@@ -22,8 +24,13 @@ final class BuildDiagnostics {
                 if (file.exists()) resource = file;
             }
             IMarker marker = resource.createMarker(TYPE);
-            marker.setAttribute(IMarker.MESSAGE, match.group(5));
-            marker.setAttribute(IMarker.SEVERITY, match.group(4).equals("warning") ? IMarker.SEVERITY_WARNING : IMarker.SEVERITY_ERROR);
+            marker.setAttribute(IMarker.MESSAGE, kconfigIssue
+                    .map(issue -> match.group(5) + "\n" + issue.suggestion())
+                    .orElse(match.group(5)));
+            // Undefined Kconfig requests abort configuration, so show them as errors
+            // even though upstream prints the individual diagnostic as a warning.
+            marker.setAttribute(IMarker.SEVERITY, kconfigIssue.isPresent() || !match.group(4).equals("warning")
+                    ? IMarker.SEVERITY_ERROR : IMarker.SEVERITY_WARNING);
             marker.setAttribute(IMarker.LINE_NUMBER, Integer.parseInt(match.group(2)));
             marker.setAttribute(IMarker.LOCATION, match.group(1) + ":" + match.group(2));
         } catch (Exception ignored) { /* Console retains complete output when a diagnostic cannot be mapped. */ }
