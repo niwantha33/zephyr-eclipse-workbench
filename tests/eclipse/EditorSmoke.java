@@ -236,6 +236,11 @@ public final class EditorSmoke implements IApplication {
         check(!cpp.getDefinedSymbols().containsKey("__EXCEPTIONS") && !cpp.getDefinedSymbols().containsKey("__GXX_RTTI"), "C++ exception/RTTI compiler flags preserved");
         check("11".equals(cpp.getDefinedSymbols().get("CPP_ONLY")) && !info.getDefinedSymbols().containsKey("CPP_ONLY"), "per-file C/C++ macros remain separate");
         var manager = CCorePlugin.getIndexManager();
+        // Native configuration jobs may have switched the active configuration during the import tests.
+        org.eclipse.core.runtime.jobs.Job.getJobManager().join(
+                org.eclipse.cdt.debug.core.launch.CoreBuildLaunchBarTracker.JOB_FAMILY_CORE_BUILD_LAUNCH_BAR_TRACKER,
+                new NullProgressMonitor());
+        manager.reindex(CoreModel.getDefault().create(project));
         check(manager.joinIndexer(30000, new NullProgressMonitor()), "indexer completed");
         var index = manager.getIndex(CoreModel.getDefault().create(project)); index.acquireReadLock();
         try {

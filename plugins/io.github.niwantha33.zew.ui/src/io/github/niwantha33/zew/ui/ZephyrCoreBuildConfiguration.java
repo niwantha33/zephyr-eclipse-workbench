@@ -25,6 +25,9 @@ public final class ZephyrCoreBuildConfiguration extends CBuildConfiguration {
     @Override public void clean(IConsole console, IProgressMonitor monitor) throws CoreException {
         getProject().build(IncrementalProjectBuilder.CLEAN_BUILD, ZephyrProjectImport.BUILDER, Map.of(), monitor);
     }
+    @Override public org.eclipse.cdt.core.parser.IScannerInfo getScannerInformation(IResource resource) {
+        return CdtEditor.scannerInformation(resource == null ? getProject() : resource);
+    }
     @Override public Path getBuildDirectory() {
         try { return ProjectContext.buildDirectory(getProject(), ProjectContext.settings(getProject())); }
         catch (Exception pending) { return getProject().getLocation().toFile().toPath().resolve(".zew-build"); }

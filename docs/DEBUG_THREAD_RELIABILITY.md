@@ -49,6 +49,14 @@ thread-unwind failures still require the target's GDB/error output to diagnose.
 Core tests additionally exercise high-volume polling, count flushing, unchanged
 errors/warnings/readiness lines and idempotent final flushing.
 
+The real native import fixture also exposed a separate inherited Core Build
+scanner fallback to desktop GCC. The West Core Build configuration now reads
+only the owned, persisted Zephyr language settings, including per-file C/C++
+macros, forced includes and macro files. Without generated settings it returns
+an empty scanner description and does not launch a host compiler. The normal
+build editor refresh supplies those settings. The index regression continues
+to require actual header and C++ symbol navigation.
+
 Primary references:
 
 - [CDT thread cache invalidation on suspend](https://github.com/eclipse-cdt/cdt/blob/main/dsf-gdb/org.eclipse.cdt.dsf.gdb/src/org/eclipse/cdt/dsf/gdb/service/GDBProcesses_7_0.java)

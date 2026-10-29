@@ -21,6 +21,31 @@ import io.github.niwantha33.zew.core.EditorSettings;
 /** No CDT build commands: West remains the project's sole firmware builder. */
 public final class CdtEditor {
     public static final String CONFIG = "io.github.niwantha33.zew.ui.editor";
+    /** Core Build and the language-settings provider use the same persisted Zephyr settings. */
+    static org.eclipse.cdt.core.parser.IScannerInfo scannerInformation(org.eclipse.core.resources.IResource resource) {
+        var defines = new java.util.LinkedHashMap<String, String>();
+        var includes = new ArrayList<String>(); var macros = new ArrayList<String>(); var forced = new ArrayList<String>();
+        var description = CoreModel.getDefault().getProjectDescription(resource.getProject(), false);
+        var config = description == null ? null : description.getConfigurationById(CONFIG);
+        if (config != null) {
+            var settings = config.getResourceDescription(resource.getProjectRelativePath(), false);
+            ICLanguageSetting language = null;
+            if (settings instanceof ICFileDescription file) language = file.getLanguageSetting();
+            else if (settings instanceof ICFolderDescription folder) {
+                String name = resource.getName().toLowerCase(java.util.Locale.ROOT);
+                String wanted = name.matches(".*\\.(cpp|cc|cxx|hpp|hh|hxx)$") ? "org.eclipse.cdt.core.g++" : "org.eclipse.cdt.core.gcc";
+                language = java.util.Arrays.stream(folder.getLanguageSettings()).filter(l -> wanted.equals(l.getLanguageId())).findFirst().orElse(null);
+            }
+            if (language != null) {
+                for (var entry : language.getSettingEntries(ICSettingEntry.MACRO)) defines.put(entry.getName(), entry.getValue());
+                for (var entry : language.getSettingEntries(ICSettingEntry.INCLUDE_PATH)) includes.add(entry.getName());
+                for (var entry : language.getSettingEntries(ICSettingEntry.MACRO_FILE)) macros.add(entry.getName());
+                for (var entry : language.getSettingEntries(ICSettingEntry.INCLUDE_FILE)) forced.add(entry.getName());
+            }
+        }
+        return new org.eclipse.cdt.core.parser.ExtendedScannerInfo(defines, includes.toArray(String[]::new),
+                macros.toArray(String[]::new), forced.toArray(String[]::new));
+    }
     public static void ensureProject(IProject project, IProgressMonitor monitor) throws Exception {
         CProjectNature.addCNature(project, monitor);
         CCProjectNature.addCCNature(project, monitor);
