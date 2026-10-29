@@ -29,8 +29,12 @@ def extract_command(output):
     Use non-POSIX tokenisation: Windows paths contain literal backslashes.
     Never execute the extracted command; only its environment is read.
     """
+    failures = []
     for line in output.splitlines():
-        if "guiconfig.py" not in line or "-E env" not in line:
+        if "guiconfig.py" not in line:
+            continue
+        if "-E env" not in line:
+            failures.append("guiconfig command has no literal CMake -E env")
             continue
         tokens = [unwrap(token) for token in shlex.split(line, posix=False)]
         try:
@@ -39,6 +43,7 @@ def extract_command(output):
             script = next(i for i in range(start, len(tokens))
                           if tokens[i].replace("\\", "/").endswith("/scripts/kconfig/guiconfig.py"))
         except StopIteration:
+            failures.append("could not locate CMake env or guiconfig.py token")
             continue
         values = {}
         for token in tokens[start:script]:
@@ -50,11 +55,19 @@ def extract_command(output):
         if script + 1 >= len(tokens):
             continue
         kroot = tokens[script + 1]
-        if not (values.get("srctree") and values.get("KCONFIG_BINARY_DIR")
-                and values.get("EDT_PICKLE") and Path(kroot).is_file()):
+        missing = [key for key in ("srctree", "KCONFIG_BINARY_DIR", "EDT_PICKLE")
+                   if not values.get(key)]
+        if missing:
+            failures.append("missing Kconfig environment keys: " + ", ".join(missing))
+            continue
+        if not Path(kroot).is_file():
+            failures.append("Kconfig root not found (argument path does not resolve)")
             continue
         return values, Path(kroot)
-    raise RuntimeError("No valid generated guiconfig environment for this exact build")
+    summary = failures[0] if failures else (
+        "no guiconfig.py command found; generated target may be a wrapper")
+    raise RuntimeError("No valid generated guiconfig environment for this exact build: "
+                       + summary)
 
 
 def field(value):
