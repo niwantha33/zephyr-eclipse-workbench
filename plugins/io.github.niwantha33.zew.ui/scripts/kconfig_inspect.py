@@ -45,7 +45,7 @@ def extract_command(output):
         env_text = prefix.rsplit("-E env", 1)[1]
         try:
             env_tokens = shlex.split(env_text, posix=False)
-            root_tokens = shlex.split(root_tail.lstrip(" \\"'\\t"), posix=False)
+            root_tokens = shlex.split(root_tail.lstrip().lstrip(chr(34) + chr(39) + chr(92)), posix=False)
         except ValueError:
             failures.append("invalid generated Ninja command quoting")
             continue
