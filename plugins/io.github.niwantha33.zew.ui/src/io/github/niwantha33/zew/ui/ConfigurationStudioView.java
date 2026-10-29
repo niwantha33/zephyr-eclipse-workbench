@@ -261,8 +261,11 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void refreshOptions() {
         if (options == null || options.isDisposed()) return;
+        Option previousSelection = selected();
+        String previousSymbol = previousSelection == null ? null : previousSelection.symbol();
         options.setRedraw(false);
         int shown = 0;
+        int keepIndex = -1;
         int matches = 0;
         int total = snapshot == null ? 0 : snapshot.options().size();
         try {
@@ -283,6 +286,7 @@ public final class ConfigurationStudioView extends ViewPart {
                             ConfigurationStudioPresentation.review(option)
                     });
                     row.setData(option);
+                    if (option.symbol().equals(previousSymbol)) keepIndex = shown;
                     ++shown;
                 }
             }
@@ -291,7 +295,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 int cap = i == 0 ? 260 : 150;
                 if (options.getColumn(i).getWidth() > cap) options.getColumn(i).setWidth(cap);
             }
-            if (options.getItemCount() > 0) options.select(0);
+            if (options.getItemCount() > 0) options.select(keepIndex >= 0 ? keepIndex : 0);
         } finally {
             options.setRedraw(true);
         }
