@@ -27,6 +27,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'CoreTests'], check=True, cwd=roo
 subprocess.run([tool('java'), '--add-modules', 'jdk.httpserver', '-cp', str(out), 'UpdateTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SetupTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ProjectFilesTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'ApplicationDiscoveryTests'], check=True, cwd=root, timeout=90)
 
 
 subprocess.run([tool('java'), '-cp', str(out), 'EditorTests'], check=True, cwd=root, timeout=90)

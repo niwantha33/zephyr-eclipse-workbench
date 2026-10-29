@@ -55,6 +55,9 @@ environment; it does not flash or test a physical board.
 
 1. Use **File > New > Other > Zephyr > Zephyr Project**, or import an existing
    application with **File > Import > Zephyr > Existing Zephyr Application**.
+   For import, select a project or parent directory, check the discovered
+   applications, then choose environment/hardware and review before Finish.
+   See the [existing-application import guide](IMPORT_EXISTING_APPLICATIONS.md).
 2. Open the project's **Properties > Zephyr**. Select the exact vendor, board,
    SoC/core and available qualifiers for your hardware.
 3. Choose **Application settings**, **Debug (-Og)** or **Release (-O2)**.
