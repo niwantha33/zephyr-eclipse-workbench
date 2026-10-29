@@ -16,13 +16,10 @@ public final class ZephyrProjectTester extends PropertyTester {
             IProject project = resource == null ? null : resource.getProject();
             if (project == null || !ZephyrProjectLifecycle.supports(project)) result = false;
             else if (resource instanceof IProject) result = true;
-            else if (resource instanceof IFile file) {
-                String name = file.getName();
-                String relative = file.getProjectRelativePath().toPortableString();
-                result = relative.equals("prj.conf") || relative.equals(".project")
-                        || name.endsWith(".prj") || name.endsWith(".overlay")
-                        || relative.equals("app.overlay");
-            } else result = false;
+            else if (resource instanceof IFile file)
+                result = io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget(
+                        file.getProjectRelativePath().toPortableString(), false);
+            else result = false;
         } else {
             result = "isZephyrProject".equals(property)
                     ? ZephyrDebugShortcut.project(receiver) != null
