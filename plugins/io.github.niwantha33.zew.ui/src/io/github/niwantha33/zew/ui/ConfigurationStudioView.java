@@ -536,6 +536,15 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void build() {
         if (project == null) return;
+        try {
+            ProjectContext.settings(project);
+        } catch (Exception notReady) {
+            MessageDialog.openInformation(getSite().getShell(), "Configure Zephyr project",
+                    "Select a ready Zephyr environment, exact target and build profile."
+                            + "\n\n" + notReady.getMessage());
+            openProjectSettings();
+            return;
+        }
         IProject target = project;
         org.eclipse.swt.widgets.Display display = options.getDisplay();
         Job job = new Job("Validate and build Zephyr configuration — " + target.getName()) {
