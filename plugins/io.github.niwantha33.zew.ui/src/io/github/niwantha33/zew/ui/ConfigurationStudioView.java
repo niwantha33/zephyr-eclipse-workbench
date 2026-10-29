@@ -68,11 +68,13 @@ public final class ConfigurationStudioView extends ViewPart {
         outer.setLayout(new GridLayout(1, false));
         var heading = new Composite(outer, SWT.NONE);
         heading.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        heading.setLayout(new GridLayout(5, false));
+        heading.setLayout(new GridLayout(6, false));
         context = new Label(heading, SWT.WRAP);
         context.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         context.setText("Select an imported Zephyr application to inspect its configuration.");
         action(heading, "Refresh", this::reload).setToolTipText("Reload the saved project configuration");
+        action(heading, "Project settings", this::openProjectSettings)
+                .setToolTipText("Select Zephyr environment, board, SoC/core and build configuration");
         action(heading, "Edit source", () -> openResource("prj.conf"))
                 .setToolTipText("Open the original prj.conf in the Eclipse editor");
         action(heading, "Hardware overlay", this::openOverlay)
@@ -205,28 +207,57 @@ public final class ConfigurationStudioView extends ViewPart {
             return;
         }
         try {
-            var settings = ProjectContext.settings(project);
-            Path build = ProjectContext.buildDirectory(project, settings);
-            snapshot = ConfigurationStudioFiles.inspect(project.getLocation().toFile().toPath(),
-                    build, settings.getProperty("zew.buildConfiguration", "default"));
+            Path app = project.getLocation().toFile().toPath();
+            Path build = null;
+            String profile = "Source configuration";
+            String board = "No target selected";
+            String setupProblem = null;
+            try {
+                var settings = ProjectContext.settings(project);
+                board = settings.getProperty("board", "No target selected");
+                profile = settings.getProperty("zew.buildConfiguration", "default");
+                build = ProjectContext.buildDirectory(project, settings);
+            } catch (Exception notConfigured) {
+                // Project configuration is still useful if tool installation or
+                // board selection fails. Source repair must not require a build.
+                setupProblem = notConfigured.getMessage();
+            }
+            snapshot = ConfigurationStudioFiles.inspect(app, build, profile);
             context.setText("CONFIGURATION STUDIO   •   " + project.getName() + "   •   "
-                    + settings.getProperty("board") + "   •   " + snapshot.profile());
+                    + board + "   •   " + snapshot.profile());
             refreshOptions();
             tree.setText(snapshot.devicetree().isEmpty()
-                    ? "No generated zephyr.dts yet. Build the project to inspect the resolved hardware tree."
+                    ? "No resolved Devicetree is available. Select the board in Project settings "
+                            + "and build to generate zephyr.dts. Existing overlays remain editable."
                     : snapshot.devicetree());
-            refreshAnalysis(build);
-            status.setText("Read-only build outputs. Changes to prj.conf require review and explicit confirmation.");
+            if (build == null) {
+                long requested = snapshot.options().stream().filter(Option::overridden).count();
+                analysis.setText("Project: " + project.getName()
+                        + "\\nStatus: Environment or board not configured"
+                        + "\\nRequested settings in prj.conf: " + requested
+                        + "\\nNo effective Kconfig or hardware data is available yet."
+                        + "\\n\\nProject settings → choose the Zephyr installation and exact board."
+                        + "\\nBuild & validate → generate the effective Kconfig and Devicetree."
+                        + "\\n\\nYou can inspect prj.conf now and remove obsolete or invalid "
+                        + "requests with the normal backup and change review.");
+                status.setText("Source-only mode: " + setupProblem
+                        + "  •  Configure the project to enable validated setting changes.");
+            } else {
+                refreshAnalysis(build);
+                status.setText("Build values are from the last generated output. "
+                        + "Changes to prj.conf require review, backup and a new build.");
+            }
         } catch (Exception error) {
             snapshot = null;
             options.removeAll();
             describeSelected();
             help.setText("Configuration cannot be loaded: " + error.getMessage());
             tree.setText("");
-            analysis.setText("Check Project Properties > Zephyr, and select the exact board and environment.");
-            status.setText("Configuration unavailable. No project files were changed.");
+            analysis.setText("Open Project settings or inspect the source file for configuration errors.");
+            status.setText("Configuration unavailable. No source files were changed.");
         }
     }
+
 
     private void refreshOptions() {
         if (options == null || options.isDisposed()) return;
@@ -405,7 +436,15 @@ public final class ConfigurationStudioView extends ViewPart {
         if (project == null || current == null) return;
         try {
             Path app = project.getLocation().toFile().toPath();
-            Path build = ProjectContext.buildDirectory(project, ProjectContext.settings(project));
+            Path build = null;
+            try {
+                build = ProjectContext.buildDirectory(project, ProjectContext.settings(project));
+            } catch (Exception notConfigured) {
+                if (current.requested() == null)
+                    throw new java.io.IOException("Select an environment and build the exact board before "
+                            + "adding a new symbol.", notConfigured);
+                // Existing prj.conf assignments can be repaired without a build.
+            }
             var preview = ConfigurationStudioFiles.plan(app, build, current.symbol(), value);
             if (!preview.changed()) {
                 status.setText("No change: CONFIG_" + current.symbol() + " already has that request.");
@@ -431,6 +470,13 @@ public final class ConfigurationStudioView extends ViewPart {
         } catch (Exception error) {
             MessageDialog.openError(getSite().getShell(), "Configuration not saved", error.getMessage());
         }
+    }
+
+    private void openProjectSettings() {
+        if (project == null) return;
+        var dialog = org.eclipse.ui.dialogs.PreferencesUtil.createPropertyDialogOn(
+                getSite().getShell(), project, "io.github.niwantha33.zew.projectProperties", null, null);
+        if (dialog != null && dialog.open() == Window.OK) reload();
     }
 
     private void openResource(String path) {

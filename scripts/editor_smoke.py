@@ -43,6 +43,14 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
     (headers / 'kernel.h').write_text('void k_sleep(int duration);\n')
     forced = build / 'forced.h'; forced.write_text('typedef int forced_type;\n')
     macro = build / 'autoconf.h'; macro.write_text('#define CONFIG_ZEW_TEST 73\n')
+    # This is an actual Zephyr application even with no selected board/SDK.
+    # The Configuration Studio must open prj.conf without a working build.
+    (fixture / 'CMakeLists.txt').write_text(
+        'cmake_minimum_required(VERSION 3.20.0)\\n'
+        'find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})\\n'
+        'project(zew_editor_smoke)\\n'
+        'target_sources(app PRIVATE src/main.c)\\n')
+    (fixture / 'prj.conf').write_text('CONFIG_LOG=y\\nCONFIG_DEBUG_INFO=y\\n')
     main = fixture / 'src/main.c'; main.write_text('#include <zephyr/kernel.h>\nforced_type test_value = CONFIG_ZEW_TEST;\nint main(void){ k_sleep(test_value); return 0; }\n')
     gcc = Path(shutil.which('gcc')).resolve()
     command = [str(gcc), '-I', str(headers.parent), '-imacros', str(macro), '-include', str(forced)]

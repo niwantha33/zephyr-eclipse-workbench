@@ -24,6 +24,15 @@ public final class ConfigurationStudioTests {
             Files.writeString(build.resolve("zephyr/.config"),
                     "CONFIG_LOG=y\n# CONFIG_DEBUG_THREAD_INFO is not set\n");
             Files.writeString(build.resolve("zephyr/zephyr.dts"), "/ { model = \"Board\"; };\n");
+            var beforeSetup = ConfigurationStudioFiles.inspect(app, null, "Source-only");
+            ok(beforeSetup.options().stream().anyMatch(o -> o.symbol().equals("DEBUG_INFO")
+                    && "y".equals(o.requested()) && o.effective() == null),
+                    "prj.conf remains open for repair before any SDK or board is configured");
+            ok(beforeSetup.devicetree().isEmpty(), "source-only mode does not invent hardware");
+            var repairWithoutSdk = ConfigurationStudioFiles.plan(app, null, "DEBUG_INFO", null);
+            ok(!repairWithoutSdk.updated().contains("CONFIG_DEBUG_INFO"),
+                    "remove invalid existing assignment without a configured build");
+            rejects(() -> ConfigurationStudioFiles.plan(app, null, "UNVERIFIED_OPTION", "y"));
             var snapshot = ConfigurationStudioFiles.inspect(app, build, "Debug (-Og)");
             ok(snapshot.options().stream().anyMatch(o -> o.symbol().equals("DEBUG_INFO")
                     && o.unresolved() && o.requestedLine() == 4),

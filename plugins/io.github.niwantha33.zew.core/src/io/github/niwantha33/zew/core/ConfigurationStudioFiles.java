@@ -49,8 +49,8 @@ public final class ConfigurationStudioFiles {
     public static Snapshot inspect(Path application, Path build, String profile) throws IOException {
         Path source = application.resolve("prj.conf");
         Map<String, String> actual = new LinkedHashMap<>();
-        Path effective = build.resolve("zephyr/.config");
-        if (Files.isRegularFile(effective)) {
+        Path effective = build == null ? null : build.resolve("zephyr/.config");
+        if (effective != null && Files.isRegularFile(effective, LinkOption.NOFOLLOW_LINKS)) {
             for (String line : bounded(effective).split("\\R")) {
                 var setting = ASSIGN.matcher(line);
                 var disabled = NOT_SET.matcher(line);
@@ -84,8 +84,8 @@ public final class ConfigurationStudioFiles {
         for (var entry : wanted.entrySet())
             options.putIfAbsent(entry.getKey(), new Option(entry.getKey(), null, entry.getValue(),
                     lines.getOrDefault(entry.getKey(), 0)));
-        Path tree = build.resolve("zephyr/zephyr.dts");
-        String dts = Files.isRegularFile(tree) ? bounded(tree) : "";
+        Path tree = build == null ? null : build.resolve("zephyr/zephyr.dts");
+        String dts = tree != null && Files.isRegularFile(tree, LinkOption.NOFOLLOW_LINKS) ? bounded(tree) : "";
         return new Snapshot(new ArrayList<>(options.values()), dts, profile, source);
     }
 
@@ -156,6 +156,7 @@ public final class ConfigurationStudioFiles {
     }
 
     private static boolean knownInGeneratedConfig(Path build, String symbol) throws IOException {
+        if (build == null) return false;
         Path conf = build.resolve("zephyr/.config");
         if (!Files.isRegularFile(conf, LinkOption.NOFOLLOW_LINKS)) return false;
         for (String line : bounded(conf).split("\\R")) {
