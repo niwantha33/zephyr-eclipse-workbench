@@ -9,22 +9,52 @@ This uses the current native Zephyr DSF-GDB session.
 
 ## Named SoC peripherals
 
-CPU registers and memory-mapped peripheral registers are different views.
-The current Zephyr launch does **not** connect a vendor SVD to a peripheral
-decoder. An empty Peripherals view is not evidence that the probe failed.
-Do not enter an SVD path in the Disassembly view's location field.
+Open **Window > Show View > Other > Debug > SoC Registers**. Click **Load SVD**
+and choose the exact chip's vendor CMSIS-SVD file. The file is loaded locally;
+Workbench does not download or guess a device definition. The selected SVD path
+is restored when the view is reopened. Check its device name against your
+physical chip before reading.
 
-Named GPIO, UART, timer and other peripheral registers require the exact
-device's vendor SVD plus an SVD-capable debugger integration. Eclipse Embedded
-CDT's debug launchers offer an **SVD Path** tab; those are separate launch
-types, not a tab currently supplied by this Workbench's **Zephyr Application**
-launcher. Installing an SVD alone does not wire that integration into it.
+The native tree shows peripherals, registers, bitfields, addresses, access,
+reset values and values from the selected CDT DSF-GDB debug session. Search by
+peripheral, register, field or description. Select a register (or one of its
+fields), halt the target, select a suspended frame in Debug, then click
+**Refresh selected + watches**. **Watch / unwatch** includes a register in later
+refreshes, including when filtered out of the tree. Values differing from the
+SVD reset value within its reset mask are marked. An unspecified reset value
+is shown as unavailable, not assumed to be zero.
 
-For a specific documented address, the standard **Memory** view can inspect
-target memory through this session. Consult the device reference manual first:
-reads can clear flags or consume FIFO data. Never scan all peripheral addresses
-to discover registers. No device definitions or peripheral reads are fabricated
-by this Workbench.
+Reads use the existing debug session: no second GDB connection, server launch,
+firmware write, halt or resume is issued by this view. GDB handles target byte
+order; the expression checks the target C type width before dereferencing an
+8-, 16- or 32-bit address. Refresh drops the DSF expression cache. Reads are
+serial and capped at 64 registers per refresh. Values are explicit snapshots,
+not live polling, and should be refreshed after stepping or resuming. Context
+changes discard values and pending responses; a new SVD or closed view cancels
+subsequent requests. An already-issued read cannot be undone.
+
+Write-only and SVD-declared read-side-effect registers (including field-level
+read actions) are blocked. This is a read-only first implementation; there is
+no register editor. Vendor SVDs may omit side effects, so consult the reference
+manual before selecting a FIFO/status register. No peripheral address scan is
+performed.
+
+The offline parser supports inherited register properties, same-scope
+`derivedFrom` peripherals/registers/fields, nested clusters, and numeric or
+comma-separated register/cluster array indices. XML external entities and
+DOCTYPE declarations are disabled. Files are limited to 32 MiB; array sizes,
+nesting, register counts and expansion work are bounded. Cross-scope derived
+references, peripheral/field arrays, non-byte address units, unaligned
+registers and unsupported widths fail with an explicit diagnostic. A failed
+load retains the previous device. The tree shows at most 2,000 matches at once;
+narrow the search to find other registers in large devices.
+
+Automatic board-to-SVD resolution, remote SVD catalogs, register writes,
+polling and history plots are not included. CPU Registers remains the standard
+CDT view. Parser and existing core tests run in `scripts/test_core.py`; these
+checks do not establish probe or physical peripheral correctness. Validate on
+hardware with a safe, documented read-only register and compare the same
+address in GDB.
 
 ## Repeated `Only size_t of 4 bytes are supported`
 

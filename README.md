@@ -109,3 +109,7 @@ This is an independent integration project. Upstream sources: [Zephyr](https://g
 
 
 Native Eclipse Run/Debug controls, CCS/other-IDE adapter boundaries and the editor improvement roadmap are described in [IDE integration](docs/IDE_INTEGRATION.md).
+
+### SoC peripheral registers
+
+Open **Window > Show View > Other > Debug > SoC Registers**, load the exact chip vendor SVD, and refresh a selected register while halted in native Debug. Includes search, bitfields, watches and reset comparison. See [register inspection](docs/DEBUG_REGISTERS_AND_THREADS.md) for supported SVD features and validation limits.
