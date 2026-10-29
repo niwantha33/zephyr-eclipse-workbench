@@ -46,6 +46,16 @@ public final class EditorSmoke implements IApplication {
         check(!tester.test(workspace.getRoot().getProject("UnmanagedSmoke"), "isConfigurationStudioTarget",
                 new Object[0], Boolean.TRUE),
                 "Configuration Studio action is excluded from non-Zephyr projects");
+        var popupVisibility = org.eclipse.core.expressions.ExpressionConverter.getDefault().perform(
+                studioMenus.get(0).getChildren("visibleWhen")[0].getChildren()[0]);
+        var popupContext = new org.eclipse.core.expressions.EvaluationContext(null, project.getFile("prj.conf"));
+        popupContext.addVariable("activeMenuSelection", java.util.List.of(project.getFile("prj.conf")));
+        check(popupVisibility.evaluate(popupContext) == org.eclipse.core.expressions.EvaluationResult.TRUE,
+                "installed Eclipse popup expression shows Configuration Studio for prj.conf");
+        popupContext.addVariable("activeMenuSelection", java.util.List.of(project.getFile("src/main.c")));
+        check(popupVisibility.evaluate(popupContext) == org.eclipse.core.expressions.EvaluationResult.FALSE,
+                "installed Eclipse popup expression hides Configuration Studio for unrelated C file");
+
         if (Boolean.getBoolean("zew.nativeFlow")) {
             org.eclipse.swt.widgets.Display.getDefault().syncExec(() -> {
                 try {
