@@ -5,6 +5,32 @@ Select an imported project in Project Explorer and open the command. This is
 a native Eclipse SWT/JFace view; no secondary browser, VS Code, tkinter or
 unmanaged Python installation is required.
 
+## Beginner-first context-menu workflow
+
+Right-click the **Zephyr project**, its Eclipse **.project** descriptor,
+or a **.prj** project descriptor and select **Open Zephyr Configuration
+Studio...**. Right-click **prj.conf** to open its project-owned settings
+directly. Right-click **app.overlay** or another application `.overlay`
+to open the hardware page; **Open overlay** opens the exact selected file.
+
+This is not an editor for arbitrary `.prj` formats. The action appears only
+when the containing Eclipse project is recognised as an existing Zephyr
+application. Unrelated files and non-Zephyr projects retain their own
+context menus.
+
+Kconfig Studio now offers a plain-language feature list with **Enabled**
+and **Disabled** labels and a one-click choice between **Turn on** and
+**Turn off** for boolean settings. Other values still use an explicitly
+reviewed text input. Search understands friendly names and `CONFIG_`
+symbols. The left filter groups features by common purpose and distinguishes
+my project settings and requests that need review.
+
+Category assignment is a display heuristic, **not** Kconfig dependency
+evaluation. Generated build outputs may also be stale; the real Zephyr
+configure-and-build step remains authoritative. Removing a setting from
+`prj.conf` does not guarantee a specific default if another active fragment
+or board configuration sets it.
+
 ## Kconfig Studio
 
 The selected exact board and build profile come from the existing project
