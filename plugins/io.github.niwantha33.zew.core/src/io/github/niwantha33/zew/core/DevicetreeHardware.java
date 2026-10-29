@@ -3,6 +3,7 @@ package io.github.niwantha33.zew.core;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -25,10 +26,11 @@ public final class DevicetreeHardware {
         if (generatedDts == null || generatedDts.isBlank()) return List.of();
         var result = new ArrayList<Device>();
         var stack = new ArrayList<Open>();
-        String compatible = "", status = "", label = "", reg = "";
+        int lineNumber = 0;
         // The generated DTS has ordinary braced nodes. Only a top-level
         // property on a device node is associated with that node.
         for (String raw : generatedDts.split("\\R", -1)) {
+            lineNumber++;
             String line = raw.strip();
             var node = NODE.matcher(line);
             if (node.matches()) {
@@ -36,7 +38,7 @@ public final class DevicetreeHardware {
                 String parent = stack.isEmpty() ? "" : stack.get(stack.size() - 1).path();
                 String path = "/".equals(name) ? "/" : ("/".equals(parent) ? "/" : parent + "/") + name;
                 stack.add(new Open(path, name, result.size()));
-                result.add(new Device(path, name, "", "", "", "", result.size() + 1));
+                result.add(new Device(path, name, "", "", "", "", lineNumber));
                 continue;
             }
             if (line.startsWith("};") || line.equals("}")) {
@@ -63,6 +65,16 @@ public final class DevicetreeHardware {
             if (result.size() > LIMIT) break;
         }
         return List.copyOf(result);
+    }
+    /** Search actual node metadata; keep hierarchy context separately in the view. */
+    public static boolean matches(Device device, String query, String state) {
+        if ("Okay/default".equals(state) && !device.enabled()) return false;
+        if ("Disabled".equals(state) && !"disabled".equals(device.status())) return false;
+        String haystack = (device.path() + " " + device.label() + " " + device.compatible()
+                + " " + device.reg() + " " + device.status()).toLowerCase(Locale.ROOT);
+        for (String term : (query == null ? "" : query.strip()).toLowerCase(Locale.ROOT).split("\\s+"))
+            if (!haystack.contains(term)) return false;
+        return true;
     }
     public static String explanation(Device device) {
         if (device == null) return "Select a device in the compiled Devicetree.";
