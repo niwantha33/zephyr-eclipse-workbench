@@ -30,9 +30,13 @@ public final class RemoteSmokeDelegate extends GdbLaunchDelegate {
         // so the test relay can prove that creation notifications did not reach CDT.
         return new GdbDebugServicesFactory(version, configuration) {
             @Override protected IStack createStackService(DsfSession session) {
-                // Exercise the SAME stack recovery used in production; do not
-                // silently accept missing source/function names from GDB.
-                return new io.github.niwantha33.zew.ui.ZephyrStack(session);
+                // Use the installed production implementation without making
+                // private UI packages part of the public OSGi API.
+                try {
+                    var bundle = Platform.getBundle("io.github.niwantha33.zew.ui");
+                    var implementation = bundle.loadClass("io.github.niwantha33.zew.ui.ZephyrStack");
+                    return (IStack) implementation.getConstructor(DsfSession.class).newInstance(session);
+                } catch (Exception error) { throw new IllegalStateException("Production ZephyrStack unavailable", error); }
             }
             @Override protected IMIBackend createBackendGDBService(DsfSession session, ILaunchConfiguration config) {
                 return new GDBBackend_7_12(session, config) {
