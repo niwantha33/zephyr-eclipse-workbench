@@ -65,6 +65,10 @@ public final class EditorSmoke implements IApplication {
             check(source.getSelectionText().contains("adc@4000 {"), "Reveal in source selects the exact generated DTS node line");
             hardwareSearch.setText("no-such-controller");
             check(hardware.getItemCount() == 0, "hardware search has an honest empty state");
+            var cancel = new org.eclipse.swt.widgets.Event(); cancel.detail = org.eclipse.swt.SWT.ICON_CANCEL;
+            hardwareSearch.notifyListeners(org.eclipse.swt.SWT.Selection, cancel);
+            check(hardwareSearch.getText().isEmpty() && hardware.getItemCount() > 0,
+                    "native search clear icon restores the filtered hardware hierarchy");
         } finally {
             snapshotField.set(view, original);
             clear.invoke(view);
