@@ -55,6 +55,31 @@ public final class ConfigurationStudioTests {
             ok(!repairWithoutSdk.updated().contains("CONFIG_DEBUG_INFO"),
                     "remove invalid existing assignment without a configured build");
             rejects(() -> ConfigurationStudioFiles.plan(app, null, "UNVERIFIED_OPTION", "y"));
+            var hardware = io.github.niwantha33.zew.core.DevicetreeHardware.inspect("""
+                    / {
+                        leds {
+                            compatible = "gpio-leds";
+                            led0: led_0 {
+                                gpios = <&gpiob 22 0>;
+                                label = "Blue LED";
+                                status = "okay";
+                            };
+                        };
+                        adc0: adc@40000000 {
+                            compatible = "ti,mspm0-adc";
+                            reg = <0x40000000 0x1000>;
+                            status = "disabled";
+                        };
+                    };
+                    """);
+            ok(hardware.stream().anyMatch(d -> d.path().equals("/leds/led_0")
+                    && d.enabled() && "Blue LED".equals(d.label())),
+                    "generated Devicetree LED appears in the hardware inventory");
+            ok(hardware.stream().anyMatch(d -> d.path().equals("/adc@40000000")
+                    && !d.enabled() && d.compatible().contains("mspm0-adc")),
+                    "hardware inventory reports disabled ADC without inventing configuration");
+            ok(io.github.niwantha33.zew.core.DevicetreeHardware.inspect("").isEmpty(),
+                    "missing build must not fabricate hardware");
             var snapshot = ConfigurationStudioFiles.inspect(app, build, "Debug (-Og)");
             var domains = io.github.niwantha33.zew.core.ConfigurationStudioDomains.TABS;
             ok(domains.size() >= 11
