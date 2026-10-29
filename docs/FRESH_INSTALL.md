@@ -28,6 +28,10 @@ follow that Eclipse package's Java requirement using an open-source JDK.
    the installation details and licence review, and restart Eclipse.
 6. Confirm the **Zephyr** menu appears. Open **Zephyr > About Zephyr Workbench**
    to check the installed version.
+7. Before following the current workflow below, configure public access and run
+   **Zephyr > Check for Workbench Updates** (see the update steps at the end).
+   A release archive stays fixed at its published preview; newer import/debug
+   improvements arrive through the Workbench update channel. Restart if updated.
 
 The plug-ins are unsigned. Review Eclipse's normal trust prompt; do not disable
 Eclipse trust checks globally. `SHA256SUMS.txt` detects download corruption and
@@ -55,6 +59,9 @@ environment; it does not flash or test a physical board.
 
 1. Use **File > New > Other > Zephyr > Zephyr Project**, or import an existing
    application with **File > Import > Zephyr > Existing Zephyr Application**.
+   For import, select a project or parent directory, check the discovered
+   applications, then choose environment/hardware and review before Finish.
+   See the [existing-application import guide](IMPORT_EXISTING_APPLICATIONS.md).
 2. Open the project's **Properties > Zephyr**. Select the exact vendor, board,
    SoC/core and available qualifiers for your hardware.
 3. Choose **Application settings**, **Debug (-Og)** or **Release (-O2)**.
