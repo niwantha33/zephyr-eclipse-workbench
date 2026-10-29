@@ -130,6 +130,12 @@ public final class EditorSmoke implements IApplication {
                             && "Hardware".equals(studioTabs.getItem(1).getText())
                             && "Insights".equals(studioTabs.getItem(2).getText()),
                             "native Configuration Studio has feature, hardware and insight workspaces");
+                    var hardwareField = cls.getDeclaredField("hardwareDevices");
+                    hardwareField.setAccessible(true);
+                    var hw = (org.eclipse.swt.widgets.Table) hardwareField.get(view);
+                    check(hw.getColumnCount() == 3
+                            && "Device path".equals(hw.getColumn(0).getText()),
+                            "installed Hardware workspace has a compiled-Devicetree device inventory");
                     var peripheralField = cls.getDeclaredField("peripheralTabs");
                     peripheralField.setAccessible(true);
                     var peripheralTabs = (org.eclipse.swt.custom.CTabFolder) peripheralField.get(view);
