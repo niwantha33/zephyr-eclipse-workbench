@@ -93,12 +93,18 @@ public final class OpenOcdRegistryTests {
                         OpenOcdRegistry.select("nucleo_f446re", auto).orElseThrow());
                 throw new AssertionError("incompatible provider accepted");
             } catch (java.io.IOException expected) { assertions++; }
-            try {
-                io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(
-                        new io.github.niwantha33.zew.core.TargetOperations.Plan("flash", oldPlan.board(), temp,
-                                java.util.List.of("flash")), selected);
-                throw new AssertionError("flash plan accepted");
-            } catch (java.io.IOException expected) { assertions++; }
+            var flashPlan = new io.github.niwantha33.zew.core.TargetOperations.Plan("flash", oldPlan.board(), temp,
+                    java.util.List.of("flash", "--no-rebuild"));
+            var verifiedFlash = io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(flashPlan, selected);
+            check(verifiedFlash.westArguments().contains("--verify"), "OpenOCD Flash requires readback verification");
+            check(verifiedFlash.westArguments().contains(selected.executable().toString().replace('\\', '/')),
+                    "Flash uses the same selected tool as Debug");
+            check(!verifiedFlash.westArguments().contains("gdb_breakpoint_override hard"), "Flash receives no debug breakpoint commands");
+            check(io.github.niwantha33.zew.core.TargetOperations.usesOpenOcdFlash(flashPlan, "flash-runner: openocd\n"),
+                    "default OpenOCD flash backend recognized");
+            check(!io.github.niwantha33.zew.core.TargetOperations.usesOpenOcdFlash(flashPlan, "flash-runner: jlink\ndebug-runner: openocd\n"),
+                    "debug backend never replaces a different flash backend");
+
 
             for (String board : java.util.List.of("nucleo_f446re/stm32f446xx", "nrf52840dk/nrf52840",
                     "frdm_k64f/mk64f12", "ek_ra6m3/r7fa6m3ah3cfc", "sam_e70_xplained/same70q21",

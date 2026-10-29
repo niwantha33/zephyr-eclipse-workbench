@@ -36,10 +36,19 @@ public final class TargetOperations {
                 .matcher(yaml).find();
     }
 
+    public static boolean usesOpenOcdFlash(Plan plan, String yaml) {
+        if (!"flash".equals(plan.action()) || yaml == null) return false;
+        int explicit = plan.westArguments().indexOf("--runner");
+        if (explicit >= 0) return explicit + 1 < plan.westArguments().size()
+                && "openocd".equals(plan.westArguments().get(explicit + 1));
+        return java.util.regex.Pattern.compile("(?m)^flash-runner:[ \\t]*['\"]?openocd['\"]?[ \\t]*$")
+                .matcher(yaml).find();
+    }
+
     /** Bind a compatible shared tool at launch time, including builds made before tool selection. */
     public static Plan withOpenOcd(Plan plan, OpenOcdRegistry.Installation tool) throws IOException {
-        if (!plan.action().equals("debugserver"))
-            throw new IOException("OpenOCD debug override requires a debugserver plan.");
+        if (!Set.of("debugserver", "flash").contains(plan.action()))
+            throw new IOException("OpenOCD override requires a flash or debugserver plan.");
         if (tool.provider() != OpenOcdRegistry.providerFor(plan.board()))
             throw new IOException("OpenOCD provider does not match the selected board.");
         var verified = OpenOcdRegistry.fromExecutable(tool.provider(), tool.executable(), tool.origin());
@@ -51,7 +60,8 @@ public final class TargetOperations {
         // ESP Zephyr images can lack an IDF partition table, leaving OpenOCD's
         // IROM/DROM maps empty. Never try to patch instructions in unmapped flash.
         // Use real CPU breakpoints, with the hardware's finite slot limit.
-        if (tool.provider() == OpenOcdRegistry.Provider.ESPRESSIF)
+        if (plan.action().equals("flash")) args.add("--verify");
+        if (plan.action().equals("debugserver") && tool.provider() == OpenOcdRegistry.Provider.ESPRESSIF)
             args.addAll(List.of("--cmd-pre-init", "gdb_breakpoint_override hard"));
         return new Plan(plan.action(), plan.board(), plan.buildDirectory(), args);
     }

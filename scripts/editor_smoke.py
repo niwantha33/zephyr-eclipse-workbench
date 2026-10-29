@@ -13,10 +13,12 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+os.environ['ZEW_TEST_PYTHON'] = sys.executable
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--eclipse', type=Path, required=True)
 parser.add_argument('--java-home', type=Path, required=True)
@@ -58,6 +60,7 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
     metadata_source.write_text('const unsigned char _kernel_thread_info_size_t_size = 4;\nconst unsigned int _kernel_thread_info_num_offsets = 15;\nconst unsigned int _kernel_thread_info_offsets[15] = {1,0,4,0};\nint _kernel = 1;\nvoid entry(void) {}\n')
     for bits in (32, 64):
         run([gcc, f'-m{bits}', '-nostdlib', '-static', '-Wl,-e,entry', metadata_source, '-o', fixture / f'thread-{bits}.elf'])
+        run([shutil.which('objcopy'), '-O', 'ihex', fixture / f'thread-{bits}.elf', fixture / f'thread-{bits}.hex'])
     classes = temporary / 'classes'; classes.mkdir()
     classpath = os.pathsep.join(map(str, (eclipse / 'plugins').glob('*.jar')))
     run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java', ROOT / 'tests/eclipse/ProjectImportSmoke.java', ROOT / 'tests/eclipse/StandardProjectFlowSmoke.java', ROOT / 'tests/eclipse/WorkbenchSmoke.java', ROOT / 'tests/eclipse/CoreBuildCompatibilitySmoke.java', ROOT / 'tests/eclipse/OpenOcdMetadataSmoke.java'])

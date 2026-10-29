@@ -54,6 +54,24 @@ public final class OpenOcdThreadCheckTests {
         var diagnostics = new io.github.niwantha33.zew.core.DebugServerDiagnostics();
         diagnostics.accept("Info : Listening on port 6333 for tcl connections");
         yes(diagnostics.isTclListening(6333) && !diagnostics.isListening(6333), "only owned Tcl readiness enables metadata inspection");
+        String python = System.getenv("ZEW_TEST_PYTHON");
+        if (python != null) {
+            String harness = "import sys,importlib.util\n"
+                    + "if importlib.util.find_spec('tkinter') is None: sys.exit(77)\n"
+                    + "import tkinter\nt = tkinter.Tcl()\ncalls=[]\n"
+                    + "t.createcommand('read_memory',lambda *args: calls.append(args) or sys.argv[2])\n"
+                    + "t.createcommand('echo',lambda *args: '')\n"
+                    + "try:\n t.eval(sys.argv[1])\n print(calls)\n"
+                    + "except tkinter.TclError as e:\n print(str(e));sys.exit(2)\n";
+            for (String actual : List.of("4", "255")) {
+                var result = new io.github.niwantha33.zew.core.ProcessRunner().run(
+                        List.of(python, "-c", harness, OpenOcdThreadCheck.postFlashCommand(List.of(size)), actual),
+                        java.nio.file.Path.of(System.getProperty("java.io.tmpdir")), java.time.Duration.ofSeconds(15), () -> false, line -> {});
+                if (result.exitCode() == 77) { System.out.println("SKIP Tcl evaluator: Python tkinter unavailable"); break; }
+                if (actual.equals("4")) yes(result.exitCode() == 0 && result.output().contains("0x1280"), "post-flash Tcl executes exact readback and succeeds only on matching bytes");
+                else yes(result.exitCode() != 0 && result.output().contains("expected byte 4, target byte 255"), "post-flash Tcl propagates the observed mismatch as a programming failure");
+            }
+        }
         System.out.println("OpenOcdThreadCheckTests PASS: " + checks + " checks");
     }
 }

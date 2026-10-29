@@ -88,6 +88,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
                     throw new IOException("Eclipse could not register the runner process.");
                 watchOwnedProcess(process, lease, "flash".equals(action));
                 handedOff = true;
+                if ("flash".equals(action)) awaitFlash(process, monitor);
             } finally {
                 if (!handedOff) {
                     if (process != null) {
@@ -102,12 +103,28 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new CoreException(Status.CANCEL_STATUS);
+        } catch (InterruptedIOException cancelled) {
+            throw new CoreException(Status.CANCEL_STATUS);
         } catch (Exception error) {
             throw failure(error.getMessage(), error);
         }
     }
 
     private record FlashPlan(List<String> command, Properties settings) {}
+
+    /** Starting a programmer process is not a completed Flash operation. */
+    static void awaitFlash(Process process, IProgressMonitor monitor) throws IOException, InterruptedException {
+        while (!process.waitFor(100, TimeUnit.MILLISECONDS)) {
+            if (monitor.isCanceled()) {
+                process.destroy(); // lifecycle watcher also reaps this operation's children
+                throw new InterruptedIOException("Flash cancelled");
+            }
+        }
+        if (monitor.isCanceled()) throw new InterruptedIOException("Flash cancelled");
+        if (process.exitValue() != 0)
+            throw new IOException("Flash programming or readback verification failed (West exit " + process.exitValue()
+                    + "). See the Zephyr Flash console. Firmware was not verified; Debug was not started.");
+    }
 
     /** Every flash entry, including repeated native Run launches, uses the same preflight. */
     private FlashPlan prepareFlash(IProject project, Properties settings,
@@ -143,6 +160,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
             var plan = TargetOperations.prepare(
                     ProjectContext.buildDirectory(project, settings), board, "flash", "");
             io.github.niwantha33.zew.core.BuildConfiguration.fromId(buildConfiguration).verify(plan.buildDirectory());
+            plan = OpenOcdFlashPreparation.prepare(plan, settings, monitor, stream::println);
             var command = new ArrayList<>(plan.command(settings.getProperty("python")));
             if (EspressifFlashSafety.isEsp32Runner(plan.buildDirectory())) {
                 String port = EspressifSerialProbe.selectAndVerify(shell.get(), board, settings,

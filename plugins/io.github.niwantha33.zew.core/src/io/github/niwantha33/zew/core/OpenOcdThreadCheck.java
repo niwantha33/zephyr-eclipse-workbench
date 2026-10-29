@@ -59,4 +59,20 @@ public final class OpenOcdThreadCheck {
             }
         }
     }
+
+    /** West invokes this after image readback verification, before reset/run. No writes. */
+    public static String postFlashCommand(List<Region> regions) {
+        if (regions.isEmpty() || regions.size() > 3) throw new IllegalArgumentException("Missing thread metadata");
+        var script = new StringBuilder("namespace eval ::zew {}; proc ::zew::verify_flash_metadata {} {");
+        for (var region : regions) {
+            String address = "0x" + Long.toHexString(region.address());
+            script.append(" set values [read_memory ").append(address).append(" 8 ").append(region.bytes().size()).append("]; ");
+            script.append("if {[llength $values] != ").append(region.bytes().size()).append("} {error {Flash metadata read returned an invalid length}}; ");
+            script.append("set address ").append(address).append("; foreach expected {");
+            for (int b : region.bytes()) script.append(b).append(' ');
+            script.append("} actual $values { if {$actual != $expected} {error [format {Flash verification failed: ")
+                    .append(region.symbol()).append(" at 0x%x expected byte %d, target byte %d. Programming was not verified.} $address $expected $actual]}; incr address }; ");
+        }
+        return script.append("echo {Verified flashed Zephyr thread metadata against the selected ELF}; }; ::zew::verify_flash_metadata; rename ::zew::verify_flash_metadata {}").toString();
+    }
 }

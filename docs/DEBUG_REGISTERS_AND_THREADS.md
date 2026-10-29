@@ -68,6 +68,46 @@ An initial `No symbols for Zephyr` before GDB connects can occur because West
 enables RTOS decoding before GDB supplies the symbol table. It does not by
 itself indicate a missing ELF. Raw OpenOCD messages remain visible.
 
+### Flash completed but target metadata reads `0xFF`
+
+An observed report was `_kernel_thread_info_size_t_size` at `0x5e68`, ELF byte
+`4`, target byte `255`, despite a reported successful Flash. This proves a
+readback mismatch at that point, not its physical cause. Missing/stale image
+data and probe/read behavior still need to be distinguished from the actual
+Flash console output.
+
+The Flash path previously left OpenOCD readback verification optional and
+could use the executable cached in `runners.yaml`, while Debug overrode it with
+the shared selected tool. Flash now uses that same selected OpenOCD executable
+and matching script tree and always requests `--verify`. Other flash backends
+keep their own tool selection.
+
+The native Flash launch also waits for the programmer process to finish and
+propagates nonzero exit status as a launch failure. Starting the process no
+longer completes the Flash job. Cancellation remains attached to the owned
+programmer process and its lifecycle watcher.
+
+For Cortex-M XIP builds with thread metadata, the bundled validator resolves
+the board-declared image, checks Intel HEX checksums/address records, and
+requires all expected thread metadata bytes to be present. Merged HEX images
+remain selected; no replacement HEX image is fabricated. ELF and explicitly
+addressed BIN contracts are checked separately. The exact validated image and
+format are passed to West and logged beside the debug ELF path.
+
+After image verification, OpenOCD also reads and compares the metadata bytes
+before its normal reset/run. A missing or mismatched byte raises an OpenOCD
+error and fails Flash, rather than leaving it to be discovered at Debug. This
+check performs no separate erase, RAM patch, or metadata write. Programming
+continues to use the board runner after the normal Flash confirmation. Debug
+still performs its independent non-programming check.
+
+Regression checks include the reported `0x5e68`/`0xFF` mismatch, missing HEX
+records, checksum failures, extended addresses, declared merged images,
+alternative runner preservation, BIN load addresses and Tcl error propagation.
+Installed Eclipse tests check compiler/objcopy-generated HEX images against
+CDT-extracted ELF32/ELF64 metadata. Physical programming remains unverified in
+the development container.
+
 Native OpenOCD launches with GDB 7.12 or newer now use `extended-remote` via
 CDT's command factory, preserving its normal DSF startup, breakpoint, variable,
 and stack services. Older GDB and other runners retain CDT's default services.
