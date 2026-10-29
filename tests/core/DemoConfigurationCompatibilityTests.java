@@ -21,7 +21,8 @@ public final class DemoConfigurationCompatibilityTests {
             Files.writeString(app.resolve("CMakeLists.txt"), cmake.replace("rtos_analysis_demo", "other_application"));
             check(!DemoConfigurationCompatibility.migrate(app, "undefined symbol DEBUG_INFO"), "unrelated applications are not rewritten");
             Files.writeString(app.resolve("CMakeLists.txt"), cmake);
-            String windows = original.replace("\n", "\r\n");
+            // Windows Git checkouts may already contain CRLF. Normalize once.
+            String windows = original.replace("\r\n", "\n").replace("\n", "\r\n");
             Files.writeString(app.resolve("prj.conf"), windows);
             check(DemoConfigurationCompatibility.migrate(app, "warning: attempt to assign 'y' to undefined symbol DEBUG_INFO"), "original Windows demo migrated after verified diagnostic");
             check(Files.readString(app.resolve(".zew/config-backup/prj.conf.before-debug-info-migration")).equals(windows), "exact original configuration backed up");
