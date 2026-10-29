@@ -187,7 +187,7 @@ jobs:
           python3 scripts/prepare_update.py \
             --site "$SITE" --revision "$IMMUTABLE_SHA" \
             --output "$RUNNER_TEMP/prepared-release" \
-            --notes "Development preview: cross-vendor board dependencies, project properties and native run configurations. Windows hardware and desktop validation pending."
+            --notes "Development preview: native Zephyr Configuration Studio (Kconfig, Devicetree, prj.conf right-click, Enable/Disable), source-only recovery, exact board build and debug. Installed Eclipse smoke-tested; Windows hardware validation pending."
           cp "$RUNNER_TEMP/prepared-release/channel.properties" "$RELEASE_ROOT/channel.properties"
 
           python3 - <<'PY'

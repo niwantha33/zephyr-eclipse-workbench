@@ -261,8 +261,11 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void refreshOptions() {
         if (options == null || options.isDisposed()) return;
+        Option previousSelection = selected();
+        String previousSymbol = previousSelection == null ? null : previousSelection.symbol();
         options.setRedraw(false);
         int shown = 0;
+        int keepIndex = -1;
         int matches = 0;
         int total = snapshot == null ? 0 : snapshot.options().size();
         try {
@@ -283,6 +286,7 @@ public final class ConfigurationStudioView extends ViewPart {
                             ConfigurationStudioPresentation.review(option)
                     });
                     row.setData(option);
+                    if (option.symbol().equals(previousSymbol)) keepIndex = shown;
                     ++shown;
                 }
             }
@@ -291,7 +295,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 int cap = i == 0 ? 260 : 150;
                 if (options.getColumn(i).getWidth() > cap) options.getColumn(i).setWidth(cap);
             }
-            if (options.getItemCount() > 0) options.select(0);
+            if (options.getItemCount() > 0) options.select(keepIndex >= 0 ? keepIndex : 0);
         } finally {
             options.setRedraw(true);
         }
@@ -474,6 +478,14 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void openProjectSettings() {
         if (project == null) return;
+        if (!ZephyrProjectLifecycle.supports(project)) {
+            MessageDialog.openInformation(getSite().getShell(), "Existing Eclipse project",
+                    "This Zephyr application uses another Eclipse build system. "
+                    + "Configuration Studio can inspect prj.conf without taking over that builder. "
+                    + "For native West build and debug, use File > Import > Zephyr > "
+                    + "Existing Zephyr Application and complete the target setup.");
+            return;
+        }
         var dialog = org.eclipse.ui.dialogs.PreferencesUtil.createPropertyDialogOn(
                 getSite().getShell(), project, "io.github.niwantha33.zew.projectProperties", null, null);
         if (dialog != null && dialog.open() == Window.OK) reload();
@@ -536,6 +548,19 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void build() {
         if (project == null) return;
+        if (!ZephyrProjectLifecycle.supports(project)) {
+            openProjectSettings();
+            return;
+        }
+        try {
+            ProjectContext.settings(project);
+        } catch (Exception notReady) {
+            MessageDialog.openInformation(getSite().getShell(), "Configure Zephyr project",
+                    "Select a ready Zephyr environment, exact target and build profile."
+                            + "\n\n" + notReady.getMessage());
+            openProjectSettings();
+            return;
+        }
         IProject target = project;
         org.eclipse.swt.widgets.Display display = options.getDisplay();
         Job job = new Job("Validate and build Zephyr configuration — " + target.getName()) {

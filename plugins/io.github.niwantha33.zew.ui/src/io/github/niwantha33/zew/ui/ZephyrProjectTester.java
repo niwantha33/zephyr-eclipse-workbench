@@ -14,7 +14,7 @@ public final class ZephyrProjectTester extends PropertyTester {
         if ("isConfigurationStudioTarget".equals(property)) {
             IResource resource = receiver instanceof IResource direct ? direct : Adapters.adapt(receiver, IResource.class);
             IProject project = resource == null ? null : resource.getProject();
-            if (project == null || !ZephyrProjectLifecycle.supports(project)) result = false;
+            if (project == null || !ZephyrProjectLifecycle.canInspect(project)) result = false;
             else if (resource instanceof IProject) result = true;
             else if (resource instanceof IFile file)
                 result = io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget(

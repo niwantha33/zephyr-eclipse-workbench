@@ -18,7 +18,7 @@ public final class ConfigurationStudioHandler extends AbstractHandler {
         var project = selection instanceof IStructuredSelection items && items.size() == 1
                 ? SelectedProject.fromObject(items.getFirstElement()) : null;
         if (project == null && activeMenu == null) project = SelectedProject.from(event);
-        if (project == null || !ZephyrProjectLifecycle.supports(project)) {
+        if (project == null || !ZephyrProjectLifecycle.canInspect(project)) {
             MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Zephyr Configuration Studio",
                     "Select a Zephyr project or its prj.conf in Project Explorer.");
             return null;

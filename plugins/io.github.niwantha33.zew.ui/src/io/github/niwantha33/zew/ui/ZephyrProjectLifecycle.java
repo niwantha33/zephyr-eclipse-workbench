@@ -14,10 +14,18 @@ public final class ZephyrProjectLifecycle implements IResourceChangeListener {
     static final String ENVIRONMENT = "project.defaultEnvironment";
     private boolean configuring;
 
+    /** Read-only inspection is safe even for a Zephyr app using another Eclipse builder. */
+    public static boolean canInspect(IProject project) {
+        try {
+            return project != null && project.isAccessible() && project.getLocation() != null
+                    && ZephyrApplicationDiscovery.isApplication(project.getLocation().toFile().toPath());
+        } catch (Exception unavailable) { return false; }
+    }
+
+    /** Taking over builds remains forbidden for projects with another vendor builder. */
     public static boolean supports(IProject project) {
         try {
-            if (project == null || !project.isAccessible() || project.getLocation() == null) return false;
-            if (!ZephyrApplicationDiscovery.isApplication(project.getLocation().toFile().toPath())) return false;
+            if (!canInspect(project)) return false;
             ZephyrProjectImport.validate(project.getDescription());
             return true;
         } catch (Exception unavailable) { return false; }
