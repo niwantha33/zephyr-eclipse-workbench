@@ -77,6 +77,28 @@ public final class ConfigurationStudioTests {
                     "missing metadata must not pretend to evaluate Kconfig availability");
             rejects(() -> io.github.niwantha33.zew.core.KconfigSourceHelp.firstDefinition(
                     root.resolve("workspace"), "BAD/NAME"));
+            var presentation = io.github.niwantha33.zew.core.ConfigurationStudioPresentation.class;
+            var overridden = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("LOG", "y", "y", 3);
+            var invalid = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("DEBUG_INFO", null, "y", 2);
+            var inherited = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("GPIO", "n", null, 0);
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.title("LOG").equals("System logging"),
+                    "user-friendly setting title");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.current(overridden).equals("Enabled"),
+                    "boolean y is displayed as Enabled");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.current(inherited).equals("Disabled"),
+                    "boolean n is displayed as Disabled");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(overridden,
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.MINE, "logging"),
+                    "search by plain English finds project choices");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(invalid,
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.REVIEW, "debug"),
+                    "unresolved symbol appears under Needs review");
+            ok(!io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(inherited,
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.MINE, ""),
+                    "inherited setting must not appear under My changes");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.category("GPIO").equals(
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.DRIVERS),
+                    "drivers category is correct");
             System.out.println("ConfigurationStudioTests PASS");
         } finally {
             try (var paths = Files.walk(root)) {
