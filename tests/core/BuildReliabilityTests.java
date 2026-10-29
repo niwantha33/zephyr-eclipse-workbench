@@ -36,6 +36,32 @@ public class BuildReliabilityTests {
             rejects(() -> BuildArtifacts.verifyArchitecture(build), "wrong architecture must fail");
             Files.writeString(build.resolve("zephyr/.config"), "CONFIG_KERNEL_BIN_NAME=\"../user\"\n");
             rejects(() -> BuildArtifacts.required(build), "output traversal must fail");
+            // Fatal Zephyr Kconfig warnings are application errors, not SDK/module
+            // provisioning failures. Preserve the original file and line number.
+            var kconfigFailure = new KconfigFailure();
+            String invalidConfig = "C:/Zephyr Project/demo/prj.conf:2: warning: attempt to assign "
+                    + "the value 'y' to the undefined symbol DEBUG_INFO";
+            var issue = KconfigFailure.parse(invalidConfig).orElseThrow();
+            check(issue.file().equals("C:/Zephyr Project/demo/prj.conf")
+                    && issue.line() == 2 && issue.symbol().equals("DEBUG_INFO"),
+                    "Windows drive paths and Kconfig line numbers are preserved");
+            check(issue.suggestion().contains("CONFIG_DEBUG_OPTIMIZATIONS=y"),
+                    "debug-info diagnostic offers a supported separate debug profile");
+            kconfigFailure.accept(invalidConfig);
+            kconfigFailure.accept(invalidConfig);
+            check(kconfigFailure.description().split("C:/Zephyr Project/demo/prj.conf:2: CONFIG_DEBUG_INFO", -1).length == 2,
+                    "duplicate warnings are reported once");
+            check(KconfigFailure.parse("/tmp/app/boards/debug.conf:25: warning: attempt to assign "
+                    + "the value 'y' to the undefined symbol MISSING_MODULE").isPresent(),
+                    "any application configuration fragment is supported");
+            check(KconfigFailure.parse("C:/app/src/main.c:3: error: undefined reference").isEmpty(),
+                    "ordinary linker/compile errors are not reclassified as Kconfig");
+            check(KconfigFailure.parse("not a Kconfig warning").isEmpty(),
+                    "non-Kconfig output is not reclassified");
+            check(KconfigFailure.parse("C:/app/prj.conf:99999999999999999999: warning: attempt "
+                    + "to assign the value 'y' to the undefined symbol BAD").isEmpty(),
+                    "malformed line numbers are rejected without throwing");
+            check(!new KconfigFailure().hasIssues(), "successful builds carry no Kconfig advice");
             int[] calls = {0};
             var recovery = new BuildRecovery(Map.of("IMGTOOL", () -> calls[0]++), 1);
             rejects(() -> recovery.repair(Set.of("IMGTOOL", "UNREVIEWED")), "unsupported tools must fail before any install");

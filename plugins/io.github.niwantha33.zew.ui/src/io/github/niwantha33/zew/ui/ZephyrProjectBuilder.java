@@ -25,6 +25,7 @@ import org.eclipse.ui.console.MessageConsole;
 import io.github.niwantha33.zew.core.BuildHostRequirements;
 import io.github.niwantha33.zew.core.BuildArtifacts;
 import io.github.niwantha33.zew.core.BuildRecovery;
+import io.github.niwantha33.zew.core.KconfigFailure;
 import io.github.niwantha33.zew.core.BuildSession;
 import io.github.niwantha33.zew.core.ProcessRunner;
 import io.github.niwantha33.zew.core.WestCommands;
@@ -73,6 +74,19 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         runner.run(command, workspace, Duration.ofMinutes(2),
                 monitor::isCanceled, scanner, environment).requireSuccess();
         return scanner.missing();
+    }
+
+    /** Preserve Zephyr's fatal Kconfig validation and provide an actionable error. */
+    private static void requireConfigured(ProcessRunner.Result result, KconfigFailure issues,
+            java.util.function.Consumer<String> output) throws java.io.IOException {
+        try {
+            result.requireSuccess();
+        } catch (java.io.IOException error) {
+            if (!issues.hasIssues()) throw error;
+            String explanation = issues.description();
+            output.accept("Configuration diagnosis:\n" + explanation);
+            throw new java.io.IOException(explanation, error);
+        }
     }
 
     @Override protected void clean(IProgressMonitor monitor) throws CoreException {
@@ -141,10 +155,12 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             monitor.setTaskName(clean ? "Clean Zephyr project" : "Build Zephyr project");
             BuildDiagnostics.clear(getProject());
             var runner = new ProcessRunner();
+            var kconfigFailure = new KconfigFailure();
             var workspace = Path.of(paths.workspace());
             java.util.function.Consumer<String> log = line -> {
                 stream.println(line);
                 BuildDiagnostics.accept(getProject(), buildDirectory, line);
+                kconfigFailure.accept(line);
             };
             if (!clean) {
                 // Resolve real build requirements from Zephyr's configured
@@ -158,8 +174,8 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 }
                 stream.println("Preflight: Zephyr configure-only; checking actual host tool dependencies.");
                 stage[0] = "Configure Zephyr";
-                runner.run(configure, workspace, Duration.ofMinutes(15),
-                        monitor::isCanceled, log, environment).requireSuccess();
+                requireConfigured(runner.run(configure, workspace, Duration.ofMinutes(15),
+                        monitor::isCanceled, log, environment), kconfigFailure, stream::println);
                 var inspectCommands = List.of(settings.getProperty("tools.ninja"), "-C", paths.build(), "-t", "commands");
                 var missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
                 var recovery = new BuildRecovery(Map.of("IMGTOOL", () ->
@@ -177,8 +193,8 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     refresh.add("-UZEPHYR_MODULES");
                     for (String tool : missing) refresh.add("-U" + tool);
                     stage[0] = "Refresh target configuration";
-                    runner.run(refresh, workspace, Duration.ofMinutes(15),
-                            monitor::isCanceled, log, environment).requireSuccess();
+                    requireConfigured(runner.run(refresh, workspace, Duration.ofMinutes(15),
+                            monitor::isCanceled, log, environment), kconfigFailure, stream::println);
                     missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
                 }
                 BuildArtifacts.verifyArchitecture(buildDirectory);
