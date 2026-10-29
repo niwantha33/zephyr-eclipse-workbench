@@ -31,6 +31,15 @@ public final class ConfigurationStudioTests {
             ok(snapshot.options().stream().anyMatch(o -> o.symbol().equals("LOG")
                     && "y".equals(o.effective())), "effective value from generated .config");
             ok(snapshot.devicetree().contains("Board"), "compiled devicetree available read-only");
+            var noop = ConfigurationStudioFiles.plan(app, build, "DEBUG_INFO", "y");
+            // The source has a single DEBUG_INFO assignment; selecting the same
+            // value must not reorder the file or create a misleading change.
+            ok(!noop.changed(), "same requested value is a true no-op");
+            var logPreview = ConfigurationStudioFiles.plan(app, build, "LOG", "n");
+            ok(logPreview.updated().startsWith("# Original notes\\r\\nCONFIG_LOG=n\\r\\n"),
+                    "modified value keeps original line position and CRLF");
+            ok(!logPreview.updated().contains("CONFIG_LOG=y"),
+                    "duplicate assignment removed safely");
             var remove = ConfigurationStudioFiles.plan(app, build, "DEBUG_INFO", null);
             ok(remove.updated().contains("# Original notes"), "comments retained");
             ok(!remove.updated().contains("CONFIG_DEBUG_INFO"), "problematic line removed from proposed diff");
