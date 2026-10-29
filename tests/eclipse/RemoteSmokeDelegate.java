@@ -2,6 +2,7 @@
 package zew.smoke;
 
 import org.eclipse.cdt.dsf.debug.service.IDsfDebugServicesFactory;
+import org.eclipse.cdt.dsf.debug.service.IStack;
 import org.eclipse.cdt.dsf.gdb.launching.GdbLaunchDelegate;
 import org.eclipse.cdt.dsf.gdb.service.*;
 import org.eclipse.cdt.dsf.gdb.service.command.GDBControl_7_12;
@@ -28,6 +29,11 @@ public final class RemoteSmokeDelegate extends GdbLaunchDelegate {
         // Linux also offers a second PTY MI channel. Use the stdio MI transport used on Windows
         // so the test relay can prove that creation notifications did not reach CDT.
         return new GdbDebugServicesFactory(version, configuration) {
+            @Override protected IStack createStackService(DsfSession session) {
+                // Exercise the SAME stack recovery used in production; do not
+                // silently accept missing source/function names from GDB.
+                return new io.github.niwantha33.zew.ui.ZephyrStack(session);
+            }
             @Override protected IMIBackend createBackendGDBService(DsfSession session, ILaunchConfiguration config) {
                 return new GDBBackend_7_12(session, config) {
                     @Override public boolean isFullGdbConsoleSupported() { return false; }
