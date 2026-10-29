@@ -99,6 +99,23 @@ public final class ConfigurationStudioTests {
             ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.category("GPIO").equals(
                     io.github.niwantha33.zew.core.ConfigurationStudioPresentation.DRIVERS),
                     "drivers category is correct");
+            var resources = io.github.niwantha33.zew.core.ConfigurationStudioResources.class;
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget("", true),
+                    "project root context menu available");
+            for (String file : new String[]{"prj.conf", ".project", "demo.prj",
+                    "app.overlay", "boards/custom.overlay"}) {
+                ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget(file, false),
+                        "project configuration context offered for " + file);
+            }
+            for (String file : new String[]{"main.c", "CMakeLists.txt", "README.md",
+                    "../unrelated.prj", "other.txt"}) {
+                ok(!io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget(file, false),
+                        "no irrelevant context menu for " + file);
+            }
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.projectSettings("prj.conf"),
+                    "right-click prj.conf focuses project choices");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.hardware("boards/custom.overlay"),
+                    "right-click overlay opens Devicetree tab");
             System.out.println("ConfigurationStudioTests PASS");
         } finally {
             try (var paths = Files.walk(root)) {
