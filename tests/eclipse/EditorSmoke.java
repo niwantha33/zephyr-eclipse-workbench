@@ -254,6 +254,7 @@ public final class EditorSmoke implements IApplication {
         check(Files.isRegularFile(fixture.resolve(".cproject")), "CDT settings persisted");
         workspace.save(true, new NullProgressMonitor());
         System.out.println("HEADLESS CDT EDITOR CHECKS PASSED");
+        if (Boolean.getBoolean("zew.nativeFlow")) RemoteDebugSmoke.run(fixture);
         return IApplication.EXIT_OK;
     }
     @Override public void stop() {}

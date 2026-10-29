@@ -130,8 +130,14 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_HOST, "127.0.0.1");
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_PORT, Integer.toString(ports.gdb()));
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUG_NAME, params.gdb());
-        working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_NON_STOP, false);
+        configureThreadTracking(working);
         return super.getLaunch(working.doSave(), mode);
+    }
+
+    /** RTOS threads may appear after reset without target-side creation notifications. */
+    static void configureThreadTracking(org.eclipse.debug.core.ILaunchConfigurationWorkingCopy working) {
+        working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_NON_STOP, false);
+        working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_UPDATE_THREADLIST_ON_SUSPEND, true);
     }
 
     @Override protected org.eclipse.cdt.dsf.debug.service.IDsfDebugServicesFactory newServiceFactory(
@@ -162,6 +168,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             builder.redirectErrorStream(true);
             var console = new MessageConsole("Zephyr DSF-GDB — "
                     + configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, ""), null);
+            console.setWaterMarks(256 * 1024, 1024 * 1024);
             ConsolePlugin.getDefault().getConsoleManager().addConsoles(new IConsole[] {console});
             ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
             if (io.github.niwantha33.zew.core.OpenOcdRegistry.providerFor(params.plan().board())
@@ -179,6 +186,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 info.println("CPU registers: select a suspended frame, then Window > Show View > Other > Debug > Registers. "
                         + "Named SoC peripherals require a matching vendor SVD and an SVD-capable debugger view; "
                         + "this Zephyr launch does not currently bind an SVD file.");
+                info.println("Zephyr thread tracking: refresh the native CDT thread list after every suspend. "
+                        + "Repetitive OpenOCD INFO register-polling lines are condensed; warnings and errors are preserved.");
             }
             Process server = builder.start();
             session = new ManagedServer(server, console.newMessageStream(), lease, launch, params.port(),
@@ -275,16 +284,18 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         }
         void startLogPump() {
             var reader = new Thread(() -> {
+                var output = new io.github.niwantha33.zew.core.DebugConsoleOutput();
                 try (var input = new BufferedReader(
                         new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = input.readLine()) != null) {
                         ownedChildren.addAll(process.descendants().toList());
                         diagnostics.accept(line);
-                        if (!closed.get()) stream.println(line);
+                        if (!closed.get()) for (String visible : output.accept(line, System.nanoTime())) stream.println(visible);
                         String advice = diagnostics.runtimeAdvice(line);
                         if (!closed.get() && !advice.isBlank()) stream.println("Workbench: " + advice);
                     }
+                    if (!closed.get()) for (String visible : output.flush()) stream.println(visible);
                 } catch (IOException ignored) { /* exit/terminate closes the stream */ }
             }, "zew-owned-debugserver-output");
             reader.setDaemon(true);
