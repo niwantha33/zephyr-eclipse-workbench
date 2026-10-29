@@ -49,7 +49,7 @@ public class BuildReliabilityTests {
                     "debug-info diagnostic offers a supported separate debug profile");
             kconfigFailure.accept(invalidConfig);
             kconfigFailure.accept(invalidConfig);
-            check(kconfigFailure.description().split("CONFIG_DEBUG_INFO", -1).length == 2,
+            check(kconfigFailure.description().split("C:/Zephyr Project/demo/prj.conf:2: CONFIG_DEBUG_INFO", -1).length == 2,
                     "duplicate warnings are reported once");
             check(KconfigFailure.parse("/tmp/app/boards/debug.conf:25: warning: attempt to assign "
                     + "the value 'y' to the undefined symbol MISSING_MODULE").isPresent(),
