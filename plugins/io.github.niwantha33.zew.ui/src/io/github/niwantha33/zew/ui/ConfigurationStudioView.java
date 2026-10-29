@@ -51,6 +51,7 @@ import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains.Domain;
 import io.github.niwantha33.zew.core.KconfigSourceHelp;
+import io.github.niwantha33.zew.core.KconfigInspector;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles.Snapshot;
 
@@ -86,6 +87,10 @@ public final class ConfigurationStudioView extends ViewPart {
     private final java.util.concurrent.atomic.AtomicInteger helpGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ConcurrentMap<String, String> definitionCache =
             new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentMap<String, KconfigInspector.Result> kconfigCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private Path inspectionBuild;
+    private java.util.Properties inspectionSettings;
 
     @Override public void createPartControl(Composite parent) {
         var outer = new Composite(parent, SWT.NONE);
@@ -433,6 +438,9 @@ public final class ConfigurationStudioView extends ViewPart {
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         definitionCache.clear();
+        kconfigCache.clear();
+        inspectionBuild = null;
+        inspectionSettings = null;
         if (options == null || options.isDisposed()) return;
         if (project == null) {
             hasGeneratedConfiguration = false;
@@ -456,6 +464,8 @@ public final class ConfigurationStudioView extends ViewPart {
                 board = settings.getProperty("board", "No target selected");
                 profile = settings.getProperty("zew.buildConfiguration", "default");
                 build = ProjectContext.buildDirectory(project, settings);
+                inspectionBuild = build;
+                inspectionSettings = settings;
             } catch (Exception notConfigured) {
                 // Project configuration is still useful if tool installation or
                 // board selection fails. Source repair must not require a build.
@@ -623,9 +633,12 @@ public final class ConfigurationStudioView extends ViewPart {
         if (helpJob != null) helpJob.cancel();
         Option o = selected();
         boolean togglable = ConfigurationStudioPresentation.isToggle(o);
+        KconfigInspector.Result checked = o == null ? null : kconfigCache.get(o.symbol());
         if (enableButton != null && !enableButton.isDisposed()) {
-            enableButton.setEnabled(togglable && !"y".equals(o.requested()));
-            disableButton.setEnabled(togglable && !"n".equals(o.requested()));
+            enableButton.setEnabled(togglable && !"y".equals(o.requested())
+                    && (checked == null || !checked.available() || checked.details().canRequest("y")));
+            disableButton.setEnabled(togglable && !"n".equals(o.requested())
+                    && (checked == null || !checked.available() || checked.details().canRequest("n")));
             String displayed = o == null ? null
                     : o.requested() != null ? o.requested() : o.effective();
             enableButton.setSelection(togglable && "y".equals(displayed));
@@ -679,9 +692,13 @@ public final class ConfigurationStudioView extends ViewPart {
                         + " Examine Zephyr's Kconfig diagnostics before changing it." : "")
                 + "\n\nEnable / Disable writes an explicit prj.conf request. The effective "
                 + "value is determined by Zephyr during the next configuration/build.";
+        if (checked != null)
+            base += checked.available() ? checked.details().describe()
+                    : "\n\nKconfiglib inspection unavailable: " + checked.unavailable();
         help.setText(base);
-        // Source text is a supplementary explanation, not a Kconfig dependency
-        // evaluation. Run filesystem searches off the SWT UI thread.
+        // The source declaration is supplementary; dependency/visibility data,
+        // when available, comes from the selected build's actual Kconfiglib.
+        // Both operations run off the SWT UI thread.
         if (project == null) return;
         final int generation = helpGeneration.incrementAndGet();
         final org.eclipse.swt.widgets.Display display = help.getDisplay();
@@ -689,7 +706,10 @@ public final class ConfigurationStudioView extends ViewPart {
             Path workspace = Path.of(ProjectContext.settings(project).getProperty("workspace"));
             String key = workspace + "#" + o.symbol();
             String cached = definitionCache.get(key);
-            if (cached != null) { help.setText(base + cached); return; }
+            if (cached != null && checked != null) { help.setText(base + cached); return; }
+            final String sourceBase = base;
+            final Path selectedBuild = inspectionBuild;
+            final java.util.Properties selectedSettings = inspectionSettings;
             Job lookup = new Job("Explain CONFIG_" + o.symbol()) {
                 @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
@@ -706,11 +726,38 @@ public final class ConfigurationStudioView extends ViewPart {
                         result = "\n\nSource explanation unavailable: " + error.getMessage();
                     }
                     definitionCache.putIfAbsent(key, result);
-                    String sourceText = result;
+                    KconfigInspector.Result metadata = checked;
+                    if (metadata == null && selectedBuild != null && selectedSettings != null) {
+                        try {
+                            var python = Path.of(selectedSettings.getProperty("python"));
+                            var ninja = Path.of(selectedSettings.getProperty("tools.ninja"));
+                            metadata = KconfigInspector.inspect(python, ninja, selectedBuild,
+                                    o.symbol(), ConfigurationStudioView.class.getResourceAsStream(
+                                            "/scripts/kconfig_inspect.py"));
+                        } catch (Exception unavailable) {
+                            metadata = KconfigInspector.Result.missing(
+                                    "The selected build's Kconfig environment is not available.");
+                        }
+                        kconfigCache.putIfAbsent(o.symbol(), metadata);
+                    }
+                    final KconfigInspector.Result inspected = metadata;
+                    final String sourceText = result;
                     if (!display.isDisposed()) display.asyncExec(() -> {
                         if (!help.isDisposed() && generation == helpGeneration.get()
-                                && selected() != null && o.symbol().equals(selected().symbol()))
-                            help.setText(base + sourceText);
+                                && selected() != null && o.symbol().equals(selected().symbol())) {
+                            help.setText(sourceBase + sourceText + (
+                                    inspected == null || checked != null ? ""
+                                    : inspected.available() ? inspected.details().describe()
+                                        : "\n\nKconfiglib inspection unavailable: " + inspected.unavailable()));
+                            if (inspected != null && inspected.available()) {
+                                // Update the existing inline control only when an
+                                // independently evaluated visible prompt allows it.
+                                enableButton.setEnabled(togglable && !"y".equals(o.requested())
+                                        && inspected.details().canRequest("y"));
+                                disableButton.setEnabled(togglable && !"n".equals(o.requested())
+                                        && inspected.details().canRequest("n"));
+                            }
+                        }
                     });
                     return Status.OK_STATUS;
                 }
@@ -730,6 +777,17 @@ public final class ConfigurationStudioView extends ViewPart {
             MessageDialog.openWarning(getSite().getShell(), "Cannot change as a switch",
                     "This option is not a resolved on/off setting. "
                     + "Inspect its Kconfig definition or use Edit value for non-switch types.");
+            return;
+        }
+        var evaluated = kconfigCache.get(current.symbol());
+        if (evaluated != null && evaluated.available()
+                && !evaluated.details().canRequest(value)) {
+            MessageDialog.openWarning(getSite().getShell(), "Blocked Kconfig request",
+                    "CONFIG_" + current.symbol() + " cannot be set to " + value
+                    + " in the last built Kconfig state.\n\nDependency: "
+                    + evaluated.details().dependencies()
+                    + "\nExpression result: " + evaluated.details().dependencyState()
+                    + "\n\nResolve the prerequisites and rebuild before changing this setting.");
             return;
         }
         try {

@@ -5,6 +5,37 @@ Select an imported project in Project Explorer and open the command. This is
 a native Eclipse SWT/JFace view; no secondary browser, VS Code, tkinter or
 unmanaged Python installation is required.
 
+## Kconfiglib dependency inspector (Step 05)
+
+When a **configured Ninja build** is selected, the feature inspector can use
+the *same* generated Kconfig environment that Zephyr's `guiconfig` target
+uses. The packaged, read-only `kconfig_inspect.py` resource retrieves the
+Ninja command with `ninja -t commands guiconfig`, reads its generated
+Kconfig environment variables and root file **without executing the target**,
+then loads `zephyr/.config` through the selected Zephyr checkout's
+`scripts/kconfig/kconfiglib.py`. No Kconfig input, project source or build
+artifact is modified by inspection.
+
+The **Explanation & dependencies** tab then shows the Kconfiglib symbol type,
+effective value, prompt, direct dependency expression and evaluated result,
+visibility, currently assignable values, `select`/`imply` relationships,
+definitions and upstream help. If a resolved boolean is not assignable to
+`y`/`n` in the last built state, the corresponding inline toggle is
+disabled and the save handler rejects the blocked request even if clicked by
+a keyboard/accessibility action.
+
+When the selected build has no Kconfig Ninja target, the toolchain cannot
+be reconstructed, a symbol is missing, or a build is stale, this is **clearly
+marked as unavailable**; the normal Kconfig source declaration viewer and
+backup/review workflow remain intact. A disabled setting is **not**
+automatically enabled by changing its dependencies. Kconfiglib results
+represent the last successful build, so changes to `prj.conf` still require
+rebuilding before the inspector can show updated dependency states.
+
+This is the first evaluator-backed dependency inspection stage. A complete
+interactive Kconfig dependency graph, transitive change planning, graphical
+pinmux and board-specific peripheral wizard remain later roadmap items.
+
 ## Peripheral workspaces and inline controls (Step 02–04)
 
 The **Features** workspace now contains separate, native SWT peripheral tabs:
