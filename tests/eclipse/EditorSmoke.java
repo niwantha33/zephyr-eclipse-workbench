@@ -46,6 +46,31 @@ public final class EditorSmoke implements IApplication {
         check(!tester.test(workspace.getRoot().getProject("UnmanagedSmoke"), "isConfigurationStudioTarget",
                 new Object[0], Boolean.TRUE),
                 "Configuration Studio action is excluded from non-Zephyr projects");
+        Path otherLocation = fixture.getParent().resolve("foreign-vendor-zephyr-app");
+        Files.createDirectories(otherLocation);
+        Files.copy(fixture.resolve("CMakeLists.txt"), otherLocation.resolve("CMakeLists.txt"),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        Files.copy(fixture.resolve("prj.conf"), otherLocation.resolve("prj.conf"),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        var external = workspace.getRoot().getProject("VendorOwnedZephyrApp");
+        if (!external.exists()) {
+            var description = workspace.newProjectDescription(external.getName());
+            description.setLocationURI(otherLocation.toUri());
+            external.create(description, null);
+            external.open(null);
+        }
+        var foreignDescription = external.getDescription();
+        var foreignBuilder = foreignDescription.newCommand();
+        foreignBuilder.setBuilderName("com.vendor.otherBuilder");
+        foreignDescription.setBuildSpec(new ICommand[] {foreignBuilder});
+        external.setDescription(foreignDescription, null);
+        external.refreshLocal(IResource.DEPTH_INFINITE, null);
+        check(tester.test(external.getFile("prj.conf"), "isConfigurationStudioTarget",
+                new Object[0], Boolean.TRUE),
+                "right-click source configuration is available without replacing vendor build ownership");
+        check(!(Boolean) ui.loadClass("io.github.niwantha33.zew.ui.ZephyrProjectLifecycle")
+                .getMethod("supports", IProject.class).invoke(null, external),
+                "foreign Eclipse builder is not taken over for West build");
         var popupVisibility = org.eclipse.core.expressions.ExpressionConverter.getDefault().perform(
                 studioMenus.get(0).getChildren("visibleWhen")[0].getChildren()[0]);
         var popupContext = new org.eclipse.core.expressions.EvaluationContext(null, project.getFile("prj.conf"));
