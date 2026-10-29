@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
     run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java', ROOT / 'tests/eclipse/ProjectImportSmoke.java', ROOT / 'tests/eclipse/StandardProjectFlowSmoke.java', ROOT / 'tests/eclipse/WorkbenchSmoke.java', ROOT / 'tests/eclipse/CoreBuildCompatibilitySmoke.java', ROOT / 'tests/eclipse/OpenOcdMetadataSmoke.java', ROOT / 'tests/eclipse/RemoteSmokeDelegate.java', ROOT / 'tests/eclipse/RemoteDebugSmoke.java'])
     jar = temporary / 'editor-smoke.jar'
     with zipfile.ZipFile(jar, 'w') as z:
-        z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nBundle-ManifestVersion: 2\nBundle-SymbolicName: zew.editor.smoke;singleton:=true\nBundle-Version: 1.0.0\nRequire-Bundle: org.eclipse.equinox.app,org.eclipse.core.runtime,org.eclipse.core.resources,org.eclipse.core.expressions,org.eclipse.cdt.core,org.eclipse.debug.ui,org.eclipse.jface,org.eclipse.ui,org.eclipse.ui.ide,org.eclipse.swt,org.eclipse.launchbar.core,org.eclipse.cdt.debug.core,org.eclipse.cdt.dsf,org.eclipse.cdt.dsf.gdb,org.eclipse.debug.core,io.github.niwantha33.zew.core\n\n')
+        z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nBundle-ManifestVersion: 2\nBundle-SymbolicName: zew.editor.smoke;singleton:=true\nBundle-Version: 1.0.0\nRequire-Bundle: org.eclipse.equinox.app,org.eclipse.core.runtime,org.eclipse.core.resources,org.eclipse.core.expressions,org.eclipse.cdt.core,org.eclipse.debug.ui,org.eclipse.jface,org.eclipse.ui,org.eclipse.ui.ide,org.eclipse.swt,org.eclipse.launchbar.core,org.eclipse.cdt.debug.core,org.eclipse.cdt.dsf,org.eclipse.cdt.dsf.gdb,org.eclipse.debug.core,org.eclipse.ui.console,io.github.niwantha33.zew.core\n\n')
         z.writestr('plugin.xml', '<plugin><extension point="org.eclipse.debug.core.launchConfigurationTypes"><launchConfigurationType id="zew.editor.smoke.remote" name="Test-only remote GDB" modes="debug" delegate="zew.smoke.RemoteSmokeDelegate" sourceLocatorId="org.eclipse.cdt.debug.core.sourceLocator" sourcePathComputerId="org.eclipse.cdt.debug.core.sourcePathComputer"/></extension><extension point="org.eclipse.core.runtime.applications" id="run"><application><run class="zew.smoke.EditorSmoke"/></application></extension><extension point="org.eclipse.core.runtime.applications" id="workbench"><application><run class="zew.smoke.WorkbenchSmoke"/></application></extension></plugin>')
         for path in classes.rglob('*.class'): z.write(path, path.relative_to(classes).as_posix())
     config = eclipse / 'configuration/config.ini'; original = config.read_text()
@@ -113,7 +113,8 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
                             if server.poll() is not None or time.monotonic() >= deadline:
                                 raise RuntimeError(server_log.read_text(errors='replace'))
                             time.sleep(0.05)
-                        properties = [f'-Dzew.remote.gdb={wrapper}', f'-Dzew.remote.port={port}']
+                        properties = [f'-Dzew.remote.gdb={wrapper}', f'-Dzew.remote.port={port}',
+                                      f'-Dzew.remote.terminateRunning={str(bool(attempt)).lower()}']
                     try:
                         run([jdk / 'bin/java', *properties, '-jar', launcher, '-nosplash', '-consolelog', '-clean', '-data', temporary / 'workspace', '-application', 'zew.editor.smoke.workbench' if args.native_workbench else 'zew.editor.smoke.run', fixture, 'verify' if attempt else 'apply'])
                     except subprocess.CalledProcessError:
