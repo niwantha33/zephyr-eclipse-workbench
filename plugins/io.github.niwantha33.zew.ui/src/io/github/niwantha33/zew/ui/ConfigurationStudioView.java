@@ -178,11 +178,14 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void refreshOptions() {
         if (options == null || options.isDisposed()) return;
-        options.removeAll();
-        if (snapshot == null) return;
-        String term = filter.toUpperCase(java.util.Locale.ROOT);
-        for (Option option : snapshot.options().stream()
-                .sorted(Comparator.comparing(Option::symbol)).toList()) {
+        options.setRedraw(false);
+        try {
+            options.removeAll();
+            if (snapshot == null) return;
+            String term = filter.toUpperCase(java.util.Locale.ROOT);
+            int rendered = 0;
+            for (Option option : snapshot.options().stream()
+                    .sorted(Comparator.comparing(Option::symbol)).toList()) {
             if (!option.symbol().contains(term)
                     && !(option.requested() != null && option.requested().toUpperCase(java.util.Locale.ROOT).contains(term)))
                 continue;
@@ -191,9 +194,13 @@ public final class ConfigurationStudioView extends ViewPart {
                     option.unresolved() ? "(not in generated .config)" : option.effective(),
                     option.requested() == null ? "(default/inherited)" : option.requested()});
             item.setData(option);
+            if (++rendered >= 750) break; // Search all symbols; render a bounded page.
+            }
+            for (int i = 0; i < options.getColumnCount(); i++) options.getColumn(i).pack();
+            if (options.getItemCount() > 0) options.select(0);
+        } finally {
+            options.setRedraw(true);
         }
-        for (int i = 0; i < options.getColumnCount(); i++) options.getColumn(i).pack();
-        if (options.getItemCount() > 0) options.select(0);
         describeSelected();
     }
 
