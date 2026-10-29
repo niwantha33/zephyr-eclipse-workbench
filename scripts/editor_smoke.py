@@ -99,6 +99,7 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
                             raise RuntimeError('Native debug regression requires test-only gdb and gdbserver')
                         os.environ['ZEW_REAL_GDB'] = gdb
                         os.environ['ZEW_THREAD_EVENT_LOG'] = str(Path(debug_directory) / 'withheld-events.log')
+                        os.environ['ZEW_MI_TRACE_LOG'] = str(Path(debug_directory) / 'gdb-mi-trace.log')
                         wrapper = Path(debug_directory) / 'gdb-relay'
                         shutil.copyfile(ROOT / 'tests/tools/gdb_without_thread_events.py', wrapper)
                         wrapper.chmod(0o755)
@@ -113,7 +114,15 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
                                 raise RuntimeError(server_log.read_text(errors='replace'))
                             time.sleep(0.05)
                         properties = [f'-Dzew.remote.gdb={wrapper}', f'-Dzew.remote.port={port}']
-                    run([jdk / 'bin/java', *properties, '-jar', launcher, '-nosplash', '-consolelog', '-clean', '-data', temporary / 'workspace', '-application', 'zew.editor.smoke.workbench' if args.native_workbench else 'zew.editor.smoke.run', fixture, 'verify' if attempt else 'apply'])
+                    try:
+                        run([jdk / 'bin/java', *properties, '-jar', launcher, '-nosplash', '-consolelog', '-clean', '-data', temporary / 'workspace', '-application', 'zew.editor.smoke.workbench' if args.native_workbench else 'zew.editor.smoke.run', fixture, 'verify' if attempt else 'apply'])
+                    except subprocess.CalledProcessError:
+                        trace = Path(debug_directory) / 'gdb-mi-trace.log'
+                        if trace.is_file():
+                            print('=== Test-only GDB MI stack/error trace (last 100 records) ===', file=sys.stderr)
+                            for row in trace.read_text(errors='replace').splitlines()[-100:]:
+                                print(row[:500], file=sys.stderr)
+                        raise
                 finally:
                     if server is not None:
                         if server.poll() is None:
