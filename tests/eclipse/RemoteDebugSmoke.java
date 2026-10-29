@@ -50,13 +50,7 @@ public final class RemoteDebugSmoke {
         String port = System.getProperty("zew.remote.port", "");
         if (port.isBlank()) throw new AssertionError("Native smoke requires an owned GDB server");
         var manager = DebugPlugin.getDefault().getLaunchManager();
-        // Use the real, installed Zephyr launch type. A dynamically injected
-        // test-only bundle does not reliably register additional launch types
-        // when Eclipse's launch manager has already initialised its registry.
-        // The test's DSF delegate below is invoked directly; the production
-        // type's built-in launch delegate must not attempt to flash hardware.
-        var type = manager.getLaunchConfigurationType("io.github.niwantha33.zew.ui.launchType");
-        check(type != null, "installed Zephyr launch configuration type registered");
+        var type = manager.getLaunchConfigurationType("zew.editor.smoke.remote");
         var working = type.newInstance(null, manager.generateLaunchConfigurationName("Remote thread reliability smoke"));
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROJECT_NAME, "HelloZephyrEditorSmoke");
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROGRAM_NAME, fixture.resolve("remote-threads").toString());
@@ -74,14 +68,7 @@ public final class RemoteDebugSmoke {
         GdbLaunch launch = null;
         DsfServicesTracker services = null;
         try {
-            // Do not use configuration.launch(): that routes through Zephyr's
-            // production debug delegate, which owns real target setup/flash.
-            // Exercise the same DSF backend with an owned local gdbserver.
-            var delegate = new RemoteSmokeDelegate();
-            launch = (GdbLaunch) delegate.getLaunch(configuration, ILaunchManager.DEBUG_MODE);
-            manager.addLaunch(launch);
-            delegate.launch(launch.getLaunchConfiguration(), ILaunchManager.DEBUG_MODE,
-                    launch, new NullProgressMonitor());
+            launch = (GdbLaunch) configuration.launch("debug", new NullProgressMonitor());
             check(launch.getLaunchConfiguration().getAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_UPDATE_THREADLIST_ON_SUSPEND, false),
                     "saved launch now refreshes threads at every halt");
             var session = launch.getSession();
