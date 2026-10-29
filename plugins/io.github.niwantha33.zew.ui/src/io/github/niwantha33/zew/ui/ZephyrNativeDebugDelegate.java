@@ -44,6 +44,7 @@ import org.eclipse.ui.console.MessageConsoleStream;
 public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
     public static final String RUNNER = Activator.ID + ".launch.debugRunner";
     public static final String PORT = Activator.ID + ".launch.gdbPort";
+    private static final String RESOLVED_RUNNER = RUNNER + ".resolved";
     private static final Pattern DEFAULT_DEBUG_RUNNER =
             Pattern.compile("(?m)^debug-runner:\\s*([A-Za-z0-9_+.-]+)\\s*$");
     private static final Pattern CONFIG_GDB =
@@ -117,7 +118,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         working.setAttribute(TCL_PORT, ports.tcl());
         working.setAttribute(TELNET_PORT, ports.telnet());
         var params = prepare(working);
-        working.setAttribute(RUNNER, params.runner());
+        working.setAttribute(RESOLVED_RUNNER, params.runner());
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROJECT_NAME,
                 configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, ""));
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROGRAM_NAME, params.elf().toString());
@@ -136,7 +137,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
     @Override protected org.eclipse.cdt.dsf.debug.service.IDsfDebugServicesFactory newServiceFactory(
             ILaunchConfiguration configuration, String version) {
         try {
-            if ("openocd".equals(configuration.getAttribute(RUNNER, "")))
+            if ("openocd".equals(configuration.getAttribute(RESOLVED_RUNNER, "")))
                 return new ZephyrDebugServicesFactory(version, configuration);
         } catch (CoreException error) { Activator.getDefault().getLog().log(error.getStatus()); }
         return super.newServiceFactory(configuration, version);

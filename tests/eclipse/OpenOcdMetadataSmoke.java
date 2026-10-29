@@ -25,8 +25,10 @@ public final class OpenOcdMetadataSmoke {
         }
         var commands = ui.loadClass("io.github.niwantha33.zew.ui.ZephyrDebugServicesFactory$OpenOcdCommands").getConstructor().newInstance();
         var context = org.eclipse.cdt.dsf.datamodel.IDMContext.class;
+        var controlContext = ui.loadClass("org.eclipse.cdt.dsf.mi.service.command.MIControlDMContext")
+                .getConstructor(String.class, String.class).newInstance("zew-smoke", "owned-openocd");
         var command = commands.getClass().getMethod("createMITargetSelect", context, String.class, String.class, boolean.class)
-                .invoke(commands, null, "127.0.0.1", "3333", false);
+                .invoke(commands, controlContext, "127.0.0.1", "3333", false);
         String text = (String) command.getClass().getMethod("constructCommand").invoke(command);
         if (!text.contains("extended-remote") || !text.contains("127.0.0.1:3333")) throw new AssertionError(text);
         System.out.println("PASS thread metadata: native DSF OpenOCD connection uses extended-remote");
