@@ -235,9 +235,15 @@ public final class EditorSmoke implements IApplication {
         check("201703L".equals(cpp.getDefinedSymbols().get("__cplusplus")), "C++17 compiler mode visible");
         check(!cpp.getDefinedSymbols().containsKey("__EXCEPTIONS") && !cpp.getDefinedSymbols().containsKey("__GXX_RTTI"), "C++ exception/RTTI compiler flags preserved");
         check("11".equals(cpp.getDefinedSymbols().get("CPP_ONLY")) && !info.getDefinedSymbols().containsKey("CPP_ONLY"), "per-file C/C++ macros remain separate");
+        // CDT can finish its queued Core Build/CDT configuration transitions
+        // after scanner settings are applied. Explicitly refresh and reindex
+        // the real source project before asserting persisted navigation data.
+        project.refreshLocal(IResource.DEPTH_INFINITE, new NullProgressMonitor());
         var manager = CCorePlugin.getIndexManager();
+        var cProject = CoreModel.getDefault().create(project);
+        manager.reindex(cProject);
         check(manager.joinIndexer(30000, new NullProgressMonitor()), "indexer completed");
-        var index = manager.getIndex(CoreModel.getDefault().create(project)); index.acquireReadLock();
+        var index = manager.getIndex(cProject); index.acquireReadLock();
         try {
             check(index.findBindings(Pattern.compile("k_sleep"), false, IndexFilter.ALL, new NullProgressMonitor()).length > 0, "header function indexed for symbol navigation");
             check(index.findBindings(Pattern.compile("cpp_user"), false, IndexFilter.ALL, new NullProgressMonitor()).length > 0, "C++ source indexed");
