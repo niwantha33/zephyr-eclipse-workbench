@@ -25,16 +25,18 @@ public final class ConfigurationStudioHandler extends AbstractHandler {
         }
         boolean devicetree = false;
         boolean focusOverrides = false;
+        String overlayPath = null;
         if (selection instanceof IStructuredSelection items && items.size() == 1
                 && items.getFirstElement() instanceof IFile file) {
-            devicetree = file.getName().endsWith(".overlay");
-            focusOverrides = file.getProjectRelativePath().toPortableString().equals("prj.conf")
-                    || file.getName().endsWith(".prj");
+            String relative = file.getProjectRelativePath().toPortableString();
+            devicetree = io.github.niwantha33.zew.core.ConfigurationStudioResources.hardware(relative);
+            focusOverrides = io.github.niwantha33.zew.core.ConfigurationStudioResources.projectSettings(relative);
+            if (devicetree) overlayPath = relative;
         }
         try {
             var page = HandlerUtil.getActiveWorkbenchWindowChecked(event).getActivePage();
             var view = (ConfigurationStudioView) page.showView(ConfigurationStudioView.ID);
-            view.displayProject(project, devicetree);
+            view.displayProject(project, devicetree, overlayPath);
             if (focusOverrides) view.focusProjectChanges();
         } catch (Exception error) {
             throw new ExecutionException("Could not open Zephyr Configuration Studio.", error);
