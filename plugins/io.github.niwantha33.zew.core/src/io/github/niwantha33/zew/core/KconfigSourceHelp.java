@@ -23,6 +23,11 @@ public final class KconfigSourceHelp {
     public record Definition(Path file, int line, String sourceExcerpt) {}
 
     public static Definition firstDefinition(Path workspace, String symbol) throws IOException {
+        return firstDefinition(workspace, symbol, () -> false);
+    }
+
+    public static Definition firstDefinition(Path workspace, String symbol,
+            java.util.function.BooleanSupplier cancelled) throws IOException {
         if (symbol == null || !symbol.matches("[A-Z0-9_]{1,160}"))
             throw new IOException("Invalid Kconfig symbol.");
         if (!Files.isDirectory(workspace)) return null;
@@ -32,11 +37,13 @@ public final class KconfigSourceHelp {
         final int[] visited = {0};
         Files.walkFileTree(workspace, new SimpleFileVisitor<Path>() {
             @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                if (cancelled.getAsBoolean()) return FileVisitResult.TERMINATE;
                 if (!dir.equals(workspace) && (SKIP.contains(dir.getFileName().toString())
                         || Files.isSymbolicLink(dir))) return FileVisitResult.SKIP_SUBTREE;
                 return visited[0] > 12000 ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
             }
             @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                if (cancelled.getAsBoolean()) return FileVisitResult.TERMINATE;
                 String name = file.getFileName().toString();
                 if (!name.equals("Kconfig") && !name.startsWith("Kconfig.")) return FileVisitResult.CONTINUE;
                 if (++visited[0] > 12000) return FileVisitResult.TERMINATE;
