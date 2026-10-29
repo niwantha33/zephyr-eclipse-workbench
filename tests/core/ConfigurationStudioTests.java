@@ -31,23 +31,23 @@ public final class ConfigurationStudioTests {
             ok(snapshot.options().stream().anyMatch(o -> o.symbol().equals("LOG")
                     && "y".equals(o.effective())), "effective value from generated .config");
             ok(snapshot.devicetree().contains("Board"), "compiled devicetree available read-only");
-            var remove = ConfigurationStudioFiles.plan(app, "DEBUG_INFO", null);
+            var remove = ConfigurationStudioFiles.plan(app, build, "DEBUG_INFO", null);
             ok(remove.updated().contains("# Original notes"), "comments retained");
             ok(!remove.updated().contains("CONFIG_DEBUG_INFO"), "problematic line removed from proposed diff");
             var backup = ConfigurationStudioFiles.commit(app, remove);
             ok(Files.readString(backup).contains("CONFIG_DEBUG_INFO=y"), "original file backed up");
             ok(!Files.readString(app.resolve("prj.conf")).contains("CONFIG_DEBUG_INFO"), "repair persisted");
             var before = Files.readString(app.resolve("prj.conf"));
-            var changes = ConfigurationStudioFiles.plan(app, "LOG", "n");
+            var changes = ConfigurationStudioFiles.plan(app, build, "LOG", "n");
             Files.writeString(app.resolve("prj.conf"), before + "# external editor change\r\n");
             rejects(() -> ConfigurationStudioFiles.commit(app, changes));
             ok(Files.readString(app.resolve("prj.conf")).contains("external editor change"),
                     "optimistic locking preserves concurrent edits");
             Files.writeString(app.resolve("prj.conf"), before);
-            rejects(() -> ConfigurationStudioFiles.plan(app, "NOT_A_SYMBOL", "y"));
-            rejects(() -> ConfigurationStudioFiles.plan(app, "LOG", "y\nCONFIG_INJECT=y"));
-            rejects(() -> ConfigurationStudioFiles.plan(app, "../CONFIG_LOG", "y"));
-            var changed = ConfigurationStudioFiles.plan(app, "LOG", "n");
+            rejects(() -> ConfigurationStudioFiles.plan(app, build, "NOT_A_SYMBOL", "y"));
+            rejects(() -> ConfigurationStudioFiles.plan(app, build, "LOG", "y\nCONFIG_INJECT=y"));
+            rejects(() -> ConfigurationStudioFiles.plan(app, build, "../CONFIG_LOG", "y"));
+            var changed = ConfigurationStudioFiles.plan(app, build, "LOG", "n");
             ok(changed.updated().contains("CONFIG_LOG=n"), "valid effective option editable");
             ok(!changed.updated().contains("CONFIG_LOG=y"), "duplicate requested lines replaced");
             ConfigurationStudioFiles.commit(app, changed);
