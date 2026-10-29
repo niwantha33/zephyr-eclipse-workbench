@@ -2,6 +2,13 @@
 <?eclipse version="3.4"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <plugin>
+  <extension point="org.eclipse.core.resources.natures" id="zephyrNature" name="Zephyr Project">
+    <runtime><run class="io.github.niwantha33.zew.ui.ZephyrProjectNature"/></runtime>
+  </extension>
+  <extension point="org.eclipse.cdt.core.buildConfigProvider">
+    <provider id="io.github.niwantha33.zew.ui.westProvider" natureId="io.github.niwantha33.zew.ui.zephyrNature"
+        class="io.github.niwantha33.zew.ui.ZephyrCoreBuildProvider"/>
+  </extension>
   <extension point="org.eclipse.ui.ide.projectConfigurators">
     <projectConfigurator class="io.github.niwantha33.zew.ui.ZephyrProjectConfigurator" label="Zephyr Application"/>
   </extension>

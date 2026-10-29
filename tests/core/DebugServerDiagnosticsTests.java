@@ -64,6 +64,22 @@ public final class DebugServerDiagnosticsTests {
         yes(text.length() < 3700, "Large OpenOCD output must remain bounded");
         yes(text.contains("line-999"), "Capture must keep last available evidence");
         yes(!text.contains("line-10:"), "Drop oldest lines");
+        var metadata = new DebugServerDiagnostics(3333, "openocd");
+        String sizeError = "Error: Only size_t of 4 bytes are supported";
+        metadata.accept("Error: No symbols for Zephyr");
+        yes(metadata.runtimeAdvice("Error: No symbols for Zephyr").isEmpty(),
+                "Initial symbol negotiation does not diagnose a persistent failure");
+        for (int i = 0; i < 2; i++) { metadata.accept(sizeError); yes(metadata.runtimeAdvice(sizeError).isEmpty(), "Wait for repeated metadata errors"); }
+        metadata.accept(sizeError);
+        String advice = metadata.runtimeAdvice(sizeError);
+        yes(advice.contains("flashed image matches") && advice.contains("CONFIG_DEBUG_THREAD_INFO=y"), "Explains image and metadata checks");
+        yes(advice.contains("does not prove") && advice.contains("No automatic flash"), "No invented MCU ABI or automatic programming");
+        yes(metadata.runtimeAdvice(sizeError).isEmpty(), "Thread diagnosis emitted once");
+        String usb = "The module for runner \"rtsflash\" could not be imported (No module named 'usb').";
+        var selectedOpenocd = new DebugServerDiagnostics(3333, "openocd");
+        yes(selectedOpenocd.runtimeAdvice(usb).contains("unused rtsflash"), "Distinguish unrelated import warning from OpenOCD probe access");
+        yes(selectedOpenocd.runtimeAdvice(usb).isEmpty(), "Import advice emitted once");
+        yes(new DebugServerDiagnostics(3333, "rtsflash").runtimeAdvice(usb).isEmpty(), "Do not label the selected runner unused");
         System.out.println("DebugServerDiagnosticsTests PASS: " + checks + " checks");
     }
 }

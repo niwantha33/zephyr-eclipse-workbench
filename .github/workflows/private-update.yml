@@ -103,6 +103,22 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress "-DforceContextQualifier=${ZEW_RELEASE_QUALIFIER}" clean verify
       - name: Verify packaged p2 site before publication
         run: python3 scripts/verify_site.py
+      - name: Exercise native Eclipse import, export and CDT configuration selection
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zew-eclipse"
+          curl --fail --location --retry 3 \
+            https://download.eclipse.org/eclipse/downloads/drops4/R-4.41-202608281142/eclipse-platform-4.41-linux-gtk-x86_64.tar.gz \
+            -o "$RUNNER_TEMP/eclipse-platform.tar.gz"
+          tar -xzf "$RUNNER_TEMP/eclipse-platform.tar.gz" -C "$RUNNER_TEMP/zew-eclipse"
+          ECLIPSE="$RUNNER_TEMP/zew-eclipse/eclipse"
+          LAUNCHERS=("$ECLIPSE"/plugins/org.eclipse.equinox.launcher_*.jar)
+          java -jar "${LAUNCHERS[0]}" -nosplash -application org.eclipse.equinox.p2.director \
+            -destination "$ECLIPSE" -profile SDKProfile -roaming \
+            -repository https://download.eclipse.org/eclipse/updates/4.41/R-4.41-202608281142/,https://download.eclipse.org/tools/cdt/releases/12.6/cdt-12.6.0/,https://download.eclipse.org/releases/2026-09/202609091000/ \
+            -installIU org.eclipse.cdt.core,org.eclipse.cdt.ui,org.eclipse.cdt.debug.core,org.eclipse.cdt.dsf.gdb,org.eclipse.cdt.dsf.gdb.ui,org.eclipse.cdt.cmake.ui,org.eclipse.cdt.build.gcc.core
+          xvfb-run -a python3 scripts/editor_smoke.py --native-workbench \
+            --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
       - name: Publish release and channel as one fast-forward operation
         shell: bash
         run: |

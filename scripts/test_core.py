@@ -43,3 +43,5 @@ subprocess.run([tool('java'), '-cp', str(out), 'OpenOcdRegistryTests'], check=Tr
 
 subprocess.run([tool('java'), '-cp', str(out), 'DebugPortsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DebugBackendTests'], check=True, cwd=root, timeout=90)
+
+subprocess.run([tool('java'), '-cp', str(out), 'DemoConfigurationCompatibilityTests'], check=True, cwd=root, timeout=90)

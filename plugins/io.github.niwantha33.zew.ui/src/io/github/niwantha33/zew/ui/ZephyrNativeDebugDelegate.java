@@ -161,6 +161,9 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 info.println("Debug endpoints: GDB=" + params.port()
                         + ", TCL=" + configuration.getAttribute(TCL_PORT, 6333)
                         + ", Telnet=" + configuration.getAttribute(TELNET_PORT, 4444));
+                info.println("CPU registers: select a suspended frame, then Window > Show View > Other > Debug > Registers. "
+                        + "Named SoC peripherals require a matching vendor SVD and an SVD-capable debugger view; "
+                        + "this Zephyr launch does not currently bind an SVD file.");
             }
             Process server = builder.start();
             session = new ManagedServer(server, console.newMessageStream(), lease, launch, params.port(),
@@ -244,6 +247,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                         ownedChildren.addAll(process.descendants().toList());
                         diagnostics.accept(line);
                         if (!closed.get()) stream.println(line);
+                        String advice = diagnostics.runtimeAdvice(line);
+                        if (!closed.get() && !advice.isBlank()) stream.println("Workbench: " + advice);
                     }
                 } catch (IOException ignored) { /* exit/terminate closes the stream */ }
             }, "zew-owned-debugserver-output");

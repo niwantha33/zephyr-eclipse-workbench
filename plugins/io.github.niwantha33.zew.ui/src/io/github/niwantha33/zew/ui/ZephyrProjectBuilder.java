@@ -174,8 +174,16 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 }
                 stream.println("Preflight: Zephyr configure-only; checking actual host tool dependencies.");
                 stage[0] = "Configure Zephyr";
-                requireConfigured(runner.run(configure, workspace, Duration.ofMinutes(15),
-                        monitor::isCanceled, log, environment), kconfigFailure, stream::println);
+                var configured = runner.run(configure, workspace, Duration.ofMinutes(15),
+                        monitor::isCanceled, log, environment);
+                if (configured.exitCode() != 0 && io.github.niwantha33.zew.core.DemoConfigurationCompatibility
+                        .migrate(project, configured.output())) {
+                    stream.println("Updated the original RTOS demo's obsolete CONFIG_DEBUG_INFO setting. Original saved in .zew/config-backup.");
+                    BuildDiagnostics.clear(getProject());
+                    configured = runner.run(configure, workspace, Duration.ofMinutes(15),
+                            monitor::isCanceled, log, environment);
+                }
+                requireConfigured(configured, kconfigFailure, stream::println);
                 var inspectCommands = List.of(settings.getProperty("tools.ninja"), "-C", paths.build(), "-t", "commands");
                 var missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
                 var recovery = new BuildRecovery(Map.of("IMGTOOL", () ->

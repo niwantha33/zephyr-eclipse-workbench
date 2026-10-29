@@ -17,11 +17,15 @@ public final class DebugServerDiagnostics {
 
     private final int expectedPort;
     private final String runner;
+    private int zephyrMetadataFailures;
+    private boolean threadWarningReported;
+    private boolean usbWarningReported;
     public DebugServerDiagnostics() { this(0, ""); }
     public DebugServerDiagnostics(int expectedPort, String runner) { this.expectedPort = expectedPort; this.runner = runner; }
 
     public synchronized void accept(String line) {
         if (line == null) return;
+        if (line.contains("Only size_t of 4 bytes are supported")) zephyrMetadataFailures++;
         var listening = java.util.regex.Pattern.compile(
                 "^Info\\s*:\\s*Listening on port ([0-9]{1,5}) for gdb connections\\s*$").matcher(line);
         if (listening.matches()) listeningPorts.add(Integer.parseInt(listening.group(1)));
@@ -34,6 +38,28 @@ public final class DebugServerDiagnostics {
         if (clean.length() > MAX_LINE) clean = clean.substring(0, MAX_LINE) + " [truncated]";
         if (recent.size() == LINES) recent.removeFirst();
         recent.addLast(clean);
+    }
+
+    /** Explain observed runtime problems once; keep the original server output intact. */
+    public synchronized String runtimeAdvice(String line) {
+        if (!threadWarningReported && zephyrMetadataFailures >= 3) {
+            threadWarningReported = true;
+            return "Zephyr thread inspection is failing: OpenOCD did not read a supported size_t byte "
+                    + "from the target's thread metadata. This does not prove the MCU has a 64-bit size_t. "
+                    + "Check that the flashed image matches this launch's zephyr.elf and includes "
+                    + "CONFIG_DEBUG_THREAD_INFO=y; also check OpenOCD compatibility. Core debugging "
+                    + "can remain connected while the RTOS thread list is unavailable. Terminate Debug "
+                    + "before deliberately flashing the matching build. No automatic flash was requested.";
+        }
+        if (!usbWarningReported && runner.equals("openocd") && line != null
+                && line.contains("runner \"rtsflash\"") && line.contains("No module named 'usb'")) {
+            usbWarningReported = true;
+            return "The missing Python usb module belongs to the unused rtsflash runner. "
+                    + "This launch selects OpenOCD; use its subsequent connection output to assess "
+                    + "probe access. To remove that Python import warning, install PyUSB in the "
+                    + "same Python environment used by West.";
+        }
+        return "";
     }
 
     /** Read the owned server's output; never consume its first GDB connection. */

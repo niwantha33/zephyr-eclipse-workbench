@@ -95,12 +95,14 @@ public final class ZephyrProjectImport {
         var description = project.getDescription();
         validate(description);
         boolean cmake = isCMake(description);
-        boolean correct = !cmake && description.getBuildSpec().length == 1
+        boolean correct = !cmake && java.util.Arrays.asList(description.getNatureIds()).contains(ZephyrProjectNature.ID)
+                && description.getBuildSpec().length == 1
                 && BUILDER.equals(description.getBuildSpec()[0].getBuilderName());
         if (!correct) {
             if (cmake) backup(folder);
-            description.setNatureIds(Arrays.stream(description.getNatureIds())
-                    .filter(id -> !CMAKE_NATURE.equals(id)).toArray(String[]::new));
+            var natures = new java.util.LinkedHashSet<>(Arrays.asList(description.getNatureIds()));
+            natures.remove(CMAKE_NATURE); natures.add(ZephyrProjectNature.ID);
+            description.setNatureIds(natures.toArray(String[]::new));
             ICommand command = description.newCommand(); command.setBuilderName(BUILDER);
             description.setBuildSpec(new ICommand[] {command});
             if (cmake) {
