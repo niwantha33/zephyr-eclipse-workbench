@@ -33,6 +33,7 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
+import io.github.niwantha33.zew.core.KconfigSourceHelp;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles.Snapshot;
 
@@ -51,6 +52,9 @@ public final class ConfigurationStudioView extends ViewPart {
     private Table options;
     private Label context, status;
     private String filter = "";
+    private final java.util.concurrent.atomic.AtomicInteger helpGeneration = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.ConcurrentMap<String, String> definitionCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override public void createPartControl(Composite parent) {
         var outer = new Composite(parent, SWT.NONE);
@@ -137,6 +141,8 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private void reload() {
+        helpGeneration.incrementAndGet();
+        definitionCache.clear();
         if (options == null || options.isDisposed()) return;
         if (project == null) {
             options.removeAll();
@@ -211,7 +217,7 @@ public final class ConfigurationStudioView extends ViewPart {
             default -> "No curated explanation for this option yet. Refer to its definition in the "
                     + "selected Zephyr checkout and upstream Kconfig help; the effective value is authoritative.";
         };
-        help.setText("CONFIG_" + o.symbol()
+        String base = "CONFIG_" + o.symbol()
                 + "\nEffective value: " + (o.effective() == null ? "unknown / configure failed" : o.effective())
                 + "\nRequested in prj.conf: " + (o.requested() == null ? "not explicitly set" : o.requested())
                 + (o.requestedLine() > 0 ? " (line " + o.requestedLine() + ")" : "")
@@ -219,7 +225,48 @@ public final class ConfigurationStudioView extends ViewPart {
                 + (o.unresolved() ? "\n\nThis request has no corresponding entry in the last generated "
                         + ".config. It may be undefined or the generated configuration may be stale."
                         + " Examine Zephyr's Kconfig diagnostics before changing it." : "")
-                + "\n\nConfiguration changes take effect only after the selected board is configured and rebuilt.");
+                + "\n\nConfiguration changes take effect only after the selected board is configured and rebuilt.";
+        help.setText(base);
+        // Source text is a supplementary explanation, not a Kconfig dependency
+        // evaluation. Run filesystem searches off the SWT UI thread.
+        if (project == null) return;
+        final int generation = helpGeneration.incrementAndGet();
+        final org.eclipse.swt.widgets.Display display = help.getDisplay();
+        try {
+            Path workspace = Path.of(ProjectContext.settings(project).getProperty("workspace"));
+            String key = workspace + "#" + o.symbol();
+            String cached = definitionCache.get(key);
+            if (cached != null) { help.setText(base + cached); return; }
+            Job lookup = new Job("Explain CONFIG_" + o.symbol()) {
+                @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    String result;
+                    try {
+                        var definition = KconfigSourceHelp.firstDefinition(workspace, o.symbol());
+                        result = definition == null
+                                ? "\n\nNo source definition found in the bounded scan. "
+                                  + "This does not prove the symbol is undefined in the active build."
+                                : "\n\nSource declaration (raw text, not resolved dependency state):\n"
+                                  + definition.file() + ":" + definition.line() + "\n"
+                                  + definition.sourceExcerpt();
+                    } catch (Exception error) {
+                        result = "\n\nSource explanation unavailable: " + error.getMessage();
+                    }
+                    definitionCache.putIfAbsent(key, result);
+                    String sourceText = result;
+                    if (!display.isDisposed()) display.asyncExec(() -> {
+                        if (!help.isDisposed() && generation == helpGeneration.get()
+                                && selected() != null && o.symbol().equals(selected().symbol()))
+                            help.setText(base + sourceText);
+                    });
+                    return Status.OK_STATUS;
+                }
+            };
+            lookup.setSystem(true);
+            lookup.schedule();
+        } catch (Exception unavailable) {
+            // Basic effective/requested values remain usable without source indexing.
+        }
     }
 
     private void editSelected(boolean remove) {
