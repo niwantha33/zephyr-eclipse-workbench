@@ -94,6 +94,16 @@ public final class ConfigurationStudioPresentation {
         return "";
     }
 
+    /** Compact at-a-glance request state, edited via SWT controls in the same table cell. */
+    public static String inlineValue(ConfigurationStudioFiles.Option option) {
+        if (!isToggle(option)) return current(option);
+        String displayed = option.requested() != null ? option.requested() : option.effective();
+        String controls = "y".equals(displayed) ? "● Enable  |  ○ Disable"
+                : "○ Enable  |  ● Disable";
+        return controls + (option.requested() != null
+                && !option.requested().equals(option.effective()) ? "  (pending build)" : "");
+    }
+
     public static String current(ConfigurationStudioFiles.Option option) {
         if (option.unresolved()) return "Not resolved";
         return switch (option.effective()) {
