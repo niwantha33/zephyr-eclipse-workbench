@@ -328,14 +328,15 @@ public final class ConfigurationStudioView extends ViewPart {
     private void build() {
         if (project == null) return;
         IProject target = project;
+        org.eclipse.swt.widgets.Display display = options.getDisplay();
         Job job = new Job("Validate and build Zephyr configuration — " + target.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 try {
                     target.build(IncrementalProjectBuilder.FULL_BUILD, Activator.ID + ".zephyrBuilder",
                             java.util.Map.of(), monitor);
-                    if (!monitor.isCanceled() && !options.isDisposed())
-                        options.getDisplay().asyncExec(() -> {
-                            if (!options.isDisposed() && project == target) reload();
+                    if (!monitor.isCanceled() && !display.isDisposed())
+                        display.asyncExec(() -> {
+                            if (options != null && !options.isDisposed() && project == target) reload();
                         });
                     return monitor.isCanceled() ? Status.CANCEL_STATUS : Status.OK_STATUS;
                 } catch (org.eclipse.core.runtime.CoreException error) { return error.getStatus(); }
