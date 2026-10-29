@@ -16,6 +16,28 @@ public final class ConfigurationStudioTests {
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("zew-studio space ");
         try {
+            var encode = java.util.Base64.getEncoder();
+            String[] kfields = {"ADC", "bool", "n", "n", "n", "GPIO && SOC_ADC",
+                    "n", "Analog converter", "drivers/adc/Kconfig:12", "",
+                    "", "Analog input sample engine"};
+            StringBuilder message = new StringBuilder("ZEW-KCONFIG-1\n");
+            for (int i = 0; i < kfields.length; i++) {
+                if (i > 0) message.append('\t');
+                message.append(encode.encodeToString(
+                        kfields[i].getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            }
+            var parsed = io.github.niwantha33.zew.core.KconfigInspector.parse(message.toString());
+            ok(parsed.available() && !parsed.details().canRequest("y")
+                    && parsed.details().canRequest("n"),
+                    "Kconfiglib assignment restrictions block unavailable Enable requests");
+            ok(parsed.details().describe().contains("GPIO && SOC_ADC")
+                    && parsed.details().describe().contains("drivers/adc/Kconfig:12"),
+                    "native help retains actual source and direct dependency expression");
+            ok(!io.github.niwantha33.zew.core.KconfigInspector.parse(
+                    "ZEW-KCONFIG-UNAVAILABLE\nNo generated build").available(),
+                    "missing generated Kconfig never reports invented dependency results");
+            rejects(() -> io.github.niwantha33.zew.core.KconfigInspector.parse(
+                    "ZEW-KCONFIG-1\nnot-valid"));
             Path app = root.resolve("existing application");
             Path build = app.resolve(".zew-build/debug-target");
             Files.createDirectories(build.resolve("zephyr"));
