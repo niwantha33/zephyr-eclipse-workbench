@@ -145,11 +145,16 @@ def main():
             # MSPM0G3507 Zephyr build. No source or .config writes allowed.
             kconfig_source = Path(build_arg) / 'zephyr/.config'
             before_inspection = hashlib.sha256(kconfig_source.read_bytes()).digest()
-            inspected = run([python, REPO /
-                    'plugins/io.github.niwantha33.zew.ui/scripts/kconfig_inspect.py',
-                    '--build', build_arg, '--ninja', ninja, '--symbol', 'GPIO'],
-                    workspace, env, capture=True)
-            inspection_lines = inspected.splitlines()
+            inspection = subprocess.run([str(python), str(REPO /
+                    'plugins/io.github.niwantha33.zew.ui/scripts/kconfig_inspect.py'),
+                    '--build', str(build_arg), '--ninja', str(ninja), '--symbol', 'GPIO'],
+                    cwd=workspace, env=env, text=True, encoding='utf-8',
+                    errors='replace', capture_output=True, timeout=60)
+            if inspection.returncode:
+                raise ValueError('Real MSPM0 Kconfiglib probe failed: '
+                                 + inspection.stdout.strip()[-1200:]
+                                 + inspection.stderr.strip()[-300:])
+            inspection_lines = inspection.stdout.splitlines()
             if len(inspection_lines) < 2 or inspection_lines[0] != 'ZEW-KCONFIG-1':
                 raise ValueError('Real Zephyr Kconfiglib inspection did not return evaluated metadata')
             fields = [base64.b64decode(x).decode('utf-8')
