@@ -139,6 +139,12 @@ public final class ConfigurationStudioTests {
                     .equals("Inherited"), "no explicit override is shown as inherited");
             ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.review(requestedEnable)
                     .equals("Verify with build"), "requested and effective mismatch requires build validation");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(requestedEnable,
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.REVIEW, ""),
+                    "Needs review includes requested settings that differ from generated effective values");
+            ok(!io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(binary,
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.REVIEW, ""),
+                    "Needs review excludes inherited settings that agree with the generated configuration");
             ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.review(invalid)
                     .equals("Unresolved"), "invalid setting is visibly marked unresolved");
             var requestOn = ConfigurationStudioFiles.plan(app, build, "DEBUG_THREAD_INFO", "y");
