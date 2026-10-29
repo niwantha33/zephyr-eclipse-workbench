@@ -2,6 +2,12 @@
 <?eclipse version="3.4"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <plugin>
+  <extension point="org.eclipse.ui.ide.projectConfigurators">
+    <projectConfigurator class="io.github.niwantha33.zew.ui.ZephyrProjectConfigurator" label="Zephyr Application"/>
+  </extension>
+  <extension point="org.eclipse.core.resources.markers" id="configurationProblem" name="Zephyr project configuration">
+    <super type="org.eclipse.core.resources.problemmarker"/><persistent value="true"/>
+  </extension>
   <extension point="org.eclipse.core.resources.markers" id="buildProblem" name="Zephyr build diagnostic">
     <super type="org.eclipse.core.resources.problemmarker"/><persistent value="true"/>
   </extension>
@@ -46,7 +52,7 @@
   <extension point="org.eclipse.core.expressions.propertyTesters">
     <propertyTester id="io.github.niwantha33.zew.ui.projectTester"
         type="java.lang.Object" namespace="io.github.niwantha33.zew.ui"
-        properties="isImportedProject" class="io.github.niwantha33.zew.ui.ZephyrProjectTester"/>
+        properties="isImportedProject,isZephyrProject" class="io.github.niwantha33.zew.ui.ZephyrProjectTester"/>
   </extension>
   <extension point="org.eclipse.core.runtime.adapters">
     <factory adaptableType="org.eclipse.core.resources.IResource" class="">
@@ -134,7 +140,7 @@
         <with variable="selection">
           <count value="1"/>
           <iterate ifEmpty="false">
-            <test property="io.github.niwantha33.zew.ui.isImportedProject" value="true" forcePluginActivation="true"/>
+            <test property="io.github.niwantha33.zew.ui.isZephyrProject" value="true" forcePluginActivation="true"/>
           </iterate>
         </with>
       </activeWhen>

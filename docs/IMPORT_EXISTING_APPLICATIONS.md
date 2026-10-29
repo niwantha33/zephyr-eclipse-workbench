@@ -1,95 +1,78 @@
-# Import existing Zephyr applications
+# Standard Eclipse project workflows
 
-The Zephyr import wizard now follows a root-directory/project-list flow.
-It imports applications in place: it does not copy their source into the
-Eclipse workspace and does not convert CCS or STM32 non-Zephyr firmware.
+## Create a project
 
-1. Extract an application ZIP first. Keep the extracted sources in their final
-   location, for example `C:\projects`.
-2. Choose **File > Import > Zephyr > Existing Zephyr Application**.
-3. Browse to either the application itself or its parent directory. Leave
-   **Search nested folders** enabled for a parent containing several projects
-   or an extra folder from ZIP extraction. Browse starts a search; the **Search**
-   button also refreshes it after changing the path or search option.
-4. Check the applications to import. Their real application folders appear in
-   the list. If names conflict, highlight a row and edit **Selected row's project
-   name**. **Select All** and **Deselect All** affect the checkboxes.
-5. Click **Next**. Choose a completed **Ready setup folder** and load its hardware
-   catalogue. Filter by vendor, board or core and select the exact default target
-   for applications that have no saved Workbench target.
-6. Click **Next** to review each project name, original folder, exact target and
-   environment. Saved `.zew` targets are preserved; a default selection does not
-   overwrite them.
-7. Click **Finish**. Projects appear in Project Explorer. Eclipse's **Build
-   Automatically** preference applies; import does not launch an additional
-   explicit build. With auto-build off, select **Project > Build Project**.
+Use **File > New > Zephyr Project**. Choose a completed Zephyr setup folder,
+application location and exact board/SoC/CPU. The project uses Eclipse's native
+Build, Clean, Debug and project properties controls.
 
-For the test ZIP, selecting `C:\projects` should find the inner folder containing
-`Zephyr_RTOS_Analysis_Demo\CMakeLists.txt`, even if extraction added a wrapper
-directory. That inner application, rather than the wrapper, becomes the project.
+## Open a project from a folder or archive
 
-## Discovery and conflict handling
+1. Choose **File > Open Projects from File System...**.
+2. Choose **Directory** for an application or its parent folder, or **Archive**
+   for an exported project ZIP. Keep **Detect and configure project natures**
+   enabled. Nested-project detection can find applications inside a wrapper folder.
+3. Select the application folders and finish. The installed configurator appears
+   as **Zephyr Application**. Both existing Eclipse projects and standalone
+   applications containing `find_package(Zephyr ...)` are supported.
+4. Use **Project > Build Project**. A saved `.zew` board target is reused. If the
+   application has no target, Build opens **Properties > Zephyr** to select its
+   environment and exact board. Save those settings and the build proceeds.
 
-Discovery reads `CMakeLists.txt` and recognises a direct `find_package(Zephyr ...)`
-call, including multiline calls and a quoted package name. It does not execute
-CMake. Examples in comments/strings do not qualify a generic CMake project.
-Applications that select Zephyr only indirectly through custom scripts are not
-auto-detected by this first scanner; keep that limitation visible rather than
-silently importing a generic CMake tree.
+The normal **General > Existing Projects into Workspace** importer also works
+for applications that already contain `.project`. Projects already present in
+the workspace can simply be opened again. Existing open projects are checked
+at Workbench startup and before native builds. No separate repair command or
+remove-and-reimport step is needed.
 
-The scanner skips common generated/tool folders, filesystem links and upstream
-Zephyr source trees. Search is cancelable and bounded to 12 levels, 20,000
-directories, 500 applications and 1 MiB per CMake file. Unreadable/oversized input
-and depth limits are reported. Choose a narrower source parent for large trees.
+A single completed local environment, or an environment explicitly chosen in
+Project Properties, is bound automatically. If several environments are
+available without a selected default, choose one in **Properties > Zephyr**.
+Another project's board is never used as a default target for a new application.
+Target discovery in Properties reads the selected checkout's hardware catalogue.
+Opening a project does not download dependencies or invoke CMake/West; dependency
+preparation runs when the project is built.
 
-Already configured Workbench locations are unavailable. Applications imported
-through Eclipse's generic File System importer can be repaired in place; keep
-their existing workspace project name. Duplicate names for new imports can be
-renamed; overlapping parent/child applications cannot be selected together.
-Existing Workbench Eclipse descriptions are reused while binding the chosen
-local environment. Generic CDT CMake projects are identified by their CMake
-nature and core builder. The review page explicitly lists their conversion to
-West. Other builders (including vendor builders) are rejected without conversion.
-Source code, `prj.conf` and saved board profiles are not replaced. Creating the
-Eclipse project and editor integration adds/updates project metadata in place.
+Applications can be opened before selecting an environment or board. A single
+configuration problem in Eclipse's Problems view explains the missing selection;
+background builds wait for it instead of running generic CMake.
 
-The import rechecks all selected applications before creating projects. Import
-is not a transaction across multiple directories: if cancellation or a filesystem
-error occurs after some imports complete, those projects are retained and named
-in the error. The remaining selection can be retried; no application is deleted.
+## Configure, build and clean
 
-This path requires a completed Workbench managed environment. It is not an
-installer for arbitrary external SDK layouts. Run **Zephyr > Set Up Zephyr** if
-there is no ready environment, or choose an already completed installation.
+**Project Properties > Zephyr** contains the environment, board/vendor/SoC/CPU
+filters and build configuration. Debug and Release have separate managed build
+folders. Use **Project > Build Project**, **Project > Clean** and the standard
+Debug controls. Projects retain their source locations when opened from folders.
 
-## Repair `Could not find ZephyrConfig.cmake` after generic import
+## Export and reopen
 
-A build folder named `build/cmake.run.win32.x86_64.Local` and a command such as
-`cmake -DCMAKE_BUILD_TYPE=Release ...` indicate Eclipse's generic CDT CMake
-workflow. It does not supply the Workbench's managed Python/West environment,
-`ZEPHYR_BASE`, SDK or exact board. The later `CMAKE_PROJECT_NAME` error is a
-consequence of that failed configure.
+Use **File > Export > General > Archive File** to create a ZIP, or
+**General > File System** to copy a project folder. Include the application
+sources, `CMakeLists.txt`, configuration/overlay files, `.project`, `.cproject`
+when present, and `.zew/project.json` or the legacy `.zew/project.properties`.
+The `.zew` profile contains the portable board selection. Eclipse's local
+persistent properties contain the setup path; that machine-specific binding is
+not required in the exported project.
 
-After installing the updated Workbench:
+Build outputs such as `.zew-build` and `build` can be deselected in the standard
+export wizard. On the destination machine, complete Zephyr setup first, then
+open the archive or copied folder through **Open Projects from File System**.
+The board is retained and the local environment is rebound automatically when
+it is unambiguous. No custom archive format or export wizard is required.
 
-1. Close the **Import Projects from File System or Archive** dialog.
-2. Right-click the existing application in Project Explorer, then select
-   **Properties > Zephyr > Configure / Repair Zephyr Project...**. Alternatively,
-   use **File > Import > Zephyr > Existing Zephyr Application** and search the
-   application's folder. You do not need to delete it from the workspace.
-3. Select the application marked **Repair generic CMake builder**, choose your
-   completed ready setup folder and exact board/CPU, then review and finish.
-   Existing `.zew` targets are preserved.
-4. Build using **Project > Build Project**. Build configuration selection is now
-   under **Properties > Zephyr**; West uses `.zew-build` rather than the old
-   generic CMake build folder.
+## Automatic compatibility handling
 
-Repair removes the generic CMake build-provider nature, installs the sole West
-builder and resets the native Eclipse build configuration to `default`. The
-original `.project` and `.cproject` files are retained in `.zew/import-backup`
-before conversion. Source, `prj.conf`, linked resources and old build outputs
-remain in place. Only stale CDT CMake problem markers are cleared. Unknown
-vendor builders are not converted. A closed project must be opened first.
+Zephyr applications imported as generic CDT CMake are automatically switched to
+the managed West builder. The generic CMake nature and `cmake.run.*` build
+configurations are removed. Original `.project` and `.cproject` files are backed
+up in `.zew/import-backup` on the first conversion; source, `prj.conf`, linked
+resources and existing build outputs are preserved. A pre-build check also
+handles the order in which Eclipse's generic and Zephyr configurators run.
+Ordinary CMake applications and unrelated vendor builders retain their workflows.
 
-Use the Zephyr importer for future applications; Eclipse's generic File System
-importer still treats `CMakeLists.txt` as a generic CMake project.
+The dedicated **File > Import > Zephyr > Existing Zephyr Application** wizard
+remains available as an alternative. Native Eclipse handles project-name/location
+conflicts. Zephyr's own scanner bounds discovery to 12 levels, 20,000 directories,
+500 applications and 1 MiB per CMake file, skipping common generated/tool folders
+and upstream Zephyr source trees. Applications that select Zephyr only indirectly
+through custom scripts are not detected automatically.

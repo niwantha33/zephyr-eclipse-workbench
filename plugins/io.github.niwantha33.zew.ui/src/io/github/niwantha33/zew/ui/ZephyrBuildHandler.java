@@ -28,10 +28,12 @@ public final class ZephyrBuildHandler extends AbstractHandler {
         boolean pristine = event.getCommand().getId().endsWith(".rebuild");
         try {
             ProjectContext.settings(project);
-        } catch (Exception ex) {
-            MessageDialog.openError(HandlerUtil.getActiveShell(event), "Zephyr Build",
-                "This project is not connected to the managed Zephyr environment: " + ex.getMessage());
-            return null;
+        } catch (Exception missing) {
+            var dialog = org.eclipse.ui.dialogs.PreferencesUtil.createPropertyDialogOn(
+                    HandlerUtil.getActiveShell(event), project, Activator.ID + ".projectProperties", null, null);
+            if (dialog == null || dialog.open() != org.eclipse.jface.window.Window.OK) return null;
+            try { ProjectContext.settings(project); }
+            catch (Exception incomplete) { return null; }
         }
         Job job = new Job((pristine ? "Pristine Rebuild" : "Build") + " Zephyr — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {

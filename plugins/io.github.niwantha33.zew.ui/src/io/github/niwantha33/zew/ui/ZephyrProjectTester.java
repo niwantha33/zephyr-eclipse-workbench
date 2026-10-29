@@ -6,7 +6,9 @@ import org.eclipse.core.expressions.PropertyTester;
 /** Only imported Zephyr resources participate in contextual Debug As. */
 public final class ZephyrProjectTester extends PropertyTester {
     @Override public boolean test(Object receiver, String property, Object[] args, Object expectedValue) {
-        boolean imported = "isImportedProject".equals(property) && ZephyrDebugShortcut.project(receiver) != null;
+        boolean imported = "isZephyrProject".equals(property)
+                ? ZephyrDebugShortcut.project(receiver) != null || ZephyrProjectLifecycle.supports(SelectedProject.fromObject(receiver))
+                : "isImportedProject".equals(property) && ZephyrDebugShortcut.project(receiver) != null;
         return expectedValue == null ? imported : imported == Boolean.parseBoolean(expectedValue.toString());
     }
 }

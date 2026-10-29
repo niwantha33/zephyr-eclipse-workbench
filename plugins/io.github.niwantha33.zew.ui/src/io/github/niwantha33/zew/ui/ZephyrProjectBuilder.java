@@ -34,6 +34,11 @@ import io.github.niwantha33.zew.core.ZephyrProjectFiles;
 /** Native Eclipse Build/Clean for independently imported or generated managed Zephyr projects. */
 public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
     @Override protected IProject[] build(int kind, Map<String, String> arguments, IProgressMonitor monitor) throws CoreException {
+        try {
+            if (!ZephyrProjectLifecycle.configure(getProject(), monitor)) return new IProject[0];
+        } catch (Exception error) {
+            throw new CoreException(new Status(IStatus.ERROR, Activator.ID, error.getMessage(), error));
+        }
         if (kind != AUTO_BUILD || sourceChanged()) run(false, "true".equals(arguments.get("zew.pristine")), monitor);
         return new IProject[0];
     }
@@ -70,7 +75,11 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         return scanner.missing();
     }
 
-    @Override protected void clean(IProgressMonitor monitor) throws CoreException { run(true, false, monitor); }
+    @Override protected void clean(IProgressMonitor monitor) throws CoreException {
+        try { if (ZephyrProjectLifecycle.configure(getProject(), monitor)) run(true, false, monitor); }
+        catch (CoreException error) { throw error; }
+        catch (Exception error) { throw new CoreException(new Status(IStatus.ERROR, Activator.ID, error.getMessage(), error)); }
+    }
     private void run(boolean clean, boolean pristine, IProgressMonitor monitor) throws CoreException {
         var console = new MessageConsole("Zephyr — " + getProject().getName(), null);
         ConsolePlugin.getDefault().getConsoleManager().addConsoles(new org.eclipse.ui.console.IConsole[] {console});

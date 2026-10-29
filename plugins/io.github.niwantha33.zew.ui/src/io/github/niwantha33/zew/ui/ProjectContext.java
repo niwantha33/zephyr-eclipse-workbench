@@ -14,7 +14,7 @@ final class ProjectContext {
 
     static Properties settings(IProject project) throws Exception {
         String root = project.getPersistentProperty(new QualifiedName(Activator.ID, "setupRoot"));
-        if (root == null) throw new java.io.IOException("Import this application using File > Import > Zephyr first.");
+        if (root == null) throw new java.io.IOException("Select a ready environment in Project Properties > Zephyr.");
         Properties settings = load(Path.of(root));
         settings.setProperty("zew.setupRoot", root);
         settings.setProperty("zew.buildConfiguration", io.github.niwantha33.zew.core.BuildConfiguration
@@ -29,8 +29,10 @@ final class ProjectContext {
             settings.setProperty("board", io.github.niwantha33.zew.core.ZephyrProjectFiles.readBoard(application));
             settings.setProperty("application", application.toString());
             settings.setProperty("zew.modules.none", settings.getProperty("board").equals("qemu_x86/atom") ? "true" : "false");
-        } else if (!application.toRealPath().equals(Path.of(settings.getProperty("application")).toRealPath())) {
-            throw new java.io.IOException("Legacy project differs from its managed environment. Import it using the project wizard.");
+        } else if (settings.getProperty("application", "").isBlank()
+                || !Files.exists(Path.of(settings.getProperty("application")))
+                || !application.toRealPath().equals(Path.of(settings.getProperty("application")).toRealPath())) {
+            throw new java.io.IOException("Select an exact board / SoC / CPU in Project Properties > Zephyr.");
         }
         // Imported legacy projects may inherit a starter environment setting.
         // Only the original qemu_x86/atom starter intentionally bypasses modules.

@@ -37,7 +37,8 @@ import io.github.niwantha33.zew.core.ZephyrProjectFiles;
 public final class ZephyrProjectPropertyPage extends PropertyPage {
     private IProject project;
     private Combo vendor, soc, buildConfiguration;
-    private Text search;
+    private Text search, environment;
+    private Path loadedEnvironment;
     private Table targets;
     private Label current;
     private String originalBoard = "";
@@ -52,31 +53,41 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
             setValid(false);
             return panel;
         }
-        try {
-            if (ZephyrProjectImport.isCMake(project.getDescription()))
-                throw new java.io.IOException("Generic CMake builder needs repair.");
-            originalBoard = ProjectContext.settings(project).getProperty("board");
-        } catch (Exception error) {
-            var help = new Label(panel, SWT.WRAP);
-            help.setText("Configure this application with a ready Zephyr environment and exact board target. "
-                    + "If it was imported as generic CMake, the wizard can repair its builder in place.");
-            help.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1));
-            Button repair = new Button(panel, SWT.PUSH);
-            repair.setText("Configure / Repair Zephyr Project...");
-            repair.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false, 3, 1));
-            repair.addListener(SWT.Selection, event -> {
-                var wizard = new ZephyrImportWizard();
-                wizard.init(org.eclipse.ui.PlatformUI.getWorkbench(), new org.eclipse.jface.viewers.StructuredSelection(project));
-                if (new org.eclipse.jface.wizard.WizardDialog(getShell(), wizard).open() == org.eclipse.jface.window.Window.OK) {
-                    help.setText("Zephyr project configured. Close and reopen Properties to change its target or build configuration.");
-                    panel.layout(true, true);
-                }
-            });
+        if (!ZephyrProjectLifecycle.supports(project)) {
+            setErrorMessage("Select a Zephyr application. Projects with other vendor builders keep their native settings.");
+            setValid(false);
             return panel;
         }
+        try {
+            Path application = project.getLocation().toFile().toPath();
+            if (Files.isRegularFile(application.resolve(".zew/project.json"))) originalBoard = ProjectProfile.read(application).board();
+            else if (Files.isRegularFile(application.resolve(".zew/project.properties"))) originalBoard = ZephyrProjectFiles.readBoard(application);
+            else {
+                try { originalBoard = ProjectContext.settings(project).getProperty("board", ""); }
+                catch (Exception missing) { /* Board selection is part of normal project configuration. */ }
+            }
+        } catch (Exception error) {
+            setErrorMessage(error.getMessage()); setValid(false); return panel;
+        }
+        new Label(panel, SWT.NONE).setText("Zephyr environment");
+        environment = new Text(panel, SWT.BORDER);
+        environment.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        Path detected = ZephyrProjectLifecycle.environment(project);
+        environment.setText(detected == null ? "" : detected.toString());
+        Button browse = new Button(panel, SWT.PUSH); browse.setText("Browse...");
+        browse.addListener(SWT.Selection, event -> {
+            var dialog = new org.eclipse.swt.widgets.DirectoryDialog(getShell());
+            dialog.setMessage("Select a completed Zephyr setup folder."); dialog.setFilterPath(environment.getText());
+            String value = dialog.open(); if (value != null) { environment.setText(value); loadHardware(); }
+        });
+        environment.addModifyListener(event -> {
+            loadedEnvironment = null;
+            if (targets != null) targets.removeAll();
+            setErrorMessage("Reload hardware for the selected environment."); setValid(false);
+        });
         new Label(panel, SWT.NONE).setText("Current board / CPU:");
         current = new Label(panel, SWT.WRAP);
-        current.setText(originalBoard);
+        current.setText(originalBoard.isBlank() ? "Select a target below" : originalBoard);
         current.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
         new Label(panel, SWT.NONE).setText("Build configuration");
         buildConfiguration = new Combo(panel, SWT.READ_ONLY);
@@ -85,7 +96,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
         buildConfiguration.setItems(java.util.Arrays.stream(profiles).map(p -> p.label()).toArray(String[]::new));
         try {
             var selectedProfile = io.github.niwantha33.zew.core.BuildConfiguration.fromId(
-                    ProjectContext.settings(project).getProperty("zew.buildConfiguration"));
+                    project.getPersistentProperty(ProjectContext.BUILD_CONFIGURATION));
             buildConfiguration.select(selectedProfile.ordinal());
         } catch (Exception error) {
             setErrorMessage("Invalid build configuration: " + error.getMessage());
@@ -131,7 +142,11 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
 
     private void loadHardware() {
         try {
-            var settings = ProjectContext.settings(project);
+            loadedEnvironment = null;
+            targets.removeAll(); setValid(false);
+            Path root = Path.of(environment.getText().trim()).toAbsolutePath().normalize();
+            var settings = ProjectContext.load(root);
+            settings.setProperty("zew.setupRoot", root.toString());
             var found = new ArrayList<String[]>();
             new ProgressMonitorDialog(getShell()).run(true, true, monitor -> {
                 try {
@@ -147,6 +162,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
                 finally { monitor.done(); }
             });
             if (found.isEmpty()) throw new java.io.IOException("No hardware metadata returned from this Zephyr checkout.");
+            loadedEnvironment = root;
             hardware = found;
             vendor.setItems(java.util.stream.Stream.concat(java.util.stream.Stream.of("All chip vendors"),
                     hardware.stream().map(row -> row[0]).distinct().sorted()).toArray(String[]::new));
@@ -200,7 +216,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
     }
 
     private void validateSelection() {
-        if (targets.getSelectionCount() != 1) {
+        if (loadedEnvironment == null || targets.getSelectionCount() != 1) {
             setErrorMessage("Choose an exact board / SoC / CPU target.");
             setValid(false);
             return;
@@ -214,7 +230,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
     }
 
     @Override public boolean performOk() {
-        if (targets == null) return true; // The configure/repair panel has no pending property edits.
+        if (targets == null || loadedEnvironment == null) return false;
         if (project == null || !isValid() || targets.getSelectionCount() != 1) return false;
         String selected = ((String[]) targets.getSelection()[0].getData())[6];
         int selectedIndex = buildConfiguration.getSelectionIndex();
@@ -232,14 +248,18 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
                         // Schema-1 legacy profiles remain intact for rollback. JSON wins on reload.
                         new ProjectProfile(selected).write(application);
                     } else {
-                        throw new java.io.IOException("Project profile is missing; import this application again.");
+                        new ProjectProfile(selected).write(application);
                     }
+                    ZephyrProjectImport.bind(application, project.getName(), selected, loadedEnvironment, monitor);
                     project.setPersistentProperty(ProjectContext.BUILD_CONFIGURATION, configuration.id());
+                    ZephyrProjectLifecycle.configure(project, monitor);
                     project.refreshLocal(IResource.DEPTH_INFINITE, monitor);
                 } catch (Exception error) {
                     throw new org.eclipse.core.runtime.CoreException(new Status(IStatus.ERROR, Activator.ID, error.getMessage(), error));
                 }
             }, project, org.eclipse.core.resources.IWorkspace.AVOID_UPDATE, null);
+            Activator.getDefault().getPreferenceStore().setValue(ZephyrProjectLifecycle.ENVIRONMENT, loadedEnvironment.toString());
+            originalBoard = selected;
             EditorIntegration.schedule(project);
             return true;
         } catch (Exception error) {

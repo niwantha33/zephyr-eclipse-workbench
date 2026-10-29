@@ -17,7 +17,7 @@ import io.github.niwantha33.zew.core.ProjectProfile;
 import io.github.niwantha33.zew.core.ZephyrApplicationDiscovery;
 import io.github.niwantha33.zew.core.ZephyrProjectFiles;
 
-/** Import and explicit repair share the same validation and West builder binding. */
+/** Native and dedicated imports share the same validation and West builder binding. */
 public final class ZephyrProjectImport {
     static final String BUILDER = Activator.ID + ".zephyrBuilder";
     static final String CMAKE_NATURE = "org.eclipse.cdt.cmake.core.cmakeNature";
@@ -42,13 +42,13 @@ public final class ZephyrProjectImport {
         for (ICommand command : description.getBuildSpec()) {
             if (!BUILDER.equals(command.getBuilderName())
                     && !(isCMake(description) && CMAKE_BUILDER.equals(command.getBuilderName())))
-                throw new IOException("Other Eclipse builder present; use its native workflow. Only generic CDT CMake projects can be repaired here.");
+                throw new IOException("Other Eclipse builder present; this project retains its native workflow.");
         }
     }
 
     static IProjectDescription description(Path folder) throws CoreException, IOException {
         IProject existing = existingProject(folder);
-        if (existing != null && !existing.isOpen()) throw new IOException("Open this project in Eclipse before repairing it.");
+        if (existing != null && !existing.isOpen()) throw new IOException("Open this project in Eclipse before configuring it.");
         var description = existing != null ? existing.getDescription() : ResourcesPlugin.getWorkspace()
                 .loadProjectDescription(new org.eclipse.core.runtime.Path(folder.resolve(".project").toString()));
         validate(description);
@@ -78,24 +78,40 @@ public final class ZephyrProjectImport {
         if (cmake) backup(folder);
         description.setName(name);
         if (existing == null) description.setLocationURI(folder.toUri());
-        description.setNatureIds(Arrays.stream(description.getNatureIds()).filter(id -> !CMAKE_NATURE.equals(id)).toArray(String[]::new));
-        ICommand command = description.newCommand(); command.setBuilderName(BUILDER);
-        description.setBuildSpec(new ICommand[] {command});
-        if (cmake) {
-            // Eclipse's native Build must stop selecting cmake.run.win32.* configurations.
-            description.setBuildConfigs(new String[] {"default"});
-            description.setActiveBuildConfig("default");
-        }
         if (savedBoard.isBlank()) new ProjectProfile(board).write(folder);
         if (existing == null) { project.create(description, monitor); project.open(monitor); }
-        // Opening an existing .project on disk can reload its old generic description.
-        // Apply the reviewed description after open, while the workspace rule defers builds.
-        project.setDescription(description, monitor);
+        attach(project, monitor);
         project.setPersistentProperty(SETUP, environment.toString());
         project.refreshLocal(IResource.DEPTH_INFINITE, monitor);
+        return project;
+    }
+
+    /** Installs the native West workflow even when environment/target selection is pending. */
+    public static void attach(IProject project, IProgressMonitor monitor) throws Exception {
+        Path folder = project.getLocation().toFile().toPath();
+        if (!ZephyrApplicationDiscovery.isApplication(folder)) throw new IOException("Not a Zephyr application: " + folder);
+        if (Files.isSymbolicLink(folder.resolve(".project")) || Files.isSymbolicLink(folder.resolve(".zew")))
+            throw new IOException("Project metadata is a filesystem link.");
+        var description = project.getDescription();
+        validate(description);
+        boolean cmake = isCMake(description);
+        boolean correct = !cmake && description.getBuildSpec().length == 1
+                && BUILDER.equals(description.getBuildSpec()[0].getBuilderName());
+        if (!correct) {
+            if (cmake) backup(folder);
+            description.setNatureIds(Arrays.stream(description.getNatureIds())
+                    .filter(id -> !CMAKE_NATURE.equals(id)).toArray(String[]::new));
+            ICommand command = description.newCommand(); command.setBuilderName(BUILDER);
+            description.setBuildSpec(new ICommand[] {command});
+            if (cmake) {
+                description.setBuildConfigs(new String[] {"default"});
+                description.setActiveBuildConfig("default");
+            }
+            // Apply after open: Eclipse may reload the original .project during open.
+            project.setDescription(description, monitor);
+        }
         CdtEditor.ensureProject(project, monitor);
         if (cmake) project.deleteMarkers("org.eclipse.cdt.cmake.core.cmakeproblem", true, IResource.DEPTH_INFINITE);
-        return project;
     }
 
     private static void backup(Path folder) throws IOException {

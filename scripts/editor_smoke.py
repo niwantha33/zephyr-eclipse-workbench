@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--eclipse', type=Path, required=True)
 parser.add_argument('--java-home', type=Path, required=True)
 parser.add_argument('--site', type=Path, required=True)
+parser.add_argument('--native-workbench', action='store_true', help='Also exercise the native importer/exporter in a full workbench; requires a display.')
 args = parser.parse_args()
 eclipse = args.eclipse.resolve(); jdk = args.java_home.resolve()
 launcher = next((eclipse / 'plugins').glob('org.eclipse.equinox.launcher_*.jar'))
@@ -55,11 +56,11 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
     editor.write(editor.collect(fixture, build, gcc.parent.parent), build / 'editor-settings.tsv')
     classes = temporary / 'classes'; classes.mkdir()
     classpath = os.pathsep.join(map(str, (eclipse / 'plugins').glob('*.jar')))
-    run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java', ROOT / 'tests/eclipse/ProjectImportSmoke.java'])
+    run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java', ROOT / 'tests/eclipse/ProjectImportSmoke.java', ROOT / 'tests/eclipse/StandardProjectFlowSmoke.java', ROOT / 'tests/eclipse/WorkbenchSmoke.java'])
     jar = temporary / 'editor-smoke.jar'
     with zipfile.ZipFile(jar, 'w') as z:
-        z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nBundle-ManifestVersion: 2\nBundle-SymbolicName: zew.editor.smoke;singleton:=true\nBundle-Version: 1.0.0\nRequire-Bundle: org.eclipse.equinox.app,org.eclipse.core.runtime,org.eclipse.core.resources,org.eclipse.core.expressions,org.eclipse.cdt.core,org.eclipse.debug.ui,org.eclipse.jface,io.github.niwantha33.zew.core\n\n')
-        z.writestr('plugin.xml', '<plugin><extension point="org.eclipse.core.runtime.applications" id="run"><application><run class="zew.smoke.EditorSmoke"/></application></extension></plugin>')
+        z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nBundle-ManifestVersion: 2\nBundle-SymbolicName: zew.editor.smoke;singleton:=true\nBundle-Version: 1.0.0\nRequire-Bundle: org.eclipse.equinox.app,org.eclipse.core.runtime,org.eclipse.core.resources,org.eclipse.core.expressions,org.eclipse.cdt.core,org.eclipse.debug.ui,org.eclipse.jface,org.eclipse.ui,org.eclipse.ui.ide,org.eclipse.swt,io.github.niwantha33.zew.core\n\n')
+        z.writestr('plugin.xml', '<plugin><extension point="org.eclipse.core.runtime.applications" id="run"><application><run class="zew.smoke.EditorSmoke"/></application></extension><extension point="org.eclipse.core.runtime.applications" id="workbench"><application><run class="zew.smoke.WorkbenchSmoke"/></application></extension></plugin>')
         for path in classes.rglob('*.class'): z.write(path, path.relative_to(classes).as_posix())
     config = eclipse / 'configuration/config.ini'; original = config.read_text()
     modified = '\n'.join(line + ',reference:' + jar.as_uri() + '@4:start' if line.startswith('osgi.bundles=') else line for line in original.splitlines()) + '\n'
@@ -68,5 +69,5 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
         for attempt in range(2):
             # p2 may rewrite config.ini on shutdown; restore the test-only bundle for each process.
             config.write_text(modified)
-            run([jdk / 'bin/java', '-jar', launcher, '-nosplash', '-consolelog', '-clean', '-data', temporary / 'workspace', '-application', 'zew.editor.smoke.run', fixture, 'verify' if attempt else 'apply'])
+            run([jdk / 'bin/java', '-jar', launcher, '-nosplash', '-consolelog', '-clean', '-data', temporary / 'workspace', '-application', 'zew.editor.smoke.workbench' if args.native_workbench else 'zew.editor.smoke.run', fixture, 'verify' if attempt else 'apply'])
     finally: config.write_text(original)

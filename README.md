@@ -69,10 +69,19 @@ This section describes the historical 0.1.11 baseline. Current dependency prepar
 
 **Updates:** A source merge is separate from an Eclipse installation update. Use the Workbench update command and restart Eclipse after installation. The update channel points to an immutable, verified p2 release.
 
+## Standard project workflow
+
+Use **File > New > Zephyr Project** to start a project, **File > Open Projects
+from File System...** to open a folder or archive, and **File > Export > General
+> Archive File** to share it. Zephyr applications are detected and configured
+automatically, including existing generic CDT CMake imports. Saved board targets
+are retained; missing targets are selected in **Project Properties > Zephyr**.
+No separate project repair step is required.
+
 ## Start here
 
 - [One-click project setup, build, firmware output, Flash and Debug workflow](docs/ONE_CLICK_WORKFLOW.md)
-- [Import applications from a parent folder with project selection](docs/IMPORT_EXISTING_APPLICATIONS.md)
+- [Standard new, open, configure and export workflows](docs/IMPORT_EXISTING_APPLICATIONS.md)
 - [Global, cross-vendor OpenOCD tool manager](docs/SHARED_OPENOCD_TOOLS.md)
 - [Build, install locally and use the development slice](docs/DEVELOPMENT.md)
 - [Set up workbench updates once](docs/UPDATE_CHANNEL.md)

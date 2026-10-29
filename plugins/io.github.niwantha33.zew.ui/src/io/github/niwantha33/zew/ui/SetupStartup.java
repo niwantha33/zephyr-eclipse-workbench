@@ -9,6 +9,7 @@ import org.eclipse.ui.PlatformUI;
 /** Offer setup once for new Eclipse workspaces; existing configurations are left alone. */
 public final class SetupStartup implements IStartup {
     @Override public void earlyStartup() {
+        ZephyrProjectLifecycle.scheduleOpenProjects();
         var display = PlatformUI.getWorkbench().getDisplay();
         display.asyncExec(() -> {
             var plugin = Activator.getDefault(); if (plugin == null) return;

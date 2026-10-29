@@ -65,7 +65,7 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
     }
     private record ImportItem(Path folder, String name, String board, boolean repair) {}
 
-    public ZephyrImportWizard() { setWindowTitle("Import or Repair Zephyr Applications"); setNeedsProgressMonitor(true); }
+    public ZephyrImportWizard() { setWindowTitle("Import Zephyr Applications"); setNeedsProgressMonitor(true); }
 
     @Override public void init(IWorkbench workbench, IStructuredSelection selection) {
         if (selection.getFirstElement() instanceof IResource resource && resource.getLocation() != null) {
@@ -199,7 +199,7 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
                 for (Entry entry : found) {
                     TableItem item = new TableItem(projects, SWT.NONE); item.setData(entry);
                     item.setText(new String[] {entry.name, entry.folder.toString(), entry.problem.isBlank()
-                            ? entry.repair ? "Repair generic CMake builder" : entry.existing != null ? "Bind existing project to Zephyr"
+                            ? entry.repair ? "Configure Zephyr application" : entry.existing != null ? "Bind existing project to Zephyr"
                             : entry.board.isBlank() ? "Choose target on next page" : "Saved: " + entry.board : entry.problem});
                     item.setGrayed(!entry.problem.isBlank());
                 }
@@ -286,7 +286,7 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
                     catch (Exception error) { throw new InvocationTargetException(error); }
                     finally { monitor.done(); }
                 });
-                if (found.isEmpty()) throw new IOException("No hardware found. Repair or select another ready environment.");
+                if (found.isEmpty()) throw new IOException("No hardware found. Complete setup or select another ready environment.");
                 rows = found; loadedRoot = root; filter(); validateTarget();
             } catch (InterruptedException error) { setErrorMessage("Hardware discovery cancelled. Load hardware to retry."); }
             catch (Exception error) { setErrorMessage(message(error)); }
@@ -336,7 +336,7 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
                 StringBuilder text = new StringBuilder("Import in place. Source files remain at their existing locations.\n\nEnvironment: " + target.loadedRoot + "\n");
                 for (Entry entry : applications.selected()) {
                     text.append("\n").append(entry.name).append("\n  ").append(entry.folder).append("\n  Target: ").append(target.board(entry)).append("\n");
-                    if (entry.repair) text.append("  Repair: replace generic CDT CMake with the managed West builder.\n"
+                    if (entry.repair) text.append("  Configure the managed Zephyr build workflow automatically.\n"
                             + "  Eclipse metadata backed up in .zew/import-backup; existing build files retained.\n");
                     else if (entry.existing != null) text.append("  Bind the existing workspace project to this Zephyr environment.\n");
                 }
