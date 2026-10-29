@@ -13,6 +13,7 @@ public final class DebugServerDiagnostics {
     private static final int LINES = 40;
     private static final int MAX_LINE = 500;
     private final java.util.Set<Integer> listeningPorts = new java.util.HashSet<>();
+    private final java.util.Set<Integer> tclPorts = new java.util.HashSet<>();
     private final ArrayDeque<String> recent = new ArrayDeque<>();
 
     private final int expectedPort;
@@ -29,6 +30,9 @@ public final class DebugServerDiagnostics {
         var listening = java.util.regex.Pattern.compile(
                 "^Info\\s*:\\s*Listening on port ([0-9]{1,5}) for gdb connections\\s*$").matcher(line);
         if (listening.matches()) listeningPorts.add(Integer.parseInt(listening.group(1)));
+        var tcl = java.util.regex.Pattern.compile(
+                "^Info\\s*:\\s*Listening on port ([0-9]{1,5}) for tcl connections\\s*$").matcher(line);
+        if (tcl.matches()) tclPorts.add(Integer.parseInt(tcl.group(1)));
         // Match actual server readiness, never West's pre-start "running" announcement.
         if (runner.equals("jlink") && expectedPort > 0 && line.trim().matches("Waiting for GDB connection\\.\\.\\."))
             listeningPorts.add(expectedPort);
@@ -66,6 +70,7 @@ public final class DebugServerDiagnostics {
     public synchronized boolean isListening(int port) {
         return listeningPorts.contains(port);
     }
+    public synchronized boolean isTclListening(int port) { return tclPorts.contains(port); }
 
     public synchronized String describe(String board, int port, Integer exitCode) {
         String log = String.join("\n", recent);

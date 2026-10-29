@@ -33,6 +33,8 @@ public final class EditorSmoke implements IApplication {
         project.open(null); project.refreshLocal(IResource.DEPTH_INFINITE, null);
         var parsed = EditorSettings.parse(Files.readString(fixture.resolve(".zew-build/first/editor-settings.tsv"), StandardCharsets.UTF_8));
         var ui = Platform.getBundle("io.github.niwantha33.zew.ui");
+        ui.start();
+        OpenOcdMetadataSmoke.run(ui, fixture);
         if (args.length < 2 || !args[1].equals("verify")) ProjectImportSmoke.run(ui, fixture.getParent());
         if (Boolean.getBoolean("zew.nativeFlow") && (args.length < 2 || !args[1].equals("verify")))
             StandardProjectFlowSmoke.run(ui, fixture.getParent());

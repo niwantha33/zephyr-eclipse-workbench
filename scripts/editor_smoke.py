@@ -54,12 +54,16 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
     spec = importlib.util.spec_from_file_location('editor', ROOT / 'plugins/io.github.niwantha33.zew.ui/tools/editor_settings.py')
     editor = importlib.util.module_from_spec(spec); spec.loader.exec_module(editor)
     editor.write(editor.collect(fixture, build, gcc.parent.parent), build / 'editor-settings.tsv')
+    metadata_source = temporary / 'thread-metadata.c'
+    metadata_source.write_text('const unsigned char _kernel_thread_info_size_t_size = 4;\nconst unsigned int _kernel_thread_info_num_offsets = 15;\nconst unsigned int _kernel_thread_info_offsets[15] = {1,0,4,0};\nint _kernel = 1;\nvoid entry(void) {}\n')
+    for bits in (32, 64):
+        run([gcc, f'-m{bits}', '-nostdlib', '-static', '-Wl,-e,entry', metadata_source, '-o', fixture / f'thread-{bits}.elf'])
     classes = temporary / 'classes'; classes.mkdir()
     classpath = os.pathsep.join(map(str, (eclipse / 'plugins').glob('*.jar')))
-    run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java', ROOT / 'tests/eclipse/ProjectImportSmoke.java', ROOT / 'tests/eclipse/StandardProjectFlowSmoke.java', ROOT / 'tests/eclipse/WorkbenchSmoke.java', ROOT / 'tests/eclipse/CoreBuildCompatibilitySmoke.java'])
+    run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java', ROOT / 'tests/eclipse/ProjectImportSmoke.java', ROOT / 'tests/eclipse/StandardProjectFlowSmoke.java', ROOT / 'tests/eclipse/WorkbenchSmoke.java', ROOT / 'tests/eclipse/CoreBuildCompatibilitySmoke.java', ROOT / 'tests/eclipse/OpenOcdMetadataSmoke.java'])
     jar = temporary / 'editor-smoke.jar'
     with zipfile.ZipFile(jar, 'w') as z:
-        z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nBundle-ManifestVersion: 2\nBundle-SymbolicName: zew.editor.smoke;singleton:=true\nBundle-Version: 1.0.0\nRequire-Bundle: org.eclipse.equinox.app,org.eclipse.core.runtime,org.eclipse.core.resources,org.eclipse.core.expressions,org.eclipse.cdt.core,org.eclipse.debug.ui,org.eclipse.jface,org.eclipse.ui,org.eclipse.ui.ide,org.eclipse.swt,org.eclipse.launchbar.core,org.eclipse.cdt.debug.core,io.github.niwantha33.zew.core\n\n')
+        z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nBundle-ManifestVersion: 2\nBundle-SymbolicName: zew.editor.smoke;singleton:=true\nBundle-Version: 1.0.0\nRequire-Bundle: org.eclipse.equinox.app,org.eclipse.core.runtime,org.eclipse.core.resources,org.eclipse.core.expressions,org.eclipse.cdt.core,org.eclipse.debug.ui,org.eclipse.jface,org.eclipse.ui,org.eclipse.ui.ide,org.eclipse.swt,org.eclipse.launchbar.core,org.eclipse.cdt.debug.core,org.eclipse.cdt.dsf,io.github.niwantha33.zew.core\n\n')
         z.writestr('plugin.xml', '<plugin><extension point="org.eclipse.core.runtime.applications" id="run"><application><run class="zew.smoke.EditorSmoke"/></application></extension><extension point="org.eclipse.core.runtime.applications" id="workbench"><application><run class="zew.smoke.WorkbenchSmoke"/></application></extension></plugin>')
         for path in classes.rglob('*.class'): z.write(path, path.relative_to(classes).as_posix())
     config = eclipse / 'configuration/config.ini'; original = config.read_text()

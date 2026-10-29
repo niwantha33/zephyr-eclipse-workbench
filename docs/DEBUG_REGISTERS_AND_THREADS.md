@@ -29,7 +29,8 @@ by this Workbench.
 ## Repeated `Only size_t of 4 bytes are supported`
 
 OpenOCD's Zephyr RTOS decoder reads the byte at the ELF symbol
-`_kernel_openocd_size_t_size` from the physical target and rejects values other
+`_kernel_thread_info_size_t_size` (older builds use its
+`_kernel_openocd_size_t_size` alias) from the physical target and rejects values other
 than 4. The message does not establish that the MSPM0's C ABI has a 64-bit
 `size_t`. Possible causes include an ELF that differs from the flashed image,
 unavailable/uninitialized metadata, target memory access, or incompatible
@@ -46,15 +47,35 @@ debugging while Zephyr thread enumeration fails.
    32-bit supported target is 4. Do not patch the ELF or firmware metadata to
    conceal the error.
 
-An initial `No symbols for Zephyr` can occur during GDB symbol negotiation;
-repeated failures after attachment require investigation. Workbench reports
-the repeated size error once with these checks and preserves the raw output.
-It does not automatically flash, reset again, or change the RTOS configuration.
+The native OpenOCD launch now reads static metadata from the exact launch ELF
+using CDT's ELF reader. When `CONFIG_DEBUG_THREAD_INFO=y`, it verifies the
+size byte, count and offset table through the owned OpenOCD Tcl endpoint before
+GDB attaches. These are only the bounded addresses of the ELF's allocated,
+read-only symbols, not a scan of RAM or peripheral registers. A mismatch stops
+the launch and reports the first differing address, expected byte and observed
+target byte. It does not proceed with invalid thread offsets, disable RTOS
+awareness, write metadata into RAM, or automatically flash. An unreadable Tcl
+endpoint or malformed/missing ELF metadata is also a launch error.
 
-The `target extended-remote` suggestion is an OpenOCD recommendation about
-the connection mode; it does not explain missing peripheral definitions or
-establish the cause of the thread metadata error. The current native CDT
-launch controls its remote connection sequence.
+For a mismatch, explicitly Flash the selected exact build and retry Debug. A
+successful metadata comparison verifies only that table, not the entire
+firmware image. If comparison succeeds and OpenOCD still fails its RTOS
+decoder after symbol negotiation, capture that output and investigate the
+OpenOCD/GDB compatibility; the metadata comparison is not a hardware thread
+enumeration test.
+
+An initial `No symbols for Zephyr` before GDB connects can occur because West
+enables RTOS decoding before GDB supplies the symbol table. It does not by
+itself indicate a missing ELF. Raw OpenOCD messages remain visible.
+
+Native OpenOCD launches with GDB 7.12 or newer now use `extended-remote` via
+CDT's command factory, preserving its normal DSF startup, breakpoint, variable,
+and stack services. Older GDB and other runners retain CDT's default services.
+The connection-mode change does not establish the cause of a metadata mismatch.
+
+`Data region NOT available!` comes from OpenOCD's MSPM0 flash driver when the
+optional data-flash bank has zero size. It does not mean SRAM or the Zephyr
+thread metadata is missing, and is not treated as a fatal launch error.
 
 ## `rtsflash` / missing Python `usb`
 
@@ -71,5 +92,7 @@ an SVD decoder.
 - [Zephyr debugging and SVD configuration](https://docs.zephyrproject.org/latest/develop/debug/index.html)
 
 No physical register or thread inspection was performed in the development
-container. The regression tests exercise diagnostic classification, not probe
-or peripheral behavior.
+container. Tests exercise a real socket with an emulated Tcl peer for matching,
+mismatched and malformed responses; installed Eclipse tests extract metadata
+from compiler-generated ELF32/ELF64 files and check the actual DSF command.
+These tests do not establish successful RTOS enumeration on hardware.

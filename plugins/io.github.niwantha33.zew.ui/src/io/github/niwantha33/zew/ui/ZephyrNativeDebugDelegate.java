@@ -52,7 +52,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
     private static final String TELNET_PORT = PORT + ".telnet";
 
     private record Parameters(io.github.niwantha33.zew.core.TargetOperations.Plan plan,
-                              String gdb, Path elf, int port, java.util.Properties settings) {}
+                              String gdb, Path elf, int port, java.util.Properties settings,
+                              String runner, List<io.github.niwantha33.zew.core.OpenOcdThreadCheck.Region> threadMetadata) {}
 
     private Parameters prepare(ILaunchConfiguration configuration) throws CoreException {
         try {
@@ -94,7 +95,10 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             if (port < 1024 || port > 65535) throw new IOException("GDB TCP port must be 1024..65535.");
             plan = new DebugPorts(port, configuration.getAttribute(TCL_PORT, 6333),
                     configuration.getAttribute(TELNET_PORT, 4444)).apply(plan, runner);
-            return new Parameters(plan, gdb, elf, port, settings);
+            var config = io.github.niwantha33.zew.core.BuildArtifacts.configuration(plan.buildDirectory());
+            var metadata = runner.equals("openocd") && "y".equals(config.get("CONFIG_DEBUG_THREAD_INFO"))
+                    ? OpenOcdThreadMetadata.read(elf) : List.<io.github.niwantha33.zew.core.OpenOcdThreadCheck.Region>of();
+            return new Parameters(plan, gdb, elf, port, settings, runner, metadata);
         } catch (Exception error) {
             if (error instanceof CoreException core) throw core;
             throw failure("Debug target validation failed: " + error.getMessage(), error);
@@ -113,6 +117,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         working.setAttribute(TCL_PORT, ports.tcl());
         working.setAttribute(TELNET_PORT, ports.telnet());
         var params = prepare(working);
+        working.setAttribute(RUNNER, params.runner());
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROJECT_NAME,
                 configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, ""));
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROGRAM_NAME, params.elf().toString());
@@ -126,6 +131,15 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUG_NAME, params.gdb());
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_NON_STOP, false);
         return super.getLaunch(working.doSave(), mode);
+    }
+
+    @Override protected org.eclipse.cdt.dsf.debug.service.IDsfDebugServicesFactory newServiceFactory(
+            ILaunchConfiguration configuration, String version) {
+        try {
+            if ("openocd".equals(configuration.getAttribute(RUNNER, "")))
+                return new ZephyrDebugServicesFactory(version, configuration);
+        } catch (CoreException error) { Activator.getDefault().getLog().log(error.getStatus()); }
+        return super.newServiceFactory(configuration, version);
     }
 
     @Override public void launch(ILaunchConfiguration configuration, String mode, ILaunch launch,
@@ -185,6 +199,26 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 throw new IOException(session.diagnose(params.plan().board(), params.port(), exitCode));
             }
             session.register();
+            if (!params.threadMetadata().isEmpty()) {
+                int tclPort = configuration.getAttribute(TCL_PORT, 6333);
+                long tclDeadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+                while (!session.diagnostics.isTclListening(tclPort) && server.isAlive() && System.nanoTime() < tclDeadline) {
+                    if (monitor.isCanceled()) throw new java.io.InterruptedIOException("Debug session cancelled.");
+                    Thread.sleep(50);
+                }
+                if (!session.diagnostics.isTclListening(tclPort))
+                    throw new IOException("Owned OpenOCD Tcl endpoint was not ready for read-only Zephyr metadata verification.");
+                try (var info = console.newMessageStream()) {
+                    info.println("Preflight: comparing static Zephyr thread metadata in target memory with " + params.elf());
+                    try {
+                        io.github.niwantha33.zew.core.OpenOcdThreadCheck.verify(tclPort, params.threadMetadata());
+                    } catch (IOException error) {
+                        info.println("Thread metadata verification failed: " + error.getMessage());
+                        throw error;
+                    }
+                    info.println("Verified target thread metadata against the selected ELF; attaching GDB using extended-remote.");
+                }
+            }
             // Superclass initializes a true GdbLaunch with Eclipse breakpoints,
             // registers, variables, call stacks, memory and source stepping.
             super.launch(configuration, mode, launch, monitor);
