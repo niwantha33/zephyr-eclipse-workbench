@@ -475,7 +475,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private void openProjectSettings() {
         if (project == null) return;
         var dialog = org.eclipse.ui.dialogs.PreferencesUtil.createPropertyDialogOn(
-                getSite().getShell(), project, Activator.ID + ".projectProperties", null, null);
+                getSite().getShell(), project, "io.github.niwantha33.zew.projectProperties", null, null);
         if (dialog != null && dialog.open() == Window.OK) reload();
     }
 
