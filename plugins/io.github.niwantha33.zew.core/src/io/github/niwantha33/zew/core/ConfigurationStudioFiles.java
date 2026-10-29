@@ -89,7 +89,7 @@ public final class ConfigurationStudioFiles {
         return new Snapshot(new ArrayList<>(options.values()), dts, profile, source);
     }
 
-    public static Preview plan(Path application, String symbol, String value) throws IOException {
+    public static Preview plan(Path application, Path build, String symbol, String value) throws IOException {
         if (symbol == null || !SYMBOL.matcher(symbol).matches())
             throw new IOException("Invalid Kconfig symbol.");
         if (value != null && (!VALUE.matcher(value).matches() || !value.equals(value.strip())
@@ -116,7 +116,7 @@ public final class ConfigurationStudioFiles {
         }
         // Only known configuration inputs can be edited. Do not generate
         // guessed Kconfig symbols from an arbitrary user text entry.
-        if (found == 0 && !knownInGeneratedConfig(root, symbol))
+        if (found == 0 && !knownInGeneratedConfig(build, symbol))
             throw new IOException("Symbol is not present in prj.conf or a verified generated .config: CONFIG_" + symbol);
         String updated = String.join(newline, rows);
         if (value != null) {
@@ -127,22 +127,14 @@ public final class ConfigurationStudioFiles {
                 symbol, previous, value);
     }
 
-    private static boolean knownInGeneratedConfig(Path application, String symbol) throws IOException {
-        Path output = application.resolve(".zew-build");
-        if (!Files.isDirectory(output, LinkOption.NOFOLLOW_LINKS)) return false;
-        // Conservative fallback: the UI normally edits a selected effective
-        // symbol, but the writer must not trust an arbitrary symbol name.
-        try (var folders = Files.list(output)) {
-            for (Path dir : folders.filter(Files::isDirectory).toList()) {
-                Path conf = dir.resolve("zephyr/.config");
-                if (!Files.isRegularFile(conf)) continue;
-                for (String line : bounded(conf).split("\\R")) {
-                    var set = ASSIGN.matcher(line);
-                    var disabled = NOT_SET.matcher(line);
-                    if (set.matches() && symbol.equals(set.group(1))
-                            || disabled.matches() && symbol.equals(disabled.group(1))) return true;
-                }
-            }
+    private static boolean knownInGeneratedConfig(Path build, String symbol) throws IOException {
+        Path conf = build.resolve("zephyr/.config");
+        if (!Files.isRegularFile(conf, LinkOption.NOFOLLOW_LINKS)) return false;
+        for (String line : bounded(conf).split("\\R")) {
+            var set = ASSIGN.matcher(line);
+            var disabled = NOT_SET.matcher(line);
+            if (set.matches() && symbol.equals(set.group(1))
+                    || disabled.matches() && symbol.equals(disabled.group(1))) return true;
         }
         return false;
     }
