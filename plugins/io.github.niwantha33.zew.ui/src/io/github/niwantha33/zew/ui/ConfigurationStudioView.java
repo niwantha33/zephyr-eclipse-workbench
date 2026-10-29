@@ -73,7 +73,14 @@ public final class ConfigurationStudioView extends ViewPart {
     private final java.util.Map<Domain, Text> peripheralInfo = new java.util.LinkedHashMap<>();
     private TableEditor inlineToggleEditor;
     private Composite inlineToggle;
-    private Table options, hardwareDevices;
+    private Table options;
+    private org.eclipse.swt.widgets.Tree hardwareDevices;
+    private Text hardwareSearch;
+    private Combo hardwareState;
+    private Label hardwareSummary, navigationLocation;
+    private Button backButton, forwardButton;
+    private final java.util.List<String> navigationHistory = new java.util.ArrayList<>();
+    private int navigationPosition = -1;
     private Text hardwareDescription;
     private Button enableButton, disableButton, editButton, removeButton;
     private Combo category;
@@ -152,7 +159,7 @@ public final class ConfigurationStudioView extends ViewPart {
         // Real SWT peripheral tabs, independent of the source-editing view.
         peripheralTabs = new CTabFolder(software, SWT.BORDER | SWT.FLAT);
         GridData domainLayout = new GridData(SWT.FILL, SWT.TOP, true, false);
-        domainLayout.heightHint = 146;
+        domainLayout.heightHint = 82;
         peripheralTabs.setLayoutData(domainLayout);
         peripheralTabs.setSimple(false);
         for (Domain domain : ConfigurationStudioDomains.TABS) {
@@ -194,12 +201,43 @@ public final class ConfigurationStudioView extends ViewPart {
         category.addListener(SWT.Selection, event -> refreshOptions());
         search = new Text(navigation, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL | SWT.BORDER);
         search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        search.setMessage("Search by feature, CONFIG_ name or value…");
-        search.addModifyListener(event -> { filter = search.getText(); refreshOptions(); });
+        search.setMessage("Find any feature · paste CONFIG_ name or search by value…");
+        search.addModifyListener(event -> {
+            filter = search.getText();
+            if (!filter.isBlank()) {
+                selectDomain(ConfigurationStudioDomains.OVERVIEW);
+                category.select(0);
+            }
+            refreshOptions();
+        });
+        search.addListener(SWT.DefaultSelection, event -> options.setFocus());
+        search.addListener(SWT.Selection, event -> {
+            if (event.detail == SWT.ICON_CANCEL) search.setText("");
+        });
+        search.addListener(SWT.KeyDown, event -> {
+            if (event.keyCode == SWT.ESC) search.setText("");
+        });
+        getViewSite().getActionBars().setGlobalActionHandler(org.eclipse.ui.actions.ActionFactory.FIND.getId(),
+                new org.eclipse.jface.action.Action() {
+                    @Override public void run() { focusSearch(); }
+                });
 
         overview = new Label(software, SWT.WRAP);
         overview.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         overview.setText("Select a feature to inspect its definition and change its project request.");
+
+        var trail = new Composite(software, SWT.NONE);
+        trail.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        trail.setLayout(new GridLayout(4, false));
+        backButton = action(trail, "← Back", () -> navigateHistory(-1));
+        backButton.setToolTipText("Previous inspected setting (Alt+Left)");
+        forwardButton = action(trail, "Forward →", () -> navigateHistory(1));
+        forwardButton.setToolTipText("Next inspected setting (Alt+Right)");
+        backButton.setEnabled(false);
+        forwardButton.setEnabled(false);
+        navigationLocation = new Label(trail, SWT.WRAP);
+        navigationLocation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        action(trail, "Clear filters", this::clearFeatureFilters);
 
         var sash = new SashForm(software, SWT.HORIZONTAL);
         sash.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -234,7 +272,17 @@ public final class ConfigurationStudioView extends ViewPart {
         disableButton.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         disableButton.addListener(SWT.Selection, event -> setToggle("n"));
         inlineToggle.setVisible(false);
-        options.addListener(SWT.Selection, event -> describeSelected());
+        options.addListener(SWT.Selection, event -> {
+            rememberSelection();
+            describeSelected();
+        });
+        options.addListener(SWT.KeyDown, event -> {
+            if ((event.stateMask & SWT.ALT) != 0 && event.keyCode == SWT.ARROW_LEFT) {
+                navigateHistory(-1); event.doit = false;
+            } else if ((event.stateMask & SWT.ALT) != 0 && event.keyCode == SWT.ARROW_RIGHT) {
+                navigateHistory(1); event.doit = false;
+            }
+        });
         options.addControlListener(new ControlAdapter() {
             @Override public void controlResized(ControlEvent event) { sizeColumns(); }
         });
@@ -310,12 +358,27 @@ public final class ConfigurationStudioView extends ViewPart {
         var deviceTitle = new Label(devicePanel, SWT.NONE);
         deviceTitle.setText("Detected hardware from the selected build");
         deviceTitle.setFont(metricFont);
-        hardwareDevices = new Table(devicePanel, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL);
+        var hardwareNavigation = new Composite(devicePanel, SWT.NONE);
+        hardwareNavigation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        hardwareNavigation.setLayout(new GridLayout(4, false));
+        hardwareSearch = new Text(hardwareNavigation, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL | SWT.BORDER);
+        hardwareSearch.setMessage("Find node, compatible, label or address…");
+        hardwareSearch.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        hardwareState = new Combo(hardwareNavigation, SWT.DROP_DOWN | SWT.READ_ONLY);
+        hardwareState.setItems("All nodes", "Okay/default", "Disabled");
+        hardwareState.select(0);
+        hardwareState.setToolTipText("Filter the node's own status; ancestors remain visible as context");
+        action(hardwareNavigation, "Expand all", () -> expandHardware(true));
+        action(hardwareNavigation, "Collapse all", () -> expandHardware(false));
+        hardwareSummary = new Label(devicePanel, SWT.WRAP);
+        hardwareSummary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        hardwareDevices = new org.eclipse.swt.widgets.Tree(devicePanel,
+                SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL | SWT.H_SCROLL);
         hardwareDevices.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         hardwareDevices.setHeaderVisible(true);
         hardwareDevices.setLinesVisible(true);
-        for (String title : new String[] {"Device path", "Compatible", "State"}) {
-            var column = new TableColumn(hardwareDevices, SWT.LEFT);
+        for (String title : new String[] {"Device / hierarchy", "Compatible", "Node status"}) {
+            var column = new org.eclipse.swt.widgets.TreeColumn(hardwareDevices, SWT.LEFT);
             column.setText(title);
         }
         hardwareDescription = new Text(devicePanel, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.BORDER);
@@ -323,12 +386,17 @@ public final class ConfigurationStudioView extends ViewPart {
         descriptionLayout.heightHint = 112;
         hardwareDescription.setLayoutData(descriptionLayout);
         hardwareDescription.setText("Build the exact target to discover hardware from zephyr.dts.");
-        hardwareDevices.addListener(SWT.Selection, event -> {
-            if (hardwareDevices.getSelectionCount() != 0) {
-                var selected = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
-                hardwareDescription.setText(DevicetreeHardware.explanation(selected));
-            }
+        hardwareDevices.addListener(SWT.Selection, event -> describeHardware());
+        hardwareDevices.addListener(SWT.DefaultSelection, event -> revealHardwareSource());
+        hardwareSearch.addModifyListener(event -> refreshHardware());
+        hardwareSearch.addListener(SWT.DefaultSelection, event -> hardwareDevices.setFocus());
+        hardwareSearch.addListener(SWT.Selection, event -> {
+            if (event.detail == SWT.ICON_CANCEL) hardwareSearch.setText("");
         });
+        hardwareSearch.addListener(SWT.KeyDown, event -> {
+            if (event.keyCode == SWT.ESC) hardwareSearch.setText("");
+        });
+        hardwareState.addListener(SWT.Selection, event -> refreshHardware());
         var sourcePanel = new Composite(hardwareSplit, SWT.NONE);
         sourcePanel.setLayout(new GridLayout(1, false));
         var sourceCaption = new Label(sourcePanel, SWT.NONE);
@@ -336,7 +404,11 @@ public final class ConfigurationStudioView extends ViewPart {
         tree = new Text(sourcePanel, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         hardwareSplit.setWeights(new int[] {60, 40});
-        action(hardware, "Open the selected application overlay…", this::openOverlay);
+        var hardwareActions = new Composite(hardware, SWT.NONE);
+        hardwareActions.setLayout(new GridLayout(3, false));
+        action(hardwareActions, "Reveal in source", this::revealHardwareSource);
+        action(hardwareActions, "Copy node path", this::copyHardwarePath);
+        action(hardwareActions, "Edit application overlay…", this::openOverlay);
 
         Composite reports = tab(tabs, "Insights");
         reports.setLayout(new GridLayout(1, false));
@@ -446,6 +518,12 @@ public final class ConfigurationStudioView extends ViewPart {
         project = selected;
         selectedOverlay = overlayPath == null ? "app.overlay" : overlayPath;
         if (changedProject && category != null && !category.isDisposed()) {
+            navigationHistory.clear();
+            navigationPosition = -1;
+            backButton.setEnabled(false);
+            forwardButton.setEnabled(false);
+            hardwareSearch.setText("");
+            hardwareState.select(0);
             selectDomain(ConfigurationStudioDomains.OVERVIEW);
             category.select(0);
             if (search != null && !search.isDisposed()) search.setText("");
@@ -476,6 +554,7 @@ public final class ConfigurationStudioView extends ViewPart {
         inspectionSettings = null;
         if (options == null || options.isDisposed()) return;
         if (project == null) {
+            snapshot = null;
             hasGeneratedConfiguration = false;
             buildOutdated = false;
             updateMetrics();
@@ -483,6 +562,7 @@ public final class ConfigurationStudioView extends ViewPart {
             describeSelected();
             help.setText("Open Zephyr > Configuration Studio with an application selected in Project Explorer.");
             tree.setText("");
+            refreshHardware();
             analysis.setText("");
             return;
         }
@@ -546,38 +626,165 @@ public final class ConfigurationStudioView extends ViewPart {
             describeSelected();
             help.setText("Configuration cannot be loaded: " + error.getMessage());
             tree.setText("");
+            refreshHardware();
             analysis.setText("Open Project settings or inspect the source file for configuration errors.");
             status.setText("Configuration unavailable. No source files were changed.");
         }
     }
 
 
+    private void focusSearch() {
+        if (tabs.getSelectionIndex() == 2) tabs.setSelection(0);
+        Text target = tabs.getSelectionIndex() == 1 ? hardwareSearch : search;
+        target.setFocus();
+        target.selectAll();
+    }
+
+    private void clearFeatureFilters() {
+        selectDomain(ConfigurationStudioDomains.OVERVIEW);
+        category.select(0);
+        search.setText("");
+        refreshOptions();
+    }
+
+    private void rememberSelection() {
+        Option option = selected();
+        if (option == null || navigationPosition >= 0
+                && navigationHistory.get(navigationPosition).equals(option.symbol())) return;
+        while (navigationHistory.size() > navigationPosition + 1)
+            navigationHistory.remove(navigationHistory.size() - 1);
+        navigationHistory.add(option.symbol());
+        if (navigationHistory.size() > 40) navigationHistory.remove(0);
+        navigationPosition = navigationHistory.size() - 1;
+        backButton.setEnabled(navigationPosition > 0);
+        forwardButton.setEnabled(false);
+    }
+
+    private void navigateHistory(int direction) {
+        int next = navigationPosition + direction;
+        if (next < 0 || next >= navigationHistory.size()) return;
+        String symbol = navigationHistory.get(next);
+        clearFeatureFilters();
+        // Exact search also finds symbols beyond the bounded default table.
+        search.setText("CONFIG_" + symbol);
+        for (TableItem item : options.getItems()) {
+            if (((Option) item.getData()).symbol().equals(symbol)) {
+                options.setSelection(item);
+                options.showSelection();
+                navigationPosition = next;
+                describeSelected();
+                break;
+            }
+        }
+        backButton.setEnabled(navigationPosition > 0);
+        forwardButton.setEnabled(navigationPosition + 1 < navigationHistory.size());
+    }
+
+    private java.util.List<org.eclipse.swt.widgets.TreeItem> hardwareItems() {
+        var result = new java.util.ArrayList<org.eclipse.swt.widgets.TreeItem>();
+        var queue = new java.util.ArrayDeque<org.eclipse.swt.widgets.TreeItem>();
+        queue.addAll(java.util.List.of(hardwareDevices.getItems()));
+        while (!queue.isEmpty()) {
+            var item = queue.removeFirst();
+            result.add(item);
+            queue.addAll(java.util.List.of(item.getItems()));
+        }
+        return result;
+    }
+
+    private void expandHardware(boolean expanded) {
+        for (var item : hardwareItems()) item.setExpanded(expanded);
+    }
+
+    private void describeHardware() {
+        if (hardwareDevices.getSelectionCount() == 0) return;
+        var device = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+        hardwareDescription.setText(DevicetreeHardware.explanation(device));
+    }
+
+    private void revealHardwareSource() {
+        if (hardwareDevices.getSelectionCount() == 0 || snapshot == null) return;
+        var device = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+        String source = tree.getText();
+        int start = 0;
+        for (int line = 1; line < device.line(); line++) {
+            int end = source.indexOf('\n', start);
+            if (end < 0) return;
+            start = end + 1;
+        }
+        int end = source.indexOf('\n', start);
+        tree.setSelection(start, end < 0 ? source.length() : end);
+        tree.showSelection();
+        tree.setFocus();
+        status.setText(device.path() + " · generated zephyr.dts:" + device.line());
+    }
+
+    private void copyHardwarePath() {
+        if (hardwareDevices.getSelectionCount() == 0) return;
+        var device = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+        var clipboard = new Clipboard(hardwareDevices.getDisplay());
+        try {
+            clipboard.setContents(new Object[] {device.path()}, new Transfer[] {TextTransfer.getInstance()});
+        } finally { clipboard.dispose(); }
+    }
+
     private void refreshHardware() {
         if (hardwareDevices == null || hardwareDevices.isDisposed()) return;
+        String previous = hardwareDevices.getSelectionCount() == 0 ? null
+                : ((DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData()).path();
+        var expanded = new java.util.HashSet<String>();
+        for (var item : hardwareItems()) if (item.getExpanded())
+            expanded.add(((DevicetreeHardware.Device) item.getData()).path());
+        var devices = snapshot == null ? List.<DevicetreeHardware.Device>of()
+                : DevicetreeHardware.inspect(snapshot.devicetree());
+        var matches = new java.util.LinkedHashSet<String>();
+        for (var device : devices)
+            if (DevicetreeHardware.matches(device, hardwareSearch.getText(), hardwareState.getText()))
+                matches.add(device.path());
+        var visible = new java.util.HashSet<>(matches);
+        for (String path : matches) {
+            for (int slash = path.lastIndexOf('/'); slash > 0; slash = path.lastIndexOf('/', slash - 1))
+                visible.add(path.substring(0, slash));
+            visible.add("/");
+        }
         hardwareDevices.setRedraw(false);
         try {
             hardwareDevices.removeAll();
-            if (snapshot != null) {
-                for (var device : DevicetreeHardware.inspect(snapshot.devicetree())) {
-                    if (device.compatible().isBlank() && !device.name().contains("@")) continue;
-                    var row = new TableItem(hardwareDevices, SWT.NONE);
-                    row.setText(new String[] {device.path(), device.compatible(),
-                            device.enabled() ? "Enabled" : device.status()});
-                    row.setData(device);
-                }
+            var nodes = new java.util.LinkedHashMap<String, org.eclipse.swt.widgets.TreeItem>();
+            for (var device : devices) {
+                if (!visible.contains(device.path())) continue;
+                int slash = device.path().lastIndexOf('/');
+                String parent = slash <= 0 ? "/" : device.path().substring(0, slash);
+                var parentItem = device.path().equals("/") ? null : nodes.get(parent);
+                var item = parentItem == null ? new org.eclipse.swt.widgets.TreeItem(hardwareDevices, SWT.NONE)
+                        : new org.eclipse.swt.widgets.TreeItem(parentItem, SWT.NONE);
+                item.setText(new String[] {device.name(), device.compatible(),
+                        device.status().isBlank() ? "Default (okay)" : device.status()});
+                item.setData(device);
+                item.setExpanded(expanded.contains(device.path()) || device.path().equals("/")
+                        || !hardwareSearch.getText().isBlank() || hardwareState.getSelectionIndex() != 0);
+                if (!matches.contains(device.path()))
+                    item.setForeground(hardwareDevices.getDisplay().getSystemColor(SWT.COLOR_DARK_GRAY));
+                nodes.put(device.path(), item);
             }
             for (int i = 0; i < hardwareDevices.getColumnCount(); i++) {
                 hardwareDevices.getColumn(i).pack();
-                if (hardwareDevices.getColumn(i).getWidth() > (i == 0 ? 360 : 240))
-                    hardwareDevices.getColumn(i).setWidth(i == 0 ? 360 : 240);
+                hardwareDevices.getColumn(i).setWidth(Math.max(110,
+                        Math.min(i == 0 ? 360 : 240, hardwareDevices.getColumn(i).getWidth())));
             }
-            if (hardwareDevices.getItemCount() > 0) {
-                hardwareDevices.select(0);
-                hardwareDescription.setText(DevicetreeHardware.explanation(
-                        (DevicetreeHardware.Device) hardwareDevices.getItem(0).getData()));
-            } else hardwareDescription.setText(
-                    "No devices parsed from generated zephyr.dts. Check target build and exact board."
-                    + "\nOnly the generated Devicetree is authoritative.");
+            var selection = nodes.get(previous);
+            if (selection == null) selection = nodes.values().stream()
+                    .filter(item -> matches.contains(((DevicetreeHardware.Device) item.getData()).path()))
+                    .findFirst().orElse(null);
+            if (selection != null) {
+                hardwareDevices.setSelection(selection);
+                hardwareDevices.showSelection();
+                describeHardware();
+            } else hardwareDescription.setText(devices.isEmpty()
+                    ? "Build the exact target to generate zephyr.dts. Existing overlays remain editable."
+                    : "No matching nodes. Clear the search or choose All nodes.");
+            hardwareSummary.setText(matches.size() + " matching nodes · " + devices.size()
+                    + " in this build · ancestors shown for context · double-click to reveal source");
         } finally { hardwareDevices.setRedraw(true); }
     }
 
@@ -647,6 +854,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "   •   Double-click an overridden setting to open prj.conf");
         }
         describeSelected();
+        if (navigationPosition < 0) rememberSelection();
     }
 
     private void selectDomain(Domain domain) {
@@ -695,6 +903,12 @@ public final class ConfigurationStudioView extends ViewPart {
     private void describeSelected() {
         if (helpJob != null) helpJob.cancel();
         Option o = selected();
+        if (navigationLocation != null && !navigationLocation.isDisposed()) {
+            navigationLocation.setText(o == null ? "No matching setting · clear filters to start again"
+                    : activeDomain.title() + "  /  " + ConfigurationStudioPresentation.category(o.symbol())
+                        + "  /  CONFIG_" + o.symbol());
+            navigationLocation.getParent().layout(true, true);
+        }
         boolean togglable = ConfigurationStudioPresentation.isToggle(o);
         KconfigInspector.Result checked = o == null ? null : kconfigCache.get(o.symbol());
         if (enableButton != null && !enableButton.isDisposed()) {

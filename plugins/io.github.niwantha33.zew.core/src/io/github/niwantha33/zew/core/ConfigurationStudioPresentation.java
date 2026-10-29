@@ -122,8 +122,10 @@ public final class ConfigurationStudioPresentation {
 
     public static boolean matches(ConfigurationStudioFiles.Option option, String filter, String term) {
         String search = term == null ? "" : term.strip().toUpperCase(Locale.ROOT);
+        if (search.startsWith("CONFIG_")) search = search.substring(7);
         if (!search.isEmpty() && !(option.symbol().contains(search)
                 || title(option.symbol()).toUpperCase(Locale.ROOT).contains(search)
+                || option.effective() != null && option.effective().toUpperCase(Locale.ROOT).contains(search)
                 || option.requested() != null && option.requested().toUpperCase(Locale.ROOT).contains(search))) return false;
         if (MINE.equals(filter)) return option.overridden();
         if (REVIEW.equals(filter)) return !review(option).isBlank();

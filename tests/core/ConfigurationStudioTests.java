@@ -78,6 +78,12 @@ public final class ConfigurationStudioTests {
             ok(hardware.stream().anyMatch(d -> d.path().equals("/adc@40000000")
                     && !d.enabled() && d.compatible().contains("mspm0-adc")),
                     "hardware inventory reports disabled ADC without inventing configuration");
+            var adcDevice = hardware.stream().filter(d -> d.path().equals("/adc@40000000")).findFirst().orElseThrow();
+            ok(adcDevice.line() == 10, "source navigation uses the physical DTS line, not node ordinal");
+            ok(io.github.niwantha33.zew.core.DevicetreeHardware.matches(adcDevice, "MSPM0 40000000", "Disabled"),
+                    "hardware search combines compatible and address with explicit disabled status");
+            ok(!io.github.niwantha33.zew.core.DevicetreeHardware.matches(adcDevice, "adc", "Okay/default"),
+                    "hardware status filter excludes explicitly disabled controllers");
             ok(io.github.niwantha33.zew.core.DevicetreeHardware.inspect("").isEmpty(),
                     "missing build must not fabricate hardware");
             var snapshot = ConfigurationStudioFiles.inspect(app, build, "Debug (-Og)");
@@ -187,6 +193,13 @@ public final class ConfigurationStudioTests {
             ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(overridden,
                     io.github.niwantha33.zew.core.ConfigurationStudioPresentation.MINE, "logging"),
                     "search by plain English finds project choices");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(overridden,
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.ALL, "CONFIG_LOG"),
+                    "pasted CONFIG_ symbols are searchable without manual prefix removal");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(
+                    new ConfigurationStudioFiles.Option("MAIN_STACK_SIZE", "4096", null, 0),
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.ALL, "4096"),
+                    "effective build values are searchable without a project override");
             ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(invalid,
                     io.github.niwantha33.zew.core.ConfigurationStudioPresentation.REVIEW, "debug"),
                     "unresolved symbol appears under Needs review");
