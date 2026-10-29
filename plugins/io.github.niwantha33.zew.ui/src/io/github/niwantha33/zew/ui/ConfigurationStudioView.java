@@ -17,9 +17,14 @@ import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
+import org.eclipse.swt.custom.CTabFolder;
+import org.eclipse.swt.custom.CTabItem;
+import org.eclipse.swt.custom.TableEditor;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.events.ControlAdapter;
+import org.eclipse.swt.events.ControlEvent;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
@@ -43,6 +48,8 @@ import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
+import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
+import io.github.niwantha33.zew.core.ConfigurationStudioDomains.Domain;
 import io.github.niwantha33.zew.core.KconfigSourceHelp;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles.Snapshot;
@@ -58,7 +65,12 @@ public final class ConfigurationStudioView extends ViewPart {
     public static final String ID = Activator.ID + ".configurationStudio";
     private IProject project;
     private Snapshot snapshot;
-    private Text search, help, tree, analysis;
+    private Text search, help, tree, analysis, codeExample;
+    private CTabFolder peripheralTabs;
+    private Domain activeDomain = ConfigurationStudioDomains.OVERVIEW;
+    private final java.util.Map<Domain, Text> peripheralInfo = new java.util.LinkedHashMap<>();
+    private TableEditor inlineToggleEditor;
+    private Composite inlineToggle;
     private Table options;
     private Button enableButton, disableButton, editButton, removeButton;
     private Combo category;
@@ -110,7 +122,7 @@ public final class ConfigurationStudioView extends ViewPart {
         secondary.setLayout(new GridLayout(4, false));
         action(secondary, "Open prj.conf", () -> openResource("prj.conf"))
                 .setToolTipText("Open the exact application configuration source");
-        action(secondary, "Hardware overlay", this::openOverlay)
+        action(secondary, "Edit hardware overlay", this::openOverlay)
                 .setToolTipText("Open the selected overlay; no pins or clocks are generated automatically");
         action(secondary, "Refresh", this::reload)
                 .setToolTipText("Reload project and generated configuration after editing or building");
@@ -129,6 +141,33 @@ public final class ConfigurationStudioView extends ViewPart {
         tabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         Composite software = tab(tabs, "Features");
         software.setLayout(new GridLayout(1, false));
+
+        // Real SWT peripheral tabs, independent of the source-editing view.
+        peripheralTabs = new CTabFolder(software, SWT.BORDER | SWT.FLAT);
+        GridData domainLayout = new GridData(SWT.FILL, SWT.TOP, true, false);
+        domainLayout.heightHint = 146;
+        peripheralTabs.setLayoutData(domainLayout);
+        peripheralTabs.setSimple(false);
+        for (Domain domain : ConfigurationStudioDomains.TABS) {
+            var tab = new CTabItem(peripheralTabs, SWT.NONE);
+            tab.setText(domain.title());
+            tab.setData(domain);
+            Composite body = new Composite(peripheralTabs, SWT.NONE);
+            body.setLayout(new GridLayout(1, false));
+            Text information = new Text(body, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
+            information.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+            information.setText(domain.description());
+            peripheralInfo.put(domain, information);
+            tab.setControl(body);
+        }
+        peripheralTabs.setSelection(0);
+        peripheralTabs.addListener(SWT.Selection, event -> {
+            Domain chosen = (Domain) peripheralTabs.getSelection().getData();
+            activeDomain = chosen == null ? ConfigurationStudioDomains.OVERVIEW : chosen;
+            if (category != null && !category.isDisposed()) category.select(0);
+            refreshOptions();
+            refreshPeripheralInfo();
+        });
 
         var shortcuts = new Composite(software, SWT.NONE);
         shortcuts.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -160,11 +199,38 @@ public final class ConfigurationStudioView extends ViewPart {
         options = new Table(sash, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION | SWT.V_SCROLL);
         options.setHeaderVisible(true);
         options.setLinesVisible(true);
-        for (String header : new String[] {"Feature / Kconfig symbol", "Effective", "Requested", "Status"}) {
+        for (String header : new String[] {"Feature / Kconfig symbol", "Enable / Disable · Value", "Project request", "Review"}) {
             var column = new TableColumn(options, SWT.LEFT);
             column.setText(header);
         }
+        // One native, keyboard-accessible Enable/Disable editor is reused for
+        // the selected boolean row. Hundreds of native controls are NOT created
+        // for large .config files.
+        inlineToggleEditor = new TableEditor(options);
+        inlineToggleEditor.grabHorizontal = true;
+        inlineToggleEditor.minimumWidth = 154;
+        inlineToggleEditor.minimumHeight = options.getItemHeight();
+        inlineToggle = new Composite(options, SWT.NONE);
+        GridLayout toggleLayout = new GridLayout(2, true);
+        toggleLayout.marginWidth = 0;
+        toggleLayout.marginHeight = 0;
+        toggleLayout.horizontalSpacing = 1;
+        inlineToggle.setLayout(toggleLayout);
+        enableButton = new Button(inlineToggle, SWT.TOGGLE);
+        enableButton.setText("Enable");
+        enableButton.setToolTipText("Request CONFIG_<symbol>=y; review and backup before saving");
+        enableButton.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        enableButton.addListener(SWT.Selection, event -> setToggle("y"));
+        disableButton = new Button(inlineToggle, SWT.TOGGLE);
+        disableButton.setText("Disable");
+        disableButton.setToolTipText("Request CONFIG_<symbol>=n; review and backup before saving");
+        disableButton.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        disableButton.addListener(SWT.Selection, event -> setToggle("n"));
+        inlineToggle.setVisible(false);
         options.addListener(SWT.Selection, event -> describeSelected());
+        options.addControlListener(new ControlAdapter() {
+            @Override public void controlResized(ControlEvent event) { sizeColumns(); }
+        });
         options.addListener(SWT.DefaultSelection, event -> {
             Option o = selected();
             if (o != null && o.overridden()) openResource("prj.conf");
@@ -188,18 +254,31 @@ public final class ConfigurationStudioView extends ViewPart {
         detailNotice.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         detailNotice.setText("Changes are reviewed and backed up before saving.");
 
-        help = new Text(detail, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
+        var explanationTabs = new TabFolder(detail, SWT.NONE);
+        explanationTabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        Composite infoPage = tab(explanationTabs, "Explanation & dependencies");
+        infoPage.setLayout(new GridLayout(1, false));
+        help = new Text(infoPage, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
         help.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        Composite examplePage = tab(explanationTabs, "Example C");
+        examplePage.setLayout(new GridLayout(1, false));
+        codeExample = new Text(examplePage, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY
+                | SWT.H_SCROLL | SWT.V_SCROLL);
+        codeExample.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        Button copyExample = action(examplePage, "Copy example code", () -> {
+            if (codeExample != null && !codeExample.isDisposed()) {
+                Clipboard clipboard = new Clipboard(codeExample.getDisplay());
+                try {
+                    clipboard.setContents(new Object[] {codeExample.getText()},
+                            new Transfer[] {TextTransfer.getInstance()});
+                } finally { clipboard.dispose(); }
+            }
+        });
+        copyExample.setToolTipText("Copy a template. Review the selected board's bindings before use.");
 
         Composite actions = new Composite(detail, SWT.NONE);
         actions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         actions.setLayout(new GridLayout(2, true));
-        enableButton = action(actions, "Enable", () -> setToggle("y"));
-        enableButton.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        enableButton.setToolTipText("Request CONFIG_<symbol>=y in prj.conf; preview and backup before saving");
-        disableButton = action(actions, "Disable", () -> setToggle("n"));
-        disableButton.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        disableButton.setToolTipText("Request CONFIG_<symbol>=n in prj.conf; preview and backup before saving");
         editButton = action(actions, "Edit value…", () -> editSelected(false));
         editButton.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         editButton.setToolTipText("Edit numeric, string and non-switch Kconfig requests");
@@ -212,8 +291,10 @@ public final class ConfigurationStudioView extends ViewPart {
         Composite hardware = tab(tabs, "Hardware");
         hardware.setLayout(new GridLayout(1, false));
         Label warning = new Label(hardware, SWT.WRAP);
-        warning.setText("Generated Devicetree is read-only. Use an application overlay to change hardware, "
-                + "then validate the board's bindings, pin assignments and clocks with a Zephyr build.");
+        warning.setText("Hardware configuration = the board's Devicetree plus your app.overlay. "
+                + "prj.conf selects software features; app.overlay selects actual devices, channels "
+                + "and pinctrl overrides. The generated Devicetree below is read-only. "
+                + "Do not assume an enabled driver means the board has an enabled controller.");
         warning.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         tree = new Text(hardware, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -246,6 +327,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private void shortcut(Composite parent, String caption, String value) {
         action(parent, caption, () -> {
             if (category == null || category.isDisposed()) return;
+            selectDomain(ConfigurationStudioDomains.OVERVIEW);
             int i = java.util.Arrays.asList(ConfigurationStudioPresentation.FILTERS).indexOf(value);
             if (i >= 0) category.select(i);
             refreshOptions();
@@ -326,6 +408,7 @@ public final class ConfigurationStudioView extends ViewPart {
         project = selected;
         selectedOverlay = overlayPath == null ? "app.overlay" : overlayPath;
         if (changedProject && category != null && !category.isDisposed()) {
+            selectDomain(ConfigurationStudioDomains.OVERVIEW);
             category.select(0);
             if (search != null && !search.isDisposed()) search.setText("");
             filter = "";
@@ -340,6 +423,7 @@ public final class ConfigurationStudioView extends ViewPart {
     /** Context action on prj.conf highlights only the project-owned choices. */
     public void focusProjectChanges() {
         if (category == null || category.isDisposed()) return;
+        selectDomain(ConfigurationStudioDomains.OVERVIEW);
         category.select(1);
         tabs.setSelection(0);
         refreshOptions();
@@ -385,6 +469,7 @@ public final class ConfigurationStudioView extends ViewPart {
                             .compareTo(Files.getLastModifiedTime(effectiveFile)) > 0;
             context.setText(project.getName() + "   •   " + board + "   •   " + snapshot.profile());
             updateMetrics();
+            refreshPeripheralInfo();
             refreshOptions();
             tree.setText(snapshot.devicetree().isEmpty()
                     ? "No resolved Devicetree is available. Select the board in Project settings "
@@ -446,6 +531,7 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void refreshOptions() {
         if (options == null || options.isDisposed()) return;
+        if (inlineToggle != null && !inlineToggle.isDisposed()) inlineToggle.setVisible(false);
         Option previousSelection = selected();
         String previousSymbol = previousSelection == null ? null : previousSelection.symbol();
         options.setRedraw(false);
@@ -460,13 +546,14 @@ public final class ConfigurationStudioView extends ViewPart {
                         ? ConfigurationStudioPresentation.ALL : category.getText();
                 for (Option option : snapshot.options().stream()
                         .sorted(Comparator.comparing(Option::symbol)).toList()) {
-                    if (!ConfigurationStudioPresentation.matches(option, active, filter)) continue;
+                    if (!ConfigurationStudioDomains.matches(activeDomain, option)
+                            || !ConfigurationStudioPresentation.matches(option, active, filter)) continue;
                     matches++;
                     if (shown >= 750) continue;
                     TableItem row = new TableItem(options, SWT.NONE);
                     row.setText(new String[] {
                             ConfigurationStudioPresentation.title(option.symbol()) + "  ·  CONFIG_" + option.symbol(),
-                            ConfigurationStudioPresentation.current(option),
+                            ConfigurationStudioPresentation.inlineValue(option),
                             ConfigurationStudioPresentation.requested(option),
                             ConfigurationStudioPresentation.review(option)
                     });
@@ -475,12 +562,8 @@ public final class ConfigurationStudioView extends ViewPart {
                     ++shown;
                 }
             }
-            for (int i = 0; i < options.getColumnCount(); i++) {
-                options.getColumn(i).pack();
-                int cap = i == 0 ? 365 : 140;
-                if (options.getColumn(i).getWidth() > cap) options.getColumn(i).setWidth(cap);
-            }
             if (options.getItemCount() > 0) options.select(keepIndex >= 0 ? keepIndex : 0);
+            sizeColumns();
         } finally {
             options.setRedraw(true);
         }
@@ -491,6 +574,44 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "   •   Double-click an overridden setting to open prj.conf");
         }
         describeSelected();
+    }
+
+    private void selectDomain(Domain domain) {
+        activeDomain = domain;
+        if (peripheralTabs != null && !peripheralTabs.isDisposed()) {
+            for (int i = 0; i < peripheralTabs.getItemCount(); i++) {
+                if (peripheralTabs.getItem(i).getData() == domain) {
+                    peripheralTabs.setSelection(i);
+                    break;
+                }
+            }
+        }
+        refreshPeripheralInfo();
+    }
+
+    private void refreshPeripheralInfo() {
+        if (peripheralTabs == null || peripheralTabs.isDisposed()) return;
+        for (var entry : peripheralInfo.entrySet()) {
+            Text info = entry.getValue();
+            if (info != null && !info.isDisposed())
+                info.setText(ConfigurationStudioDomains.inspect(entry.getKey(), snapshot));
+        }
+        if (codeExample != null && !codeExample.isDisposed())
+            codeExample.setText(activeDomain.example().isBlank()
+                    ? "A board-specific example is not available for this category yet.\n\n"
+                    + "Check Zephyr's chosen driver API, board bindings and Devicetree first.\n"
+                    + "No source files or hardware assignments are generated automatically."
+                    : activeDomain.example());
+    }
+
+    private void sizeColumns() {
+        if (options == null || options.isDisposed() || options.getColumnCount() != 4) return;
+        int width = options.getClientArea().width - 18;
+        if (width <= 0) return;
+        int[] minimum = {170, 156, 98, 88};
+        double[] fractions = {0.40, 0.29, 0.17, 0.14};
+        for (int i = 0; i < 4; i++)
+            options.getColumn(i).setWidth(Math.max(minimum[i], (int) (width * fractions[i])));
     }
 
     private Option selected() {
@@ -505,8 +626,18 @@ public final class ConfigurationStudioView extends ViewPart {
         if (enableButton != null && !enableButton.isDisposed()) {
             enableButton.setEnabled(togglable && !"y".equals(o.requested()));
             disableButton.setEnabled(togglable && !"n".equals(o.requested()));
+            String displayed = o == null ? null
+                    : o.requested() != null ? o.requested() : o.effective();
+            enableButton.setSelection(togglable && "y".equals(displayed));
+            disableButton.setSelection(togglable && "n".equals(displayed));
             editButton.setEnabled(o != null && !o.unresolved() && !togglable);
             removeButton.setEnabled(o != null && o.requested() != null);
+            if (inlineToggle != null && !inlineToggle.isDisposed()) {
+                if (togglable && options.getSelectionCount() > 0) {
+                    inlineToggleEditor.setEditor(inlineToggle, options.getSelection()[0], 1);
+                    inlineToggle.setVisible(true);
+                } else inlineToggle.setVisible(false);
+            }
         }
         if (o == null) {
             detailTitle.setText("No setting selected");
@@ -601,7 +732,13 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "Inspect its Kconfig definition or use Edit value for non-switch types.");
             return;
         }
-        saveSelected(current, value);
+        try {
+            saveSelected(current, value);
+        } finally {
+            // SWT.TOGGLE changes its pressed state before review is confirmed.
+            // Restore it when the dialog is cancelled or validation rejects it.
+            if (options != null && !options.isDisposed()) describeSelected();
+        }
     }
 
     private void editSelected(boolean remove) {
@@ -783,6 +920,7 @@ public final class ConfigurationStudioView extends ViewPart {
         if (helpJob != null) helpJob.cancel();
         if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();
         if (metricFont != null && !metricFont.isDisposed()) metricFont.dispose();
+        if (inlineToggleEditor != null) inlineToggleEditor.dispose();
         super.dispose();
     }
 

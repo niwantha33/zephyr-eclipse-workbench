@@ -130,6 +130,19 @@ public final class EditorSmoke implements IApplication {
                             && "Hardware".equals(studioTabs.getItem(1).getText())
                             && "Insights".equals(studioTabs.getItem(2).getText()),
                             "native Configuration Studio has feature, hardware and insight workspaces");
+                    var peripheralField = cls.getDeclaredField("peripheralTabs");
+                    peripheralField.setAccessible(true);
+                    var peripheralTabs = (org.eclipse.swt.custom.CTabFolder) peripheralField.get(view);
+                    var names = java.util.Arrays.stream(peripheralTabs.getItems())
+                            .map(org.eclipse.swt.custom.CTabItem::getText).toList();
+                    check(names.containsAll(java.util.List.of(
+                            "ADC", "GPIO", "I²C", "SPI", "UART", "CAN", "Debug", "RTOS", "Network", "More")),
+                            "native peripheral-specific navigation tabs are present");
+                    var editorField = cls.getDeclaredField("inlineToggleEditor");
+                    editorField.setAccessible(true);
+                    var inlineEditor = (org.eclipse.swt.custom.TableEditor) editorField.get(view);
+                    check(inlineEditor != null && !inlineEditor.getClass().getName().isBlank(),
+                            "native value column owns a reusable table-row toggle editor");
                     for (String fieldName : new String[]{"enableButton", "disableButton"}) {
                         var field = cls.getDeclaredField(fieldName);
                         field.setAccessible(true);
@@ -145,6 +158,8 @@ public final class EditorSmoke implements IApplication {
                             && featureTable.getMenu() != null
                             && featureTable.getItemCount() > 0,
                             "native configuration feature table supports a context menu");
+                    check(featureTable.getColumn(1).getText().contains("Enable / Disable"),
+                            "Enable and Disable appear in the SAME table value column");
                     var overridesField = cls.getDeclaredField("changesMetric");
                     overridesField.setAccessible(true);
                     var overridesCount = (org.eclipse.swt.widgets.Label) overridesField.get(view);

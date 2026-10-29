@@ -34,6 +34,38 @@ public final class ConfigurationStudioTests {
                     "remove invalid existing assignment without a configured build");
             rejects(() -> ConfigurationStudioFiles.plan(app, null, "UNVERIFIED_OPTION", "y"));
             var snapshot = ConfigurationStudioFiles.inspect(app, build, "Debug (-Og)");
+            var domains = io.github.niwantha33.zew.core.ConfigurationStudioDomains.TABS;
+            ok(domains.size() >= 11
+                    && domains.stream().anyMatch(d -> d.id().equals("adc"))
+                    && domains.stream().anyMatch(d -> d.id().equals("gpio"))
+                    && domains.stream().anyMatch(d -> d.id().equals("rtos")),
+                    "dedicated peripheral, debug and RTOS tabs are registered");
+            var adcSymbol = new ConfigurationStudioFiles.Option("ADC", "y", null, 0);
+            var adcOptional = new ConfigurationStudioFiles.Option("ADC_ASYNC", "n", null, 0);
+            var gpioSymbol = new ConfigurationStudioFiles.Option("GPIO", "y", null, 0);
+            var demo = new ConfigurationStudioFiles.Snapshot(
+                    java.util.List.of(adcSymbol, adcOptional, gpioSymbol),
+                    "", "Test", null);
+            var groups = io.github.niwantha33.zew.core.ConfigurationStudioDomains.TABS;
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioDomains.matches(
+                    io.github.niwantha33.zew.core.ConfigurationStudioDomains.ADC, adcSymbol),
+                    "ADC symbols appear in the ADC tab");
+            ok(!io.github.niwantha33.zew.core.ConfigurationStudioDomains.matches(
+                    io.github.niwantha33.zew.core.ConfigurationStudioDomains.GPIO, adcSymbol),
+                    "ADC does not leak into the GPIO tab");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioDomains.matches(
+                    io.github.niwantha33.zew.core.ConfigurationStudioDomains.MORE,
+                    new ConfigurationStudioFiles.Option("CUSTOM_FEATURE", "y", null, 0)),
+                    "unknown Kconfig symbols remain visible under More");
+            String guide = io.github.niwantha33.zew.core.ConfigurationStudioDomains.inspect(
+                    io.github.niwantha33.zew.core.ConfigurationStudioDomains.ADC, demo);
+            ok(guide.contains("CONFIG_ADC = Enabled") && guide.contains("CONFIG_ADC_ASYNC = Disabled"),
+                    "peripheral guide describes actual resolved driver and optional settings");
+            ok(!guide.contains("DMA has been enabled"),
+                    "peripheral guide cannot fabricate automatic DMA configuration");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioDomains.ADC.example()
+                    .contains("ADC_DT_SPEC_GET_BY_IDX"),
+                    "ADC code template uses the Devicetree-aware Zephyr ADC API");
             ok(snapshot.options().stream().anyMatch(o -> o.symbol().equals("DEBUG_INFO")
                     && o.unresolved() && o.requestedLine() == 4),
                     "unknown requested symbol is visible even after failed configure");
@@ -127,6 +159,12 @@ public final class ConfigurationStudioTests {
                     "Enable/Disable allowed for an effective y switch");
             ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.isToggle(binary),
                     "Enable/Disable allowed for an effective n switch");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.inlineValue(binary)
+                    .contains("Enable  |  ● Disable"),
+                    "both inline on/off choices are displayed together in the value column");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.inlineValue(requestedEnable)
+                    .contains("pending build"),
+                    "inline value warns when requested value differs from last generated build");
             ok(!io.github.niwantha33.zew.core.ConfigurationStudioPresentation.isToggle(numeric),
                     "non-boolean numeric options cannot be toggled with y/n");
             ok(!io.github.niwantha33.zew.core.ConfigurationStudioPresentation.isToggle(invalid),
