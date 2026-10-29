@@ -36,7 +36,7 @@ public final class ConfigurationStudioTests {
             // value must not reorder the file or create a misleading change.
             ok(!noop.changed(), "same requested value is a true no-op");
             var logPreview = ConfigurationStudioFiles.plan(app, build, "LOG", "n");
-            ok(logPreview.updated().startsWith("# Original notes\\r\\nCONFIG_LOG=n\\r\\n"),
+            ok(logPreview.updated().startsWith("# Original notes\r\nCONFIG_LOG=n\r\n"),
                     "modified value keeps original line position and CRLF");
             ok(!logPreview.updated().contains("CONFIG_LOG=y"),
                     "duplicate assignment removed safely");
