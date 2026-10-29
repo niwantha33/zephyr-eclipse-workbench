@@ -123,6 +123,29 @@ public final class RemoteDebugSmoke {
             awaitState(session, tracker, container, true);
             IExecutionDMContext[] paused = ask(session, result -> tracker.getService(IRunControl.class).getExecutionContexts(container, result));
             check(paused.length == 3, "thread model survives a second resume and pause");
+            boolean terminateRunning = Boolean.getBoolean("zew.remote.terminateRunning");
+            if (terminateRunning) {
+                RemoteDebugSmoke.<Object>ask(session, result -> tracker.getService(IRunControl.class).resume(container,
+                        new RequestMonitor(session.getExecutor(), result) {
+                            @Override protected void handleSuccess() { result.done(); }
+                        }));
+                awaitState(session, tracker, container, false);
+            }
+            var process = DMContexts.getAncestorOfType(container, IProcesses.IProcessDMContext.class);
+            check(process != null, "selected inferior resolves to its debug process");
+            // The toolbar uses IMultiTerminate for an inferior selection. Exercise
+            // that path, rather than merely terminating the top-level launch.
+            RemoteDebugSmoke.<Object>ask(session, result -> tracker.getService(IMultiTerminate.class).terminate(
+                    new IProcesses.IThreadDMContext[] { process },
+                    new RequestMonitor(session.getExecutor(), result) {
+                        @Override protected void handleSuccess() { result.done(); }
+                    }));
+            long stopDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (DsfSession.isSessionActive(session.getId()) && System.nanoTime() < stopDeadline) Thread.sleep(50);
+            check(!DsfSession.isSessionActive(session.getId()),
+                    "inferior Terminate ends DSF session while " + (terminateRunning ? "running" : "suspended"));
+            while (!launch.isTerminated() && System.nanoTime() < stopDeadline) Thread.sleep(50);
+            check(launch.isTerminated(), "inferior Terminate ends the launch and local GDB process");
         } finally {
             if (services != null) services.dispose();
             if (launch != null && launch.canTerminate()) launch.terminate();

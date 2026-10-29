@@ -3,6 +3,7 @@ package zew.smoke;
 
 import org.eclipse.cdt.dsf.debug.service.IDsfDebugServicesFactory;
 import org.eclipse.cdt.dsf.debug.service.IStack;
+import org.eclipse.cdt.dsf.debug.service.IProcesses;
 import org.eclipse.cdt.dsf.gdb.launching.GdbLaunchDelegate;
 import org.eclipse.cdt.dsf.gdb.service.*;
 import org.eclipse.cdt.dsf.gdb.service.command.GDBControl_7_12;
@@ -29,6 +30,13 @@ public final class RemoteSmokeDelegate extends GdbLaunchDelegate {
         // Linux also offers a second PTY MI channel. Use the stdio MI transport used on Windows
         // so the test relay can prove that creation notifications did not reach CDT.
         return new GdbDebugServicesFactory(version, configuration) {
+            @Override protected IProcesses createProcessesService(DsfSession session) {
+                try {
+                    var implementation = Platform.getBundle("io.github.niwantha33.zew.ui")
+                            .loadClass("io.github.niwantha33.zew.ui.ZephyrDebugProcesses");
+                    return (IProcesses) implementation.getConstructor(DsfSession.class).newInstance(session);
+                } catch (Exception error) { throw new IllegalStateException("Production debug processes unavailable", error); }
+            }
             @Override protected IStack createStackService(DsfSession session) {
                 // Use the installed production implementation without making
                 // private UI packages part of the public OSGi API.

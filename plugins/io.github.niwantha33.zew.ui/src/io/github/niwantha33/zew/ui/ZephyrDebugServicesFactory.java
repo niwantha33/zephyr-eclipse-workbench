@@ -3,6 +3,7 @@ package io.github.niwantha33.zew.ui;
 
 import org.eclipse.cdt.dsf.datamodel.IDMContext;
 import org.eclipse.cdt.dsf.debug.service.IStack;
+import org.eclipse.cdt.dsf.debug.service.IProcesses;
 import org.eclipse.cdt.dsf.debug.service.command.ICommand;
 import org.eclipse.cdt.dsf.debug.service.command.ICommandControl;
 import org.eclipse.cdt.dsf.gdb.service.GdbDebugServicesFactory;
@@ -14,7 +15,12 @@ import org.eclipse.debug.core.ILaunchConfiguration;
 
 /** Use OpenOCD's extended remote protocol through the existing DSF launch sequence. */
 public final class ZephyrDebugServicesFactory extends GdbDebugServicesFactory {
-    public ZephyrDebugServicesFactory(String version, ILaunchConfiguration config) { super(version, config); }
+    private final boolean openOcd;
+    public ZephyrDebugServicesFactory(String version, ILaunchConfiguration config) { this(version, config, true); }
+    public ZephyrDebugServicesFactory(String version, ILaunchConfiguration config, boolean openOcd) {
+        super(version, config);
+        this.openOcd = openOcd;
+    }
     public static final class OpenOcdCommands extends CommandFactory_6_8 {
         @Override public ICommand<MIInfo> createMITargetSelect(IDMContext context, String host, String port, boolean extended) {
             return super.createMITargetSelect(context, host, port, true);
@@ -23,8 +29,12 @@ public final class ZephyrDebugServicesFactory extends GdbDebugServicesFactory {
     @Override protected IStack createStackService(DsfSession session) {
         return new ZephyrStack(session);
     }
+    @Override protected IProcesses createProcessesService(DsfSession session) {
+        return compareVersionWith(GDB_7_12_VERSION) >= 0
+                ? new ZephyrDebugProcesses(session) : super.createProcessesService(session);
+    }
     @Override protected ICommandControl createCommandControl(DsfSession session, ILaunchConfiguration configuration) {
-        if (compareVersionWith(GDB_7_12_VERSION) >= 0)
+        if (openOcd && compareVersionWith(GDB_7_12_VERSION) >= 0)
             return new GDBControl_7_12(session, configuration, new OpenOcdCommands());
         return super.createCommandControl(session, configuration);
     }

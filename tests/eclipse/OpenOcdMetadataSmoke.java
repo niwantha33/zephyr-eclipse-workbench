@@ -36,6 +36,63 @@ public final class OpenOcdMetadataSmoke {
         if (!text.contains("extended-remote") || !text.contains("127.0.0.1:3333")) throw new AssertionError(text);
         System.out.println("PASS thread metadata: native DSF OpenOCD connection uses extended-remote");
         verifyFlashCompletion(ui);
+        verifyDebugServerCleanup(ui);
+    }
+    private static void verifyDebugServerCleanup(org.osgi.framework.Bundle ui) throws Exception {
+        var guard = ui.loadClass("io.github.niwantha33.zew.ui.TargetOperationGuard");
+        var acquire = guard.getDeclaredMethod("acquire", String.class); acquire.setAccessible(true);
+        var serverClass = ui.loadClass("io.github.niwantha33.zew.ui.ZephyrNativeDebugDelegate$ManagedServer");
+        var constructor = serverClass.getDeclaredConstructors()[0]; constructor.setAccessible(true);
+        var lease = (AutoCloseable) acquire.invoke(null, "debugserver");
+        var launch = new org.eclipse.debug.core.Launch(null, "debug", null);
+        var console = new org.eclipse.ui.console.MessageConsole("owned server cleanup test", null);
+        // The parent waits for a quiet child which owns a real TCP endpoint.
+        // No log traffic is required for termination to discover that child.
+        String child = "import socket,time;s=socket.socket();s.bind(('127.0.0.1',0));s.listen();"
+                + "print('PORT',s.getsockname()[1],flush=True);time.sleep(30)";
+        Process process = new ProcessBuilder(System.getenv("ZEW_TEST_PYTHON"), "-u", "-c",
+                "import subprocess,sys;p=subprocess.Popen([sys.executable,'-u','-c',sys.argv[1]]);"
+                        + "print('PID',p.pid,flush=True);p.wait()", child).start();
+        AutoCloseable owned = null;
+        ProcessHandle descendant = null;
+        try {
+            var lines = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()));
+            int port = 0;
+            for (int i = 0; i < 2; i++) {
+                String[] value = lines.readLine().split(" ");
+                if (value[0].equals("PORT")) port = Integer.parseInt(value[1]);
+                else if (value[0].equals("PID")) descendant = ProcessHandle.of(Long.parseLong(value[1])).orElseThrow();
+            }
+            if (port == 0 || descendant == null) throw new AssertionError("Owned server fixture did not start");
+            owned = (AutoCloseable) constructor.newInstance(process, console.newMessageStream(), lease, launch, port, "openocd");
+            long start = System.nanoTime();
+            ((org.eclipse.debug.core.ILaunchesListener2) owned).launchesTerminated(new org.eclipse.debug.core.ILaunch[] {launch});
+            if (System.nanoTime() - start > java.util.concurrent.TimeUnit.SECONDS.toNanos(1))
+                throw new AssertionError("Terminate callback blocked Eclipse event dispatch");
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while ((process.isAlive() || descendant.isAlive()) && System.nanoTime() < deadline) Thread.sleep(50);
+            if (process.isAlive() || descendant.isAlive()) throw new AssertionError("Owned server process tree survived termination");
+            try (var available = new java.net.ServerSocket()) { available.bind(new java.net.InetSocketAddress("127.0.0.1", port)); }
+            // Release is part of cleanup, and can happen just after process exit.
+            AutoCloseable next = null;
+            while (next == null && System.nanoTime() < deadline) {
+                try { next = (AutoCloseable) acquire.invoke(null, "debugserver"); }
+                catch (java.lang.reflect.InvocationTargetException busy) {
+                    if (!(busy.getCause() instanceof java.io.IOException)) throw busy;
+                    Thread.sleep(50);
+                }
+            }
+            if (next == null) throw new AssertionError("Debug operation lease was not released");
+            next.close();
+            owned.close(); // repeat cleanup is harmless
+            System.out.println("PASS debug lifecycle: asynchronous stop reaps quiet child, releases TCP port and operation lease");
+        } finally {
+            if (owned != null) owned.close();
+            else lease.close();
+            if (descendant != null && descendant.isAlive()) descendant.destroyForcibly();
+            if (process.isAlive()) process.destroyForcibly();
+            console.destroy();
+        }
     }
     private static void verifyFlashCompletion(org.osgi.framework.Bundle ui) throws Exception {
         var await = ui.loadClass("io.github.niwantha33.zew.ui.ZephyrLaunchDelegate")
