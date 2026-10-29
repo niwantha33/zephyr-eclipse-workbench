@@ -39,6 +39,31 @@ class KconfigInspectionTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "No valid"):
             probe.extract_command("cmake -E env BOARD=x python guiconfig.py Kconfig")
 
+    def test_windows_shell_wrapper_and_quoted_paths_preserve_boundaries(self):
+        with tempfile.TemporaryDirectory(prefix="Kconfig root ") as directory:
+            kroot = Path(directory) / "Kconfig"
+            kroot.write_text('mainmenu "Test"\n')
+            command = (
+                r'C:\Windows\system32\cmd.exe /C "cd /D C:\build && '
+                r'"C:\Program Files\CMake\bin\cmake.exe" -E env '
+                r'"srctree=C:\Zephyr Workspace\zephyr" '
+                r'"KCONFIG_BINARY_DIR=C:\Build Folder\zephyr\Kconfig" '
+                r'"EDT_PICKLE=C:\Build Folder\zephyr\edt.pickle" '
+                r'"C:\Python Tools\python.exe" '
+                r'"C:\Zephyr Workspace\zephyr\scripts\kconfig\guiconfig.py" '
+                f'"{kroot}""')
+            values, chosen = probe.extract_command(command)
+            self.assertEqual(chosen, kroot)
+            self.assertEqual(values["srctree"], r"C:\Zephyr Workspace\zephyr")
+            self.assertEqual(values["KCONFIG_BINARY_DIR"], r"C:\Build Folder\zephyr\Kconfig")
+            self.assertEqual(values["EDT_PICKLE"], r"C:\Build Folder\zephyr\edt.pickle")
+
+    def test_unterminated_root_quote_is_rejected(self):
+        command = ('cmake -E env srctree=z KCONFIG_BINARY_DIR=b EDT_PICKLE=e '
+                   'python guiconfig.py "unterminated path')
+        with self.assertRaisesRegex(RuntimeError, "no Kconfig root argument"):
+            probe.extract_command(command)
+
     def test_kconfiglib_reads_only_existing_build_values(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

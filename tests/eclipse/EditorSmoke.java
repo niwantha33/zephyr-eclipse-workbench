@@ -122,6 +122,10 @@ public final class EditorSmoke implements IApplication {
                     // Verify the actual installed native UX, not screenshots or
                     // plugin.xml declarations. This must run on the SWT thread.
                     var cls = view.getClass();
+                    try (var packagedProbe = cls.getResourceAsStream("/scripts/kconfig_inspect.py")) {
+                        check(packagedProbe != null && packagedProbe.readNBytes(1024).length >= 256,
+                                "Kconfiglib inspector is bundled inside installed Eclipse feature");
+                    }
                     var tabsField = cls.getDeclaredField("tabs");
                     tabsField.setAccessible(true);
                     var studioTabs = (org.eclipse.swt.widgets.TabFolder) tabsField.get(view);

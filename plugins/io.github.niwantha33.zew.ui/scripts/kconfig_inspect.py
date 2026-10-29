@@ -17,6 +17,9 @@ import sys
 
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*$")
 _SYMBOL = re.compile(r"^[A-Z0-9_]{1,160}$")
+_GUICONFIG_ARG = re.compile(
+    r'''(?:^|\s)(?:"[^"\r\n]*guiconfig\.py"|'[^'\r\n]*guiconfig\.py'|[^\s"']*guiconfig\.py)(?=\s|$)''')
+_ROOT_ARG = re.compile(r'''\s*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s"']+))''')
 
 
 def unwrap(token):
@@ -29,32 +32,55 @@ def extract_command(output):
     Use non-POSIX tokenisation: Windows paths contain literal backslashes.
     Never execute the extracted command; only its environment is read.
     """
+    failures = []
     for line in output.splitlines():
-        if "guiconfig.py" not in line or "-E env" not in line:
+        if "guiconfig.py" not in line:
             continue
-        tokens = [unwrap(token) for token in shlex.split(line, posix=False)]
+        if "-E env" not in line:
+            failures.append("guiconfig command has no literal CMake -E env")
+            continue
+        # The Windows Ninja target may be surrounded by cmd.exe /C
+        # double quotes. Tokenising the entire shell wrapper with shlex
+        # merges quoted script and environment boundaries. Locate the exact
+        # generated cmake and guiconfig delimiters first; no shell commands
+        # or arbitrary code from build.ninja are executed.
+        script = _GUICONFIG_ARG.search(line)
+        if script is None:
+            failures.append("invalid generated guiconfig script argument")
+            continue
+        prefix, root_tail = line[:script.start()], line[script.end():]
+        env_text = prefix.rsplit("-E env", 1)[1]
         try:
-            start = next(i + 2 for i in range(len(tokens) - 1)
-                         if tokens[i] == "-E" and tokens[i + 1] == "env")
-            script = next(i for i in range(start, len(tokens))
-                          if tokens[i].replace("\\", "/").endswith("/scripts/kconfig/guiconfig.py"))
-        except StopIteration:
+            env_tokens = shlex.split(env_text, posix=False)
+        except ValueError:
+            failures.append("invalid generated Ninja command quoting")
             continue
         values = {}
-        for token in tokens[start:script]:
+        for token in env_tokens:
+            token = unwrap(token)
             if "=" not in token:
                 continue
             name, value = token.split("=", 1)
             if _ENV_NAME.fullmatch(name):
                 values[name] = value
-        if script + 1 >= len(tokens):
+        root = _ROOT_ARG.match(root_tail)
+        if root is None:
+            failures.append("guiconfig command has no Kconfig root argument")
             continue
-        kroot = tokens[script + 1]
-        if not (values.get("srctree") and values.get("KCONFIG_BINARY_DIR")
-                and values.get("EDT_PICKLE") and Path(kroot).is_file()):
+        kroot = next(value for value in root.groups() if value is not None)
+        missing = [key for key in ("srctree", "KCONFIG_BINARY_DIR", "EDT_PICKLE")
+                   if not values.get(key)]
+        if missing:
+            failures.append("missing Kconfig environment keys: " + ", ".join(missing))
+            continue
+        if not Path(kroot).is_file():
+            failures.append("Kconfig root not found (argument path does not resolve)")
             continue
         return values, Path(kroot)
-    raise RuntimeError("No valid generated guiconfig environment for this exact build")
+    summary = failures[0] if failures else (
+        "no guiconfig.py command found; generated target may be a wrapper")
+    raise RuntimeError("No valid generated guiconfig environment for this exact build: "
+                       + summary)
 
 
 def field(value):
