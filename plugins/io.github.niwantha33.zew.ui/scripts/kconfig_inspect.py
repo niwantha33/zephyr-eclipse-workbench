@@ -36,25 +36,31 @@ def extract_command(output):
         if "-E env" not in line:
             failures.append("guiconfig command has no literal CMake -E env")
             continue
-        tokens = [unwrap(token) for token in shlex.split(line, posix=False)]
+        # The Windows Ninja target may be surrounded by cmd.exe /C
+        # double quotes. Tokenising the entire shell wrapper with shlex
+        # merges quoted script and environment boundaries. Locate the exact
+        # generated cmake and guiconfig delimiters first; no shell commands
+        # or arbitrary code from build.ninja are executed.
+        prefix, root_tail = line.split("guiconfig.py", 1)
+        env_text = prefix.rsplit("-E env", 1)[1]
         try:
-            start = next(i + 2 for i in range(len(tokens) - 1)
-                         if tokens[i] == "-E" and tokens[i + 1] == "env")
-            script = next(i for i in range(start, len(tokens))
-                          if tokens[i].replace("\\", "/").endswith("/scripts/kconfig/guiconfig.py"))
-        except StopIteration:
-            failures.append("could not locate CMake env or guiconfig.py token")
+            env_tokens = shlex.split(env_text, posix=False)
+            root_tokens = shlex.split(root_tail.lstrip(" \\"'\\t"), posix=False)
+        except ValueError:
+            failures.append("invalid generated Ninja command quoting")
             continue
         values = {}
-        for token in tokens[start:script]:
+        for token in env_tokens:
+            token = unwrap(token).strip("'\\"")
             if "=" not in token:
                 continue
             name, value = token.split("=", 1)
             if _ENV_NAME.fullmatch(name):
                 values[name] = value
-        if script + 1 >= len(tokens):
+        if not root_tokens:
+            failures.append("guiconfig command has no Kconfig root argument")
             continue
-        kroot = tokens[script + 1]
+        kroot = unwrap(root_tokens[0]).strip("'\\"")
         missing = [key for key in ("srctree", "KCONFIG_BINARY_DIR", "EDT_PICKLE")
                    if not values.get(key)]
         if missing:
