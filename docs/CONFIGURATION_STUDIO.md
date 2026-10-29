@@ -1,5 +1,26 @@
 # Native Zephyr Configuration Studio — initial integration
 
+## Step 07A — Hardware from the real Devicetree
+
+The Hardware workspace now has a native **Detected hardware** inventory
+built strictly from the selected target's generated `zephyr/zephyr.dts`.
+It lists paths, compatible bindings and enabled/disabled status and shows
+the selected device's label and register declaration. The complete generated
+source remains read-only below the inventory, alongside the existing
+**Open application overlay** action.
+
+The inventory is informative, not a complete DTS parser. It does not
+resolve aliases, all phandles, `pinctrl` encodings, inherited bus status or
+vendor-specific channel capabilities. Use the exact selected build and
+Devicetree bindings to verify hardware. No pins, channels or device nodes
+are silently created or enabled. A missing build shows no fabricated devices.
+
+The following step extends this with binding-driven pin/channel validation,
+a graphical status editor, reviewed `app.overlay` patch previews, backups
+and a reconfigure/build gate. Do not implement automatic DTS changes without
+validating node identity and preventing conflicts.
+
+
 The Zephyr menu now has **Configuration Studio (Kconfig / Devicetree)**.
 Select an imported project in Project Explorer and open the command. This is
 a native Eclipse SWT/JFace view; no secondary browser, VS Code, tkinter or
