@@ -53,10 +53,25 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
             return panel;
         }
         try {
+            if (ZephyrProjectImport.isCMake(project.getDescription()))
+                throw new java.io.IOException("Generic CMake builder needs repair.");
             originalBoard = ProjectContext.settings(project).getProperty("board");
         } catch (Exception error) {
-            setErrorMessage("Import this Zephyr application first: " + error.getMessage());
-            setValid(false);
+            var help = new Label(panel, SWT.WRAP);
+            help.setText("Configure this application with a ready Zephyr environment and exact board target. "
+                    + "If it was imported as generic CMake, the wizard can repair its builder in place.");
+            help.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1));
+            Button repair = new Button(panel, SWT.PUSH);
+            repair.setText("Configure / Repair Zephyr Project...");
+            repair.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false, 3, 1));
+            repair.addListener(SWT.Selection, event -> {
+                var wizard = new ZephyrImportWizard();
+                wizard.init(org.eclipse.ui.PlatformUI.getWorkbench(), new org.eclipse.jface.viewers.StructuredSelection(project));
+                if (new org.eclipse.jface.wizard.WizardDialog(getShell(), wizard).open() == org.eclipse.jface.window.Window.OK) {
+                    help.setText("Zephyr project configured. Close and reopen Properties to change its target or build configuration.");
+                    panel.layout(true, true);
+                }
+            });
             return panel;
         }
         new Label(panel, SWT.NONE).setText("Current board / CPU:");
@@ -199,6 +214,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
     }
 
     @Override public boolean performOk() {
+        if (targets == null) return true; // The configure/repair panel has no pending property edits.
         if (project == null || !isValid() || targets.getSelectionCount() != 1) return false;
         String selected = ((String[]) targets.getSelection()[0].getData())[6];
         int selectedIndex = buildConfiguration.getSelectionIndex();

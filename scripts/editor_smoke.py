@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
     editor.write(editor.collect(fixture, build, gcc.parent.parent), build / 'editor-settings.tsv')
     classes = temporary / 'classes'; classes.mkdir()
     classpath = os.pathsep.join(map(str, (eclipse / 'plugins').glob('*.jar')))
-    run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java'])
+    run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java', ROOT / 'tests/eclipse/ProjectImportSmoke.java'])
     jar = temporary / 'editor-smoke.jar'
     with zipfile.ZipFile(jar, 'w') as z:
         z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nBundle-ManifestVersion: 2\nBundle-SymbolicName: zew.editor.smoke;singleton:=true\nBundle-Version: 1.0.0\nRequire-Bundle: org.eclipse.equinox.app,org.eclipse.core.runtime,org.eclipse.core.resources,org.eclipse.core.expressions,org.eclipse.cdt.core,org.eclipse.debug.ui,org.eclipse.jface,io.github.niwantha33.zew.core\n\n')

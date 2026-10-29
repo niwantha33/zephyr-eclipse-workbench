@@ -42,11 +42,14 @@ Zephyr source trees. Search is cancelable and bounded to 12 levels, 20,000
 directories, 500 applications and 1 MiB per CMake file. Unreadable/oversized input
 and depth limits are reported. Choose a narrower source parent for large trees.
 
-Already imported locations are unavailable. Duplicate project names can be
+Already configured Workbench locations are unavailable. Applications imported
+through Eclipse's generic File System importer can be repaired in place; keep
+their existing workspace project name. Duplicate names for new imports can be
 renamed; overlapping parent/child applications cannot be selected together.
 Existing Workbench Eclipse descriptions are reused while binding the chosen
-local environment. Projects with another Eclipse builder receive guidance to
-**General > Existing Projects into Workspace**, preserving their native workflow.
+local environment. Generic CDT CMake projects are identified by their CMake
+nature and core builder. The review page explicitly lists their conversion to
+West. Other builders (including vendor builders) are rejected without conversion.
 Source code, `prj.conf` and saved board profiles are not replaced. Creating the
 Eclipse project and editor integration adds/updates project metadata in place.
 
@@ -58,3 +61,35 @@ in the error. The remaining selection can be retried; no application is deleted.
 This path requires a completed Workbench managed environment. It is not an
 installer for arbitrary external SDK layouts. Run **Zephyr > Set Up Zephyr** if
 there is no ready environment, or choose an already completed installation.
+
+## Repair `Could not find ZephyrConfig.cmake` after generic import
+
+A build folder named `build/cmake.run.win32.x86_64.Local` and a command such as
+`cmake -DCMAKE_BUILD_TYPE=Release ...` indicate Eclipse's generic CDT CMake
+workflow. It does not supply the Workbench's managed Python/West environment,
+`ZEPHYR_BASE`, SDK or exact board. The later `CMAKE_PROJECT_NAME` error is a
+consequence of that failed configure.
+
+After installing the updated Workbench:
+
+1. Close the **Import Projects from File System or Archive** dialog.
+2. Right-click the existing application in Project Explorer, then select
+   **Properties > Zephyr > Configure / Repair Zephyr Project...**. Alternatively,
+   use **File > Import > Zephyr > Existing Zephyr Application** and search the
+   application's folder. You do not need to delete it from the workspace.
+3. Select the application marked **Repair generic CMake builder**, choose your
+   completed ready setup folder and exact board/CPU, then review and finish.
+   Existing `.zew` targets are preserved.
+4. Build using **Project > Build Project**. Build configuration selection is now
+   under **Properties > Zephyr**; West uses `.zew-build` rather than the old
+   generic CMake build folder.
+
+Repair removes the generic CMake build-provider nature, installs the sole West
+builder and resets the native Eclipse build configuration to `default`. The
+original `.project` and `.cproject` files are retained in `.zew/import-backup`
+before conversion. Source, `prj.conf`, linked resources and old build outputs
+remain in place. Only stale CDT CMake problem markers are cleared. Unknown
+vendor builders are not converted. A closed project must be opened first.
+
+Use the Zephyr importer for future applications; Eclipse's generic File System
+importer still treats `CMakeLists.txt` as a generic CMake project.

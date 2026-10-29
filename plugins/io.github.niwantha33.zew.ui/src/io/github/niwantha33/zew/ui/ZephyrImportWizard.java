@@ -11,9 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import org.eclipse.core.resources.ICommand;
 import org.eclipse.core.resources.IProject;
-import org.eclipse.core.resources.IProjectDescription;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.ResourcesPlugin;
@@ -50,7 +48,6 @@ import io.github.niwantha33.zew.core.ZephyrProjectFiles;
 /** Parent-folder discovery and explicit project selection, separate from New Project. */
 public final class ZephyrImportWizard extends Wizard implements IImportWizard {
     private static final QualifiedName SETUP = new QualifiedName(Activator.ID, "setupRoot");
-    private static final String BUILDER = Activator.ID + ".zephyrBuilder";
     private final ApplicationsPage applications = new ApplicationsPage();
     private final TargetPage target = new TargetPage();
     private final ReviewPage review = new ReviewPage();
@@ -62,11 +59,13 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
         String name;
         String board = "";
         String problem = "";
+        IProject existing;
+        boolean repair;
         Entry(Path folder) { this.folder = folder; this.name = folder.getFileName().toString(); }
     }
-    private record ImportItem(Path folder, String name, String board) {}
+    private record ImportItem(Path folder, String name, String board, boolean repair) {}
 
-    public ZephyrImportWizard() { setWindowTitle("Import Zephyr Applications"); setNeedsProgressMonitor(true); }
+    public ZephyrImportWizard() { setWindowTitle("Import or Repair Zephyr Applications"); setNeedsProgressMonitor(true); }
 
     @Override public void init(IWorkbench workbench, IStructuredSelection selection) {
         if (selection.getFirstElement() instanceof IResource resource && resource.getLocation() != null) {
@@ -101,32 +100,25 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
             if (Files.isSymbolicLink(folder.resolve(".project")) || Files.isSymbolicLink(folder.resolve(".zew")))
                 throw new IOException("Project metadata is a filesystem link; choose the real application folder.");
             if (Files.isRegularFile(folder.resolve(".project"))) {
-                var description = description(folder);
+                var description = ZephyrProjectImport.description(folder);
+                entry.repair = ZephyrProjectImport.isCMake(description);
                 entry.name = description.getName();
             }
             if (Files.isRegularFile(folder.resolve(".zew/project.json"))) entry.board = ProjectProfile.read(folder).board();
             else if (Files.isRegularFile(folder.resolve(".zew/project.properties"))) entry.board = ZephyrProjectFiles.readBoard(folder);
-            if (alreadyImported(folder)) entry.problem = "Already in this workspace";
+            entry.existing = ZephyrProjectImport.existingProject(folder);
+            if (entry.existing != null) {
+                entry.name = entry.existing.getName();
+                String setup = entry.existing.getPersistentProperty(SETUP);
+                if (!entry.repair && setup != null && !setup.isBlank()) {
+                    try {
+                        ProjectContext.settings(entry.existing);
+                        entry.problem = "Already configured in this workspace";
+                    } catch (Exception unavailable) { /* Allow rebinding an unavailable environment. */ }
+                }
+            }
         } catch (Exception error) { entry.problem = message(error); }
         return entry;
-    }
-
-    private static boolean alreadyImported(Path folder) throws IOException {
-        for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
-            if (project.getLocation() != null && Files.exists(project.getLocation().toFile().toPath())
-                    && Files.isSameFile(folder, project.getLocation().toFile().toPath())) return true;
-        }
-        return false;
-    }
-
-    private static IProjectDescription description(Path folder) throws CoreException, IOException {
-        var workspace = ResourcesPlugin.getWorkspace();
-        var description = workspace.loadProjectDescription(new org.eclipse.core.runtime.Path(folder.resolve(".project").toString()));
-        for (ICommand command : description.getBuildSpec()) {
-            if (!BUILDER.equals(command.getBuilderName()))
-                throw new IOException("Other Eclipse builder present; use General > Existing Projects into Workspace to preserve its workflow.");
-        }
-        return description;
     }
 
     private final class ApplicationsPage extends WizardPage {
@@ -178,7 +170,7 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
             try {
                 if (projects.getSelectionCount() == 1) {
                     Entry entry = (Entry) projects.getSelection()[0].getData();
-                    name.setText(entry.name); name.setEnabled(entry.problem.isBlank());
+                    name.setText(entry.name); name.setEnabled(entry.problem.isBlank() && entry.existing == null);
                 } else { name.setText(""); name.setEnabled(false); }
             } finally { updatingName = false; }
         }
@@ -207,7 +199,8 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
                 for (Entry entry : found) {
                     TableItem item = new TableItem(projects, SWT.NONE); item.setData(entry);
                     item.setText(new String[] {entry.name, entry.folder.toString(), entry.problem.isBlank()
-                            ? entry.board.isBlank() ? "Choose target on next page" : "Saved: " + entry.board : entry.problem});
+                            ? entry.repair ? "Repair generic CMake builder" : entry.existing != null ? "Bind existing project to Zephyr"
+                            : entry.board.isBlank() ? "Choose target on next page" : "Saved: " + entry.board : entry.problem});
                     item.setGrayed(!entry.problem.isBlank());
                 }
                 if (projects.getItemCount() == 1 && ((Entry) projects.getItem(0).getData()).problem.isBlank()) projects.getItem(0).setChecked(true);
@@ -237,7 +230,7 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
                             throw new IOException("Enter a valid project name for " + entry.folder);
                         if (!names.add(entry.name.toLowerCase(Locale.ROOT))) throw new IOException("Selected applications have the same project name. Select a row and rename it.");
                         for (IProject existing : ResourcesPlugin.getWorkspace().getRoot().getProjects())
-                            if (existing.getName().equalsIgnoreCase(entry.name)) throw new IOException("Project name already exists: " + entry.name + ". Select the row and rename it.");
+                            if (!existing.equals(entry.existing) && existing.getName().equalsIgnoreCase(entry.name)) throw new IOException("Project name already exists: " + entry.name + ". Select the row and rename it.");
                         for (Entry other : chosen) if (other != entry && entry.folder.startsWith(other.folder))
                             throw new IOException("Selected application folders overlap. Choose the parent application or its child, not both.");
                     }
@@ -341,7 +334,12 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
         @Override public void setVisible(boolean visible) {
             if (visible) {
                 StringBuilder text = new StringBuilder("Import in place. Source files remain at their existing locations.\n\nEnvironment: " + target.loadedRoot + "\n");
-                for (Entry entry : applications.selected()) text.append("\n").append(entry.name).append("\n  ").append(entry.folder).append("\n  Target: ").append(target.board(entry)).append("\n");
+                for (Entry entry : applications.selected()) {
+                    text.append("\n").append(entry.name).append("\n  ").append(entry.folder).append("\n  Target: ").append(target.board(entry)).append("\n");
+                    if (entry.repair) text.append("  Repair: replace generic CDT CMake with the managed West builder.\n"
+                            + "  Eclipse metadata backed up in .zew/import-backup; existing build files retained.\n");
+                    else if (entry.existing != null) text.append("  Bind the existing workspace project to this Zephyr environment.\n");
+                }
                 text.append("\nOnly Workbench/Eclipse project metadata is added or bound. Eclipse Build Automatically may build imported projects. No firmware is flashed.");
                 summary.setText(text.toString()); summary.getParent().layout(true, true);
             }
@@ -352,7 +350,7 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
     @Override public boolean performFinish() {
         applications.validateSelection(); target.validateTarget();
         if (!applications.isPageComplete() || !target.isPageComplete()) return false;
-        List<ImportItem> plan = applications.selected().stream().map(e -> new ImportItem(e.folder, e.name, target.board(e))).toList();
+        List<ImportItem> plan = applications.selected().stream().map(e -> new ImportItem(e.folder, e.name, target.board(e), e.repair)).toList();
         Path environment = target.loadedRoot; List<IProject> imported = new ArrayList<>();
         try {
             getContainer().run(true, true, monitor -> {
@@ -363,27 +361,23 @@ public final class ZephyrImportWizard extends Wizard implements IImportWizard {
                         try {
                             // Validate the entire selection before creating any project.
                             for (ImportItem item : plan) {
-                                if (!ZephyrApplicationDiscovery.isApplication(item.folder()) || alreadyImported(item.folder()))
-                                    throw new IOException("Application changed or is already imported: " + item.folder());
-                                if (workspace.getRoot().getProject(item.name()).exists()) throw new IOException("Project name now exists: " + item.name());
+                                if (!ZephyrApplicationDiscovery.isApplication(item.folder()))
+                                    throw new IOException("Application changed: " + item.folder());
+                                IProject existing = ZephyrProjectImport.existingProject(item.folder());
+                                if (workspace.getRoot().getProject(item.name()).exists()
+                                        && !workspace.getRoot().getProject(item.name()).equals(existing))
+                                    throw new IOException("Project name now exists: " + item.name());
+                                if (existing != null && !existing.getName().equals(item.name()))
+                                    throw new IOException("Workspace project changed; search again: " + item.folder());
                                 Entry current = inspect(item.folder());
                                 if (!current.problem.isBlank()) throw new IOException(current.problem);
+                                if (current.repair != item.repair()) throw new IOException("Eclipse builder changed; search and review again: " + item.folder());
                                 if (!current.board.isBlank() && !current.board.equals(item.board())) throw new IOException("Saved board changed; search again: " + item.folder());
                             }
                             for (ImportItem item : plan) {
                                 if (progress.isCanceled()) throw new org.eclipse.core.runtime.OperationCanceledException();
-                                IProject project = workspace.getRoot().getProject(item.name());
-                                IProjectDescription description = Files.isRegularFile(item.folder().resolve(".project"))
-                                        ? description(item.folder()) : workspace.newProjectDescription(item.name());
-                                description.setName(item.name()); description.setLocationURI(item.folder().toUri());
-                                if (description.getBuildSpec().length == 0) {
-                                    ICommand command = description.newCommand(); command.setBuilderName(BUILDER); description.setBuildSpec(new ICommand[] {command});
-                                }
-                                if (!Files.exists(item.folder().resolve(".zew/project.json")) && !Files.exists(item.folder().resolve(".zew/project.properties")))
-                                    new ProjectProfile(item.board()).write(item.folder());
-                                project.create(description, progress); project.open(progress); project.setPersistentProperty(SETUP, environment.toString());
-                                imported.add(project); project.refreshLocal(IResource.DEPTH_INFINITE, progress);
-                                CdtEditor.ensureProject(project, progress); progress.worked(1);
+                                IProject project = ZephyrProjectImport.bind(item.folder(), item.name(), item.board(), environment, progress);
+                                imported.add(project); progress.worked(1);
                             }
                         } catch (org.eclipse.core.runtime.OperationCanceledException error) { throw error; }
                         catch (CoreException error) { throw error; }
