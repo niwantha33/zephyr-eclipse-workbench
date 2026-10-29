@@ -66,6 +66,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private Label totalMetric, changesMetric, issuesMetric, targetMetric;
     private Font headingFont, metricFont;
     private boolean hasGeneratedConfiguration;
+    private boolean buildOutdated;
     private String filter = "";
     private String selectedOverlay = "app.overlay";
     private Job helpJob;
@@ -163,7 +164,11 @@ public final class ConfigurationStudioView extends ViewPart {
             column.setText(header);
         }
         options.addListener(SWT.Selection, event -> describeSelected());
-        options.addListener(SWT.DefaultSelection, event -> openResource("prj.conf"));
+        options.addListener(SWT.DefaultSelection, event -> {
+            Option o = selected();
+            if (o != null && o.overridden()) openResource("prj.conf");
+            else describeSelected();
+        });
         installContextMenu();
 
         Composite detail = new Composite(sash, SWT.NONE);
@@ -333,6 +338,7 @@ public final class ConfigurationStudioView extends ViewPart {
         if (options == null || options.isDisposed()) return;
         if (project == null) {
             hasGeneratedConfiguration = false;
+            buildOutdated = false;
             updateMetrics();
             options.removeAll();
             describeSelected();
@@ -358,8 +364,11 @@ public final class ConfigurationStudioView extends ViewPart {
                 setupProblem = notConfigured.getMessage();
             }
             snapshot = ConfigurationStudioFiles.inspect(app, build, profile);
-            hasGeneratedConfiguration = build != null
-                    && Files.isRegularFile(build.resolve("zephyr/.config"));
+            Path effectiveFile = build == null ? null : build.resolve("zephyr/.config");
+            hasGeneratedConfiguration = effectiveFile != null && Files.isRegularFile(effectiveFile);
+            buildOutdated = hasGeneratedConfiguration && Files.isRegularFile(app.resolve("prj.conf"))
+                    && Files.getLastModifiedTime(app.resolve("prj.conf"))
+                            .compareTo(Files.getLastModifiedTime(effectiveFile)) > 0;
             context.setText(project.getName() + "   •   " + board + "   •   " + snapshot.profile());
             updateMetrics();
             refreshOptions();
@@ -381,12 +390,14 @@ public final class ConfigurationStudioView extends ViewPart {
                         + "  •  Configure the project to enable validated setting changes.");
             } else {
                 refreshAnalysis(build);
-                status.setText("Build values are from the last generated output. "
-                        + "Changes to prj.conf require review, backup and a new build.");
+                status.setText(buildOutdated
+                        ? "Build required: prj.conf is newer than the last generated .config."
+                        : "Values reflect the last generated output; build to verify any changes.");
             }
         } catch (Exception error) {
             snapshot = null;
             hasGeneratedConfiguration = false;
+            buildOutdated = false;
             updateMetrics();
             options.removeAll();
             describeSelected();
@@ -407,11 +418,13 @@ public final class ConfigurationStudioView extends ViewPart {
             targetMetric.setText("Not selected");
         } else {
             long assigned = snapshot.options().stream().filter(Option::overridden).count();
-            long unresolved = snapshot.options().stream().filter(Option::unresolved).count();
+            long unresolved = snapshot.options().stream()
+                    .filter(o -> !ConfigurationStudioPresentation.review(o).isBlank()).count();
             totalMetric.setText(Integer.toString(snapshot.options().size()));
             changesMetric.setText(Long.toString(assigned));
             issuesMetric.setText(Long.toString(unresolved));
-            targetMetric.setText(hasGeneratedConfiguration ? "Available" : "Not built");
+            targetMetric.setText(buildOutdated ? "Build required"
+                    : hasGeneratedConfiguration ? "Available" : "Not built");
         }
         for (Label metric : new Label[] {totalMetric, changesMetric, issuesMetric, targetMetric})
             metric.getParent().layout(true, true);
@@ -461,7 +474,7 @@ public final class ConfigurationStudioView extends ViewPart {
             overview.setText("Showing " + shown + " of " + matches + " matching settings"
                     + "   •   " + total + " values in this project"
                     + (shown < matches ? "   •   Narrow your search to see more" : "")
-                    + "   •   Double-click a setting to inspect its source");
+                    + "   •   Double-click an overridden setting to open prj.conf");
         }
         describeSelected();
     }
@@ -494,10 +507,12 @@ public final class ConfigurationStudioView extends ViewPart {
                 + ConfigurationStudioPresentation.current(o)
                 + "   •   Requested: " + ConfigurationStudioPresentation.requested(o));
         detailNotice.setText(o.unresolved()
-                ? "Needs review: this request is not resolved in the last generated .config."
-                : ConfigurationStudioPresentation.review(o).isBlank()
-                    ? "Changes take effect after a Zephyr configure/build."
-                    : "Requested value differs from the last build; rebuild to verify.");
+                ? "Needs review: no effective value in the last generated .config."
+                : buildOutdated
+                    ? "Build required: prj.conf changed since the last generated .config."
+                    : ConfigurationStudioPresentation.review(o).isBlank()
+                        ? "The last generated build agrees with this request."
+                        : "Requested value differs from the last build; rebuild to verify.");
         detailTitle.getParent().layout(true, true);
         String explanation = switch (o.symbol()) {
             case "LOG" -> "Enables the Zephyr logging subsystem. Logging can increase firmware size and runtime work.";
