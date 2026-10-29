@@ -6,7 +6,6 @@ import org.eclipse.cdt.dsf.gdb.launching.GdbLaunchDelegate;
 import org.eclipse.cdt.dsf.gdb.service.*;
 import org.eclipse.cdt.dsf.gdb.service.command.GDBControl_7_12;
 import org.eclipse.cdt.dsf.mi.service.IMIBackend;
-import org.eclipse.cdt.dsf.mi.service.command.CommandFactory;
 import org.eclipse.cdt.dsf.debug.service.command.ICommandControl;
 import org.eclipse.cdt.dsf.service.DsfSession;
 import org.eclipse.core.runtime.*;
@@ -36,11 +35,13 @@ public final class RemoteSmokeDelegate extends GdbLaunchDelegate {
                 };
             }
             @Override protected ICommandControl createCommandControl(DsfSession session, ILaunchConfiguration config) {
-                try {
-                    var commands = (CommandFactory) Platform.getBundle("io.github.niwantha33.zew.ui")
-                            .loadClass("io.github.niwantha33.zew.ui.ZephyrDebugServicesFactory$OpenOcdCommands").getConstructor().newInstance();
-                    return new GDBControl_7_12(session, config, commands);
-                } catch (Exception error) { throw new IllegalStateException(error); }
+                // This integration fixture owns a plain gdbserver --once.
+                // OpenOCD's production command factory forces extended-remote,
+                // which is inappropriate for the single-process gdbserver test.
+                // Use the standard remote protocol here. The production
+                // OpenOCD command factory is covered by dedicated tests.
+                return new GDBControl_7_12(session, config,
+                        new org.eclipse.cdt.dsf.gdb.service.command.CommandFactory_6_8());
             }
         };
     }
