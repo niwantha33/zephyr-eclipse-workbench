@@ -18,6 +18,61 @@ import io.github.niwantha33.zew.core.EditorSettings;
 /** Test-only bundle: exercise the installed plug-in through real CDT APIs. */
 public final class EditorSmoke implements IApplication {
     private static void check(boolean value, String name) { if (!value) throw new AssertionError(name); System.out.println("PASS CDT: " + name); }
+    private static Object studioField(Object view, Class<?> type, String name) throws Exception {
+        var field = type.getDeclaredField(name); field.setAccessible(true); return field.get(view);
+    }
+    private static void verifyStudioNavigation(Object view, Class<?> type, java.lang.reflect.Field snapshotField,
+            Object original, org.eclipse.swt.widgets.Table features, org.eclipse.swt.widgets.Tree hardware) throws Exception {
+        String dts = "/* Generated fixture */\n/ {\n    soc {\n        adc@4000 {\n"
+                + "            compatible = \"ti,mspm0-adc\";\n            status = \"disabled\";\n        };\n    };\n};\n";
+        var data = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Snapshot(java.util.List.of(
+                new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("ADC", "n", null, 0),
+                new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("GPIO", "y", null, 0),
+                new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("LOG", "y", "y", 1)), dts, "Navigation fixture", null);
+        var search = (org.eclipse.swt.widgets.Text) studioField(view, type, "search");
+        var hardwareSearch = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareSearch");
+        var hardwareState = (org.eclipse.swt.widgets.Combo) studioField(view, type, "hardwareState");
+        var source = (org.eclipse.swt.widgets.Text) studioField(view, type, "tree");
+        var clear = type.getDeclaredMethod("clearFeatureFilters"); clear.setAccessible(true);
+        var refresh = type.getDeclaredMethod("refreshHardware"); refresh.setAccessible(true);
+        var reveal = type.getDeclaredMethod("revealHardwareSource"); reveal.setAccessible(true);
+        var history = type.getDeclaredMethod("navigateHistory", int.class); history.setAccessible(true);
+        try {
+            snapshotField.set(view, data);
+            source.setText(dts);
+            var domains = (org.eclipse.swt.custom.CTabFolder) studioField(view, type, "peripheralTabs");
+            domains.setSelection(1);
+            domains.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            search.setText("CONFIG_GPIO");
+            check(features.getItemCount() == 1 && features.getItem(0).getText().contains("CONFIG_GPIO"),
+                    "global CONFIG_ search finds settings outside the selected peripheral tab");
+            clear.invoke(view);
+            features.select(0); features.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            features.select(1); features.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            history.invoke(view, -1);
+            check(features.getSelection()[0].getText().contains("CONFIG_ADC"), "Back returns to the previously inspected symbol");
+            history.invoke(view, 1);
+            check(features.getSelection()[0].getText().contains("CONFIG_GPIO"), "Forward restores the next inspected symbol");
+            hardwareSearch.setText("mspm0");
+            hardwareState.select(2);
+            hardwareState.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(hardware.getItemCount() == 1 && hardware.getItem(0).getText().equals("/")
+                    && hardware.getItem(0).getItem(0).getText().equals("soc")
+                    && hardware.getItem(0).getItem(0).getItem(0).getText().equals("adc@4000"),
+                    "filtered Devicetree retains real root and bus ancestors");
+            hardware.setSelection(hardware.getItem(0).getItem(0).getItem(0));
+            reveal.invoke(view);
+            check(source.getSelectionText().contains("adc@4000 {"), "Reveal in source selects the exact generated DTS node line");
+            hardwareSearch.setText("no-such-controller");
+            check(hardware.getItemCount() == 0, "hardware search has an honest empty state");
+        } finally {
+            snapshotField.set(view, original);
+            clear.invoke(view);
+            hardwareSearch.setText(""); hardwareState.select(0);
+            source.setText(((io.github.niwantha33.zew.core.ConfigurationStudioFiles.Snapshot) original).devicetree());
+            refresh.invoke(view);
+        }
+    }
     @Override public Object start(IApplicationContext context) throws Exception {
         String[] args = (String[]) context.getArguments().get(IApplicationContext.APPLICATION_ARGS);
         Path fixture = Path.of(args[0]);
@@ -136,9 +191,9 @@ public final class EditorSmoke implements IApplication {
                             "native Configuration Studio has feature, hardware and insight workspaces");
                     var hardwareField = cls.getDeclaredField("hardwareDevices");
                     hardwareField.setAccessible(true);
-                    var hw = (org.eclipse.swt.widgets.Table) hardwareField.get(view);
+                    var hw = (org.eclipse.swt.widgets.Tree) hardwareField.get(view);
                     check(hw.getColumnCount() == 3
-                            && "Device path".equals(hw.getColumn(0).getText()),
+                            && "Device / hierarchy".equals(hw.getColumn(0).getText()),
                             "installed Hardware workspace has a compiled-Devicetree device inventory");
                     var peripheralField = cls.getDeclaredField("peripheralTabs");
                     peripheralField.setAccessible(true);
@@ -175,6 +230,7 @@ public final class EditorSmoke implements IApplication {
                     var overridesCount = (org.eclipse.swt.widgets.Label) overridesField.get(view);
                     check(!"—".equals(overridesCount.getText()),
                             "live project override summary is populated");
+                    verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw);
                 } catch (Exception error) { throw new IllegalStateException("Native Studio smoke failed", error); }
             });
         }
