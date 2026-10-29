@@ -301,7 +301,8 @@ public final class ConfigurationStudioView extends ViewPart {
         }
         try {
             Path app = project.getLocation().toFile().toPath();
-            var preview = ConfigurationStudioFiles.plan(app, current.symbol(), value);
+            Path build = ProjectContext.buildDirectory(project, ProjectContext.settings(project));
+            var preview = ConfigurationStudioFiles.plan(app, build, current.symbol(), value);
             if (!preview.changed()) {
                 MessageDialog.openInformation(getSite().getShell(), "No changes", "prj.conf already contains that setting.");
                 return;
