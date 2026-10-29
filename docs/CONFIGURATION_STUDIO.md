@@ -5,7 +5,7 @@ Select an imported project in Project Explorer and open the command. This is
 a native Eclipse SWT/JFace view; no secondary browser, VS Code, tkinter or
 unmanaged Python installation is required.
 
-## Beginner-first context-menu workflow
+## Configuration Studio context-menu workflow
 
 Right-click the **Zephyr project**, its Eclipse **.project** descriptor,
 or a **.prj** project descriptor and select **Open Zephyr Configuration
@@ -18,12 +18,16 @@ when the containing Eclipse project is recognised as an existing Zephyr
 application. Unrelated files and non-Zephyr projects retain their own
 context menus.
 
-Kconfig Studio now offers a plain-language feature list with **Enabled**
-and **Disabled** labels and a one-click choice between **Turn on** and
-**Turn off** for boolean settings. Other values still use an explicitly
-reviewed text input. Search understands friendly names and `CONFIG_`
-symbols. The left filter groups features by common purpose and distinguishes
-my project settings and requests that need review.
+Kconfig Studio provides **Enable** and **Disable** buttons directly in the
+details panel for options whose effective generated Kconfig value is `y` or
+`n`. The action is disabled for unresolved and non-switch options.
+**Edit value** remains available for numeric or text settings; **Remove
+override** clears an application request without guessing the resulting
+Zephyr default. The table separately displays effective values, requested
+values, and entries needing build verification. All changes require a
+review, backup and a subsequent Zephyr build; this is not a live Kconfig
+dependency solver. Search accepts technical `CONFIG_` names and display
+labels. Filters group common subsystems and show local project requests.
 
 Category assignment is a display heuristic, **not** Kconfig dependency
 evaluation. Generated build outputs may also be stale; the real Zephyr
