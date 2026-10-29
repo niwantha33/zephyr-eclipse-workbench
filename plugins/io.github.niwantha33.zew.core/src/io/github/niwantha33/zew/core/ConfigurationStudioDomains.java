@@ -27,6 +27,7 @@ public final class ConfigurationStudioDomains {
             /* Template: configure a valid io-channels entry in your board overlay first.
              * Then check that its gain/reference/acquisition time suit your ADC.
              * This does not select a pin or enable an unsupported device. */
+            #include <errno.h>
             #include <zephyr/device.h>
             #include <zephyr/drivers/adc.h>
             #include <zephyr/devicetree.h>
@@ -52,6 +53,7 @@ public final class ConfigurationStudioDomains {
             """;
     private static final String GPIO_EXAMPLE = """
             /* Template: provide an alias 'led0' in your board's Devicetree. */
+            #include <errno.h>
             #include <zephyr/device.h>
             #include <zephyr/drivers/gpio.h>
             #include <zephyr/devicetree.h>
@@ -143,6 +145,17 @@ public final class ConfigurationStudioDomains {
                     .filter(o -> o.symbol().equals(domain.driverSymbol())).findFirst();
             text.append("\nDriver CONFIG_").append(domain.driverSymbol()).append(": ")
                     .append(driver.map(ConfigurationStudioPresentation::current).orElse("not resolved"));
+        }
+        if (domain != OVERVIEW && domain != MORE) {
+            var related = snapshot.options().stream().filter(o -> matches(domain, o))
+                    .sorted(java.util.Comparator.comparing(ConfigurationStudioFiles.Option::symbol))
+                    .limit(8).toList();
+            if (!related.isEmpty()) {
+                text.append("\nRelated settings in this build:");
+                for (var option : related)
+                    text.append("\n  CONFIG_").append(option.symbol()).append(" = ")
+                            .append(ConfigurationStudioPresentation.current(option));
+            }
         }
         text.append("\nEnabling a driver changes a software request. Real controllers, pins, ")
                 .append("Kconfig dependencies and optional DMA are board-specific. ")
