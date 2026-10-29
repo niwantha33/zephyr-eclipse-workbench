@@ -211,6 +211,9 @@ public final class ConfigurationStudioView extends ViewPart {
             refreshOptions();
         });
         search.addListener(SWT.DefaultSelection, event -> options.setFocus());
+        search.addListener(SWT.Selection, event -> {
+            if (event.detail == SWT.ICON_CANCEL) search.setText("");
+        });
         search.addListener(SWT.KeyDown, event -> {
             if (event.keyCode == SWT.ESC) search.setText("");
         });
@@ -387,6 +390,9 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareDevices.addListener(SWT.DefaultSelection, event -> revealHardwareSource());
         hardwareSearch.addModifyListener(event -> refreshHardware());
         hardwareSearch.addListener(SWT.DefaultSelection, event -> hardwareDevices.setFocus());
+        hardwareSearch.addListener(SWT.Selection, event -> {
+            if (event.detail == SWT.ICON_CANCEL) hardwareSearch.setText("");
+        });
         hardwareSearch.addListener(SWT.KeyDown, event -> {
             if (event.keyCode == SWT.ESC) hardwareSearch.setText("");
         });
