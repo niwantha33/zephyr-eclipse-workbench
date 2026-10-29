@@ -30,7 +30,7 @@ public final class ZephyrBuildHandler extends AbstractHandler {
             ProjectContext.settings(project);
         } catch (Exception missing) {
             var dialog = org.eclipse.ui.dialogs.PreferencesUtil.createPropertyDialogOn(
-                    HandlerUtil.getActiveShell(event), project, Activator.ID + ".projectProperties", null, null);
+                    HandlerUtil.getActiveShell(event), project, "io.github.niwantha33.zew.projectProperties", null, null);
             if (dialog == null || dialog.open() != org.eclipse.jface.window.Window.OK) return null;
             try { ProjectContext.settings(project); }
             catch (Exception incomplete) { return null; }
