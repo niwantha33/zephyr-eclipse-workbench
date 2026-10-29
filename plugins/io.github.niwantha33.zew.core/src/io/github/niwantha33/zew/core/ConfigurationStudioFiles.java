@@ -101,27 +101,55 @@ public final class ConfigurationStudioFiles {
             throw new IOException("The application prj.conf must be a regular file, not a symlink.");
         String original = bounded(source);
         String newline = original.contains("\r\n") ? "\r\n" : "\n";
-        var rows = new ArrayList<>(List.of(original.split("\\R", -1)));
+        String[] rows = original.split("(?<=\n)", -1);
         int found = 0;
         String previous = null;
-        for (int i = rows.size() - 1; i >= 0; i--) {
-            var setting = ASSIGN.matcher(rows.get(i));
-            var disabled = NOT_SET.matcher(rows.get(i));
-            String name = setting.matches() ? setting.group(1) : disabled.matches() ? disabled.group(1) : null;
+        for (String raw : rows) {
+            String line = raw.endsWith("\r\n") ? raw.substring(0, raw.length() - 2)
+                    : raw.endsWith("\n") ? raw.substring(0, raw.length() - 1) : raw;
+            var setting = ASSIGN.matcher(line);
+            var disabled = NOT_SET.matcher(line);
+            boolean isSet = setting.matches();
+            boolean isDisabled = !isSet && disabled.matches();
+            String name = isSet ? setting.group(1) : isDisabled ? disabled.group(1) : null;
             if (!symbol.equals(name)) continue;
             found++;
-            previous = setting.matches() ? setting.group(2) : "n";
-            // Remove all redundant assignments. They are reported in the diff.
-            rows.remove(i);
+            previous = isSet ? setting.group(2) : "n";
         }
-        // Only known configuration inputs can be edited. Do not generate
-        // guessed Kconfig symbols from an arbitrary user text entry.
+        // Only known configuration inputs may be edited. Never manufacture
+        // random Kconfig names from free-form user text.
         if (found == 0 && !knownInGeneratedConfig(build, symbol))
-            throw new IOException("Symbol is not present in prj.conf or a verified generated .config: CONFIG_" + symbol);
-        String updated = String.join(newline, rows);
-        if (value != null) {
-            if (!updated.isEmpty() && !updated.endsWith(newline)) updated += newline;
-            updated += "CONFIG_" + symbol + "=" + value + newline;
+            throw new IOException("Symbol is not present in prj.conf or the selected generated .config: CONFIG_" + symbol);
+
+        String updated;
+        if (found == 1 && value != null && value.equals(previous)) {
+            // Same effective request: do not reorder or reformat the source.
+            updated = original;
+        } else {
+            StringBuilder edited = new StringBuilder(original.length() + 128);
+            boolean written = false;
+            for (String raw : rows) {
+                String ending = raw.endsWith("\r\n") ? "\r\n" : raw.endsWith("\n") ? "\n" : "";
+                String line = raw.substring(0, raw.length() - ending.length());
+                var setting = ASSIGN.matcher(line);
+                var disabled = NOT_SET.matcher(line);
+                String name = setting.matches() ? setting.group(1)
+                        : disabled.matches() ? disabled.group(1) : null;
+                if (symbol.equals(name)) {
+                    // Keep the original position and line ending of the first
+                    // assignment, remove any duplicate assignments of this symbol.
+                    if (value != null && !written) {
+                        edited.append("CONFIG_").append(symbol).append('=').append(value).append(ending);
+                        written = true;
+                    }
+                } else edited.append(raw);
+            }
+            if (value != null && !written) {
+                if (!edited.isEmpty() && edited.charAt(edited.length() - 1) != '\n')
+                    edited.append(newline);
+                edited.append("CONFIG_").append(symbol).append('=').append(value).append(newline);
+            }
+            updated = edited.toString();
         }
         return new Preview(source, original, updated, sha256(original),
                 symbol, previous, value);

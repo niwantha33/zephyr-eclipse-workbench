@@ -31,6 +31,15 @@ public final class ConfigurationStudioTests {
             ok(snapshot.options().stream().anyMatch(o -> o.symbol().equals("LOG")
                     && "y".equals(o.effective())), "effective value from generated .config");
             ok(snapshot.devicetree().contains("Board"), "compiled devicetree available read-only");
+            var noop = ConfigurationStudioFiles.plan(app, build, "DEBUG_INFO", "y");
+            // The source has a single DEBUG_INFO assignment; selecting the same
+            // value must not reorder the file or create a misleading change.
+            ok(!noop.changed(), "same requested value is a true no-op");
+            var logPreview = ConfigurationStudioFiles.plan(app, build, "LOG", "n");
+            ok(logPreview.updated().startsWith("# Original notes\r\nCONFIG_LOG=n\r\n"),
+                    "modified value keeps original line position and CRLF");
+            ok(!logPreview.updated().contains("CONFIG_LOG=y"),
+                    "duplicate assignment removed safely");
             var remove = ConfigurationStudioFiles.plan(app, build, "DEBUG_INFO", null);
             ok(remove.updated().contains("# Original notes"), "comments retained");
             ok(!remove.updated().contains("CONFIG_DEBUG_INFO"), "problematic line removed from proposed diff");
@@ -77,6 +86,45 @@ public final class ConfigurationStudioTests {
                     "missing metadata must not pretend to evaluate Kconfig availability");
             rejects(() -> io.github.niwantha33.zew.core.KconfigSourceHelp.firstDefinition(
                     root.resolve("workspace"), "BAD/NAME"));
+            var presentation = io.github.niwantha33.zew.core.ConfigurationStudioPresentation.class;
+            var overridden = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("LOG", "y", "y", 3);
+            var invalid = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("DEBUG_INFO", null, "y", 2);
+            var inherited = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("GPIO", "n", null, 0);
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.title("LOG").equals("System logging"),
+                    "user-friendly setting title");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.current(overridden).equals("Enabled"),
+                    "boolean y is displayed as Enabled");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.current(inherited).equals("Disabled"),
+                    "boolean n is displayed as Disabled");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(overridden,
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.MINE, "logging"),
+                    "search by plain English finds project choices");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(invalid,
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.REVIEW, "debug"),
+                    "unresolved symbol appears under Needs review");
+            ok(!io.github.niwantha33.zew.core.ConfigurationStudioPresentation.matches(inherited,
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.MINE, ""),
+                    "inherited setting must not appear under My changes");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.category("GPIO").equals(
+                    io.github.niwantha33.zew.core.ConfigurationStudioPresentation.DRIVERS),
+                    "drivers category is correct");
+            var resources = io.github.niwantha33.zew.core.ConfigurationStudioResources.class;
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget("", true),
+                    "project root context menu available");
+            for (String file : new String[]{"prj.conf", ".project", "demo.prj",
+                    "app.overlay", "boards/custom.overlay"}) {
+                ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget(file, false),
+                        "project configuration context offered for " + file);
+            }
+            for (String file : new String[]{"main.c", "CMakeLists.txt", "README.md",
+                    "../unrelated.prj", "other.txt"}) {
+                ok(!io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget(file, false),
+                        "no irrelevant context menu for " + file);
+            }
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.projectSettings("prj.conf"),
+                    "right-click prj.conf focuses project choices");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.hardware("boards/custom.overlay"),
+                    "right-click overlay opens Devicetree tab");
             System.out.println("ConfigurationStudioTests PASS");
         } finally {
             try (var paths = Files.walk(root)) {
