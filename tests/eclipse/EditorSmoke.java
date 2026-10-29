@@ -241,6 +241,9 @@ public final class EditorSmoke implements IApplication {
                 org.eclipse.cdt.debug.core.launch.CoreBuildLaunchBarTracker.JOB_FAMILY_CORE_BUILD_LAUNCH_BAR_TRACKER,
                 new NullProgressMonitor());
         manager.reindex(CoreModel.getDefault().create(project));
+        // Reindex schedules a setup job before it queues indexer work. Joining the
+        // indexer alone can report idle before that job has submitted anything.
+        org.eclipse.core.runtime.jobs.Job.getJobManager().join(manager, new NullProgressMonitor());
         check(manager.joinIndexer(30000, new NullProgressMonitor()), "indexer completed");
         var index = manager.getIndex(CoreModel.getDefault().create(project)); index.acquireReadLock();
         try {
