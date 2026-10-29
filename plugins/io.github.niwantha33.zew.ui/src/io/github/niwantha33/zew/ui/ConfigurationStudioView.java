@@ -212,27 +212,43 @@ public final class ConfigurationStudioView extends ViewPart {
     private void refreshOptions() {
         if (options == null || options.isDisposed()) return;
         options.setRedraw(false);
+        int shown = 0;
+        int matches = 0;
+        int total = snapshot == null ? 0 : snapshot.options().size();
         try {
             options.removeAll();
-            if (snapshot == null) return;
-            String term = filter.toUpperCase(java.util.Locale.ROOT);
-            int rendered = 0;
-            for (Option option : snapshot.options().stream()
-                    .sorted(Comparator.comparing(Option::symbol)).toList()) {
-            if (!option.symbol().contains(term)
-                    && !(option.requested() != null && option.requested().toUpperCase(java.util.Locale.ROOT).contains(term)))
-                continue;
-            TableItem item = new TableItem(options, SWT.NONE);
-            item.setText(new String[] {"CONFIG_" + option.symbol(),
-                    option.unresolved() ? "(not in generated .config)" : option.effective(),
-                    option.requested() == null ? "(default/inherited)" : option.requested()});
-            item.setData(option);
-            if (++rendered >= 750) break; // Search all symbols; render a bounded page.
+            if (snapshot != null) {
+                String active = category == null || category.isDisposed()
+                        ? ConfigurationStudioPresentation.ALL : category.getText();
+                for (Option option : snapshot.options().stream()
+                        .sorted(Comparator.comparing(Option::symbol)).toList()) {
+                    if (!ConfigurationStudioPresentation.matches(option, active, filter)) continue;
+                    matches++;
+                    if (shown >= 750) continue;
+                    TableItem row = new TableItem(options, SWT.NONE);
+                    row.setText(new String[] {
+                            ConfigurationStudioPresentation.title(option.symbol()),
+                            ConfigurationStudioPresentation.current(option),
+                            ConfigurationStudioPresentation.source(option)
+                    });
+                    row.setData(option);
+                    ++shown;
+                }
             }
-            for (int i = 0; i < options.getColumnCount(); i++) options.getColumn(i).pack();
+            for (int i = 0; i < options.getColumnCount(); i++) {
+                options.getColumn(i).pack();
+                int cap = i == 0 ? 280 : 175;
+                if (options.getColumn(i).getWidth() > cap) options.getColumn(i).setWidth(cap);
+            }
             if (options.getItemCount() > 0) options.select(0);
         } finally {
             options.setRedraw(true);
+        }
+        if (overview != null && !overview.isDisposed()) {
+            overview.setText("Showing " + shown + " of " + matches + " matching settings"
+                    + "   •   " + total + " values from the selected build"
+                    + (shown < matches ? "   •   Narrow your search to see more" : "")
+                    + "   •   Select a feature for its explanation");
         }
         describeSelected();
     }
