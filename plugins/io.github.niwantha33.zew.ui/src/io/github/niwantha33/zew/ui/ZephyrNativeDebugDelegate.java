@@ -184,8 +184,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                         + ", TCL=" + configuration.getAttribute(TCL_PORT, 6333)
                         + ", Telnet=" + configuration.getAttribute(TELNET_PORT, 4444));
                 info.println("CPU registers: select a suspended frame, then Window > Show View > Other > Debug > Registers. "
-                        + "Named SoC peripherals require a matching vendor SVD and an SVD-capable debugger view; "
-                        + "this Zephyr launch does not currently bind an SVD file.");
+                        + "SoC peripheral registers: Window > Show View > Other > Debug > SoC Registers; "
+                        + "load the exact chip vendor SVD, select a register and Refresh while halted.");
                 info.println("Zephyr thread tracking: refresh the native CDT thread list after every suspend. "
                         + "Repetitive OpenOCD INFO register-polling lines are condensed; warnings and errors are preserved.");
             }

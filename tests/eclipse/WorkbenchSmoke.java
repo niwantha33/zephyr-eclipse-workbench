@@ -23,7 +23,13 @@ public final class WorkbenchSmoke implements IApplication {
                 @Override public String getInitialWindowPerspectiveId() { return "org.eclipse.ui.resourcePerspective"; }
                 @Override public void postStartup() {
                     new Thread(() -> {
-                        try { new EditorSmoke().start(context); }
+                        try {
+                            display.syncExec(() -> {
+                                try { SocRegistersSmoke.run(); }
+                                catch (Exception ex) { throw new IllegalStateException(ex); }
+                            });
+                            new EditorSmoke().start(context);
+                        }
                         catch (Throwable error) { failure = error; error.printStackTrace(); }
                         finally { display.asyncExec(() -> PlatformUI.getWorkbench().close()); }
                     }, "Standard Eclipse project flow checks").start();

@@ -118,6 +118,9 @@
   </extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.UpdateStartup"/></extension>
   <extension point="org.eclipse.ui.views">
+    <view id="io.github.niwantha33.zew.ui.socRegisters" name="SoC Registers"
+          category="org.eclipse.debug.ui"
+          class="io.github.niwantha33.zew.ui.SocRegistersView" restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.configurationStudio"
           name="Zephyr Configuration Studio"
           class="io.github.niwantha33.zew.ui.ConfigurationStudioView"

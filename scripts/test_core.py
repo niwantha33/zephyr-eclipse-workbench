@@ -47,3 +47,5 @@ subprocess.run([tool('java'), '-cp', str(out), 'DebugBackendTests'], check=True,
 subprocess.run([tool('java'), '-cp', str(out), 'DemoConfigurationCompatibilityTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'OpenOcdThreadCheckTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DebugConsoleOutputTests'], check=True, cwd=root, timeout=90)
+
+subprocess.run([tool('java'), '-cp', str(out), 'SvdDeviceTests'], check=True, cwd=root, timeout=90)
