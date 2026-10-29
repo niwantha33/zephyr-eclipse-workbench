@@ -60,6 +60,23 @@ public final class ConfigurationStudioTests {
             ConfigurationStudioFiles.inspect(app, build, "Release");
             ok(Files.readString(overlay).equals("/* user overlay */\n"),
                     "hardware configuration is never automatically changed");
+            Path zephyr = root.resolve("workspace/zephyr/subsys/logging");
+            Files.createDirectories(zephyr);
+            Files.writeString(zephyr.resolve("Kconfig"), "menu \"Logging\"\n"
+                    + "config LOG\n    bool \"Logging enabled\"\n"
+                    + "    depends on PRINTK\n    help\n      Enables subsystem logging.\n"
+                    + "config OTHER\n    bool \"Other\"\n");
+            var sourceHelp = io.github.niwantha33.zew.core.KconfigSourceHelp.firstDefinition(
+                    root.resolve("workspace"), "LOG");
+            ok(sourceHelp != null && sourceHelp.line() == 2
+                    && sourceHelp.sourceExcerpt().contains("depends on PRINTK")
+                    && !sourceHelp.sourceExcerpt().contains("config OTHER"),
+                    "definition lookup gives source help without including next symbol");
+            ok(io.github.niwantha33.zew.core.KconfigSourceHelp.firstDefinition(
+                    root.resolve("workspace"), "NONEXISTENT") == null,
+                    "missing metadata must not pretend to evaluate Kconfig availability");
+            rejects(() -> io.github.niwantha33.zew.core.KconfigSourceHelp.firstDefinition(
+                    root.resolve("workspace"), "BAD/NAME"));
             System.out.println("ConfigurationStudioTests PASS");
         } finally {
             try (var paths = Files.walk(root)) {
