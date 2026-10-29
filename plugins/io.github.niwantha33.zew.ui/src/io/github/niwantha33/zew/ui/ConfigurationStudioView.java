@@ -56,6 +56,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private TabFolder tabs;
     private Label context, status, overview;
     private String filter = "";
+    private String selectedOverlay = "app.overlay";
     private Job helpJob;
     private final java.util.concurrent.atomic.AtomicInteger helpGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ConcurrentMap<String, String> definitionCache =
@@ -115,8 +116,8 @@ public final class ConfigurationStudioView extends ViewPart {
         actions.setLayout(new GridLayout(2, false));
         action(actions, "Change this setting...", () -> editSelected(false))
                 .setToolTipText("For switches, choose On or Off; other values are entered as text");
-        action(actions, "Use Zephyr default...", () -> editSelected(true))
-                .setToolTipText("Remove this setting from prj.conf after reviewing the change");
+        action(actions, "Remove from prj.conf...", () -> editSelected(true))
+                .setToolTipText("Remove this request; other fragments and Zephyr defaults may still affect the value");
         sash.setWeights(new int[] {62, 38});
         options.addListener(SWT.Selection, event -> describeSelected());
 
@@ -154,11 +155,16 @@ public final class ConfigurationStudioView extends ViewPart {
         return button;
     }
 
-    public void displayProject(IProject selected) { displayProject(selected, false); }
+    public void displayProject(IProject selected) { displayProject(selected, false, null); }
 
     public void displayProject(IProject selected, boolean hardware) {
+        displayProject(selected, hardware, null);
+    }
+
+    public void displayProject(IProject selected, boolean hardware, String overlayPath) {
         if (selected == null || !selected.isAccessible()) return;
         project = selected;
+        selectedOverlay = overlayPath == null ? "app.overlay" : overlayPath;
         setPartName("Configuration — " + selected.getName());
         if (options != null && !options.isDisposed()) {
             reload();
@@ -409,7 +415,10 @@ public final class ConfigurationStudioView extends ViewPart {
         if (project == null) return;
         try {
             Path app = project.getLocation().toFile().toPath().toRealPath();
-            Path overlay = app.resolve("app.overlay");
+            Path overlay = app.resolve(selectedOverlay).normalize();
+            if (!overlay.startsWith(app)) throw new java.io.IOException("Overlay is outside the application.");
+            if (!Files.exists(overlay) && !"app.overlay".equals(selectedOverlay))
+                throw new java.io.IOException("The selected overlay no longer exists: " + selectedOverlay);
             if (!Files.exists(overlay) && MessageDialog.openConfirm(getSite().getShell(),
                     "Create application overlay", "Create an empty app.overlay in this project?\n"
                             + "The file will be recognised as an application hardware overlay on the next "
@@ -417,7 +426,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 Files.writeString(overlay, "/* Application hardware overlay. Validate against this board's bindings. */\n",
                         java.nio.charset.StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
             project.refreshLocal(IResource.DEPTH_INFINITE, null);
-            if (Files.isRegularFile(overlay)) openResource("app.overlay");
+            if (Files.isRegularFile(overlay)) openResource(selectedOverlay);
         } catch (Exception error) {
             MessageDialog.openError(getSite().getShell(), "Devicetree overlay", error.getMessage());
         }
