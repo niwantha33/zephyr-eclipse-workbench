@@ -198,6 +198,7 @@ public final class ConfigurationStudioView extends ViewPart {
         if (options == null || options.isDisposed()) return;
         if (project == null) {
             options.removeAll();
+            describeSelected();
             help.setText("Open Zephyr > Configuration Studio with an application selected in Project Explorer.");
             tree.setText("");
             analysis.setText("");
@@ -219,6 +220,7 @@ public final class ConfigurationStudioView extends ViewPart {
         } catch (Exception error) {
             snapshot = null;
             options.removeAll();
+            describeSelected();
             help.setText("Configuration cannot be loaded: " + error.getMessage());
             tree.setText("");
             analysis.setText("Check Project Properties > Zephyr, and select the exact board and environment.");
