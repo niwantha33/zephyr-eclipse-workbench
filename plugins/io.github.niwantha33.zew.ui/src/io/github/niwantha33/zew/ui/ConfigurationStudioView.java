@@ -327,6 +327,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private void shortcut(Composite parent, String caption, String value) {
         action(parent, caption, () -> {
             if (category == null || category.isDisposed()) return;
+            selectDomain(ConfigurationStudioDomains.OVERVIEW);
             int i = java.util.Arrays.asList(ConfigurationStudioPresentation.FILTERS).indexOf(value);
             if (i >= 0) category.select(i);
             refreshOptions();
@@ -407,6 +408,7 @@ public final class ConfigurationStudioView extends ViewPart {
         project = selected;
         selectedOverlay = overlayPath == null ? "app.overlay" : overlayPath;
         if (changedProject && category != null && !category.isDisposed()) {
+            selectDomain(ConfigurationStudioDomains.OVERVIEW);
             category.select(0);
             if (search != null && !search.isDisposed()) search.setText("");
             filter = "";
@@ -421,6 +423,7 @@ public final class ConfigurationStudioView extends ViewPart {
     /** Context action on prj.conf highlights only the project-owned choices. */
     public void focusProjectChanges() {
         if (category == null || category.isDisposed()) return;
+        selectDomain(ConfigurationStudioDomains.OVERVIEW);
         category.select(1);
         tabs.setSelection(0);
         refreshOptions();
@@ -466,6 +469,7 @@ public final class ConfigurationStudioView extends ViewPart {
                             .compareTo(Files.getLastModifiedTime(effectiveFile)) > 0;
             context.setText(project.getName() + "   •   " + board + "   •   " + snapshot.profile());
             updateMetrics();
+            refreshPeripheralInfo();
             refreshOptions();
             tree.setText(snapshot.devicetree().isEmpty()
                     ? "No resolved Devicetree is available. Select the board in Project settings "
@@ -527,6 +531,7 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void refreshOptions() {
         if (options == null || options.isDisposed()) return;
+        if (inlineToggle != null && !inlineToggle.isDisposed()) inlineToggle.setVisible(false);
         Option previousSelection = selected();
         String previousSymbol = previousSelection == null ? null : previousSelection.symbol();
         options.setRedraw(false);
@@ -541,13 +546,14 @@ public final class ConfigurationStudioView extends ViewPart {
                         ? ConfigurationStudioPresentation.ALL : category.getText();
                 for (Option option : snapshot.options().stream()
                         .sorted(Comparator.comparing(Option::symbol)).toList()) {
-                    if (!ConfigurationStudioPresentation.matches(option, active, filter)) continue;
+                    if (!ConfigurationStudioDomains.matches(activeDomain, option)
+                            || !ConfigurationStudioPresentation.matches(option, active, filter)) continue;
                     matches++;
                     if (shown >= 750) continue;
                     TableItem row = new TableItem(options, SWT.NONE);
                     row.setText(new String[] {
                             ConfigurationStudioPresentation.title(option.symbol()) + "  ·  CONFIG_" + option.symbol(),
-                            ConfigurationStudioPresentation.current(option),
+                            ConfigurationStudioPresentation.inlineValue(option),
                             ConfigurationStudioPresentation.requested(option),
                             ConfigurationStudioPresentation.review(option)
                     });
@@ -556,12 +562,8 @@ public final class ConfigurationStudioView extends ViewPart {
                     ++shown;
                 }
             }
-            for (int i = 0; i < options.getColumnCount(); i++) {
-                options.getColumn(i).pack();
-                int cap = i == 0 ? 365 : 140;
-                if (options.getColumn(i).getWidth() > cap) options.getColumn(i).setWidth(cap);
-            }
             if (options.getItemCount() > 0) options.select(keepIndex >= 0 ? keepIndex : 0);
+            sizeColumns();
         } finally {
             options.setRedraw(true);
         }
@@ -572,6 +574,44 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "   •   Double-click an overridden setting to open prj.conf");
         }
         describeSelected();
+    }
+
+    private void selectDomain(Domain domain) {
+        activeDomain = domain;
+        if (peripheralTabs != null && !peripheralTabs.isDisposed()) {
+            for (int i = 0; i < peripheralTabs.getItemCount(); i++) {
+                if (peripheralTabs.getItem(i).getData() == domain) {
+                    peripheralTabs.setSelection(i);
+                    break;
+                }
+            }
+        }
+        refreshPeripheralInfo();
+    }
+
+    private void refreshPeripheralInfo() {
+        if (peripheralTabs == null || peripheralTabs.isDisposed()) return;
+        for (var entry : peripheralInfo.entrySet()) {
+            Text info = entry.getValue();
+            if (info != null && !info.isDisposed())
+                info.setText(ConfigurationStudioDomains.inspect(entry.getKey(), snapshot));
+        }
+        if (codeExample != null && !codeExample.isDisposed())
+            codeExample.setText(activeDomain.example().isBlank()
+                    ? "A board-specific example is not available for this category yet.\n\n"
+                    + "Check Zephyr's chosen driver API, board bindings and Devicetree first.\n"
+                    + "No source files or hardware assignments are generated automatically."
+                    : activeDomain.example());
+    }
+
+    private void sizeColumns() {
+        if (options == null || options.isDisposed() || options.getColumnCount() != 4) return;
+        int width = options.getClientArea().width - 18;
+        if (width <= 0) return;
+        int[] minimum = {170, 156, 98, 88};
+        double[] fractions = {0.40, 0.29, 0.17, 0.14};
+        for (int i = 0; i < 4; i++)
+            options.getColumn(i).setWidth(Math.max(minimum[i], (int) (width * fractions[i])));
     }
 
     private Option selected() {
@@ -586,8 +626,18 @@ public final class ConfigurationStudioView extends ViewPart {
         if (enableButton != null && !enableButton.isDisposed()) {
             enableButton.setEnabled(togglable && !"y".equals(o.requested()));
             disableButton.setEnabled(togglable && !"n".equals(o.requested()));
+            String displayed = o == null ? null
+                    : o.requested() != null ? o.requested() : o.effective();
+            enableButton.setSelection(togglable && "y".equals(displayed));
+            disableButton.setSelection(togglable && "n".equals(displayed));
             editButton.setEnabled(o != null && !o.unresolved() && !togglable);
             removeButton.setEnabled(o != null && o.requested() != null);
+            if (inlineToggle != null && !inlineToggle.isDisposed()) {
+                if (togglable && options.getSelectionCount() > 0) {
+                    inlineToggleEditor.setEditor(inlineToggle, options.getSelection()[0], 1);
+                    inlineToggle.setVisible(true);
+                } else inlineToggle.setVisible(false);
+            }
         }
         if (o == null) {
             detailTitle.setText("No setting selected");
@@ -864,6 +914,7 @@ public final class ConfigurationStudioView extends ViewPart {
         if (helpJob != null) helpJob.cancel();
         if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();
         if (metricFont != null && !metricFont.isDisposed()) metricFont.dispose();
+        if (inlineToggleEditor != null) inlineToggleEditor.dispose();
         super.dispose();
     }
 
