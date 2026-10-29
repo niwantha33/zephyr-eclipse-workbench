@@ -779,6 +779,17 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "Inspect its Kconfig definition or use Edit value for non-switch types.");
             return;
         }
+        var evaluated = kconfigCache.get(current.symbol());
+        if (evaluated != null && evaluated.available()
+                && !evaluated.details().canRequest(value)) {
+            MessageDialog.openWarning(getSite().getShell(), "Blocked Kconfig request",
+                    "CONFIG_" + current.symbol() + " cannot be set to " + value
+                    + " in the last built Kconfig state.\n\nDependency: "
+                    + evaluated.details().dependencies()
+                    + "\nExpression result: " + evaluated.details().dependencyState()
+                    + "\n\nResolve the prerequisites and rebuild before changing this setting.");
+            return;
+        }
         try {
             saveSelected(current, value);
         } finally {
