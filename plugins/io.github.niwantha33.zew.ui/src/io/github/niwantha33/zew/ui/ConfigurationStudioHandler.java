@@ -12,7 +12,12 @@ import org.eclipse.ui.handlers.HandlerUtil;
 /** The Zephyr menu and right-click project/config-file actions share one view. */
 public final class ConfigurationStudioHandler extends AbstractHandler {
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
-        var project = SelectedProject.from(event);
+        var activeMenu = HandlerUtil.getActiveMenuSelection(event);
+        var selection = activeMenu instanceof IStructuredSelection
+                ? activeMenu : HandlerUtil.getCurrentSelection(event);
+        var project = selection instanceof IStructuredSelection items && items.size() == 1
+                ? SelectedProject.fromObject(items.getFirstElement()) : null;
+        if (project == null && activeMenu == null) project = SelectedProject.from(event);
         if (project == null || !ZephyrProjectLifecycle.supports(project)) {
             MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Zephyr Configuration Studio",
                     "Select a Zephyr project or its prj.conf in Project Explorer.");
@@ -20,7 +25,6 @@ public final class ConfigurationStudioHandler extends AbstractHandler {
         }
         boolean devicetree = false;
         boolean focusOverrides = false;
-        var selection = HandlerUtil.getCurrentSelection(event);
         if (selection instanceof IStructuredSelection items && items.size() == 1
                 && items.getFirstElement() instanceof IFile file) {
             devicetree = file.getName().endsWith(".overlay");
