@@ -143,8 +143,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
     @Override protected org.eclipse.cdt.dsf.debug.service.IDsfDebugServicesFactory newServiceFactory(
             ILaunchConfiguration configuration, String version) {
         try {
-            if ("openocd".equals(configuration.getAttribute(RESOLVED_RUNNER, "")))
-                return new ZephyrDebugServicesFactory(version, configuration);
+            return new ZephyrDebugServicesFactory(version, configuration,
+                    "openocd".equals(configuration.getAttribute(RESOLVED_RUNNER, "")));
         } catch (CoreException error) { Activator.getDefault().getLog().log(error.getStatus()); }
         return super.newServiceFactory(configuration, version);
     }
@@ -257,12 +257,13 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         return new CoreException(new Status(IStatus.ERROR, Activator.ID, message, cause));
     }
 
-    private static final class ManagedServer implements ILaunchesListener2, AutoCloseable {
+    public static final class ManagedServer implements ILaunchesListener2, AutoCloseable {
         private final Process process;
         private final MessageConsoleStream stream;
         private final TargetOperationGuard.Lease lease;
         private final ILaunch launch;
         private final AtomicBoolean closed = new AtomicBoolean();
+        private final AtomicBoolean closeScheduled = new AtomicBoolean();
         private final DebugServerDiagnostics diagnostics;
         private volatile Thread logThread;
         private final java.util.Set<ProcessHandle> ownedChildren = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -304,17 +305,36 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         }
         void register() {
             DebugPlugin.getDefault().getLaunchManager().addLaunchListener(this);
+            if (launch instanceof org.eclipse.cdt.dsf.gdb.launching.GdbLaunch gdb) {
+                gdb.getSession().getExecutor().execute(() -> gdb.getSession().addServiceEventListener(this, null));
+            }
+        }
+        @org.eclipse.cdt.dsf.service.DsfServiceEventHandler
+        public void commandControlStopped(
+                org.eclipse.cdt.dsf.debug.service.command.ICommandControlService.ICommandControlShutdownDMEvent event) {
+            closeAsync();
+        }
+        private void closeAsync() {
+            if (!closeScheduled.compareAndSet(false, true)) return;
+            var cleanup = new Thread(this::close, "zew-owned-debugserver-stop");
+            cleanup.setDaemon(true);
+            cleanup.start();
         }
         @Override public void launchesAdded(ILaunch[] added) {}
         @Override public void launchesChanged(ILaunch[] changed) {}
         @Override public void launchesRemoved(ILaunch[] removed) { check(removed); }
         @Override public void launchesTerminated(ILaunch[] terminated) { check(terminated); }
         private void check(ILaunch[] launches) {
-            for (ILaunch item : launches) if (item == launch) { close(); return; }
+            for (ILaunch item : launches) if (item == launch) { closeAsync(); return; }
         }
         @Override public void close() {
             if (!closed.compareAndSet(false, true)) return;
             DebugPlugin.getDefault().getLaunchManager().removeLaunchListener(this);
+            if (launch instanceof org.eclipse.cdt.dsf.gdb.launching.GdbLaunch gdb) {
+                try {
+                    gdb.getSession().getExecutor().execute(() -> gdb.getSession().removeServiceEventListener(this));
+                } catch (java.util.concurrent.RejectedExecutionException ignored) { /* session already ended */ }
+            }
             ownedChildren.addAll(process.descendants().toList());
             for (var child : ownedChildren) if (child.isAlive()) child.destroy();
             process.destroy();
