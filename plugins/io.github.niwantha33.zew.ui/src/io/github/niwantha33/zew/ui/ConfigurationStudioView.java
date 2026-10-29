@@ -52,6 +52,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private Snapshot snapshot;
     private Text search, help, tree, analysis;
     private Table options;
+    private Button enableButton, disableButton, editButton, removeButton;
     private Combo category;
     private TabFolder tabs;
     private Label context, status, overview;
@@ -85,7 +86,7 @@ public final class ConfigurationStudioView extends ViewPart {
         software.setLayout(new GridLayout(1, false));
         overview = new Label(software, SWT.WRAP);
         overview.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        overview.setText("Choose a feature to understand it. Changes are reviewed before saving.");
+        overview.setText("Select an option to inspect its effective value, override, and Kconfig definition.");
         Composite navigation = new Composite(software, SWT.NONE);
         navigation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         navigation.setLayout(new GridLayout(2, false));
@@ -96,14 +97,14 @@ public final class ConfigurationStudioView extends ViewPart {
         category.addListener(SWT.Selection, event -> refreshOptions());
         search = new Text(navigation, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL | SWT.BORDER);
         search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        search.setMessage("Find a feature: logging, debug, Bluetooth, CONFIG_...");
+        search.setMessage("Search configuration options (LOG, DEBUG_THREAD_INFO, Bluetooth...)");
         search.addModifyListener(event -> { filter = search.getText(); refreshOptions(); });
         SashForm sash = new SashForm(software, SWT.HORIZONTAL);
         sash.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         options = new Table(sash, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION | SWT.V_SCROLL);
         options.setHeaderVisible(true);
         options.setLinesVisible(true);
-        for (String name : new String[] {"Feature", "Current value", "Configured by"}) {
+        for (String name : new String[] {"Option", "Effective", "Requested", "Validation"}) {
             var col = new TableColumn(options, SWT.LEFT);
             col.setText(name);
         }
@@ -114,10 +115,14 @@ public final class ConfigurationStudioView extends ViewPart {
         Composite actions = new Composite(detail, SWT.NONE);
         actions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         actions.setLayout(new GridLayout(2, false));
-        action(actions, "Change this setting...", () -> editSelected(false))
-                .setToolTipText("For switches, choose On or Off; other values are entered as text");
-        action(actions, "Remove from prj.conf...", () -> editSelected(true))
-                .setToolTipText("Remove this request; other fragments and Zephyr defaults may still affect the value");
+        enableButton = action(actions, "Enable", () -> setToggle("y"));
+        enableButton.setToolTipText("Request CONFIG_<symbol>=y in prj.conf, with review and backup");
+        disableButton = action(actions, "Disable", () -> setToggle("n"));
+        disableButton.setToolTipText("Request CONFIG_<symbol>=n in prj.conf, with review and backup");
+        editButton = action(actions, "Edit value...", () -> editSelected(false));
+        editButton.setToolTipText("Edit numeric, text or other non-switch settings");
+        removeButton = action(actions, "Remove override...", () -> editSelected(true));
+        removeButton.setToolTipText("Remove the prj.conf assignment; board defaults and other fragments still apply");
         sash.setWeights(new int[] {62, 38});
         options.addListener(SWT.Selection, event -> describeSelected());
 
@@ -193,6 +198,7 @@ public final class ConfigurationStudioView extends ViewPart {
         if (options == null || options.isDisposed()) return;
         if (project == null) {
             options.removeAll();
+            describeSelected();
             help.setText("Open Zephyr > Configuration Studio with an application selected in Project Explorer.");
             tree.setText("");
             analysis.setText("");
@@ -214,6 +220,7 @@ public final class ConfigurationStudioView extends ViewPart {
         } catch (Exception error) {
             snapshot = null;
             options.removeAll();
+            describeSelected();
             help.setText("Configuration cannot be loaded: " + error.getMessage());
             tree.setText("");
             analysis.setText("Check Project Properties > Zephyr, and select the exact board and environment.");
@@ -241,7 +248,8 @@ public final class ConfigurationStudioView extends ViewPart {
                     row.setText(new String[] {
                             ConfigurationStudioPresentation.title(option.symbol()),
                             ConfigurationStudioPresentation.current(option),
-                            ConfigurationStudioPresentation.source(option)
+                            ConfigurationStudioPresentation.requested(option),
+                            ConfigurationStudioPresentation.review(option)
                     });
                     row.setData(option);
                     ++shown;
@@ -249,7 +257,7 @@ public final class ConfigurationStudioView extends ViewPart {
             }
             for (int i = 0; i < options.getColumnCount(); i++) {
                 options.getColumn(i).pack();
-                int cap = i == 0 ? 280 : 175;
+                int cap = i == 0 ? 260 : 150;
                 if (options.getColumn(i).getWidth() > cap) options.getColumn(i).setWidth(cap);
             }
             if (options.getItemCount() > 0) options.select(0);
@@ -273,6 +281,13 @@ public final class ConfigurationStudioView extends ViewPart {
     private void describeSelected() {
         if (helpJob != null) helpJob.cancel();
         Option o = selected();
+        boolean togglable = ConfigurationStudioPresentation.isToggle(o);
+        if (enableButton != null && !enableButton.isDisposed()) {
+            enableButton.setEnabled(togglable && !"y".equals(o.requested()));
+            disableButton.setEnabled(togglable && !"n".equals(o.requested()));
+            editButton.setEnabled(o != null && !o.unresolved() && !togglable);
+            removeButton.setEnabled(o != null && o.requested() != null);
+        }
         if (o == null) {
             help.setText("No settings match the current search.");
             return;
@@ -292,13 +307,14 @@ public final class ConfigurationStudioView extends ViewPart {
                 + "\n" + ConfigurationStudioPresentation.current(o)
                 + "   •   " + ConfigurationStudioPresentation.source(o)
                 + "\nTechnical option: CONFIG_" + o.symbol()
-                + "\nValue in prj.conf: " + (o.requested() == null ? "not explicitly set" : o.requested())
+                + "\nRequested in prj.conf: " + ConfigurationStudioPresentation.requested(o)
                 + (o.requestedLine() > 0 ? " (line " + o.requestedLine() + ")" : "")
                 + "\n\nWhat this setting does\n" + explanation
                 + (o.unresolved() ? "\n\nThis request has no corresponding entry in the last generated "
                         + ".config. It may be undefined or the generated configuration may be stale."
                         + " Examine Zephyr's Kconfig diagnostics before changing it." : "")
-                + "\n\nConfiguration changes take effect only after the selected board is configured and rebuilt.";
+                + "\n\nEnable / Disable writes an explicit prj.conf request. The effective "
+                + "value is determined by Zephyr during the next configuration/build.";
         help.setText(base);
         // Source text is a supplementary explanation, not a Kconfig dependency
         // evaluation. Run filesystem searches off the SWT UI thread.
@@ -343,64 +359,75 @@ public final class ConfigurationStudioView extends ViewPart {
         }
     }
 
+    /** Direct Enable/Disable controls stay visible; only resolved switches are actionable. */
+    private void setToggle(String value) {
+        Option current = selected();
+        if (!ConfigurationStudioPresentation.isToggle(current)) {
+            MessageDialog.openWarning(getSite().getShell(), "Cannot change as a switch",
+                    "This option is not a resolved on/off setting. "
+                    + "Inspect its Kconfig definition or use Edit value for non-switch types.");
+            return;
+        }
+        saveSelected(current, value);
+    }
+
     private void editSelected(boolean remove) {
         Option current = selected();
         if (project == null || current == null) return;
-        if (remove && current.requested() == null) {
-            MessageDialog.openInformation(getSite().getShell(), "No application override",
-                    "There is no assignment for this symbol in prj.conf to remove.");
+        if (remove) {
+            if (current.requested() == null) return;
+            saveSelected(current, null);
             return;
         }
-        String value = null;
-        if (!remove) {
-            if (current.unresolved()) {
-                MessageDialog.openWarning(getSite().getShell(), "Unresolved setting",
-                        "This symbol is absent from the last generated .config. "
-                                + "Remove the invalid override or resolve Kconfig prerequisites before editing it.");
-                return;
-            }
-            if ("y".equals(current.effective()) || "n".equals(current.effective())) {
-                var dialog = new MessageDialog(getSite().getShell(),
-                        "Configure " + ConfigurationStudioPresentation.title(current.symbol()),
-                        null, "Choose what you want.\n\n"
-                                + "Zephyr will check whether this choice is supported by the board.",
-                        MessageDialog.QUESTION, new String[] {"Turn on", "Turn off", "Cancel"}, 2);
-                int selected = dialog.open();
-                if (selected == 2 || selected < 0) return;
-                value = selected == 0 ? "y" : "n";
-            } else {
-                var dialog = new InputDialog(getSite().getShell(),
-                        "Configure " + ConfigurationStudioPresentation.title(current.symbol()),
-                        "Enter a value for CONFIG_" + current.symbol()
-                                + ".\nZephyr will check it during the next build.",
-                        current.requested() != null ? current.requested() : current.effective(),
-                        text -> text == null || text.isBlank() || text.indexOf('\n') >= 0
-                                || text.indexOf('\r') >= 0 ? "Enter one nonempty line." : null);
-                if (dialog.open() != Window.OK) return;
-                value = dialog.getValue();
-            }
+        if (current.unresolved()) {
+            MessageDialog.openWarning(getSite().getShell(), "Unresolved setting",
+                    "This setting has no resolved value in the last .config. "
+                    + "Remove the invalid override or fix Kconfig dependencies and build first.");
+            return;
         }
+        if (ConfigurationStudioPresentation.isToggle(current)) {
+            MessageDialog.openInformation(getSite().getShell(), "On/off setting",
+                    "Use the Enable or Disable controls for this setting.");
+            return;
+        }
+        var dialog = new InputDialog(getSite().getShell(),
+                "Edit " + ConfigurationStudioPresentation.title(current.symbol()),
+                "Enter a value for CONFIG_" + current.symbol()
+                + ".\nZephyr validates it during the next build.",
+                current.requested() != null ? current.requested() : current.effective(),
+                value -> value == null || value.isBlank() || value.indexOf('\n') >= 0
+                        || value.indexOf('\r') >= 0 ? "Enter one nonempty line." : null);
+        if (dialog.open() == Window.OK) saveSelected(current, dialog.getValue());
+    }
+
+    /** Every GUI action shares review, optimistic locking and backed-up atomic save. */
+    private void saveSelected(Option current, String value) {
+        if (project == null || current == null) return;
         try {
             Path app = project.getLocation().toFile().toPath();
             Path build = ProjectContext.buildDirectory(project, ProjectContext.settings(project));
             var preview = ConfigurationStudioFiles.plan(app, build, current.symbol(), value);
             if (!preview.changed()) {
-                MessageDialog.openInformation(getSite().getShell(), "No changes", "prj.conf already contains that setting.");
+                status.setText("No change: CONFIG_" + current.symbol() + " already has that request.");
                 return;
             }
-            String before = preview.before() == null ? "(not set)" : "CONFIG_" + current.symbol() + "=" + preview.before();
-            String after = remove ? "(remove explicit assignment)" : "CONFIG_" + current.symbol() + "=" + value;
-            if (!MessageDialog.openConfirm(getSite().getShell(), "Review configuration edit",
-                    "File: " + preview.file() + "\n\nBefore: " + before + "\nAfter: " + after
-                    + "\n\nExisting comments and unrelated configuration are preserved. "
-                    + "A dated backup will be created. Zephyr must validate the result on the next build.\n\nApply this change?"))
-                return;
+            String before = preview.before() == null ? "(no prj.conf assignment)"
+                    : "CONFIG_" + current.symbol() + "=" + preview.before();
+            String after = value == null ? "(remove assignment)"
+                    : "CONFIG_" + current.symbol() + "=" + value;
+            if (!MessageDialog.openConfirm(getSite().getShell(), "Review Kconfig change",
+                    "Project: " + project.getName()
+                    + "\nFile: " + preview.file()
+                    + "\n\nBefore: " + before + "\nAfter:  " + after
+                    + "\n\nThis edits the request in prj.conf, not Zephyr's generated .config."
+                    + "\nA timestamped backup will be saved. Effective settings and dependencies "
+                    + "are verified only by the next Zephyr build."
+                    + "\n\nApply this change?")) return;
             Path backup = ConfigurationStudioFiles.commit(app, preview);
             project.refreshLocal(IResource.DEPTH_INFINITE, null);
             reload();
-            MessageDialog.openInformation(getSite().getShell(), "Configuration saved",
-                    "prj.conf updated atomically.\nBackup: " + backup
-                            + "\n\nBuild the project to validate Kconfig dependencies and regenerate .config.");
+            status.setText("Saved CONFIG_" + current.symbol()
+                    + " to prj.conf; build to validate. Backup: " + backup);
         } catch (Exception error) {
             MessageDialog.openError(getSite().getShell(), "Configuration not saved", error.getMessage());
         }

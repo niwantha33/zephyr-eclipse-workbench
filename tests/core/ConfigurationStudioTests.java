@@ -108,6 +108,36 @@ public final class ConfigurationStudioTests {
             ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.category("GPIO").equals(
                     io.github.niwantha33.zew.core.ConfigurationStudioPresentation.DRIVERS),
                     "drivers category is correct");
+            var binary = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option(
+                    "DEBUG_THREAD_INFO", "n", null, 0);
+            var requestedEnable = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option(
+                    "DEBUG_THREAD_INFO", "n", "y", 12);
+            var numeric = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option(
+                    "MAIN_STACK_SIZE", "2048", "4096", 7);
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.isToggle(overridden),
+                    "Enable/Disable allowed for an effective y switch");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.isToggle(binary),
+                    "Enable/Disable allowed for an effective n switch");
+            ok(!io.github.niwantha33.zew.core.ConfigurationStudioPresentation.isToggle(numeric),
+                    "non-boolean numeric options cannot be toggled with y/n");
+            ok(!io.github.niwantha33.zew.core.ConfigurationStudioPresentation.isToggle(invalid),
+                    "unresolved options cannot be enabled before Kconfig validation");
+            ok(!io.github.niwantha33.zew.core.ConfigurationStudioPresentation.isToggle(null),
+                    "missing selection cannot be toggled");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.requested(requestedEnable)
+                    .equals("Enable"), "requested enabled value is visible independently of effective state");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.requested(binary)
+                    .equals("Inherited"), "no explicit override is shown as inherited");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.review(requestedEnable)
+                    .equals("Verify with build"), "requested and effective mismatch requires build validation");
+            ok(io.github.niwantha33.zew.core.ConfigurationStudioPresentation.review(invalid)
+                    .equals("Unresolved"), "invalid setting is visibly marked unresolved");
+            var requestOn = ConfigurationStudioFiles.plan(app, build, "DEBUG_THREAD_INFO", "y");
+            ok(requestOn.updated().contains("CONFIG_DEBUG_THREAD_INFO=y"),
+                    "Enable action emits an explicit yes request using the verified selected build");
+            var requestOff = ConfigurationStudioFiles.plan(app, build, "DEBUG_THREAD_INFO", "n");
+            ok(requestOff.updated().contains("CONFIG_DEBUG_THREAD_INFO=n"),
+                    "Disable action emits an explicit no request using the verified selected build");
             var resources = io.github.niwantha33.zew.core.ConfigurationStudioResources.class;
             ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget("", true),
                     "project root context menu available");

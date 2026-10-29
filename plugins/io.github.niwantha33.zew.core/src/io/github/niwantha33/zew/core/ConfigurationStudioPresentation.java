@@ -71,6 +71,29 @@ public final class ConfigurationStudioPresentation {
         };
     }
 
+    /** Only resolved on/off values get direct controls in the current editor. */
+    public static boolean isToggle(ConfigurationStudioFiles.Option option) {
+        return option != null && !option.unresolved()
+                && ("y".equals(option.effective()) || "n".equals(option.effective()));
+    }
+
+    /** Show requests separately from the last effective build value. */
+    public static String requested(ConfigurationStudioFiles.Option option) {
+        if (option.requested() == null) return "Inherited";
+        return switch (option.requested()) {
+            case "y" -> "Enable";
+            case "n" -> "Disable";
+            default -> option.requested();
+        };
+    }
+
+    public static String review(ConfigurationStudioFiles.Option option) {
+        if (option.unresolved()) return "Unresolved";
+        if (option.requested() != null && !option.requested().equals(option.effective()))
+            return "Verify with build";
+        return "";
+    }
+
     public static String current(ConfigurationStudioFiles.Option option) {
         if (option.unresolved()) return "Not resolved";
         return switch (option.effective()) {
