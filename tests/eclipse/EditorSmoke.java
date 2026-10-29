@@ -31,6 +31,26 @@ public final class EditorSmoke implements IApplication {
             pd.setBuildSpec(new ICommand[] {command}); project.setDescription(pd, null);
         }
         project.open(null); project.refreshLocal(IResource.DEPTH_INFINITE, null);
+        var ui = Platform.getBundle("io.github.niwantha33.zew.ui");
+        ui.start();
+        // Test contributions from the actually installed p2 feature, not just
+        // plugin.xml in the checkout.
+        var registry = Platform.getExtensionRegistry();
+        var studioViews = Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.views"));
+        check(studioViews.anyMatch(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui")
+                && "io.github.niwantha33.zew.ui.configurationStudio".equals(e.getAttribute("id"))),
+                "installed Configuration Studio view registered");
+        var studioMenus = Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.menus"))
+                .filter(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui"))
+                .filter(e -> "popup:org.eclipse.ui.popup.any?after=additions".equals(e.getAttribute("locationURI")))
+                .flatMap(e -> Arrays.stream(e.getChildren("command")))
+                .filter(e -> "io.github.niwantha33.zew.configurationStudio".equals(e.getAttribute("commandId")))
+                .toList();
+        check(studioMenus.size() == 1 && studioMenus.get(0).getChildren("visibleWhen").length == 1,
+                "installed right-click Configuration Studio command is selection-guarded");
+        check(Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.propertyPages"))
+                .anyMatch(e -> "io.github.niwantha33.zew.projectProperties".equals(e.getAttribute("id"))),
+                "Project settings action resolves the registered Zephyr property page");
         var tester = (org.eclipse.core.expressions.PropertyTester) Platform.getBundle(
                 "io.github.niwantha33.zew.ui").loadClass(
                         "io.github.niwantha33.zew.ui.ZephyrProjectTester")
@@ -103,26 +123,6 @@ public final class EditorSmoke implements IApplication {
             });
         }
         var parsed = EditorSettings.parse(Files.readString(fixture.resolve(".zew-build/first/editor-settings.tsv"), StandardCharsets.UTF_8));
-        var ui = Platform.getBundle("io.github.niwantha33.zew.ui");
-        ui.start();
-        // Test contributions from the actually installed p2 feature, not just
-        // plugin.xml in the checkout.
-        var registry = Platform.getExtensionRegistry();
-        var studioViews = Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.views"));
-        check(studioViews.anyMatch(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui")
-                && "io.github.niwantha33.zew.ui.configurationStudio".equals(e.getAttribute("id"))),
-                "installed Configuration Studio view registered");
-        var studioMenus = Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.menus"))
-                .filter(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui"))
-                .filter(e -> "popup:org.eclipse.ui.popup.any?after=additions".equals(e.getAttribute("locationURI")))
-                .flatMap(e -> Arrays.stream(e.getChildren("command")))
-                .filter(e -> "io.github.niwantha33.zew.configurationStudio".equals(e.getAttribute("commandId")))
-                .toList();
-        check(studioMenus.size() == 1 && studioMenus.get(0).getChildren("visibleWhen").length == 1,
-                "installed right-click Configuration Studio command is selection-guarded");
-        check(Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.propertyPages"))
-                .anyMatch(e -> "io.github.niwantha33.zew.projectProperties".equals(e.getAttribute("id"))),
-                "Project settings action resolves the registered Zephyr property page");
         OpenOcdMetadataSmoke.run(ui, fixture);
         if (args.length < 2 || !args[1].equals("verify")) ProjectImportSmoke.run(ui, fixture.getParent());
         if (Boolean.getBoolean("zew.nativeFlow") && (args.length < 2 || !args[1].equals("verify")))
