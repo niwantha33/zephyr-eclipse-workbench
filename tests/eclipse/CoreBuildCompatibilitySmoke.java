@@ -34,6 +34,9 @@ public final class CoreBuildCompatibilitySmoke {
                 "native run/toolchain selection resolves to West instead of missing provider");
         check(((ICBuildConfiguration2) config).getBuildDirectoryURI().getPath().contains("/.zew-build"),
                 "Core Build uses managed Zephyr outputs rather than host CMake output");
+        var pendingInfo = config.getScannerInformation(project.getFile("src/main.c"));
+        check(pendingInfo != null && pendingInfo.getDefinedSymbols().isEmpty() && pendingInfo.getIncludePaths().length == 0,
+                "unconfigured Core Build scanner does not probe the desktop compiler");
         config.build(IncrementalProjectBuilder.FULL_BUILD, Map.of(), null, new NullProgressMonitor());
         check(project.findMarkers(UI + ".configurationProblem", false, IResource.DEPTH_ZERO).length == 1,
                 "native configuration waits for missing board without invoking host compiler");
