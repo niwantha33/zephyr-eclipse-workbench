@@ -52,6 +52,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private Table options;
     private Label context, status;
     private String filter = "";
+    private Job helpJob;
     private final java.util.concurrent.atomic.AtomicInteger helpGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ConcurrentMap<String, String> definitionCache =
             new java.util.concurrent.ConcurrentHashMap<>();
@@ -142,6 +143,7 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void reload() {
         helpGeneration.incrementAndGet();
+        if (helpJob != null) helpJob.cancel();
         definitionCache.clear();
         if (options == null || options.isDisposed()) return;
         if (project == null) {
@@ -201,6 +203,7 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private void describeSelected() {
+        if (helpJob != null) helpJob.cancel();
         Option o = selected();
         if (o == null) {
             help.setText("No settings match the current search.");
@@ -242,7 +245,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     String result;
                     try {
-                        var definition = KconfigSourceHelp.firstDefinition(workspace, o.symbol());
+                        var definition = KconfigSourceHelp.firstDefinition(workspace, o.symbol(), monitor::isCanceled);
                         result = definition == null
                                 ? "\n\nNo source definition found in the bounded scan. "
                                   + "This does not prove the symbol is undefined in the active build."
@@ -263,6 +266,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 }
             };
             lookup.setSystem(true);
+            helpJob = lookup;
             lookup.schedule();
         } catch (Exception unavailable) {
             // Basic effective/requested values remain usable without source indexing.
@@ -391,6 +395,12 @@ public final class ConfigurationStudioView extends ViewPart {
         };
         job.setUser(true);
         job.schedule();
+    }
+
+    @Override public void dispose() {
+        helpGeneration.incrementAndGet();
+        if (helpJob != null) helpJob.cancel();
+        super.dispose();
     }
 
     @Override public void setFocus() {
