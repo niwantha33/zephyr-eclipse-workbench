@@ -122,7 +122,7 @@ public final class ConfigurationStudioView extends ViewPart {
         secondary.setLayout(new GridLayout(4, false));
         action(secondary, "Open prj.conf", () -> openResource("prj.conf"))
                 .setToolTipText("Open the exact application configuration source");
-        action(secondary, "Hardware overlay", this::openOverlay)
+        action(secondary, "Edit hardware overlay", this::openOverlay)
                 .setToolTipText("Open the selected overlay; no pins or clocks are generated automatically");
         action(secondary, "Refresh", this::reload)
                 .setToolTipText("Reload project and generated configuration after editing or building");
@@ -732,7 +732,13 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "Inspect its Kconfig definition or use Edit value for non-switch types.");
             return;
         }
-        saveSelected(current, value);
+        try {
+            saveSelected(current, value);
+        } finally {
+            // SWT.TOGGLE changes its pressed state before review is confirmed.
+            // Restore it when the dialog is cancelled or validation rejects it.
+            if (options != null && !options.isDisposed()) describeSelected();
+        }
     }
 
     private void editSelected(boolean remove) {
