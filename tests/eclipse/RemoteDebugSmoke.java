@@ -51,6 +51,7 @@ public final class RemoteDebugSmoke {
         if (port.isBlank()) throw new AssertionError("Native smoke requires an owned GDB server");
         var manager = DebugPlugin.getDefault().getLaunchManager();
         var type = manager.getLaunchConfigurationType("zew.editor.smoke.remote");
+        check(type != null, "test-only remote GDB launch type registered");
         var working = type.newInstance(null, manager.generateLaunchConfigurationName("Remote thread reliability smoke"));
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROJECT_NAME, "HelloZephyrEditorSmoke");
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROGRAM_NAME, fixture.resolve("remote-threads").toString());
