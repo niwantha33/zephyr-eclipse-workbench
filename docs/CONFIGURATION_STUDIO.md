@@ -5,6 +5,38 @@ Select an imported project in Project Explorer and open the command. This is
 a native Eclipse SWT/JFace view; no secondary browser, VS Code, tkinter or
 unmanaged Python installation is required.
 
+## Peripheral workspaces and inline controls (Step 02–04)
+
+The **Features** workspace now contains separate, native SWT peripheral tabs:
+**Overview, ADC, GPIO, I²C, SPI, UART, CAN, PWM, Debug, RTOS, Network and More**.
+Selecting a tab filters only symbols present in the project's generated
+`.config` (or explicitly requested in `prj.conf` if configuration has not
+yet succeeded). **More** collects options outside the common groups, so
+no vendor-specific symbols are silently hidden.
+
+Each tab provides a readable purpose statement, real relevant symbols from
+the selected build, the driver request's last-effective value where present,
+and a clear reminder that enabling a Kconfig driver does not manufacture
+a peripheral instance or choose pins/DMA. ADC and GPIO tabs provide
+copyable **template** C code, explicitly requiring valid board Devicetree
+aliases or `io-channels`; the tool does not insert that code automatically.
+
+On/off controls now live **inside the table's Enable / Disable value column**:
+the selected resolved boolean row exposes two accessible native SWT toggle
+buttons. This uses **one reusable editor**, avoiding hundreds of heavyweight
+buttons and native handles for large Kconfig configurations. Non-switch and
+unresolved options retain safe read-only values and the existing Edit/Remove
+path. A cancelled change review restores the selected toggle state. Every
+accepted change still uses preview, backup, optimistic edit checking and a
+subsequent Zephyr build; it does **not** write `zephyr/.config` or claim to
+solve Kconfig dependency expressions.
+
+The **Hardware** workspace explains the distinction: `prj.conf` requests
+software components; `app.overlay` describes application hardware devices
+and properties. The generated `zephyr.dts` remains read-only. Graphical
+pin mapping, valid ADC channel lists and vendor pinmux validation are
+future steps, not fabricated by the current view.
+
 ## Configuration Studio — native Eclipse workspace UX
 
 The Configuration Studio is now organised into **Features**, **Hardware** and
