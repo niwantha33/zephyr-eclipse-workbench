@@ -220,3 +220,16 @@ qualification report, and marks unmatched GNU map/ELF observations as
 source-to-binary causality or device flashing. See
 [qualification and measured baseline](EVIDENCE_QUALIFICATION_GATE.md),
 and [required branch settings](BRANCH_PROTECTION.md).
+
+## Conservative GNU ld map parent/ELF allocation context
+
+```sh
+python zew.py map-context --build ./build
+python zew.py map-context --build ./sysbuild --image app=app --image boot=mcuboot
+```
+
+Reports aggregate supported map input rows according to *exact* parent
+output section names, addresses, lengths and ELF allocation flags.
+Nonallocated output sections and unrecognised layouts remain distinct
+from loaded bytes; this is **not source inclusion or flash evidence**.
+Read [GNU map context limits](GNU_MAP_CONTEXT.md).
