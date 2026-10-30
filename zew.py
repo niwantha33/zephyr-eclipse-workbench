@@ -12,6 +12,7 @@ from zew_evidence.collector import InputError, SCHEMA_VERSION, collect, diagnose
 from zew_evidence.compare import compare
 from zew_evidence.bundle import preview, write, inspect
 from zew_evidence.freshness import verify
+from zew_evidence.spdx import inspect_build
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,12 +42,18 @@ def main(argv: list[str] | None = None) -> int:
     opening.add_argument("--input", type=Path, required=True)
     opening.add_argument("--show-graph", action="store_true",
                          help="Show integrity-validated, sanitised graph stored in archive")
+    sbom = subs.add_parser("sbom", help="Inspect locally generated upstream west SPDX build evidence")
+    sbom.add_argument("--build", type=Path, required=True, help="Existing Zephyr build root")
+    sbom.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR",
+                      help="Explicit multi-image sub-builds, without auto-generating SPDX")
     checking = subs.add_parser("verify", help="Check archived artifact hashes against an existing build")
     checking.add_argument("--input", type=Path, required=True, help="Integrity-checked evidence ZIP")
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "verify":
+        if args.command == "sbom":
+            output = inspect_build(args.build, args.image)
+        elif args.command == "verify":
             output = verify(inspect(args.input, include_graph=True)["graph"], args.build)
         elif args.command == "inspect":
             output = inspect(args.input, include_graph=args.show_graph)
