@@ -88,6 +88,28 @@ class OfflineEvidenceTests(unittest.TestCase):
                                    "--right", str(self.right)]), 0)
         self.assertTrue(json.loads(diff.getvalue())["kconfig_changes"])
 
+    def test_inspect_graph_and_compare_two_archived_builds(self):
+        left_file, right_file = self.root / "working.zip", self.root / "failing.zip"
+        write(collect(self.left), left_file)
+        write(collect(self.right), right_file)
+        detail = inspect(left_file, include_graph=True)
+        self.assertEqual(detail["status"], "verified-integrity-only")
+        self.assertEqual(detail["graph"]["status"], "observations-only")
+        self.assertNotIn("password-1", json.dumps(detail))
+        displayed = io.StringIO()
+        with contextlib.redirect_stdout(displayed):
+            self.assertEqual(main(["inspect", "--input", str(left_file), "--show-graph"]), 0)
+        self.assertEqual(json.loads(displayed.getvalue())["graph"]["schema_version"], "0.1.0")
+        comparison = io.StringIO()
+        with contextlib.redirect_stdout(comparison):
+            self.assertEqual(main(["compare", "--left-bundle", str(left_file),
+                                   "--right-bundle", str(right_file)]), 0)
+        diff = json.loads(comparison.getvalue())
+        self.assertEqual(diff["status"], "observed-differences-only")
+        self.assertIn("kconfig:default:CONFIG_GPIO", [x["id"] for x in diff["kconfig_changes"]])
+        self.assertNotIn("password", json.dumps(diff))
+        self.assertEqual(diff, compare(collect(self.left), collect(self.right)))
+
     def test_tampered_hash_is_refused(self):
         legitimate = self.root / "good.zip"
         tampered = self.root / "tampered.zip"
