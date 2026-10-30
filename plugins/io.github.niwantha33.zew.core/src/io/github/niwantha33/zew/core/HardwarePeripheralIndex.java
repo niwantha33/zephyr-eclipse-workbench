@@ -20,6 +20,12 @@ public final class HardwarePeripheralIndex {
     public static String category(DevicetreeHardware.Device device) {
         String name = device.name().toLowerCase(Locale.ROOT);
         String compatible = device.compatible().toLowerCase(Locale.ROOT);
+        String path = device.path().toLowerCase(Locale.ROOT);
+        // Pin configuration groups frequently have names such as adc-default,
+        // uart-tx or spi-pins. They are not independent peripheral controllers.
+        // Classify using real generated node ancestry before checking names.
+        if (path.contains("/pinctrl/") || path.contains("/pin-controller@")
+                || path.contains("/pin-controller/")) return "Pinctrl";
         if (name.equals("/") || name.equals("soc") || name.equals("aliases")
                 || name.equals("chosen") || name.equals("cpus") || name.startsWith("channel@"))
             return "Other";
