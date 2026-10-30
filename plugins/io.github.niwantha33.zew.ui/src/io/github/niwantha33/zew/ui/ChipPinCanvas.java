@@ -90,10 +90,11 @@ public final class ChipPinCanvas extends Canvas {
         int top = 64;
         int chipHeight = Math.max(166, rows * ROUTE_ROW + 48);
         int sideWidth = Math.max(105, Math.min(185, (area.width - chipWidth) / 2 - 32));
-        gc.setBackground(display.getSystemColor(SWT.COLOR_WIDGET_BACKGROUND));
-        gc.setForeground(display.getSystemColor(SWT.COLOR_WIDGET_FOREGROUND));
+        gc.setBackground(display.getSystemColor(SWT.COLOR_DARK_GRAY));
+        gc.setForeground(display.getSystemColor(SWT.COLOR_BLACK));
         gc.fillRoundRectangle(left, top, chipWidth, chipHeight, 12, 12);
         gc.drawRoundRectangle(left, top, chipWidth, chipHeight, 12, 12);
+        gc.setForeground(display.getSystemColor(SWT.COLOR_WHITE));
         gc.drawOval(left + 10, top + 10, 8, 8);
         String name = controller.substring(controller.lastIndexOf('/') + 1);
         if (name.isBlank()) name = "SoC";
@@ -141,10 +142,11 @@ public final class ChipPinCanvas extends Canvas {
         int height = Math.min(270, Math.max(160, area.height - 150));
         int left = Math.max(20, (area.width - width) / 2);
         int top = 80;
-        gc.setBackground(display.getSystemColor(SWT.COLOR_WIDGET_BACKGROUND));
-        gc.setForeground(display.getSystemColor(SWT.COLOR_WIDGET_FOREGROUND));
+        gc.setBackground(display.getSystemColor(SWT.COLOR_DARK_GRAY));
+        gc.setForeground(display.getSystemColor(SWT.COLOR_BLACK));
         gc.fillRoundRectangle(left, top, width, height, 18, 18);
         gc.drawRoundRectangle(left, top, width, height, 18, 18);
+        gc.setForeground(display.getSystemColor(SWT.COLOR_WHITE));
         gc.drawOval(left + 12, top + 12, 10, 10);
         gc.drawText("UNVERIFIED PACKAGE", left + 18, top + 60, true);
         String chip = controller.substring(controller.lastIndexOf('/') + 1);
