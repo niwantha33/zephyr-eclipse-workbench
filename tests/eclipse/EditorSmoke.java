@@ -127,8 +127,9 @@ public final class EditorSmoke implements IApplication {
                     "native chip canvas contains the selected controller's resolved pinctrl route");
             var plannerCanvas = (org.eclipse.swt.widgets.Canvas) chip;
             var plannerScroll = (org.eclipse.swt.custom.ScrolledComposite) plannerCanvas.getParent();
-            check(plannerCanvas.getToolTipText() == null && plannerScroll.getMinWidth() <= 540,
-                    "planner does not cover the MCU with a hover tooltip or force stale wide scrolling");
+            check(plannerCanvas.getToolTipText() == null && plannerScroll.getMinWidth() <= 540
+                    && plannerScroll.getMinHeight() <= 250,
+                    "small-route planner avoids obscuring tooltips and needless horizontal/vertical scrolling");
             // The redesigned native Hardware workspace must have real
             // peripheral navigation, planner modes and a separate evidence dock.
             var grouped = (org.eclipse.swt.widgets.Tree) studioField(view, type, "hardwarePeripheralTree");
