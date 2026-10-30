@@ -157,22 +157,34 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         StringBuilder memento = new StringBuilder("<mapping name=\"Workbench verified source aliases\" backend_enabled=\"true\">");
         int added = 0;
         for (var mapping : mappings) {
-            boolean covered = director.getCompilationPath(mapping.localPath()) != null
-                    || explicit.keySet().stream().map(path -> path.replace('\\', '/'))
-                        .anyMatch(path -> mapping.compilationPath().equals(path)
-                                || mapping.compilationPath().startsWith(path.endsWith("/") ? path : path + "/"));
-            if (!covered) {
-                String entry = "<mapEntry backendPath=\"" + xmlAttribute(mapping.compilationPath())
-                        + "\" localPath=\"" + xmlAttribute(mapping.localPath()) + "\"/>";
-                memento.append("<mapEntry memento=\"").append(xmlAttribute(entry)).append("\"/>");
-                added++;
+            // getCompilationPath() is NOT evidence that GDB has a substitute-path
+            // rule. It may resolve from unrelated CDT lookup containers while
+            // the actual backend map stays empty. Check the GDB map itself.
+            String existing = explicit.get(mapping.compilationPath());
+            if (existing != null) {
+                if (!existing.replace('\\', '/').equals(mapping.localPath().replace('\\', '/')))
+                    throw failure("Conflicting GDB source mapping for a verified compilation alias.", null);
+                continue;
             }
+            String entry = "<mapEntry backendPath=\"" + xmlAttribute(mapping.compilationPath())
+                    + "\" localPath=\"" + xmlAttribute(mapping.localPath()) + "\"/>";
+            memento.append("<mapEntry memento=\"").append(xmlAttribute(entry)).append("\"/>");
+            added++;
         }
-        if (added == 0) return;
-        memento.append("</mapping>");
-        entries.add(type.createSourceContainer(memento.toString()));
-        entries.addAll(java.util.Arrays.asList(previous));
-        director.setSourceContainers(entries.toArray(org.eclipse.debug.core.sourcelookup.ISourceContainer[]::new));
+        if (added > 0) {
+            memento.append("</mapping>");
+            entries.add(type.createSourceContainer(memento.toString()));
+            entries.addAll(java.util.Arrays.asList(previous));
+            director.setSourceContainers(entries.toArray(org.eclipse.debug.core.sourcelookup.ISourceContainer[]::new));
+        }
+        // Check the observable GDB-substitution contract rather than assuming
+        // that a source-container memento was accepted and backend-enabled.
+        var applied = director.getSubstitutionsPaths();
+        for (var mapping : mappings) {
+            String actual = applied.get(mapping.compilationPath());
+            if (actual == null || !actual.replace('\\', '/').equals(mapping.localPath().replace('\\', '/')))
+                throw failure("CDT did not install the verified GDB source alias: " + mapping.compilationPath(), null);
+        }
     }
 
     private static String xmlAttribute(String value) {
