@@ -164,6 +164,19 @@ class SpdxWhyTests(unittest.TestCase):
                 with self.assertRaises(InputError):
                     explain(self.image, "source", value)
 
+    def test_explicit_multi_image_does_not_attribute_app_input_to_boot(self):
+        boot = self.root / "boot"
+        (boot / "zephyr").mkdir(parents=True)
+        (boot / "zephyr/.config").write_text("CONFIG_GPIO=n\n", encoding="utf-8")
+        result = explain(self.root, "source", "drivers/adc/sensor.c",
+                         ["app=image one", "boot=boot"])
+        self.assertEqual([x["image"] for x in result["images"]], ["app", "boot"])
+        self.assertEqual(result["images"][0]["status"], "observed-direct-build-input")
+        self.assertEqual(result["images"][0]["evidence_graph_anchor"]["node_id"],
+                         "artifact:app:spdx_3_build")
+        self.assertEqual(result["images"][1]["status"], "missing-spdx3-build-evidence")
+        self.assertIsNone(result["images"][1]["evidence_graph_anchor"])
+
     def test_duplicate_symlink_and_malformed_spdx_are_rejected(self):
         self.build.write_text('{"@context":"https://spdx.org/rdf/3.0.1/spdx-context.jsonld",'
                               '"@graph":[],"@graph":[]}', encoding="utf-8")
