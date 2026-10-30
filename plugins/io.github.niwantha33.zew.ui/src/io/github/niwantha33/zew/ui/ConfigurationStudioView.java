@@ -49,6 +49,7 @@ import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationDiagnosis;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
+import io.github.niwantha33.zew.core.GpioBankEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
@@ -1037,7 +1038,13 @@ public final class ConfigurationStudioView extends ViewPart {
         String owner = device.path();
         if (device.name().startsWith("channel@")) owner = owner.substring(0, owner.lastIndexOf('/'));
         var routes = DevicetreeParameters.pinRoutes(properties, owner);
+        var gpio = GpioBankEvidence.inspect(device, properties);
         var shown = new java.util.LinkedHashSet<>(DevicetreeParameters.forDevice(properties, device.path()));
+        if (gpio != null) {
+            for (var usage : gpio.uses())
+                properties.stream().filter(p -> p.path().equals(usage.consumerPath())
+                        && p.name().equals(usage.property())).forEach(shown::add);
+        }
         for (var route : routes)
             properties.stream().filter(p -> p.path().equals(route.path()) && p.name().equals(route.property()))
                     .forEach(shown::add);
@@ -1066,7 +1073,10 @@ public final class ConfigurationStudioView extends ViewPart {
                 + (buildOutdated ? "\nBUILD REQUIRED - generated configuration may be stale." : "")
                 + "\nAfter any overlay change, Build & validate with Zephyr.");
         parameterTitle.setText(device.path() + " · " + shown.size() + " built parameters · "
-                + routes.size() + " logical pin routes · physical package pads unverified");
+                + (gpio == null ? routes.size() + " logical routes"
+                    : gpio.bitPositions() + " GPIO register bit indexes · "
+                            + gpio.uses().size() + " observed DTS references")
+                + " · physical package pads unverified");
         chipPins.showRoutes(owner, routes, route -> {
             for (var row : hardwareParameters.getItems()) {
                 var property = (DevicetreeParameters.Property) row.getData();
@@ -1075,6 +1085,38 @@ public final class ConfigurationStudioView extends ViewPart {
                 }
             }
         });
+        if (gpio != null) {
+            hardwareValidation.setText("GPIO CONTROLLER FROM COMPILED DTS  |  " + device.path()
+                    + "\nState: " + (device.enabled() ? "okay or inherited okay" : device.status())
+                    + "\nObserved consumer references: " + gpio.uses().size()
+                    + "\n" + gpio.provenance()
+                    + "\nLogical register indexes are NOT package pads, electrical capability,"
+                    + " runtime direction, or proof that the pin is bonded."
+                    + (buildOutdated ? "\nBUILD REQUIRED: compiled values may be stale." : "")
+                    + "\nSelect an index to inspect observed consumers; edit through a source overlay."
+                    + "\nRebuild the exact target to validate changes.");
+            chipPins.showGpioBank(gpio, bit -> {
+                var matches = gpio.uses().stream().filter(usage -> usage.bit() == bit).toList();
+                StringBuilder info = new StringBuilder("GPIO LOGICAL INDEX  " + gpio.bitLabel(bit))
+                        .append("\nController: ").append(gpio.controllerPath())
+                        .append("\nCompiled consumer references: ").append(matches.size())
+                        .append("\nThis is not a package pad, runtime register reading or available-pin claim.");
+                for (var usage : matches) {
+                    info.append("\n").append(usage.consumerPath()).append(" / ")
+                            .append(usage.property()).append(" at zephyr.dts:")
+                            .append(usage.line()).append(" (flags ").append(usage.flags()).append(")");
+                    for (var row : hardwareParameters.getItems()) {
+                        var p = (DevicetreeParameters.Property) row.getData();
+                        if (p.path().equals(usage.consumerPath()) && p.name().equals(usage.property())) {
+                            hardwareParameters.setSelection(row);
+                            hardwareParameters.showSelection();
+                            break;
+                        }
+                    }
+                }
+                hardwareInspector.setText(info.toString());
+            });
+        }
         chipPins.setMode(chipPins.mode());
         parameterTitle.getParent().layout(true, true);
     }
