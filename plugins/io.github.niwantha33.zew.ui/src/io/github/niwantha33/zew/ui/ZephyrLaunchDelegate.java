@@ -98,7 +98,10 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
                     awaitFlash(process, monitor);
                     // Release the programmer's owned children/lease before a new
                     // debugserver attempts to acquire the same physical operation.
-                    cleanup.get(5, TimeUnit.SECONDS);
+                    try { cleanup.get(5, TimeUnit.SECONDS); }
+                    catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException error) {
+                        throw new IOException("Flash finished but programmer cleanup was not confirmed; Debug was not started.", error);
+                    }
                     if (debugBuild != null && !monitor.isCanceled()) scheduleDebug(project, debugBuild, monitor);
                 }
             } finally {

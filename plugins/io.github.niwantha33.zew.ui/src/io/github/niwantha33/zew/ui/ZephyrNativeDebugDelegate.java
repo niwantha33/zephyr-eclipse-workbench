@@ -250,6 +250,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                         + "Routine OpenOCD INFO register-polling is hidden after one explanation; warnings and errors are preserved.");
             }
             verifyFlashedBuild(configuration, params);
+            if (monitor.isCanceled()) throw new CoreException(Status.CANCEL_STATUS);
             Process server = builder.start();
             session = new ManagedServer(server, console.newMessageStream(), lease, launch, params.port(),
                     params.plan().westArguments().get(params.plan().westArguments().indexOf("--runner") + 1));
@@ -293,6 +294,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             // Superclass initializes a true GdbLaunch with Eclipse breakpoints,
             // registers, variables, call stacks, memory and source stepping.
             verifyFlashedBuild(configuration, params);
+            if (monitor.isCanceled()) throw new CoreException(Status.CANCEL_STATUS);
             super.launch(configuration, mode, launch, monitor);
             if (!monitor.isCanceled() && !launch.isTerminated()) {
                 // CDT can reconstruct/reinitialise source containers while DSF
