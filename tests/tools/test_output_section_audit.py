@@ -8,6 +8,7 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest import mock
 
 from zew import main
 from zew_evidence.collector import collect, InputError
@@ -120,6 +121,16 @@ class OutputSectionAuditTests(unittest.TestCase):
         self.save_map()
         self.elf_path.write_bytes(fixture(duplicate=True))
         self.assertEqual(self.result()["comparison"]["ambiguous-elf-name"], 1)
+
+    def test_bounded_section_hashing_is_not_silent(self):
+        from zew_evidence import elf_sections
+        with mock.patch.object(elf_sections, "MAX_TOTAL_HASH", 1):
+            output = self.result()
+        self.assertEqual(output["status"], "map-elf-output-layout-observed")
+        self.assertEqual(output["comparison"]["exact-layout"], 1)
+        self.assertEqual(output["comparison"]["file-backed-sections-unhashed"], 1)
+        self.assertEqual(output["comparison"]["elf-section-byte-hashes"], 0)
+        self.assertEqual(output["observed_elf_section_hashes"], [])
 
     def test_nobits_zero_fill_never_hashes_nonexistent_bytes(self):
         self.elf_path.write_bytes(fixture(name=".bss", nobits=True))
