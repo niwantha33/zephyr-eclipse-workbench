@@ -126,3 +126,17 @@ existing Evidence Graph artifact ID and SHA-256. An observed build input
 Ambiguity, missing evidence and lack of relationship are explicitly unknown.
 Privacy preserves names only in the caller's CLI argument, not in output.
 See [SPDX why-source guide](SPDX_WHY_SOURCE.md) and [ADR-0007](adr/0007-spdx-why-direct-input.md).
+
+## Exact compiler-database evidence
+
+```sh
+python zew.py compile --build ./build --source drivers/adc.c --source-root ./my-app
+python zew.py why --source drivers/adc.c --source-root ./my-app --build ./build
+```
+
+`--source-root` specifies an existing local directory; source identity is
+resolved exactly within it. The command emits an SHA-256-anchored count of
+recorded compile commands for the source, per firmware image. Existing
+`zew why --source` without `--source-root` remains SPDX-only.
+**A compiler database record never proves a compiler ran, an object was
+linked, or that a board was flashed.** See [details](COMPILATION_EVIDENCE.md).
