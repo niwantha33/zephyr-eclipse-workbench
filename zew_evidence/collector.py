@@ -38,6 +38,7 @@ class InputError(ValueError):
 
 
 def _digest(path: Path) -> tuple[str, int]:
+    before = path.stat()
     total = 0
     sha = hashlib.sha256()
     with path.open("rb") as handle:
@@ -46,6 +47,9 @@ def _digest(path: Path) -> tuple[str, int]:
             if total > MAX_ARTIFACT_BYTES:
                 raise InputError(f"Artifact exceeds {MAX_ARTIFACT_BYTES} byte limit")
             sha.update(data)
+    after = path.stat()
+    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+        raise InputError("Generated artifact changed during evidence collection; retry after build")
     return sha.hexdigest(), total
 
 
@@ -64,12 +68,12 @@ def _regular(root: Path, name: str) -> Path | None:
     return path
 
 
-def _kconfig(path: Path) -> dict[str, str]:
-    if path.stat().st_size > MAX_CONFIG_BYTES:
+def _kconfig(snapshot: bytes) -> dict[str, str]:
+    if len(snapshot) > MAX_CONFIG_BYTES:
         raise InputError("Generated .config is larger than the 8 MiB parsing limit")
     values: dict[str, str] = {}
     try:
-        text = path.read_text(encoding="utf-8", errors="strict")
+        text = snapshot.decode("utf-8", errors="strict")
     except UnicodeError as error:
         raise InputError("Generated .config is not UTF-8") from error
     for line in text.splitlines():
@@ -142,7 +146,18 @@ def collect(build: Path, images: list[str] | None = None) -> dict:
                 if kind in ("kconfig", "devicetree"):
                     missing.append({"image": name, "artifact": relative, "state": "missing"})
                 continue
-            checksum, size = _digest(path)
+            if kind == "kconfig":
+                before = path.stat()
+                with path.open("rb") as handle:
+                    config_snapshot = handle.read(MAX_CONFIG_BYTES + 1)
+                after = path.stat()
+                if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                    raise InputError("Generated .config changed while collecting evidence; retry after build")
+                if len(config_snapshot) > MAX_CONFIG_BYTES:
+                    raise InputError("Generated .config is larger than the 8 MiB parsing limit")
+                checksum, size = hashlib.sha256(config_snapshot).hexdigest(), len(config_snapshot)
+            else:
+                checksum, size = _digest(path)
             artifact_id = f"artifact:{name}:{kind}"
             logical_path = f"{name}/{relative}"
             provenance = {
@@ -154,7 +169,7 @@ def collect(build: Path, images: list[str] | None = None) -> dict:
                           "data": {"kind": kind, "bytes": size}, "provenance": provenance})
             edges.append({"from": image_id, "to": artifact_id, "type": "contains"})
             if kind == "kconfig":
-                observed = _kconfig(path)
+                observed = _kconfig(config_snapshot)
                 for symbol, value in observed.items():
                     symbol_id = f"kconfig:{name}:{symbol}"
                     nodes.append({"id": symbol_id, "type": "kconfig_observation",
