@@ -84,10 +84,15 @@ def write(graph: dict, output: Path) -> dict:
         # fully validated temporary ZIP; on error remove the incomplete output.
         created = False
         try:
-            # FileExistsError must never delete a file another process just
-            # created between our preliminary checks and exclusive open.
-            with destination.open("xb") as target:
-                created = True
+            # Exclusive + restrictive permissions: an evidence ZIP must not be
+            # world-readable merely because the user's umask is permissive.
+            # O_NOFOLLOW also blocks a last-moment destination symlink swap
+            # where the platform provides it.
+            flags = (os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                     | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0))
+            fd = os.open(destination, flags, 0o600)
+            created = True
+            with os.fdopen(fd, "wb") as target:
                 with tmp_name.open("rb") as original:
                     shutil.copyfileobj(original, target, length=64 * 1024)
                 target.flush()
