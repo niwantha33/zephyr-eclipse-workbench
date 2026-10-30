@@ -138,10 +138,11 @@ def main():
     for label, board, soc, core in targets:
         target = select_target(rows, board, soc, core)
         app = root / 'projects' / ('matrix ' + label + ' Ω')
-        if label == 'adc-nrf':
+        if label in ('adc-nrf', 'ti'):
             # Compile a real bundled peripheral diagnostic, not only an empty
             # Hello World firmware. It is never flashed by this CI matrix.
-            shutil.copytree(REPO / 'examples/adc_safe_probe', app)
+            example = 'gpio_usage_demo' if label == 'ti' else 'adc_safe_probe'
+            shutil.copytree(REPO / 'examples' / example, app)
         else:
             app.mkdir(parents=True); (app / 'src').mkdir()
             (app / 'src/main.c').write_text('#include <zephyr/kernel.h>\nint main(void) { return 0; }\n')

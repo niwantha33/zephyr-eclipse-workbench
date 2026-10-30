@@ -144,6 +144,7 @@
     <command id="io.github.niwantha33.zew.trace" name="Capture RTOS Trace" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugserver" name="Start Debug Server" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debug" name="Debug Application" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.flashDebug" name="Flash and Debug Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.flash" name="Flash Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.run" name="Run in Emulator" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.editor" name="Refresh C/C++ Editor Settings" categoryId="io.github.niwantha33.zew.commands"/>
@@ -178,6 +179,7 @@
     <handler commandId="io.github.niwantha33.zew.trace" class="io.github.niwantha33.zew.ui.ZephyrTraceHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugserver" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.debug" class="io.github.niwantha33.zew.ui.ZephyrDebugHandler"/>
+    <handler commandId="io.github.niwantha33.zew.flashDebug" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.flash" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.run" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.editor" class="io.github.niwantha33.zew.ui.EditorHandler"/>
@@ -212,6 +214,7 @@
         <command commandId="io.github.niwantha33.zew.cancel" label="Cancel Operation" style="push"/>
         <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
         <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.flashDebug" label="Flash and Debug Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debug" label="Debug Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
         <command commandId="io.github.niwantha33.zew.socRegisters" label="Show Debug Data / SoC Peripherals" style="push"/>

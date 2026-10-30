@@ -39,6 +39,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
     public static final String TYPE = Activator.ID + ".launchType";
     public static final String PROJECT = Activator.ID + ".launch.project";
     public static final String ACTION = Activator.ID + ".launch.action";
+    public static final String DEBUG_AFTER_FLASH = Activator.ID + ".launch.debugAfterFlash";
 
     @Override public boolean buildForLaunch(ILaunchConfiguration configuration, String mode,
                                             IProgressMonitor monitor) throws CoreException {
@@ -64,13 +65,18 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
             var lease = TargetOperationGuard.acquire(action);
             Process process = null;
             boolean handedOff = false;
+            io.github.niwantha33.zew.core.FlashDebugBuild debugBuild = null;
             try {
                 List<String> command;
                 if ("flash".equals(action)) {
-                    var prepared = prepareFlash(project, settings, monitor);
+                    boolean debugAfterFlash = configuration.getAttribute(DEBUG_AFTER_FLASH, false);
+                    var prepared = prepareFlash(project, settings, monitor, debugAfterFlash);
                     if (prepared == null) return;
                     settings = prepared.settings();
                     command = prepared.command();
+                    if (debugAfterFlash) debugBuild = io.github.niwantha33.zew.core.FlashDebugBuild.capture(
+                            ProjectContext.buildDirectory(project, settings), settings.getProperty("board"),
+                            settings.getProperty("zew.buildConfiguration", "default"));
                 } else {
                     Path output = ProjectContext.buildDirectory(project, settings);
                     var plan = TargetOperations.prepare(
@@ -86,9 +92,15 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
                 process = builder.start();
                 if (DebugPlugin.newProcess(launch, process, "Zephyr " + action + " — " + project.getName()) == null)
                     throw new IOException("Eclipse could not register the runner process.");
-                watchOwnedProcess(process, lease, "flash".equals(action));
+                var cleanup = watchOwnedProcess(process, lease, "flash".equals(action));
                 handedOff = true;
-                if ("flash".equals(action)) awaitFlash(process, monitor);
+                if ("flash".equals(action)) {
+                    awaitFlash(process, monitor);
+                    // Release the programmer's owned children/lease before a new
+                    // debugserver attempts to acquire the same physical operation.
+                    cleanup.get(5, TimeUnit.SECONDS);
+                    if (debugBuild != null && !monitor.isCanceled()) scheduleDebug(project, debugBuild, monitor);
+                }
             } finally {
                 if (!handedOff) {
                     if (process != null) {
@@ -133,7 +145,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
 
     /** Every flash entry, including repeated native Run launches, uses the same preflight. */
     private FlashPlan prepareFlash(IProject project, Properties settings,
-                                  IProgressMonitor monitor) throws Exception {
+                                  IProgressMonitor monitor, boolean debugAfterFlash) throws Exception {
         String board = settings.getProperty("board");
         String buildConfiguration = settings.getProperty("zew.buildConfiguration");
         var shell = new AtomicReference<Shell>();
@@ -143,10 +155,12 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
             if (window == null) return;
             shell.set(window.getShell());
             confirmed.set(MessageDialog.openConfirm(shell.get(),
-                    "Build and Flash — " + project.getName(),
+                    (debugAfterFlash ? "Flash and Debug — " : "Build and Flash — ") + project.getName(),
                     "Build and program the selected board:\n\n" + board
                             + "\nConfiguration: " + buildConfiguration
-                            + "\n\nThis writes firmware using Zephyr's board runner. Continue?"));
+                            + "\n\nThis writes firmware using Zephyr's board runner."
+                            + (debugAfterFlash ? " Native Debug starts only after programming and verification succeed." : "")
+                            + " Continue?"));
         });
         if (!confirmed.get() || monitor.isCanceled()) return null;
         var console = new MessageConsole("Zephyr Flash preparation — " + project.getName(), null);
@@ -184,7 +198,32 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
         }
     }
 
-    private static void watchOwnedProcess(Process process, TargetOperationGuard.Lease lease, boolean flash) {
+    private static void scheduleDebug(IProject project, io.github.niwantha33.zew.core.FlashDebugBuild flashed, IProgressMonitor monitor) throws Exception {
+        // Hashing stays on the launch worker, never Eclipse's display thread.
+        var verified = ProjectContext.settings(project);
+        Path build = ProjectContext.buildDirectory(project, verified).toRealPath();
+        String board = verified.getProperty("board");
+        String profile = verified.getProperty("zew.buildConfiguration", "default");
+        flashed.verify(build, board, profile);
+        PlatformUI.getWorkbench().getDisplay().asyncExec(() -> {
+            var window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+            if (window == null || monitor.isCanceled()) return;
+            try {
+                var current = ProjectContext.settings(project);
+                if (!board.equals(current.getProperty("board"))
+                        || !profile.equals(current.getProperty("zew.buildConfiguration", "default"))
+                        || !build.equals(ProjectContext.buildDirectory(project, current).toRealPath()))
+                    throw new IOException("Target or build profile changed after Flash; Debug was not started.");
+                // No second build: it could replace the image just verified by Flash.
+                ZephyrDebugHandler.openDebugConfiguration(project, window.getShell(), flashed.attributes());
+            } catch (Exception error) {
+                MessageDialog.openError(window.getShell(), "Flash and Debug", error.getMessage());
+            }
+        });
+    }
+
+    private static java.util.concurrent.CompletableFuture<Void> watchOwnedProcess(Process process, TargetOperationGuard.Lease lease, boolean flash) {
+        var completion = new java.util.concurrent.CompletableFuture<Void>();
         var watcher = new Thread(() -> {
             var children = new HashSet<ProcessHandle>();
             long deadline = System.nanoTime() + java.time.Duration.ofMinutes(15).toNanos();
@@ -203,11 +242,24 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
                 process.destroyForcibly();
             } finally {
                 for (var child : children) if (child.isAlive()) child.destroyForcibly();
-                lease.close();
+                Exception cleanupFailure = null;
+                long reapDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                try {
+                    for (var child : children) if (child.isAlive())
+                        child.onExit().get(Math.max(1, reapDeadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+                    if (process.isAlive() && !process.waitFor(1, TimeUnit.SECONDS))
+                        throw new IOException("Programmer process did not terminate; Debug was not started.");
+                } catch (Exception error) {
+                    cleanupFailure = error;
+                    if (error instanceof InterruptedException) Thread.currentThread().interrupt();
+                } finally { lease.close(); }
+                if (cleanupFailure == null) completion.complete(null);
+                else completion.completeExceptionally(cleanupFailure);
             }
         }, "zew-owned-runner-lifecycle");
         watcher.setDaemon(true);
         watcher.start();
+        return completion;
     }
 
     private static CoreException failure(String message, Throwable cause) {

@@ -173,11 +173,12 @@ public final class EditorSmoke implements IApplication {
                     && adcControllerInGroup && adcChannelInGroup,
                     "ADC peripheral-first tree retains controller and channel: " + groupedDescription);
             var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
-            check(dock.getItemCount() == 4
+            check(dock.getItemCount() == 5
                     && dock.getItem(0).getText().startsWith("Changes")
                     && dock.getItem(1).getText().startsWith("Validation")
                     && dock.getItem(2).getText().startsWith("Generated DTS")
-                    && dock.getItem(3).getText().equals("GPIO Usage"),
+                    && dock.getItem(3).getText().equals("GPIO Usage")
+                    && dock.getItem(4).getText().equals("GPIO Example C"),
                     "native Studio includes GPIO Usage while retaining all existing evidence tabs");
             var validation = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareValidation");
             check(validation.getText().contains("PHYSICAL PINOUT: NOT VERIFIED"),

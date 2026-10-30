@@ -63,7 +63,7 @@ public final class OpenOcdThreadCheck {
                             .append(regions.get(r).bytes()).append(" observed=").append(first.get(r)).append(';');
                 }
                 throw new IOException(detail + "." + repeated
-                        + " GDB was not attached. Terminate old sessions, use Flash on this exact board/build, then retry Debug. "
+                        + " GDB was not attached. Terminate old sessions and use Zephyr > Flash and Debug Application for this exact board/build, or Flash then retry Debug. "
                         + "If already flashed, investigate target reads/OpenOCD compatibility. "
                         + "No firmware or metadata was written by this check. Readback:" + summary);
             }

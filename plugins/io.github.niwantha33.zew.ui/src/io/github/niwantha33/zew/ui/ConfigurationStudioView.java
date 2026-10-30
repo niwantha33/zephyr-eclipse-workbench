@@ -86,7 +86,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private Button backButton, forwardButton;
     private final java.util.List<String> navigationHistory = new java.util.ArrayList<>();
     private int navigationPosition = -1;
-    private Text hardwareDescription, hardwareInspector, hardwarePreview, hardwareValidation;
+    private Text hardwareDescription, hardwareInspector, hardwarePreview, hardwareValidation, gpioExample;
     private String proposedOverlayDraft = "";
     private TabFolder hardwareDetails;
     private Table hardwareParameters, gpioUsageTable;
@@ -469,7 +469,7 @@ public final class ConfigurationStudioView extends ViewPart {
         var plannerPanel = new Composite(studioColumns, SWT.NONE);
         plannerPanel.setLayout(new GridLayout(1, false));
         Label plannerTitle = new Label(plannerPanel, SWT.NONE);
-        plannerTitle.setText("MCU & PIN PLANNER");
+        plannerTitle.setText("GPIO / PIN PLANNER");
         plannerTitle.setFont(metricFont);
         var modes = new Composite(plannerPanel, SWT.NONE);
         modes.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -591,14 +591,26 @@ public final class ConfigurationStudioView extends ViewPart {
         gpioUsageTable.getColumn(3).setWidth(350);
         gpioUsageTable.addListener(SWT.Selection, event -> inspectSelectedGpioUsage());
 
-        studioVertical.setWeights(new int[] {69, 31});
+        var gpioExamplePage = tab(hardwareDetails, "GPIO Example C");
+        gpioExamplePage.setLayout(new GridLayout(1, false));
+        gpioExample = new Text(gpioExamplePage, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.H_SCROLL | SWT.V_SCROLL);
+        gpioExample.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        gpioExample.setText(io.github.niwantha33.zew.core.GpioExampleCode.selectedIndex(null, -1, java.util.Map.of()));
+        action(gpioExamplePage, "Copy GPIO example", () -> {
+            var clipboard = new Clipboard(gpioExample.getDisplay());
+            try { clipboard.setContents(new Object[] {gpioExample.getText()}, new Transfer[] {TextTransfer.getInstance()}); }
+            finally { clipboard.dispose(); }
+        });
+
+        studioVertical.setWeights(new int[] {78, 22});
 
         var hardwareActions = new Composite(hardware, SWT.NONE);
-        hardwareActions.setLayout(new GridLayout(4, false));
+        hardwareActions.setLayout(new GridLayout(5, false));
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
         action(hardwareActions, "Edit application overlay…", this::openOverlay);
+        action(hardwareActions, "GPIO example C", () -> hardwareDetails.setSelection(4));
 
         Composite reports = tab(tabs, "Insights");
         reports.setLayout(new GridLayout(1, false));
@@ -1046,8 +1058,9 @@ public final class ConfigurationStudioView extends ViewPart {
         try {
             gpioUsageTable.removeAll();
             var banks = new java.util.LinkedHashMap<String, GpioBankEvidence.Bank>();
+            var nodeLabels = DevicetreeHardware.nodeLabels(snapshot.devicetree());
             for (var device : DevicetreeHardware.inspect(snapshot.devicetree())) {
-                var bank = GpioBankEvidence.inspect(device, properties);
+                var bank = GpioBankEvidence.inspect(device, properties, nodeLabels);
                 if (bank == null) continue;
                 banks.put(device.path(), bank);
                 for (var usage : bank.uses()) {
@@ -1064,17 +1077,23 @@ public final class ConfigurationStudioView extends ViewPart {
             for (var call : calls) {
                 boolean resolved = call.resolved() && banks.containsKey(call.controllerPath());
                 var bank = banks.get(call.controllerPath());
-                String bitLabel = resolved ? bank.bitLabel(call.bit()) : "Unresolved bit " + call.bit();
+                String bitLabel = resolved ? bank.bitLabel(call.bit()) : (call.bit() < 0 ? "Unresolved GPIO" : "Unresolved bit " + call.bit());
                 String detail = "C source configuration candidate (NOT runtime proof): "
                         + call.description();
                 var item = new TableItem(gpioUsageTable, SWT.NONE);
                 item.setText(new String[] {bitLabel,
                         resolved ? "C source candidate" : "C unresolved device",
-                        "gpio_pin_configure(" + call.variable() + ", " + call.bit() + ", " + call.flags() + ")",
+                        call.expression(),
                         call.sourceFile() + ":" + call.line() + "  [" + call.bindingName() + "]"});
                 item.setData(new GpioUsageSelection(resolved ? call.controllerPath() : "", call.bit(), detail));
                 if (resolved) codeCount++;
                 else unresolvedCount++;
+            }
+            if (dtsCount + codeCount + unresolvedCount == 0) {
+                var item = new TableItem(gpioUsageTable, SWT.NONE);
+                item.setText(new String[] {"No references found", "No usage evidence",
+                        "Check saved source, select the LED bank, and rebuild the exact target.",
+                        "Supported: generated DTS numeric/symbolic GPIOs; direct and _dt configure calls."});
             }
             gpioUsageSummary.setText("Built DTS references: " + dtsCount
                     + "    C candidates with exact controller: " + codeCount
@@ -1142,7 +1161,7 @@ public final class ConfigurationStudioView extends ViewPart {
         String owner = device.path();
         if (device.name().startsWith("channel@")) owner = owner.substring(0, owner.lastIndexOf('/'));
         var routes = DevicetreeParameters.pinRoutes(properties, owner);
-        var gpio = GpioBankEvidence.inspect(device, properties);
+        var gpio = GpioBankEvidence.inspect(device, properties, DevicetreeHardware.nodeLabels(snapshot.devicetree()));
         var shown = new java.util.LinkedHashSet<>(DevicetreeParameters.forDevice(properties, device.path()));
         if (gpio != null) {
             for (var usage : gpio.uses())
@@ -1191,14 +1210,13 @@ public final class ConfigurationStudioView extends ViewPart {
         });
         if (gpio != null) {
             List<GpioSourceEvidence.Call> sourceCalls = List.of();
-            String sourceScanNote = "";
+            String sourceScanNote = "Saved source candidates (up to 80 files / 1 MiB), not compiler/AST or execution evidence.";
             if (project != null && project.isAccessible() && project.getLocation() != null) {
                 try {
                     sourceCalls = GpioSourceEvidence.scanProject(
-                            project.getLocation().toFile().toPath(),
-                            DevicetreeHardware.inspect(snapshot.devicetree()));
+                            project.getLocation().toFile().toPath(), snapshot.devicetree());
                 } catch (java.io.IOException | IllegalArgumentException error) {
-                    sourceScanNote = "\nC SOURCE INSPECTION UNAVAILABLE: " + error.getClass().getSimpleName();
+                    sourceScanNote = "\nC SOURCE INSPECTION UNAVAILABLE: " + error.getMessage();
                 }
             } else {
                 sourceScanNote = "\nC source scan unavailable: no accessible application.";
@@ -1234,7 +1252,10 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "\nSelect an index to inspect observed consumers; edit through a source overlay."
                     + "\nRebuild the exact target to validate changes."
                     + sourceNotes);
+            gpioExample.setText(io.github.niwantha33.zew.core.GpioExampleCode.selectedIndex(null, -1, java.util.Map.of()));
             chipPins.showGpioBank(gpio, bit -> {
+                gpioExample.setText(io.github.niwantha33.zew.core.GpioExampleCode.selectedIndex(
+                        gpio, bit, DevicetreeHardware.nodeLabels(snapshot.devicetree())));
                 var matches = gpio.uses().stream().filter(usage -> usage.bit() == bit).toList();
                 StringBuilder info = new StringBuilder("GPIO LOGICAL INDEX  " + gpio.bitLabel(bit))
                         .append("\nController: ").append(gpio.controllerPath())
@@ -1262,8 +1283,9 @@ public final class ConfigurationStudioView extends ViewPart {
             });
             chipPins.showSourceCandidates(resolvedForBank);
         } else if (gpioUsageTable != null && !gpioUsageTable.isDisposed()) {
+            gpioExample.setText(io.github.niwantha33.zew.core.GpioExampleCode.selectedIndex(null, -1, java.util.Map.of()));
             gpioUsageTable.removeAll();
-            gpioUsageSummary.setText("Select a GPIO controller to inspect compiled and C-source references.");
+            gpioUsageSummary.setText("Select a GPIO controller to inspect built DTS references and saved C-source candidates.");
         }
         chipPins.setMode(chipPins.mode());
         parameterTitle.getParent().layout(true, true);

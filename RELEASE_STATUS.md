@@ -300,3 +300,33 @@ passing these prototype tests.
   packaging, Windows CI and physical-board acceptance have not run for this
   branch. Publication is pending authorization after automatic review blocked
   the remote push check.
+
+
+## Verified Flash-to-Debug handoff and GPIO visibility repair (review PR)
+
+- Adds explicit **Zephyr > Flash and Debug Application**: one build, existing
+  programming confirmation/runner, successful Flash exit, owned-process cleanup
+  and lease release, then native Debug with no second build. Cancellation and
+  failed programming block the handoff. Separate saved configurations preserve
+  plain Flash and plain Debug behaviour.
+- Records the exact build/board/profile and ELF, runner and generated-config
+  hashes; native Debug rechecks this identity on its worker before starting the
+  server and immediately before CDT attaches. A queued or concurrent rebuild
+  cannot silently replace the selected verified ELF.
+- Repairs GPIO consumers using symbolic generated-DTS references, controller
+  labels, conditional direct configure calls and common `_dt` source patterns.
+  Saved-source candidates remain explicitly distinct from built DTS consumers,
+  compilation inclusion and actual hardware execution.
+- Enlarges the logical-index planner and improves selection/empty-state text.
+  Adds a copyable **GPIO Example C** panel using exact controller labels with
+  readiness and error checks. No physical package pinout is fabricated.
+- Adds `examples/gpio_usage_demo`, blinking the board's `led0` alias with an
+  optional PA15 output disabled by default. The existing real Windows MSPM0
+  firmware matrix now compiles this example instead of an empty Hello World.
+- Local OpenJDK21/Linux `scripts/test_core.py` passed, including the Python tool
+  suite, full Java suite, 19 Flash/Debug identity checks and 19 new GPIO checks.
+  Added installed-Eclipse configuration/lease-handoff smoke checks; CI must
+  validate packaging, UI integration and the real example compilation.
+- User reported that Flash followed by Debug resolved the observed MSPM0
+  four-byte-shift mismatch. Additional combined-flow and GPIO hardware
+  acceptance remain outstanding. No G0/G1 promotion or release publication.

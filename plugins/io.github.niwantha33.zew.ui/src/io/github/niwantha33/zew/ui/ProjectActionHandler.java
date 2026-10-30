@@ -39,9 +39,9 @@ public final class ProjectActionHandler extends AbstractHandler {
         }
         String action = event.getCommand().getId();
         action = action.substring(action.lastIndexOf('.') + 1);
-        if (!Set.of("run", "flash", "debugserver").contains(action)) return null;
-        if ("flash".equals(action)) {
-            ZephyrFlashShortcut.launchProject(project, HandlerUtil.getActiveShell(event));
+        if (!Set.of("run", "flash", "flashDebug", "debugserver").contains(action)) return null;
+        if ("flash".equals(action) || "flashDebug".equals(action)) {
+            ZephyrFlashShortcut.launchProject(project, HandlerUtil.getActiveShell(event), "flashDebug".equals(action));
             return null;
         }
         final String operation = action;

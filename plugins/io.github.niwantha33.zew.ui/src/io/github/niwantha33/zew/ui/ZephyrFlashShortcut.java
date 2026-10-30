@@ -21,30 +21,42 @@ public final class ZephyrFlashShortcut extends ZephyrDebugShortcut {
         launchProject(project, window == null ? null : window.getShell());
     }
     static void launchProject(IProject project, Shell shell) {
+        launchProject(project, shell, false);
+    }
+    static void launchProject(IProject project, Shell shell, boolean debugAfterFlash) {
         try {
             if (project == null || !project.isAccessible())
                 throw new java.io.IOException("Select an imported Zephyr project or open one of its source files.");
             ProjectContext.settings(project);
-            var manager = DebugPlugin.getDefault().getLaunchManager();
-            var type = manager.getLaunchConfigurationType(ZephyrLaunchDelegate.TYPE);
-            ILaunchConfiguration config = null;
-            for (var candidate : manager.getLaunchConfigurations(type)) {
-                if (project.getName().equals(candidate.getAttribute(ZephyrLaunchDelegate.PROJECT, ""))
-                        && "flash".equals(candidate.getAttribute(ZephyrLaunchDelegate.ACTION, ""))) {
-                    config = candidate;
-                    break;
-                }
-            }
-            var copy = config == null ? type.newInstance(null,
-                    manager.generateLaunchConfigurationName("Zephyr Flash — " + project.getName())) : config.getWorkingCopy();
-            copy.setAttribute(ZephyrLaunchDelegate.PROJECT, project.getName());
-            copy.setAttribute(ZephyrLaunchDelegate.ACTION, "flash");
-            copy.setAttribute(org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.ATTR_BUILD_BEFORE_LAUNCH,
-                    org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.BUILD_BEFORE_LAUNCH_DISABLED);
-            copy.setMappedResources(new IResource[] {project});
-            DebugUITools.launch(copy.doSave(), ILaunchManager.RUN_MODE);
+            DebugUITools.launch(configuration(project, debugAfterFlash), ILaunchManager.RUN_MODE);
         } catch (Exception error) {
             MessageDialog.openError(shell, "Zephyr Flash", error.getMessage());
         }
     }
+    static ILaunchConfiguration configuration(IProject project, boolean debugAfterFlash)
+            throws org.eclipse.core.runtime.CoreException {
+        var manager = DebugPlugin.getDefault().getLaunchManager();
+        var type = manager.getLaunchConfigurationType(ZephyrLaunchDelegate.TYPE);
+        if (type == null) throw new org.eclipse.core.runtime.CoreException(new org.eclipse.core.runtime.Status(
+                org.eclipse.core.runtime.IStatus.ERROR, Activator.ID, "Zephyr launch extension is not installed."));
+        ILaunchConfiguration config = null;
+        for (var candidate : manager.getLaunchConfigurations(type)) {
+            if (project.getName().equals(candidate.getAttribute(ZephyrLaunchDelegate.PROJECT, ""))
+                    && "flash".equals(candidate.getAttribute(ZephyrLaunchDelegate.ACTION, ""))
+                    && debugAfterFlash == candidate.getAttribute(ZephyrLaunchDelegate.DEBUG_AFTER_FLASH, false)) {
+                config = candidate;
+                break;
+            }
+        }
+        var copy = config == null ? type.newInstance(null,
+                manager.generateLaunchConfigurationName((debugAfterFlash ? "Zephyr Flash and Debug — " : "Zephyr Flash — ") + project.getName())) : config.getWorkingCopy();
+        copy.setAttribute(ZephyrLaunchDelegate.PROJECT, project.getName());
+        copy.setAttribute(ZephyrLaunchDelegate.ACTION, "flash");
+        copy.setAttribute(ZephyrLaunchDelegate.DEBUG_AFTER_FLASH, debugAfterFlash);
+        copy.setAttribute(org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.ATTR_BUILD_BEFORE_LAUNCH,
+                org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.BUILD_BEFORE_LAUNCH_DISABLED);
+        copy.setMappedResources(new IResource[] {project});
+        return copy.doSave();
+    }
+
 }

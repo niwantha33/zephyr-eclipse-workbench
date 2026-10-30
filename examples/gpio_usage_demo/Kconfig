@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+mainmenu "GPIO usage example"
+
+config GPIO_USAGE_DEMO_EXTRA_OUTPUT
+    bool "Also configure MSPM0 GPIO A logical index 15"
+    default n
+    help
+      Disabled by default. Enable only after checking the board schematic,
+      package, attached circuit and pin ownership. This actively drives PA15.
+      The GPIO A controller must have the exact gpioa node label.
+
+source "Kconfig.zephyr"
