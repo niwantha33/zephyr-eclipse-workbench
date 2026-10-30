@@ -262,3 +262,21 @@ passing these prototype tests.
   rejects claims beyond supported metadata.
 - This is not source-to-binary proof, actual flash evidence, firmware
   fault diagnosis, G0 completion or release-train approval.
+
+
+## Optional selected-build Kconfiglib semantic check (draft PR)
+
+- A new `zew config-check --semantic` mode evaluates requested symbol
+  existence, Kconfig type, current assignability, visibility and dependency
+  values against Zephyr's actual Kconfiglib using the last configured Ninja
+  environment. The prior snapshot-only CLI remains unchanged.
+- Undefined symbols are labelled only when the selected Kconfig tree is
+  successfully loaded. Missing/stale build evidence, absent Ninja target
+  or missing Kconfiglib yields explicit unknown, not invented causes.
+- No project writes, generated guiconfig execution, raw string or path
+  exports. Includes mocked unit/hostile-input tests and a **real MSPM0**
+  Kconfiglib build-matrix verification, subject to exact-head CI passing.
+- No automatic source fix, Devicetree binding evaluation, finished Truth
+  Check, physical hardware confirmation or learning-time percentage is claimed.
+- This is still Phase-0 feasibility; **G0 remains OPEN**. Do not merge or
+  publish until approved and automated Windows + Linux gates pass.
