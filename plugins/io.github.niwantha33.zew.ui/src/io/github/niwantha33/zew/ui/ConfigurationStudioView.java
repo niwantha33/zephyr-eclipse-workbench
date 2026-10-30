@@ -899,7 +899,10 @@ public final class ConfigurationStudioView extends ViewPart {
         tabs.setSelection(1);
         hardwareDetails.setSelection(0);
         hardwareState.select(0);
-        hardwareSearch.setText(domain.id());
+        String name = domain.id().toUpperCase(java.util.Locale.ROOT);
+        int kind = hardwareKind.indexOf(name);
+        hardwareKind.select(kind >= 0 ? kind : 0);
+        hardwareSearch.setText(kind >= 0 ? "" : domain.id());
         refreshHardware();
         if (hardwareDevices.getSelectionCount() == 0)
             status.setText("No " + domain.title() + " controller in the last generated Devicetree. Build the exact board first.");
@@ -1047,9 +1050,23 @@ public final class ConfigurationStudioView extends ViewPart {
                 : DevicetreeHardware.inspect(snapshot.devicetree());
         var matches = new java.util.LinkedHashSet<String>();
         for (var device : devices)
-            if (DevicetreeHardware.matches(device, hardwareSearch.getText(), hardwareState.getText()))
+            if (HardwarePeripheralIndex.matches(device, hardwareKind.getText())
+                    && DevicetreeHardware.matches(device, hardwareSearch.getText(), hardwareState.getText()))
                 matches.add(device.path());
         var visible = new java.util.HashSet<>(matches);
+        // Keep ADC channels and other descendants accessible under matching controllers.
+        if (hardwareKind.getSelectionIndex() > 0) {
+            for (var device : devices) {
+                String ancestor = device.path();
+                for (int slash = ancestor.lastIndexOf('/'); slash > 0; slash = ancestor.lastIndexOf('/', slash - 1)) {
+                    ancestor = ancestor.substring(0, slash);
+                    if (matches.contains(ancestor)) {
+                        visible.add(device.path());
+                        break;
+                    }
+                }
+            }
+        }
         for (String path : matches) {
             for (int slash = path.lastIndexOf('/'); slash > 0; slash = path.lastIndexOf('/', slash - 1))
                 visible.add(path.substring(0, slash));
@@ -1095,7 +1112,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 showHardwareParameters(null);
             }
             hardwareSummary.setText(matches.size() + " matching nodes · " + devices.size()
-                    + " in this build · ancestors shown for context · double-click to reveal source");
+                    + " in build · child nodes and ancestors shown as context · double-click opens source");
         } finally { hardwareDevices.setRedraw(true); }
     }
 
