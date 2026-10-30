@@ -157,3 +157,19 @@ passing these prototype tests.
 - Does NOT prove source-to-final ELF inclusion, binary freshness, LMA/physical
   mapping, archive extraction into linker output, target programming or
   production qualification. G0 remains OPEN.
+
+## Phase-0 ELF output-section audit (new development PR)
+
+- `zew section-audit` and opt-in `zew link-audit --section-evidence`
+  correlate exact GNU ld output-section header metadata with ELF32/64
+  SHF_ALLOC section names, VMAs and byte lengths.
+- SHA-256 observations of bounded file-backed ELF section bytes are
+  attached to Evidence Graph map/ELF artifact digests, independently per
+  declared firmware image.
+- NOBITS/zero-fill, duplicate labels, missing/unsupported section headers,
+  mismatched metadata, damaged files and stale graph capture are
+  differentiated; raw host paths, section labels and compiler commands
+  are not exported.
+- Metadata agreement or byte hash is NOT source-to-output causality,
+  a comparison against object bytes, a live target check, or proof of
+  firmware flashed. G0 remains OPEN.
