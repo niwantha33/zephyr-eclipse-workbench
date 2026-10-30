@@ -453,6 +453,11 @@ public final class ConfigurationStudioView extends ViewPart {
             var column = new TableColumn(hardwareParameters, SWT.LEFT); column.setText(caption);
         }
         hardwareParameters.addListener(SWT.DefaultSelection, event -> prepareHardwareOverride());
+        hardwareParameters.addListener(SWT.Selection, event -> {
+            if (hardwareParameters.getSelectionCount() == 0) return;
+            var selected = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
+            chipPins.selectRoute(selected.path(), selected.name());
+        });
         var parameterActions = new Composite(parameterPanel, SWT.NONE);
         parameterActions.setLayout(new GridLayout(2, false));
         action(parameterActions, "Configure property…", this::prepareHardwareOverride);
@@ -936,7 +941,7 @@ public final class ConfigurationStudioView extends ViewPart {
         }
         if (hardwareParameters.getItemCount() > 0) hardwareParameters.select(0);
         parameterTitle.setText(device.path() + " · " + shown.size() + " built parameters · "
-                + routes.size() + " pin routes · physical package pads require a device mapping");
+                + routes.size() + " logical pin routes · physical package pads unverified");
         chipPins.showRoutes(owner, routes, route -> {
             for (var row : hardwareParameters.getItems()) {
                 var property = (DevicetreeParameters.Property) row.getData();
@@ -946,7 +951,7 @@ public final class ConfigurationStudioView extends ViewPart {
             }
         });
         var scroll = (org.eclipse.swt.custom.ScrolledComposite) chipPins.getParent();
-        scroll.setMinSize(560, Math.max(295, ((routes.size() + 1) / 2) * 35 + 110));
+        scroll.setMinSize(620, Math.max(295, ((Math.min(routes.size(), ChipPinCanvas.MAX_VISIBLE_ROUTES) + 1) / 2) * 36 + 185));
         parameterTitle.getParent().layout(true, true);
     }
 
