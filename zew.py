@@ -13,6 +13,7 @@ from zew_evidence.compare import compare
 from zew_evidence.bundle import preview, write, inspect
 from zew_evidence.freshness import verify
 from zew_evidence.spdx import inspect_build
+from zew_evidence.inclusion import explain
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,7 +26,10 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR",
                          help="Explicit sysbuild image within the root; repeat per image")
         if command == "why":
-            sub.add_argument("symbol", help="CONFIG_... (observed; causal explanation unknown)")
+            sub.add_argument("symbol", nargs="?", help="CONFIG_... (observed; causal explanation unknown)")
+            lookup = sub.add_mutually_exclusive_group()
+            lookup.add_argument("--source", help="Exact SPDX source file name (no suffix guessing)")
+            lookup.add_argument("--module", help="Exact SPDX package/module name")
         if command == "bundle":
             sub.add_argument("--output", type=Path, help="Target ZIP (required only with --write)")
             sub.add_argument("--write", action="store_true", help="Explicitly save a new ZIP; never overwrite")
@@ -63,6 +67,11 @@ def main(argv: list[str] | None = None) -> int:
             left = inspect(args.left_bundle, include_graph=True)["graph"] if args.left_bundle else collect(args.left, args.left_image)
             right = inspect(args.right_bundle, include_graph=True)["graph"] if args.right_bundle else collect(args.right, args.right_image)
             output = compare(left, right)
+        elif args.command == "why" and (args.source is not None or args.module is not None):
+            if args.symbol is not None:
+                raise InputError("Use a CONFIG_ symbol or --source/--module, not both")
+            output = explain(args.build, "source" if args.source is not None else "module",
+                             args.source if args.source is not None else args.module, args.image)
         else:
             graph = collect(args.build, args.image)
             if args.command == "graph":
@@ -70,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "diagnose":
                 output = diagnose(graph)
             elif args.command == "why":
+                if args.symbol is None:
+                    raise InputError("Specify a CONFIG_ symbol, --source or --module")
                 output = why(graph, args.symbol)
             elif args.write:
                 if args.output is None:

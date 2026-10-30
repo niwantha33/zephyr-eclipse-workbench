@@ -110,3 +110,19 @@ exported. Missing outputs receive the exact upstream generation instructions.
 **Not asserted:** full SPDX validity, source-to-ELF identity, physical
 flashing, CVE applicability, VEX, licence compliance or certification.
 See [upstream SPDX evidence guide](UPSTREAM_SPDX_EVIDENCE.md).
+
+## Exact upstream SPDX source/module explanations (Phase 0)
+
+```sh
+python zew.py why --source drivers/adc/sensor.c --build /path/to/build
+python zew.py why --module hal_ti --build /path/to/build
+python zew.py why --source src/main.c --build /path/to/sysbuild --image app=app --image boot=mcuboot
+```
+
+The source or module must match an exact upstream SPDX 3 element name.
+The report links a direct build-scoped `hasInput` observation to an
+existing Evidence Graph artifact ID and SHA-256. An observed build input
+**is not proof that the source is in the final ELF or flashed firmware**.
+Ambiguity, missing evidence and lack of relationship are explicitly unknown.
+Privacy preserves names only in the caller's CLI argument, not in output.
+See [SPDX why-source guide](SPDX_WHY_SOURCE.md) and [ADR-0007](adr/0007-spdx-why-direct-input.md).

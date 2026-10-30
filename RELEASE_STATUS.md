@@ -94,3 +94,19 @@ passing these prototype tests.
   and [ADR-0006](docs/adr/0006-upstream-spdx-adapter.md).
 - No real current Zephyr 4.5 SPDX build fixture or physical target test is
   claimed by these unit fixtures. G0 remains OPEN; R2 is not started.
+
+## Phase-0 source/module relationship explanation increment
+
+- Added `zew why --source NAME` and `zew why --module NAME` modes. Existing
+  `zew why CONFIG_...` behaviour remains intentionally observational.
+- Matches an exact `software_File` or `software_Package` element across
+  upstream SPDX 3 JSON-LD documents and seeks only direct Build-scoped
+  `hasInput` relationships from known Build elements.
+- Records the Evidence Graph `artifact:*:spdx_3_build` node and byte hash;
+  rechecks the SPDX build document before using its relationships.
+- Reports ambiguous identifiers and missing relationships as UNKNOWN.
+  Does not infer compiled source, linked ELF presence, device state or CVE impact.
+- Positive and negative fixtures cover stale hashes, privacy, malformed SPDX,
+  conflicting identities, scope, ambiguities and CLI backwards compatibility.
+- **G0 still OPEN**; exact-head CI and real Zephyr v4.5 build-profile tests
+  are still prerequisites for progressing into the release trains.
