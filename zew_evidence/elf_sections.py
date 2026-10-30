@@ -11,6 +11,7 @@ from .collector import InputError
 MAX_HEADERS = 20000
 MAX_STRINGS = 8 * 1024 * 1024
 MAX_SECTION_HASH = 64 * 1024 * 1024
+MAX_TOTAL_HASH = 128 * 1024 * 1024
 
 
 def inspect_sections(path: Path) -> list[dict]:
@@ -65,6 +66,7 @@ def inspect_sections(path: Path) -> list[dict]:
         if len(strings) != str_len or not strings or strings[0] != 0:
             raise InputError("ELF section string table invalid")
         rows = []
+        hash_budget = MAX_TOTAL_HASH
         for idx, (noff, typ, flags, addr, offset, length) in enumerate(table):
             if noff >= len(strings):
                 raise InputError("ELF section-name offset outside string table")
@@ -79,7 +81,7 @@ def inspect_sections(path: Path) -> list[dict]:
             if idx == 0 or not name or not flags & 2 or not length:
                 continue
             digest = None
-            if typ != 8 and length <= MAX_SECTION_HASH:
+            if typ != 8 and length <= MAX_SECTION_HASH and length <= hash_budget:
                 f.seek(offset)
                 sha = hashlib.sha256()
                 left = length
@@ -90,9 +92,10 @@ def inspect_sections(path: Path) -> list[dict]:
                     sha.update(block)
                     left -= len(block)
                 digest = sha.hexdigest()
+                hash_budget -= length
             rows.append({"name": name, "address": addr, "bytes": length,
                          "data_kind": "zero-fill" if typ == 8 else
-                         "file-backed" if digest else "file-backed-too-large",
+                         "file-backed" if digest else "file-backed-unhashed",
                          "sha256": digest})
     after = path.stat()
     if (before.st_size, before.st_mtime_ns, before.st_ino) != (
