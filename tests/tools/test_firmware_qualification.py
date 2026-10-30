@@ -187,6 +187,17 @@ class QualifyRealFirmwareMatrixTests(unittest.TestCase):
         self.assertFalse(result["full_evidence_coverage"])
         self.assertEqual(result["observations"][0]["flashed_hardware"], "not-observed")
 
+    def test_independent_real_vendor_run_confirms_all_prior_nonallocated_metadata(self):
+        evidence = json.loads((ROOT / "docs/evidence/nonallocated_elf_observations_20261030.json")
+                              .read_text(encoding="utf-8"))
+        self.assertEqual(evidence["source_head_sha"], "7c5d5c7e2a97e92984cfd458b80171928afff6f3")
+        actual = evidence["observations"]
+        self.assertEqual({item["scenario"] for item in actual}, set(EXPECTED))
+        self.assertEqual(sum(item["exact_nonallocated_elf_metadata"] for item in actual), 66)
+        self.assertTrue(all(
+            item["previous_missing_or_unallocated"] == item["exact_nonallocated_elf_metadata"]
+            and item["exact_allocated_elf_output"] > 0 for item in actual))
+
     def test_measured_nonallocated_elf_metadata_reconciliation_keeps_ranges_unknown(self):
         cases = sample_matrix()
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))["observations"]
