@@ -106,6 +106,7 @@ def main():
     targets = [('ti', 'lp_mspm0g3507', 'mspm0g3507', None),
                ('stm32', 'nucleo_f446re', 'stm32f446xx', None),
                ('nordic', 'nrf52840dk', 'nrf52840', None),
+               ('adc-nrf', 'nrf52840dk', 'nrf52840', None),
                ('xtensa', 'esp32s3_devkitc', 'esp32s3', 'procpu'),
                ('riscv', 'esp32c3_devkitm', 'esp32c3', None),
                ('mcuboot', 'nrf52840dk', 'nrf52840', None)]
@@ -113,10 +114,15 @@ def main():
     for label, board, soc, core in targets:
         target = select_target(rows, board, soc, core)
         app = root / 'projects' / ('matrix ' + label + ' Ω')
-        app.mkdir(parents=True); (app / 'src').mkdir()
-        (app / 'src/main.c').write_text('#include <zephyr/kernel.h>\nint main(void) { return 0; }\n')
-        (app / 'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.20.5)\nfind_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})\nproject(matrix)\ntarget_sources(app PRIVATE src/main.c)\n')
-        (app / 'prj.conf').write_text('CONFIG_BOOTLOADER_MCUBOOT=y\nCONFIG_MCUBOOT_GENERATE_UNSIGNED_IMAGE=y\nCONFIG_BUILD_OUTPUT_BIN=y\n' if label == 'mcuboot' else '')
+        if label == 'adc-nrf':
+            # Compile a real bundled peripheral diagnostic, not only an empty
+            # Hello World firmware. It is never flashed by this CI matrix.
+            shutil.copytree(REPO / 'examples/adc_safe_probe', app)
+        else:
+            app.mkdir(parents=True); (app / 'src').mkdir()
+            (app / 'src/main.c').write_text('#include <zephyr/kernel.h>\nint main(void) { return 0; }\n')
+            (app / 'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.20.5)\nfind_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})\nproject(matrix)\ntarget_sources(app PRIVATE src/main.c)\n')
+            (app / 'prj.conf').write_text('CONFIG_BOOTLOADER_MCUBOOT=y\nCONFIG_MCUBOOT_GENERATE_UNSIGNED_IMAGE=y\nCONFIG_BUILD_OUTPUT_BIN=y\n' if label == 'mcuboot' else '')
         source_hash = hashlib.sha256((app / 'src/main.c').read_bytes()).hexdigest()
         build = app / '.zew-build/ci'
         protocol = run([python, root / 'installer/build_paths.py', '--root', root, '--application', app, '--build', build,
