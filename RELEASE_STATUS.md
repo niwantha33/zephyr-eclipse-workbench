@@ -45,3 +45,18 @@ G0 OPEN; G1, G2, G3, G4 NOT STARTED. A phase-0 prototype is not G1 delivery.
 Outputs are deterministic JSON. Generated Kconfig assignment observations have no dependency reasoning; generated DTS and ELF are hashed but not semantically parsed. Hardware is never touched.
 
 See [market evidence](docs/MARKET_EVIDENCE.md), [gap audit](docs/COMPETITIVE_GAP.md), [licence audit](docs/LICENSE_AUDIT.md), [CLI reference](docs/CLI_REFERENCE.md) and ADRs.
+
+
+## Later Phase-0 feasibility increment (separate PR)
+
+- Added deterministic `zew compare` between two build roots, with observed Kconfig
+  changes, artifact SHA-256 differences, explicit redacted/unknown states.
+- Added preview-first `zew bundle` and bounded `zew inspect` ZIP integrity
+  verification without extraction or credential-bearing source files.
+- Added regression cases for repeatable archive bytes, malicious entry names,
+  duplicate entries, symlink entry modes, compressed entries, tampering, Unicode
+  paths, exclusive output creation and privacy.
+- All claims are about **offline observed data only**. Build differences never
+  establish a cause, and ZIP hashes never establish publisher authenticity.
+- **Validation and gate status:** new branch CI pending. G0 remains open;
+  Phase-0 prototype work is not a passed G1 milestone.
