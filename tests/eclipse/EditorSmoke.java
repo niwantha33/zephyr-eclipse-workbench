@@ -119,6 +119,31 @@ public final class EditorSmoke implements IApplication {
             refresh.invoke(view);
         }
     }
+    /** Capture a real installed-workbench screen, not a mockup or generated illustration. */
+    private static void captureNativeStudioScreenshot() throws Exception {
+        String directory = System.getenv("ZEW_SCREENSHOT_DIR");
+        if (directory == null || directory.isBlank()) return;
+        var window = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+        if (window == null) throw new IllegalStateException("No active native Eclipse window to capture.");
+        var shell = window.getShell();
+        var screen = shell.getDisplay().getPrimaryMonitor().getBounds();
+        var area = shell.getBounds().intersection(screen);
+        if (area.width < 400 || area.height < 200)
+            throw new IllegalStateException("Workbench window is too small for screenshot evidence.");
+        var output = Path.of(directory).resolve("configuration-studio-source-only.png");
+        Files.createDirectories(output.getParent());
+        try (var image = new org.eclipse.swt.graphics.Image(shell.getDisplay(), area.width, area.height);
+                var gc = new org.eclipse.swt.graphics.GC(shell.getDisplay())) {
+            gc.copyArea(image, area.x, area.y);
+            var writer = new org.eclipse.swt.graphics.ImageLoader();
+            writer.data = new org.eclipse.swt.graphics.ImageData[] {image.getImageData()};
+            writer.save(output.toString(), org.eclipse.swt.SWT.IMAGE_PNG);
+        }
+        if (Files.size(output) < 2048)
+            throw new IllegalStateException("Installed workbench screenshot is unexpectedly empty: " + output);
+        System.out.println("Native Eclipse screenshot captured (source-only UI): " + output);
+    }
+
     @Override public Object start(IApplicationContext context) throws Exception {
         String[] args = (String[]) context.getArguments().get(IApplicationContext.APPLICATION_ARGS);
         Path fixture = Path.of(args[0]);
@@ -277,6 +302,7 @@ public final class EditorSmoke implements IApplication {
                     check(!"—".equals(overridesCount.getText()),
                             "live project override summary is populated");
                     verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw);
+                    captureNativeStudioScreenshot();
                 } catch (Exception error) { throw new IllegalStateException("Native Studio smoke failed", error); }
             });
         }
