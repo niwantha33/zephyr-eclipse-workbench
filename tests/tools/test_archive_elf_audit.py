@@ -8,6 +8,7 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest import mock
 
 from zew import main
 from zew_evidence.collector import InputError, collect
@@ -155,6 +156,20 @@ class ArchiveElfAuditTests(unittest.TestCase):
         self.assertEqual(self.report()["archive"]["status_counts"]["unsupported-thin-archive"], 1)
         self.archive.unlink()
         self.assertEqual(self.report()["archive"]["status_counts"]["unavailable-archive"], 1)
+
+    def test_archive_scan_budget_exhaustion_is_unknown(self):
+        import zew_evidence.link_audit as module
+        with mock.patch.object(module, "MAX_TOTAL_ARCHIVE_IO", 1):
+            record = self.report()
+        self.assertEqual(record["archive"]["status_counts"]["inspection-budget-exceeded"], 1)
+        self.assertEqual(record["archive"]["status_counts"]["exact-archive-member-observed"], 0)
+
+    def test_invalid_archive_name_encoding_is_controlled_error(self):
+        bad_header = bytearray(ar_entry("adc.o/", b"payload"))
+        bad_header[0] = 255
+        self.archive.write_bytes(b"!<arch>\\n" + bytes(bad_header))
+        with self.assertRaises(InputError):
+            self.report()
 
     def test_discarded_only_not_counted_as_map_section(self):
         self.write_map(line="")
