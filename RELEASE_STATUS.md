@@ -173,3 +173,18 @@ passing these prototype tests.
 - Metadata agreement or byte hash is NOT source-to-output causality,
   a comparison against object bytes, a live target check, or proof of
   firmware flashed. G0 remains OPEN.
+
+## Phase-0 real artifact acceptance matrix (development PR)
+
+- Existing pinned Windows `west build` matrix now invokes a repeatable,
+  read-only Evidence Engine probe after each **real** TI MSPM0, STM32,
+  Nordic, Espressif, ADC and MCUboot scenario.
+- Records per-target compiler database, GNU linker-map and ELF section
+  evidence statuses, reconciles SHA-256 digests with the Evidence Graph,
+  checks deterministic results and verifies generated files were unchanged.
+- Linux development CI compiles/links actual host GNU ld and LLVM lld
+  executables and archives, tests parser/CLI behaviour, and refuses
+  silent LLVM test omissions. These are **host** format tests, not Zephyr.
+- This matrix does not verify source-to-final-ELF causality, semantic
+  correctness of unsupported vendor maps, embedded LLVM Zephyr
+  compatibility or any physical hardware. G0 remains OPEN.

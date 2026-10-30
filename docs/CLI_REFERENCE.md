@@ -186,3 +186,20 @@ bounded file-backed ELF section bytes is observational and does not
 establish their object/source origin, ELF freshness or device state.
 Unsupported ELF/map layouts remain unknown. See
 [section evidence contract](ELF_OUTPUT_SECTION_EVIDENCE.md).
+
+## Validating the Evidence Engine against actual generated firmware builds
+
+Existing headless `zew compile`, `zew link-audit` and
+`zew section-audit` are now exercised on the Windows CI managed firmware
+matrix (TI, STM32, Nordic, Espressif, ADC example and MCUboot output).
+Run the same read-only evidence check for one local build with:
+
+```sh
+python scripts/evidence_firmware_probe.py --build /path/to/build --application /path/to/app
+```
+
+This is a CI contract for existing generated artifacts, and does not build,
+flash, test a physical device or establish source-to-binary causality.
+Linux CI additionally checks genuine host GNU ld and LLVM lld map formats
+via `scripts/evidence_native_linker_smoke.py`. See
+[real-build matrix](REAL_BUILD_EVIDENCE_MATRIX.md).
