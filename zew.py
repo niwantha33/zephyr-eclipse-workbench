@@ -19,6 +19,7 @@ from zew_evidence.linker import inspect as inspect_linker
 from zew_evidence.link_audit import audit as audit_link_map
 from zew_evidence.section_audit import audit as audit_elf_sections
 from zew_evidence.map_context import audit as audit_gnu_context
+from zew_evidence.config_request_check import check as check_config_requests
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -65,6 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     context = subs.add_parser("map-context", help="Conservative GNU map input/output context against ELF metadata")
     context.add_argument("--build", type=Path, required=True)
     context.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
+    request_check = subs.add_parser("config-check",
+                                    help="Compare prj.conf requests with last generated Kconfig snapshot")
+    request_check.add_argument("--build", type=Path, required=True)
+    request_check.add_argument("--snippet", type=Path, required=True,
+                               help="Explicit local prj.conf or snippet; read-only, values redacted")
+    request_check.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
     diff = subs.add_parser("compare", help="Compare two builds or verified offline bundles")
     lg = diff.add_mutually_exclusive_group(required=True)
     lg.add_argument("--left", type=Path, help="Generated build root")
@@ -87,7 +94,9 @@ def main(argv: list[str] | None = None) -> int:
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "map-context":
+        if args.command == "config-check":
+            output = check_config_requests(collect(args.build, args.image), args.snippet)
+        elif args.command == "map-context":
             output = audit_gnu_context(args.build, args.image)
         elif args.command == "section-audit":
             output = audit_elf_sections(args.build, args.image)
@@ -177,7 +186,11 @@ def main(argv: list[str] | None = None) -> int:
                           "message": str(error)}, sort_keys=True), file=sys.stderr)
         return 2
     print(json.dumps(output, sort_keys=True, indent=2, ensure_ascii=False))
-    return 1 if args.command == "verify" and output["status"] != "recorded-artifacts-match" else 0
+    if args.command == "verify":
+        return 0 if output["status"] == "recorded-artifacts-match" else 1
+    if args.command == "config-check":
+        return 0 if output["status"] == "matching-snapshot" else 1
+    return 0
 
 
 if __name__ == "__main__":

@@ -37,6 +37,25 @@ class CliPackageTests(unittest.TestCase):
                                     cwd=root, env=env, text=True, capture_output=True, timeout=15, check=True)
             self.assertEqual(json.loads(output.stdout)["status"], "observations-only")
             self.assertEqual(list(workspace.iterdir()), [])
+            # The packaged CLI must include the new checker and preserve its
+            # 0=matching-snapshot, 1=partial/mismatch return-code contract.
+            (workspace / "zephyr").mkdir()
+            (workspace / "zephyr/.config").write_text("CONFIG_GPIO=y\n", encoding="utf-8")
+            request = root / "sample.conf"
+            request.write_text("CONFIG_GPIO=y\n", encoding="utf-8")
+            command_check = [sys.executable, str(first), "config-check",
+                             "--build", str(workspace), "--snippet", str(request)]
+            matching = subprocess.run(command_check, cwd=root, env=env, text=True,
+                                      capture_output=True, timeout=15)
+            self.assertEqual(matching.returncode, 0, matching.stderr)
+            self.assertEqual(json.loads(matching.stdout)["status"], "matching-snapshot")
+            request.write_text("CONFIG_GPIO=n\n", encoding="utf-8")
+            mismatch = subprocess.run(command_check, cwd=root, env=env, text=True,
+                                      capture_output=True, timeout=15)
+            self.assertEqual(mismatch.returncode, 1, mismatch.stderr)
+            self.assertEqual(json.loads(mismatch.stdout)["counts"], {"differs-from-generated": 1})
+            (workspace / "zephyr/.config").unlink()
+            (workspace / "zephyr").rmdir()
             (workspace / "zephyr").mkdir()
             (workspace / "zephyr/.config").write_text("CONFIG_GPIO=y\n", encoding="utf-8")
             (workspace / "zephyr/zephyr.dts").write_text("/ { };\n", encoding="utf-8")

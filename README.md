@@ -117,3 +117,11 @@ Native Eclipse Run/Debug controls, CCS/other-IDE adapter boundaries and the edit
 ### SoC peripheral registers
 
 Open **Window > Show View > Other > Debug > SoC Registers**, load the exact chip vendor SVD, and refresh a selected register while halted in native Debug. Includes search, bitfields, watches and reset comparison. See [register inspection](docs/DEBUG_REGISTERS_AND_THREADS.md) for supported SVD features and validation limits.
+
+**Additional opt-in evidence prototype:** the headless
+[`zew config-check`](docs/CONFIG_REQUEST_CHECK.md) compares explicit
+boolean/tristate requests from a selected `prj.conf` or pasted snippet with
+the **last generated** `.config`. It reports conflicting settings, absent
+evidence and mismatches without modifying files or inventing dependency
+causes. It is a Phase-0 feasibility CLI, **not** a finished semantic
+Truth Check or evidence of a measured learning-curve gain.
