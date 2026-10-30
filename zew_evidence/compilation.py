@@ -80,3 +80,52 @@ def _candidate(row):
         return (file if file.is_absolute() else base / file).resolve(strict=False)
     except (OSError, ValueError):
         return None
+
+def inspect(build: Path, source: str, source_root: Path,
+            images: list[str] | None = None, graph: dict | None = None) -> dict:
+    target = _source(source_root, source)
+    graph = graph if graph is not None else collect(build, images or [])
+    root = Path(build)
+    if root.is_symlink() or not root.is_dir():
+        raise InputError("Invalid build directory")
+    root = root.resolve(strict=True)
+    hashes = {n["id"]: n["provenance"]["sha256"] for n in graph["nodes"]
+              if n["type"] == "artifact" and n["data"]["kind"] == "compiler_database"}
+    reports = []
+    for image, directory in _images(root, images or []):
+        ident = f"artifact:{image}:compiler_database"
+        path = _regular(directory, "compile_commands.json")
+        if path is None:
+            if ident in hashes:
+                raise InputError("Compiler database disappeared after capture")
+            reports.append({"image": image, "status": "missing-compiler-database",
+                            "confidence": "unknown", "matching_commands": 0,
+                            "total_entries": 0, "unresolvable_entries": 0,
+                            "provenance": None})
+            continue
+        rows, digest = _snapshot(path)
+        if hashes.get(ident) != digest:
+            raise InputError("Compiler database differs from Evidence Graph snapshot")
+        match = unresolved = 0
+        for row in rows:
+            candidate = _candidate(row)
+            match += candidate == target
+            unresolved += candidate is None
+        reports.append({"image": image,
+                        "status": "compile-command-observed" if match else "no-matching-command-observed",
+                        "confidence": "confirmed" if match else "unknown",
+                        "matching_commands": match, "unresolvable_entries": unresolved,
+                        "total_entries": len(rows),
+                        "provenance": {"node_id": ident,
+                                       "artifact": f"{image}/compile_commands.json",
+                                       "sha256": digest}})
+    return {"schema_version": SCHEMA_VERSION, "status": "compile-database-observation",
+            "query": {"name": "<not-exported>", "selection": "exact resolved file identity"},
+            "images": reports,
+            "limitations": [
+                "A compile command recorded in JSON does not prove compiler execution.",
+                "No matching entry is unknown, not proof of exclusion.",
+                "Unresolvable paths remain unknown.",
+                "No linker-map, final ELF, device, or source-freshness proof is provided.",
+                "Commands, arguments, environment and source paths are not exported."
+            ]}
