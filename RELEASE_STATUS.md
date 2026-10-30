@@ -227,3 +227,20 @@ passing these prototype tests.
 - GNU/LLVM host linker smoke now cross-checks ELF .text metadata against
   independent GNU `readelf`. No physical hardware, embedded LLVM, source
   causality or G0/G1 gate claim.
+
+
+## Phase-0 optional config request-check feasibility increment (review PR)
+
+- Added headless `zew config-check --build ... --snippet ...` against the
+  actual collected `.config` per explicitly selected build image.
+- Detects exact boolean/tristate request-versus-generated differences,
+  conflicting duplicate assignments, absent observations and malformed lines.
+  Input line numbers and hashed artifact identity are retained; raw string
+  values, local file paths and snippet contents are not emitted.
+- Includes bounded UTF-8 input, symlink/size guards, deterministic JSON,
+  isolated CLI exit statuses and test cases including the packaged zipapp.
+- Only observations are compared: no symbol existence, Kconfig dependency,
+  devicetree validation, source freshness, runtime or flashed-device claim.
+- **No G0/G1 promotion**. Exact-head Linux/Windows CI and review are needed
+  before merge; no release or installation-channel publication is requested.
+- See [configuration request checker](docs/CONFIG_REQUEST_CHECK.md).
