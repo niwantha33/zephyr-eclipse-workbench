@@ -14,7 +14,7 @@ file, setup order, updates, probe tools and optional Trace Compass installation.
 
 ## Project status
 
-**Release gate:** This remains a development preview. See [current implementation/evidence and remaining acceptance checks](docs/RELEASE_STATUS_2026-10-30.md). Do not interpret CI packaging success as proof of physical flash/debug support or completed observability.
+**Release gate:** This remains a development preview. See [current implementation/evidence and remaining acceptance checks](docs/RELEASE_STATUS_2026-10-30.md) and the [commercial release acceptance matrix](docs/COMMERCIAL_RELEASE_ACCEPTANCE.md). Do not interpret CI packaging success as proof of physical flash/debug support or completed observability.
 
 0.1.21 includes shared target dependency repair, native flash/debug integration,
 separate Debug/Release build profiles and an OpenOCD CTF RAM snapshot preview.

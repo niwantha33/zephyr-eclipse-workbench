@@ -10,7 +10,7 @@ public final class EvidenceSanitizer {
     private static final Pattern NOT_SET = Pattern.compile("^\\s*#\\s*(CONFIG_[A-Z0-9_]+) is not set\\s*$");
     private static final Pattern SCALAR = Pattern.compile("(?:[ymn]|-?[0-9]{1,16}|0[xX][0-9A-Fa-f]{1,16})");
     private static final Pattern PUBLIC_ID = Pattern.compile("[A-Za-z0-9_.@/+-]{1,160}");
-    private static final Pattern PRIVATE_NAME = Pattern.compile("(?i).*(?:PASSWORD|TOKEN|SECRET|PASSKEY|PRIVATE|CREDENTIAL|API_KEY|AUTH|SSID|CERT|IDENTITY|USERNAME|USER_NAME).*");
+    private static final Pattern PRIVATE_NAME = Pattern.compile("(?i).*(?:PASSWORD|TOKEN|SECRET|PASSKEY|PRIVATE|CREDENTIAL|API_KEY|AUTH|SSID|CERT|IDENTITY|USERNAME|USER_NAME|KEY|PIN|PSK|SEED|COOKIE|SERIAL_NUMBER|MAC_ADDRESS).*");
 
     private EvidenceSanitizer() {}
 

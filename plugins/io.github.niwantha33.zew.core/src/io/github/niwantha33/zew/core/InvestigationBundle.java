@@ -21,6 +21,8 @@ public final class InvestigationBundle {
         public String display() {
             StringBuilder text = new StringBuilder("Configuration evidence package\n");
             entries.forEach((name, bytes) -> text.append(name).append(" — ").append(bytes.length).append(" bytes\n"));
+            if (entries.containsKey("generated/zephyr.dts"))
+                text.append("\nWARNING: legacy raw Devicetree present; content is NOT sanitised. Do not share without reviewing it.\n");
             return text.append("\nShareable default: Kconfig strings/comments and absolute diagnostic paths are redacted.\n")
                     .append("Generated hardware is a lossy inventory, not the full Devicetree.\n")
                     .append("Review the actual displayed content for unexpected sensitive metadata before sharing.\n")
@@ -63,8 +65,8 @@ public final class InvestigationBundle {
     private static String buildIdentity(Path build) throws IOException {
         var cfg = BuildArtifacts.configuration(build);
         StringBuilder out = new StringBuilder("Zephyr build evidence (not a hardware-verification certificate)\n");
-        String target = cfg.getOrDefault("CONFIG_BOARD_TARGET", "(not reported)").replace("\"", "");
-        String soc = cfg.getOrDefault("CONFIG_SOC", "(not reported)").replace("\"", "");
+        String target = safeIdentifier(cfg.getOrDefault("CONFIG_BOARD_TARGET", "(not reported)").replace("\"", ""));
+        String soc = safeIdentifier(cfg.getOrDefault("CONFIG_SOC", "(not reported)").replace("\"", ""));
         out.append("CONFIG_BOARD_TARGET: ").append(target).append('\n')
                 .append("CONFIG_SOC: ").append(soc).append('\n');
         for (String arch : List.of("ARM", "ARM64", "RISCV", "XTENSA", "X86", "ARC"))
@@ -119,6 +121,13 @@ public final class InvestigationBundle {
             throw new IllegalStateException(impossible);
         }
         return out.toString();
+    }
+
+    private static String safeIdentifier(String value) {
+        if (value.length() > 160 || !value.matches("[A-Za-z0-9_./@+-]+")
+                || value.toLowerCase(java.util.Locale.ROOT).matches(".*(password|token|secret|private|credential|api_key).*"))
+            return "(not reported)";
+        return value;
     }
 
     private static void add(Map<String, byte[]> entries, String name, Path file) throws IOException {
