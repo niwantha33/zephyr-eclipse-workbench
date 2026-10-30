@@ -140,3 +140,18 @@ recorded compile commands for the source, per firmware image. Existing
 `zew why --source` without `--source-root` remains SPDX-only.
 **A compiler database record never proves a compiler ran, an object was
 linked, or that a board was flashed.** See [details](COMPILATION_EVIDENCE.md).
+
+## Exact object and linker-map observations
+
+```sh
+python zew.py link --build ./build --source drivers/adc.c --source-root ./application
+python zew.py why --source drivers/adc.c --source-root ./application --link-evidence --build ./build
+```
+
+The link reader combines **explicit** CMake `output` metadata,
+a bounded observation of an existing `.o` file, and only unambiguous
+GNU ld input-section records in `zephyr/zephyr.map`. It checks the compiler
+database and map SHA-256 against the Evidence Graph. No commands are run.
+It does not infer contributions for archives or unsupported map formats.
+No recorded object, LOAD or section may be equated with a verified final
+ELF or a flashed target. See [linker evidence](LINKER_MAP_EVIDENCE.md).

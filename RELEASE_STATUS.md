@@ -125,3 +125,19 @@ passing these prototype tests.
   linker, final ELF or flashed-target assertion is made.
 - Tests cover tampering, adversarial JSON, existing/missing database, path
   matching, privacy and multi-image isolation. G0 remains OPEN.
+
+
+## Phase-0 source/object/GNU linker-map observations (draft PR)
+
+- `zew link --source ... --source-root ... --build ...` reads an explicit
+  CMake compiler output field and observes its local object hash.
+- Reads a bounded GNU-style link map; distinguishes LOAD from nonzero
+  assigned input sections and discards. All compiler/map evidence is
+  anchored to the same per-image Evidence Graph artifact SHA-256.
+- Optional `zew why --source --link-evidence` enriches upstream SPDX and
+  compile-command reports without altering `CONFIG_...` behaviour.
+- Does NOT claim link completion, reliable ELF contents, source freshness,
+  archive member contribution or actual flashing; foreign/ambiguous
+  paths and unsupported formats stay UNKNOWN.
+- Negative and cross-image fixtures added. G0 remains OPEN; G1/G2
+  release acceptance is not implied by synthetic fixtures.
