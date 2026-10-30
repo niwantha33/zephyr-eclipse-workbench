@@ -218,6 +218,9 @@ public final class EditorSmoke implements IApplication {
             kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             hardwareSearch.setText("no-such-controller");
             check(hardware.getItemCount() == 0, "hardware search has an honest empty state");
+            var guidance = (org.eclipse.swt.widgets.Label) studioField(view, type, "parameterTitle");
+            check(guidance.getText().contains("No peripheral matches this filter"),
+                    "built target with empty filter never falsely asks the user to rebuild");
             var cancel = new org.eclipse.swt.widgets.Event(); cancel.detail = org.eclipse.swt.SWT.ICON_CANCEL;
             hardwareSearch.notifyListeners(org.eclipse.swt.SWT.Selection, cancel);
             check(hardwareSearch.getText().isEmpty() && hardware.getItemCount() > 0,
