@@ -116,6 +116,10 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
             report["missing_evidence"].append("Supported, bounded ELF PT_LOAD program headers")
             images_out.append(report)
             continue
+        # Reject a race between the hashed ELF observation and header parsing.
+        verified_sha, verified_size = _digest(elf_path)
+        if (verified_sha, verified_size) != (elf_sha, elf_size):
+            raise InputError("ELF changed after program-header inspection")
         report["provenance"]["elf"] = {"node_id": elf_id, "sha256": elf_sha, "bytes": elf_size}
         counts = {key: 0 for key in (
             "file-backed-vma", "zero-fill-vma", "mixed-file-and-zero-fill-vma",
