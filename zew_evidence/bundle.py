@@ -117,7 +117,8 @@ def inspect(bundle: Path) -> dict:
                 mode = info.external_attr >> 16
                 if (info.flag_bits & 0x1 or info.compress_type != zipfile.ZIP_STORED
                         or info.is_dir() or info.file_size > (MAX_GRAPH_BYTES if info.filename == "graph.json" else MAX_MANIFEST_BYTES)
-                        or info.compress_size != info.file_size or (mode and not stat.S_ISREG(mode))):
+                        or info.compress_size != info.file_size
+                        or stat.S_IFMT(mode) not in (0, stat.S_IFREG)):
                     raise InputError("Unsupported or unsafe archive member")
             raw_manifest = zf.read("manifest.json")
             raw_graph = zf.read("graph.json")
@@ -131,11 +132,15 @@ def inspect(bundle: Path) -> dict:
     if (not isinstance(meta, dict) or meta.get("format") != FORMAT
             or meta.get("schema_version") != SCHEMA_VERSION
             or meta.get("attestation") != "none"
-            or set(meta.get("entries", {})) != {"graph.json"}):
+            or not isinstance(meta.get("entries"), dict)
+            or set(meta["entries"]) != {"graph.json"}):
         raise InputError("Unsupported or malformed bundle manifest")
     record = meta["entries"]["graph.json"]
-    if (record.get("sha256") != hashlib.sha256(raw_graph).hexdigest()
-            or record.get("bytes") != len(raw_graph)):
+    if (not isinstance(record, dict)
+            or not isinstance(record.get("sha256"), str)
+            or type(record.get("bytes")) is not int
+            or record["sha256"] != hashlib.sha256(raw_graph).hexdigest()
+            or record["bytes"] != len(raw_graph)):
         raise InputError("Bundle SHA-256 or size mismatch")
     if (not isinstance(graph, dict) or graph.get("schema_version") != SCHEMA_VERSION
             or graph.get("status") != "observations-only"
