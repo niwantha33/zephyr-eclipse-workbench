@@ -206,7 +206,17 @@ def main():
             run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', '--base64', verify_argument], workspace, env)
         if hashlib.sha256((app / 'src/main.c').read_bytes()).hexdigest() != source_hash:
             raise ValueError('Application source changed')
-        results.append(dict(target=target, scenario=label, firmware_build_verified=True, editor_metadata_verified=True))
+        # Every real vendor build is now independently inspected by the
+        # Evidence Engine. This is build-artifact evidence, NEVER a flash or
+        # physical-board assertion. Run after deliberate failure recovery.
+        evidence_raw = run([python, REPO / 'scripts/evidence_firmware_probe.py',
+                            '--build', build_arg, '--application', app],
+                           workspace, env, capture=True, timeout=180)
+        evidence = json.loads(evidence_raw)
+        if evidence['claim_limit'].find('no runtime or flashed-device') < 0:
+            raise ValueError('Evidence report overstated verification scope')
+        results.append(dict(target=target, scenario=label, firmware_build_verified=True,
+                            editor_metadata_verified=True, evidence_engine=evidence))
         (REPO / 'windows-firmware-results.json').write_text(json.dumps(results, indent=2))
     print(json.dumps(results, indent=2))
 
