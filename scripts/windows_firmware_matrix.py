@@ -175,7 +175,7 @@ def main():
             # can be distinguished from actual definitions without code edits.
             semantic_snippet = Path(build_arg) / '.zew-semantic-ci.conf'
             semantic_snippet.write_text(
-                'CONFIG_GPIO=y\\nCONFIG_ZEW_NONEXISTENT_SEMANTIC_CI_20261030=y\\n',
+                'CONFIG_GPIO=y\nCONFIG_ZEW_NONEXISTENT_SEMANTIC_CI_20261030=y\n',
                 encoding='utf-8')
             try:
                 semantic = subprocess.run(
