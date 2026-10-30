@@ -167,7 +167,7 @@ class ArchiveElfAuditTests(unittest.TestCase):
     def test_invalid_archive_name_encoding_is_controlled_error(self):
         bad_header = bytearray(ar_entry("adc.o/", b"payload"))
         bad_header[0] = 255
-        self.archive.write_bytes(b"!<arch>\\n" + bytes(bad_header))
+        self.archive.write_bytes(b"!<arch>\n" + bytes(bad_header))
         with self.assertRaises(InputError):
             self.report()
 
