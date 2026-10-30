@@ -43,6 +43,27 @@ public final class RemoteSmokeDelegate extends GdbLaunchDelegate {
             return launch;
         } catch (Exception error) { throw new CoreException(new Status(IStatus.ERROR, "zew.editor.smoke", "Remote launch settings", error)); }
     }
+    @Override public void launch(ILaunchConfiguration configuration, String mode, ILaunch launch,
+                                 IProgressMonitor monitor) throws CoreException {
+        super.launch(configuration, mode, launch, monitor);
+        if (monitor.isCanceled() || launch.isTerminated()) return;
+        String compilation = configuration.getAttribute("zew.test.compilationRoot", "");
+        if (compilation.isBlank()) return;
+        String source = configuration.getAttribute("zew.test.sourceRoot", "");
+        try {
+            // Production launch now revalidates after DSF has initialised its
+            // source services. Run the same production helper here as well.
+            var ui = Platform.getBundle("io.github.niwantha33.zew.ui");
+            var mapping = ui.loadClass("io.github.niwantha33.zew.ui.ZephyrNativeDebugDelegate")
+                    .getDeclaredMethod("configureSourceMappings", ILaunch.class, java.util.List.class);
+            mapping.setAccessible(true);
+            mapping.invoke(null, launch, java.util.List.of(
+                    new io.github.niwantha33.zew.core.DebugSourcePaths.Mapping(compilation, source)));
+        } catch (Exception error) {
+            throw new CoreException(new Status(IStatus.ERROR, "zew.editor.smoke",
+                    "Remote debug source mapping was not restored after DSF initialization", error));
+        }
+    }
     @Override protected IDsfDebugServicesFactory newServiceFactory(ILaunchConfiguration configuration, String version) {
         // Linux also offers a second PTY MI channel. Use the stdio MI transport used on Windows
         // so the test relay can prove that creation notifications did not reach CDT.
