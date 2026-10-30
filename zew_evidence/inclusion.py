@@ -145,8 +145,13 @@ def explain(build: Path, kind: str, name: str, images: list[str] | None = None) 
     root = Path(build).resolve(strict=True)
     reports = []
     for image, directory in _images(root, images or []):
-        reports.append(_index(directory, image, kind, requested,
-                              proofs.get(f"artifact:{image}:spdx_3_build", "")))
+        artifact_id = f"artifact:{image}:spdx_3_build"
+        digest = proofs.get(artifact_id, "")
+        report = _index(directory, image, kind, requested, digest)
+        report["evidence_graph_anchor"] = (
+            {"node_id": artifact_id, "sha256": digest, "confidence": "confirmed"}
+            if digest else None)
+        reports.append(report)
     return {
         "schema_version": SCHEMA_VERSION,
         "status": "upstream-spdx-input-explanation",
