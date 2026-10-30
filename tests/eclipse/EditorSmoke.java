@@ -401,15 +401,35 @@ public final class EditorSmoke implements IApplication {
         org.eclipse.core.runtime.jobs.Job.getJobManager().join(
                 org.eclipse.cdt.debug.core.launch.CoreBuildLaunchBarTracker.JOB_FAMILY_CORE_BUILD_LAUNCH_BAR_TRACKER,
                 new NullProgressMonitor());
-        manager.reindex(CoreModel.getDefault().create(project));
-        // Reindex schedules a setup job before it queues indexer work. Joining the
-        // indexer alone can report idle before that job has submitted anything.
-        org.eclipse.core.runtime.jobs.Job.getJobManager().join(manager, new NullProgressMonitor());
-        check(manager.joinIndexer(30000, new NullProgressMonitor()), "indexer completed");
-        var index = manager.getIndex(CoreModel.getDefault().create(project)); index.acquireReadLock();
+        // Import/configuration jobs may invalidate the index immediately after
+        // the first reindex. CDT can report an idle indexer before a queued
+        // model refresh has installed the project's source entries. Require real
+        // expected bindings, with bounded retries; never accept an empty PDOM.
+        var cproject = CoreModel.getDefault().create(project);
+        var index = manager.getIndex(cproject);
+        boolean hasHeader = false, hasCpp = false;
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
+        int passes = 0;
+        do {
+            manager.reindex(cproject);
+            org.eclipse.core.runtime.jobs.Job.getJobManager().join(manager, new NullProgressMonitor());
+            check(manager.joinIndexer(5000, new NullProgressMonitor()), "indexer completed");
+            index.acquireReadLock();
+            try {
+                hasHeader = index.findBindings(Pattern.compile("k_sleep"), false, IndexFilter.ALL,
+                        new NullProgressMonitor()).length > 0;
+                hasCpp = index.findBindings(Pattern.compile("cpp_user"), false, IndexFilter.ALL,
+                        new NullProgressMonitor()).length > 0;
+            } finally { index.releaseReadLock(); }
+            if (hasHeader && hasCpp) break;
+            System.out.println("CDT index not populated yet (pass " + ++passes
+                    + ", header=" + hasHeader + ", C++=" + hasCpp + "); retry after model jobs");
+            Thread.sleep(200);
+        } while (System.nanoTime() < deadline);
+        check(hasHeader, "header function indexed for symbol navigation");
+        check(hasCpp, "C++ source indexed");
+        index.acquireReadLock();
         try {
-            check(index.findBindings(Pattern.compile("k_sleep"), false, IndexFilter.ALL, new NullProgressMonitor()).length > 0, "header function indexed for symbol navigation");
-            check(index.findBindings(Pattern.compile("cpp_user"), false, IndexFilter.ALL, new NullProgressMonitor()).length > 0, "C++ source indexed");
             var tu = (ITranslationUnit) CoreModel.getDefault().create(project.getFile("src/main.c"));
             var ast = tu.getAST(index, 0); check(ast != null, "editor AST created");
             check(Arrays.stream(ast.getIncludeDirectives()).allMatch(IASTPreprocessorIncludeStatement::isResolved), "Zephyr header resolved");
