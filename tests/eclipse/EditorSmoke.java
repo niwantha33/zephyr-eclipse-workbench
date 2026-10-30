@@ -105,6 +105,35 @@ public final class EditorSmoke implements IApplication {
             var chip = studioField(view, type, "chipPins");
             check(((Integer) chip.getClass().getMethod("routeCount").invoke(chip)) == 1,
                     "native chip canvas contains the selected controller's resolved pinctrl route");
+            // The redesigned native Hardware workspace must have real
+            // peripheral navigation, planner modes and a separate evidence dock.
+            var grouped = (org.eclipse.swt.widgets.Tree) studioField(view, type, "hardwarePeripheralTree");
+            check(grouped.getItemCount() == 1 && grouped.getItem(0).getText().startsWith("ADC")
+                    && grouped.getItem(0).getItemCount() == 1
+                    && grouped.getItem(0).getItem(0).getItem(0).getText().startsWith("channel@0"),
+                    "ADC peripheral-first tree retains the detected controller and channel");
+            var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
+            check(dock.getItemCount() == 3
+                    && dock.getItem(0).getText().startsWith("Changes")
+                    && dock.getItem(1).getText().startsWith("Validation")
+                    && dock.getItem(2).getText().startsWith("Generated DTS"),
+                    "native Studio exposes a dedicated Changes/Validation/Generated DTS evidence dock");
+            var validation = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareValidation");
+            check(validation.getText().contains("PHYSICAL PINOUT: NOT VERIFIED"),
+                    "physical package map is never invented from pinmux cells");
+            var preview = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwarePreview");
+            check(!preview.getEditable() && preview.getText().contains("No proposed changes"),
+                    "hardware overlay draft starts read-only with no implicit edits");
+            var mode = chip.getClass().getDeclaredClasses()[0];
+            var chooseMode = chip.getClass().getMethod("setMode", mode);
+            var packageMode = java.util.Arrays.stream(mode.getEnumConstants())
+                    .filter(value -> value.toString().equals("PACKAGE")).findFirst().orElseThrow();
+            chooseMode.invoke(chip, packageMode);
+            check(chip.getClass().getMethod("mode").invoke(chip).toString().equals("PACKAGE"),
+                    "unverified package placeholder is a selectable real SWT planner mode");
+            var signalsMode = java.util.Arrays.stream(mode.getEnumConstants())
+                    .filter(value -> value.toString().equals("SIGNALS")).findFirst().orElseThrow();
+            chooseMode.invoke(chip, signalsMode);
             parameterTable.setSelection(gain);
             var revealParameter = type.getDeclaredMethod("revealParameterSource"); revealParameter.setAccessible(true);
             revealParameter.invoke(view);
@@ -135,6 +164,10 @@ public final class EditorSmoke implements IApplication {
             hardwareSearch.notifyListeners(org.eclipse.swt.SWT.Selection, cancel);
             check(hardwareSearch.getText().isEmpty() && hardware.getItemCount() > 0,
                     "native search clear icon restores the filtered hardware hierarchy");
+            var studioTabs = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "tabs");
+            studioTabs.setSelection(1);
+            dock.setSelection(1);
+            captureNativeStudioScreenshot("visual-hardware-studio-built-fixture.png");
         } finally {
             snapshotField.set(view, original);
             clear.invoke(view);
@@ -145,6 +178,9 @@ public final class EditorSmoke implements IApplication {
     }
     /** Capture a real installed-workbench screen, not a mockup or generated illustration. */
     private static void captureNativeStudioScreenshot() throws Exception {
+        captureNativeStudioScreenshot("configuration-studio-source-only.png");
+    }
+    private static void captureNativeStudioScreenshot(String screenshotName) throws Exception {
         String directory = System.getenv("ZEW_SCREENSHOT_DIR");
         if (directory == null || directory.isBlank()) return;
         var window = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
@@ -154,7 +190,7 @@ public final class EditorSmoke implements IApplication {
         var area = shell.getBounds().intersection(screen);
         if (area.width < 400 || area.height < 200)
             throw new IllegalStateException("Workbench window is too small for screenshot evidence.");
-        var output = Path.of(directory).resolve("configuration-studio-source-only.png");
+        var output = Path.of(directory).resolve(screenshotName);
         Files.createDirectories(output.getParent());
         var image = new org.eclipse.swt.graphics.Image(shell.getDisplay(), area.width, area.height);
         try {
@@ -167,7 +203,7 @@ public final class EditorSmoke implements IApplication {
         } finally { image.dispose(); }
         if (Files.size(output) < 2048)
             throw new IllegalStateException("Installed workbench screenshot is unexpectedly empty: " + output);
-        System.out.println("Native Eclipse screenshot captured (source-only UI): " + output);
+        System.out.println("Native Eclipse screenshot captured: " + output);
     }
 
     @Override public Object start(IApplicationContext context) throws Exception {
