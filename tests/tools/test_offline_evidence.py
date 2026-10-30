@@ -58,6 +58,9 @@ class OfflineEvidenceTests(unittest.TestCase):
         write(graph, first)
         write(graph, second)
         self.assertEqual(first.read_bytes(), second.read_bytes())
+        if os.name != "nt":
+            self.assertEqual(first.stat().st_mode & 0o777, 0o600,
+                             "Exported evidence must be owner-private by default")
         report = inspect(first)
         self.assertEqual(report["status"], "verified-integrity-only")
         self.assertEqual(report["graph_sha256"], plan["files"][0]["sha256"])
