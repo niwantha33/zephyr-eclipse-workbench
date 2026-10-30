@@ -257,3 +257,16 @@ A zero exit code **does not prove** current source freshness, Kconfig semantics,
 successful hardware operation, or valid AI suggestions. This is deliberately
 not the proposed full Kconfiglib/edtlib Truth Check or a learning-study result.
 See [the checker guide](CONFIG_REQUEST_CHECK.md) and its tests.
+
+## ELF nonallocated output-metadata reconciliation
+
+`zew section-audit --build ./build` and
+`zew link-audit --build ./build --section-evidence` now distinguish
+an ELF section **without SHF_ALLOC** from an absent section when the
+GNU map output name, VMA and length match exactly.
+
+The historical `missing-or-unallocated` bucket is retained;
+`nonallocated-exact-metadata` is the independently explained subset,
+and `unexplained-map-outputs` is the remainder. Metadata agreement
+is **not** bytes loaded into the ELF, flashed firmware or source-object
+causality. See [real-vendor evidence and rules](ELF_NONALLOCATED_RECONCILIATION.md).
