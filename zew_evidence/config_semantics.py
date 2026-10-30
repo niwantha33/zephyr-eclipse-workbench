@@ -118,7 +118,9 @@ def _semantics_for_image(build: Path, ninja: Path | None, names: list[str],
         if not zephyr.is_dir():
             raise InputError("Selected Zephyr tree is not a directory")
         library = _load_selected_kconfiglib(zephyr)
-    except (InputError, OSError, ValueError, ImportError):
+    except Exception:
+        # A selected checkout's Kconfig module can fail to import. Never echo
+        # arbitrary source paths or exception text into the public report.
         return {"state": "unavailable", "reason": "generated-kconfig-environment-unavailable", "symbols": {}}
     original_env = os.environ.copy()
     observations = {}
@@ -148,7 +150,9 @@ def _semantics_for_image(build: Path, ninja: Path | None, names: list[str],
                 "visibility": library.TRI_TO_STR.get(symbol.visibility, "unknown"),
                 "definition_count": len(symbol.nodes),
             }
-    except (OSError, ValueError, KeyError, AttributeError, RecursionError):
+    except Exception:
+        # Kconfiglib may reject stale/malformed generated inputs. Preserve
+        # unknown evidence state instead of leaking local paths or traceback.
         return {"state": "unavailable", "reason": "kconfiglib-evaluation-failed", "symbols": {}}
     finally:
         os.environ.clear()
