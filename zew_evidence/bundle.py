@@ -101,7 +101,7 @@ def write(graph: dict, output: Path) -> dict:
     return {"status": "written", "output": destination.name, **plan}
 
 
-def inspect(bundle: Path) -> dict:
+def inspect(bundle: Path, include_graph: bool = False) -> dict:
     source = Path(bundle)
     if source.is_symlink() or not source.is_file():
         raise InputError("Input bundle must be a regular non-symlink file")
@@ -147,7 +147,7 @@ def inspect(bundle: Path) -> dict:
             or not isinstance(graph.get("nodes"), list)
             or not isinstance(graph.get("edges"), list)):
         raise InputError("Not a supported Zephyr evidence graph")
-    return {
+    result = {
         "status": "verified-integrity-only", "format": FORMAT,
         "schema_version": SCHEMA_VERSION, "graph_sha256": record["sha256"],
         "nodes": len(graph["nodes"]), "edges": len(graph["edges"]),
@@ -156,3 +156,8 @@ def inspect(bundle: Path) -> dict:
                         "This archive does not establish flashed, debugged or analysed hardware state",
                         "No archive members were extracted or executed"],
     }
+    if include_graph:
+        # Never return unvalidated raw ZIP bytes: this is the parsed, integrity-
+        # checked, sanitised snapshot. It remains untrusted producer-supplied data.
+        result["graph"] = graph
+    return result
