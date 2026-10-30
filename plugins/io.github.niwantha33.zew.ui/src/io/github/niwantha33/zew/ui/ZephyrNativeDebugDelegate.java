@@ -152,17 +152,25 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         var entries = new java.util.ArrayList<org.eclipse.debug.core.sourcelookup.ISourceContainer>();
         var explicit = director.getSubstitutionsPaths();
         var type = DebugPlugin.getDefault().getLaunchManager().getSourceContainerType(
-                "org.eclipse.cdt.debug.core.containerType.mapEntry");
+                "org.eclipse.cdt.debug.core.containerType.mapping");
         if (type == null) throw failure("CDT source-path mapping support is missing. Repair the CDT Debug installation.", null);
+        StringBuilder memento = new StringBuilder("<mapping name=\"Workbench verified source aliases\" backend_enabled=\"true\">");
+        int added = 0;
         for (var mapping : mappings) {
-            boolean covered = explicit.keySet().stream().map(path -> path.replace('\\', '/'))
-                    .anyMatch(path -> mapping.compilationPath().equals(path)
-                            || mapping.compilationPath().startsWith(path.endsWith("/") ? path : path + "/"));
-            if (!covered) entries.add(type.createSourceContainer("<mapEntry backendPath=\""
-                    + xmlAttribute(mapping.compilationPath()) + "\" localPath=\""
-                    + xmlAttribute(mapping.localPath()) + "\"/>"));
+            boolean covered = director.getCompilationPath(mapping.localPath()) != null
+                    || explicit.keySet().stream().map(path -> path.replace('\\', '/'))
+                        .anyMatch(path -> mapping.compilationPath().equals(path)
+                                || mapping.compilationPath().startsWith(path.endsWith("/") ? path : path + "/"));
+            if (!covered) {
+                String entry = "<mapEntry backendPath=\"" + xmlAttribute(mapping.compilationPath())
+                        + "\" localPath=\"" + xmlAttribute(mapping.localPath()) + "\"/>";
+                memento.append("<mapEntry memento=\"").append(xmlAttribute(entry)).append("\"/>");
+                added++;
+            }
         }
-        if (entries.isEmpty()) return;
+        if (added == 0) return;
+        memento.append("</mapping>");
+        entries.add(type.createSourceContainer(memento.toString()));
         entries.addAll(java.util.Arrays.asList(previous));
         director.setSourceContainers(entries.toArray(org.eclipse.debug.core.sourcelookup.ISourceContainer[]::new));
     }

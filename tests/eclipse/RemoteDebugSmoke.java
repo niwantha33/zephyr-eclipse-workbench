@@ -119,6 +119,8 @@ public final class RemoteDebugSmoke {
             var sourceDirector = (org.eclipse.cdt.dsf.gdb.launching.GdbSourceLookupDirector) launch.getSourceLocator();
             check(sourceDirector.getSubstitutionsPaths().containsKey(System.getProperty("zew.remote.compilationRoot")),
                     "compiler source alias is mapped to the workspace source root");
+            check(sourceDirector.getCompilationPath(source.getLocation().toOSString()) != null,
+                    "CDT breakpoint source lookup recognises the backend-enabled mapping container");
             RemoteDebugSmoke.<Object>ask(session, result -> tracker.getService(IRunControl.class).resume(container,
                     new RequestMonitor(session.getExecutor(), result) { @Override protected void handleSuccess() { result.done(); } }));
             awaitState(session, tracker, container, false);
