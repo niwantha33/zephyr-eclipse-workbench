@@ -171,3 +171,18 @@ must match the Evidence Graph's image-specific SHA-256 records. Results are
 observations only, **not source-to-binary causality, proof of runtime content,
 toolchain freshness, flashed firmware or vulnerability applicability**.
 See [archive/ELF audit constraints](ARCHIVE_ELF_RANGE_AUDIT.md).
+
+## GNU map-to-ELF output-section audit
+
+```sh
+python zew.py section-audit --build ./build
+python zew.py section-audit --build ./sysbuild --image app=app --image mcuboot=mcuboot
+python zew.py link-audit --build ./build --section-evidence
+```
+
+Only exact supported GNU map **output** section headers are paired with
+allocated ELF32/ELF64 section headers by name, VMA and size. SHA-256 of
+bounded file-backed ELF section bytes is observational and does not
+establish their object/source origin, ELF freshness or device state.
+Unsupported ELF/map layouts remain unknown. See
+[section evidence contract](ELF_OUTPUT_SECTION_EVIDENCE.md).
