@@ -21,9 +21,13 @@ public final class HardwarePeripheralIndex {
         String name = device.name().toLowerCase(Locale.ROOT);
         String compatible = device.compatible().toLowerCase(Locale.ROOT);
         String path = device.path().toLowerCase(Locale.ROOT);
-        // Pin configuration groups frequently have names such as adc-default,
-        // uart-tx or spi-pins. They are not independent peripheral controllers.
-        // Classify using real generated node ancestry before checking names.
+        // A real GPIO controller can be nested under a pin-controller on some
+        // generated device trees. A compatible-bearing gpio@ node remains GPIO;
+        // unlike adc-default / uart-tx this is not just a pinctrl state name.
+        // This is navigation classification, NOT proof of physical package pads.
+        if (name.startsWith("gpio@") && compatible.contains("-gpio"))
+            return "GPIO";
+        // Pinctrl state names such as adc-default are not device controllers.
         if (path.contains("/pinctrl/") || path.contains("/pin-controller@")
                 || path.contains("/pin-controller/")) return "Pinctrl";
         if (name.equals("/") || name.equals("soc") || name.equals("aliases")
