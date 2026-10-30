@@ -157,8 +157,11 @@ def _validate_graph(graph: object) -> None:
         elif not isinstance(item["data"].get("bytes"), int):
             raise InputError("Invalid artifact size metadata")
     for edge in edges:
-        if (not isinstance(edge, dict) or edge.get("from") not in valid_ids
-                or edge.get("to") not in valid_ids
+        if (not isinstance(edge, dict)
+                or not isinstance(edge.get("from"), str)
+                or not isinstance(edge.get("to"), str)
+                or edge["from"] not in valid_ids
+                or edge["to"] not in valid_ids
                 or edge.get("type") not in ("contains", "observed-in")):
             raise InputError("Malformed evidence relationship")
     for row in missing:
