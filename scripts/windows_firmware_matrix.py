@@ -170,6 +170,36 @@ def main():
             if hashlib.sha256(kconfig_source.read_bytes()).digest() != before_inspection:
                 raise ValueError('Read-only Kconfiglib inspector changed generated .config')
             print('PASS: MSPM0 generated Kconfiglib environment evaluated without source edits')
+            # Exercise the headless learning checker against this REAL Zephyr
+            # Kconfig tree. This confirms that an arbitrary suggested symbol
+            # can be distinguished from actual definitions without code edits.
+            semantic_snippet = Path(build_arg) / '.zew-semantic-ci.conf'
+            semantic_snippet.write_text(
+                'CONFIG_GPIO=y\\nCONFIG_ZEW_NONEXISTENT_SEMANTIC_CI_20261030=y\\n',
+                encoding='utf-8')
+            try:
+                semantic = subprocess.run(
+                    [str(python), str(REPO / 'zew.py'), 'config-check',
+                     '--build', str(build_arg), '--snippet', str(semantic_snippet),
+                     '--semantic', '--ninja', str(ninja)],
+                    cwd=REPO, env=env, text=True, encoding='utf-8',
+                    errors='replace', capture_output=True, timeout=120)
+                if semantic.returncode != 1:
+                    raise ValueError('Real Kconfiglib semantic checker exit contract failed')
+                payload = json.loads(semantic.stdout)
+                if payload['images'][0]['semantic']['state'] != 'evaluated':
+                    raise ValueError('Real Kconfiglib semantic environment unavailable')
+                by_name = {item['symbol']: item['kconfiglib']
+                           for item in payload['images'][0]['requests']}
+                if (by_name['CONFIG_GPIO']['state'] != 'defined-in-selected-tree'
+                        or by_name['CONFIG_ZEW_NONEXISTENT_SEMANTIC_CI_20261030']['state']
+                        != 'undefined-in-selected-tree'):
+                    raise ValueError('Actual Zephyr symbol existence evaluation failed')
+                if hashlib.sha256(kconfig_source.read_bytes()).digest() != before_inspection:
+                    raise ValueError('Kconfig semantic inspector modified generated .config')
+                print('PASS: real MSPM0 Kconfiglib defined/undefined symbol check')
+            finally:
+                semantic_snippet.unlink(missing_ok=True)
         # Shared Java verifier is compiled by scripts/test_core.py in this job.
         run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', '--base64', verify_argument], workspace, env)
         run([python, root / 'installer/editor_settings.py', '--project', app, '--build', build,
