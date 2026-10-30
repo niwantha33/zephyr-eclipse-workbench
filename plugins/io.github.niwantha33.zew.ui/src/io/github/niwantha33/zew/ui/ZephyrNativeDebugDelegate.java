@@ -294,6 +294,13 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             // registers, variables, call stacks, memory and source stepping.
             super.launch(configuration, mode, launch, monitor);
             if (!monitor.isCanceled() && !launch.isTerminated()) {
+                // CDT can reconstruct/reinitialise source containers while DSF
+                // starts. Validate the active locator, not only the pre-launch
+                // locator from getLaunch(). CDT's source-change notifications
+                // will then propagate this backend mapping to GDB.
+                configureSourceMappings(launch, io.github.niwantha33.zew.core.DebugSourcePaths.inspect(
+                        params.plan().buildDirectory(), Path.of(params.settings().getProperty("application")),
+                        Path.of(params.settings().getProperty("workspace"), "zephyr")));
                 try (var info = console.newMessageStream()) {
                     String name = configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, "");
                     info.println(DebugBreakpointStatus.describe(ResourcesPlugin.getWorkspace().getRoot().getProject(name)));
