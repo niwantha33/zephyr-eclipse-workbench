@@ -270,3 +270,23 @@ The historical `missing-or-unallocated` bucket is retained;
 and `unexplained-map-outputs` is the remainder. Metadata agreement
 is **not** bytes loaded into the ELF, flashed firmware or source-object
 causality. See [real-vendor evidence and rules](ELF_NONALLOCATED_RECONCILIATION.md).
+
+
+### Opt-in Kconfiglib semantic evaluation (Phase-0 increment)
+
+```sh
+python zew.py config-check --build ./build --snippet ./prj.conf --semantic
+python zew.py config-check --build ./build --snippet ./prj.conf --semantic --ninja /path/to/ninja
+```
+
+This extends the snapshot check without changing default behaviour. It reads
+the **exact configured Ninja guiconfig environment** (Ninja `-t commands`,
+not the target itself), then evaluates requested symbols with the selected
+Zephyr checkout's Kconfiglib. It can prove symbol definition in that tree
+and report its type, evaluated dependencies, visibility and currently
+assignable boolean/tristate values. Unknown or failed Kconfiglib evaluation
+is reported as unavailable and does not produce false confirmations. A
+`--semantic` invocation returns 0 only when all supported snapshot values
+match and the semantic checks have no blockers; 1 otherwise; input errors
+return 2. Neither source freshness nor a hypothetical batch reconfiguration
+is proved. See [the full scope and limitations](CONFIG_REQUEST_CHECK.md).

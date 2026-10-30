@@ -49,6 +49,14 @@ class CliPackageTests(unittest.TestCase):
                                       capture_output=True, timeout=15)
             self.assertEqual(matching.returncode, 0, matching.stderr)
             self.assertEqual(json.loads(matching.stdout)["status"], "matching-snapshot")
+            # The optional packaged semantic engine must never claim success
+            # without a generated Ninja/Kconfiglib environment.
+            missing_semantics = subprocess.run([*command_check, "--semantic"],
+                                              cwd=root, env=env, text=True,
+                                              capture_output=True, timeout=15)
+            self.assertEqual(missing_semantics.returncode, 1, missing_semantics.stderr)
+            self.assertEqual(json.loads(missing_semantics.stdout)["images"][0]["semantic"]["state"],
+                             "unavailable")
             request.write_text("CONFIG_GPIO=n\n", encoding="utf-8")
             mismatch = subprocess.run(command_check, cwd=root, env=env, text=True,
                                       capture_output=True, timeout=15)
