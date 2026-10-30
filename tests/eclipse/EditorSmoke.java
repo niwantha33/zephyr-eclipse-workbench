@@ -164,6 +164,10 @@ public final class EditorSmoke implements IApplication {
             hardwareSearch.notifyListeners(org.eclipse.swt.SWT.Selection, cancel);
             check(hardwareSearch.getText().isEmpty() && hardware.getItemCount() > 0,
                     "native search clear icon restores the filtered hardware hierarchy");
+            var studioTabs = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "tabs");
+            studioTabs.setSelection(1);
+            dock.setSelection(1);
+            captureNativeStudioScreenshot("visual-hardware-studio-built-fixture.png");
         } finally {
             snapshotField.set(view, original);
             clear.invoke(view);
@@ -174,6 +178,9 @@ public final class EditorSmoke implements IApplication {
     }
     /** Capture a real installed-workbench screen, not a mockup or generated illustration. */
     private static void captureNativeStudioScreenshot() throws Exception {
+        captureNativeStudioScreenshot("configuration-studio-source-only.png");
+    }
+    private static void captureNativeStudioScreenshot(String screenshotName) throws Exception {
         String directory = System.getenv("ZEW_SCREENSHOT_DIR");
         if (directory == null || directory.isBlank()) return;
         var window = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
@@ -183,7 +190,7 @@ public final class EditorSmoke implements IApplication {
         var area = shell.getBounds().intersection(screen);
         if (area.width < 400 || area.height < 200)
             throw new IllegalStateException("Workbench window is too small for screenshot evidence.");
-        var output = Path.of(directory).resolve("configuration-studio-source-only.png");
+        var output = Path.of(directory).resolve(screenshotName);
         Files.createDirectories(output.getParent());
         var image = new org.eclipse.swt.graphics.Image(shell.getDisplay(), area.width, area.height);
         try {
@@ -196,7 +203,7 @@ public final class EditorSmoke implements IApplication {
         } finally { image.dispose(); }
         if (Files.size(output) < 2048)
             throw new IllegalStateException("Installed workbench screenshot is unexpectedly empty: " + output);
-        System.out.println("Native Eclipse screenshot captured (source-only UI): " + output);
+        System.out.println("Native Eclipse screenshot captured: " + output);
     }
 
     @Override public Object start(IApplicationContext context) throws Exception {
