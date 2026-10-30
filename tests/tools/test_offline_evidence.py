@@ -151,6 +151,26 @@ class OfflineEvidenceTests(unittest.TestCase):
                     inspect(path)
                 self.assertFalse((self.root.parent / "manifest.json").exists())
 
+    def test_authenticated_hash_does_not_bypass_graph_validation(self):
+        graph = collect(self.left)
+        mutated = json.loads(json.dumps(graph))
+        for node in mutated["nodes"]:
+            if node["type"] == "kconfig_observation" and node["data"]["name"] == "CONFIG_GPIO":
+                node["data"]["observed_value"] = "injected-secret-string"
+                break
+        archive = self.root / "invalid-graph.zip"
+        # Writer only packages a graph. The offline reader must independently
+        # reject unsanitised values even with a matching bundle manifest.
+        write(mutated, archive)
+        with self.assertRaisesRegex(InputError, "Unredacted"):
+            inspect(archive, include_graph=True)
+        malformed = json.loads(json.dumps(graph))
+        malformed["edges"][0]["from"] = ["not", "a", "node"]
+        archive2 = self.root / "invalid-edge.zip"
+        write(malformed, archive2)
+        with self.assertRaisesRegex(InputError, "relationship"):
+            inspect(archive2, include_graph=True)
+
     def test_invalid_zip_and_symlinked_input(self):
         invalid = self.root / "not-a-zip.zip"
         invalid.write_bytes(b"garbage")
