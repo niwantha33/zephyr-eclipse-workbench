@@ -89,7 +89,9 @@ public final class ConfigurationStudioView extends ViewPart {
     private Text hardwareDescription, hardwareInspector, hardwarePreview, hardwareValidation;
     private String proposedOverlayDraft = "";
     private TabFolder hardwareDetails;
-    private Table hardwareParameters;
+    private Table hardwareParameters, gpioUsageTable;
+    private Label gpioUsageSummary;
+    private record GpioUsageSelection(String controllerPath, int bit, String detail) {}
     private Label parameterTitle;
     private ChipPinCanvas chipPins;
     private Snapshot hardwarePropertiesSnapshot;
@@ -566,7 +568,30 @@ public final class ConfigurationStudioView extends ViewPart {
         tree = new Text(sourcePage,
                 SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        studioVertical.setWeights(new int[] {73, 27});
+
+        // Evidence across ALL GPIO controllers, not only the selected bank.
+        // Unresolved C calls remain separate: no inferred physical/logical bank.
+        var gpioUsagePage = tab(hardwareDetails, "GPIO Usage");
+        gpioUsagePage.setLayout(new GridLayout(1, false));
+        gpioUsageSummary = new Label(gpioUsagePage, SWT.WRAP);
+        gpioUsageSummary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        gpioUsageSummary.setText("Select GPIO to inspect compiled DTS references and C-source candidates.");
+        gpioUsageTable = new Table(gpioUsagePage,
+                SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.H_SCROLL | SWT.V_SCROLL);
+        gpioUsageTable.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        gpioUsageTable.setHeaderVisible(true);
+        gpioUsageTable.setLinesVisible(true);
+        for (String columnTitle : new String[] {"GPIO / bit", "Evidence", "Reference", "Location"}) {
+            var usageColumn = new TableColumn(gpioUsageTable, SWT.LEFT);
+            usageColumn.setText(columnTitle);
+        }
+        gpioUsageTable.getColumn(0).setWidth(125);
+        gpioUsageTable.getColumn(1).setWidth(145);
+        gpioUsageTable.getColumn(2).setWidth(340);
+        gpioUsageTable.getColumn(3).setWidth(350);
+        gpioUsageTable.addListener(SWT.Selection, event -> inspectSelectedGpioUsage());
+
+        studioVertical.setWeights(new int[] {69, 31});
 
         var hardwareActions = new Composite(hardware, SWT.NONE);
         hardwareActions.setLayout(new GridLayout(4, false));
