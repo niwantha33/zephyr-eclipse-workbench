@@ -244,3 +244,21 @@ passing these prototype tests.
 - **No G0/G1 promotion**. Exact-head Linux/Windows CI and review are needed
   before merge; no release or installation-channel publication is requested.
 - See [configuration request checker](docs/CONFIG_REQUEST_CHECK.md).
+
+## Phase-0 ELF nonallocated metadata reconciliation (development PR)
+
+- Completed PR #76 CI (Linux package, installed Eclipse, seven actual
+  Windows Zephyr firmware targets and qualification) is **SUCCESS**.
+- Independent PR #76 map-context observations showed all 66 historically
+  missing-or-unallocated map output labels exactly matched **nonallocated**
+  ELF section metadata; evidence saved in
+  `docs/evidence/nonallocated_elf_observations_20261030.json`.
+- The read-only section auditor now separates exact `SHF_ALLOC` output
+  layouts and exact *nonallocated metadata* matches. Existing legacy
+  counters remain; new `nonallocated-exact-metadata` and
+  `unexplained-map-outputs` counts disaggregate missing/unallocated.
+- The seven-vendor qualification report enforces additive accounting,
+  keeps original uncovered `PT_LOAD` input rows as unknown, and
+  rejects claims beyond supported metadata.
+- This is not source-to-binary proof, actual flash evidence, firmware
+  fault diagnosis, G0 completion or release-train approval.
