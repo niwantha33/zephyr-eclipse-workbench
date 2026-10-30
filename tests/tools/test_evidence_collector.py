@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Phase-0 collector contract: actual files, stable bytes, no invented semantics."""
 import contextlib
+import hashlib
 import io
+from unittest import mock
 import json
 from pathlib import Path
 import tempfile
@@ -38,6 +40,26 @@ class EvidenceCollectorTests(unittest.TestCase):
         self.assertEqual(why(first, "CONFIG_GPIO")["why_enabled"], "unknown")
         self.assertEqual(why(first, "CONFIG_ADC")["observations"][0]["observed_value"], "n")
         self.assertEqual(why(first, "CONFIG_USER_NOTE")["observations"][0]["observed_value"], "<redacted>")
+
+    def test_parsed_kconfig_is_from_exact_bytes_hashed(self):
+        from zew_evidence import collector
+        config = self.image / "zephyr/.config"
+        original = config.read_bytes()
+        parse = collector._kconfig
+
+        def change_source_after_snapshot(snapshot):
+            self.assertEqual(snapshot, original)
+            config.write_text("CONFIG_GPIO=n\n", encoding="utf-8")
+            return parse(snapshot)
+
+        with mock.patch.object(collector, "_kconfig", side_effect=change_source_after_snapshot):
+            graph = collect(self.image)
+        observations = {n["data"]["name"]: n for n in graph["nodes"]
+                        if n["type"] == "kconfig_observation"}
+        self.assertEqual(observations["CONFIG_GPIO"]["data"]["observed_value"], "y")
+        self.assertEqual(observations["CONFIG_GPIO"]["provenance"]["sha256"],
+                         hashlib.sha256(original).hexdigest())
+        self.assertEqual(config.read_text(encoding="utf-8"), "CONFIG_GPIO=n\n")
 
     def test_public_id_does_not_export_paths(self):
         cfg = self.image / "zephyr/.config"
