@@ -8,6 +8,13 @@ import json
 import sys
 from pathlib import Path
 
+# Managed Windows Python uses python313._pth, which isolates sys.path and
+# omits the script directory. Import only this checked-out CLI's sibling
+# package; do not depend on PYTHONPATH or search the working directory.
+_CLI_ROOT = str(Path(__file__).resolve().parent)
+if _CLI_ROOT not in sys.path:
+    sys.path.insert(0, _CLI_ROOT)
+
 from zew_evidence.collector import InputError, SCHEMA_VERSION, collect, diagnose, why
 from zew_evidence.compare import compare
 from zew_evidence.bundle import preview, write, inspect
