@@ -561,6 +561,50 @@ public final class ConfigurationStudioTests {
             var notGpio = io.github.niwantha33.zew.core.GpioBankEvidence.inspect(
                     gpioNodes.stream().filter(d -> d.name().equals("leds")).findFirst().orElseThrow(), gpioProperties);
             ok(notGpio == null, "GPIO consumer nodes cannot masquerade as a bank");
+            // C-source usage is separate from compiled Devicetree consumers.
+            // A raw device_get_binding name must NEVER be guessed to mean PA.
+            String literalGpioCode = """
+                    const struct device *gpio_dev = device_get_binding("GPIO_0");
+                    gpio_pin_configure(gpio_dev, 15, GPIO_OUTPUT_ACTIVE);
+                    // gpio_pin_configure(gpio_dev, 22, GPIO_OUTPUT_ACTIVE);
+                    const struct device *unknown = device_get_binding("UNKNOWN_GPIO");
+                    gpio_pin_configure(unknown, 7, GPIO_OUTPUT_ACTIVE);
+                    """;
+            var gpioUnlabelled = io.github.niwantha33.zew.core.GpioSourceEvidence.inspect(
+                    "src/main.c", literalGpioCode, java.util.List.of(nestedGpio));
+            ok(gpioUnlabelled.size() == 2 && gpioUnlabelled.get(0).bit() == 15
+                    && gpioUnlabelled.get(0).bindingName().equals("GPIO_0")
+                    && !gpioUnlabelled.get(0).resolved(),
+                    "bare GPIO_0 is not automatically equated with MSPM0 GPIO A");
+            ok(gpioUnlabelled.stream().noneMatch(call -> call.bit() == 22),
+                    "commented out source call never appears as an observed candidate");
+            var gpioLabelled = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    nestedGpio.path(), nestedGpio.name(), "GPIO_0",
+                    nestedGpio.compatible(), "okay", nestedGpio.reg(), nestedGpio.line());
+            var resolvedCalls = io.github.niwantha33.zew.core.GpioSourceEvidence.inspect(
+                    "src/main.c", literalGpioCode, java.util.List.of(gpioLabelled));
+            ok(resolvedCalls.size() == 2 && resolvedCalls.get(0).resolved()
+                    && resolvedCalls.get(0).controllerPath().equals(gpioLabelled.path())
+                    && !resolvedCalls.get(1).resolved(),
+                    "exact generated DTS label resolves only the matching C source candidate");
+            var redirected = io.github.niwantha33.zew.core.GpioSourceEvidence.inspect(
+                    "src/main.c", "const struct device *gpio_dev = device_get_binding(\"GPIO_0\");\n"
+                            + "gpio_dev = another_device;\n"
+                            + "gpio_pin_configure(gpio_dev, 15, GPIO_OUTPUT_ACTIVE);\n",
+                    java.util.List.of(gpioLabelled));
+            ok(redirected.size() == 1 && !redirected.get(0).resolved(),
+                    "pointer reassignment invalidates inferred controller identity");
+            var sourceRoot = root.resolve("source-evidence-fixture");
+            Files.createDirectories(sourceRoot.resolve("src"));
+            Files.createDirectories(sourceRoot.resolve("build"));
+            Files.writeString(sourceRoot.resolve("src/main.c"), literalGpioCode);
+            Files.writeString(sourceRoot.resolve("build/generated.c"),
+                    "const struct device *x = device_get_binding(\"GPIO_0\");\n"
+                    + "gpio_pin_configure(x, 20, GPIO_OUTPUT_ACTIVE);\n");
+            var scanned = io.github.niwantha33.zew.core.GpioSourceEvidence.scanProject(
+                    sourceRoot, java.util.List.of(gpioLabelled));
+            ok(scanned.size() == 2 && scanned.stream().noneMatch(call -> call.bit() == 20),
+                    "project source scan remains bounded and excludes build-generated sources");
             System.out.println("ConfigurationStudioTests PASS");
         } finally {
             try (var paths = Files.walk(root)) {

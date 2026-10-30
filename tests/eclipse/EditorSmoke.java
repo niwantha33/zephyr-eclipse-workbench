@@ -22,7 +22,8 @@ public final class EditorSmoke implements IApplication {
         var field = type.getDeclaredField(name); field.setAccessible(true); return field.get(view);
     }
     private static void verifyStudioNavigation(Object view, Class<?> type, java.lang.reflect.Field snapshotField,
-            Object original, org.eclipse.swt.widgets.Table features, org.eclipse.swt.widgets.Tree hardware) throws Exception {
+            Object original, org.eclipse.swt.widgets.Table features, org.eclipse.swt.widgets.Tree hardware,
+            Path fixture) throws Exception {
         String dts = """
                 /* Generated fixture */
                 / {
@@ -51,6 +52,7 @@ public final class EditorSmoke implements IApplication {
                                 gpio-controller;
                                 #gpio-cells = <2>;
                                 phandle = <0x2a>;
+                                label = "GPIO_0";
                             };
                             gpio@400a2000 {
                                 compatible = "ti,mspm0-gpio";
@@ -94,6 +96,14 @@ public final class EditorSmoke implements IApplication {
         var refresh = type.getDeclaredMethod("refreshHardware"); refresh.setAccessible(true);
         var reveal = type.getDeclaredMethod("revealHardwareSource"); reveal.setAccessible(true);
         var history = type.getDeclaredMethod("navigateHistory", int.class); history.setAccessible(true);
+        var gpioSource = fixture.resolve("src/gpio_studio_source_smoke.c");
+        Files.createDirectories(gpioSource.getParent());
+        Files.writeString(gpioSource, """
+                const struct device *gpio_dev = device_get_binding("GPIO_0");
+                gpio_pin_configure(gpio_dev, 15, GPIO_OUTPUT_ACTIVE);
+                const struct device *unknown = device_get_binding("UNKNOWN_GPIO");
+                gpio_pin_configure(unknown, 12, GPIO_OUTPUT_ACTIVE);
+                """);
         try {
             snapshotField.set(view, data);
             source.setText(dts);
@@ -219,12 +229,18 @@ public final class EditorSmoke implements IApplication {
             check(validation.getText().contains("gpio@400a0000"),
                     "GPIO selection updates the evidence dock to the actual built controller");
             check(((Integer) chip.getClass().getMethod("gpioBitPositions").invoke(chip)) == 32
-                    && ((Integer) chip.getClass().getMethod("gpioConsumerCount").invoke(chip)) == 0,
-                    "GPIO A displays 32 possible register bit indexes, not 32 physical pads");
+                    && ((Integer) chip.getClass().getMethod("gpioConsumerCount").invoke(chip)) == 0
+                    && ((Integer) chip.getClass().getMethod("sourceCandidateCount").invoke(chip)) == 1,
+                    "GPIO A has one separately identified C source candidate at bit 15");
+            check(validation.getText().contains("gpio_studio_source_smoke.c")
+                    && validation.getText().contains("UNRESOLVED DEVICE NAME")
+                    && validation.getText().contains("15, GPIO_OUTPUT_ACTIVE"),
+                    "evidence shows C-call provenance and unknown device lookup without guessing its bank");
             var gpioB = grouped.getItem(0).getItem(1);
             grouped.setSelection(gpioB);
             grouped.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             check(((Integer) chip.getClass().getMethod("gpioBitPositions").invoke(chip)) == 32
+                    && ((Integer) chip.getClass().getMethod("sourceCandidateCount").invoke(chip)) == 0
                     && ((Integer) chip.getClass().getMethod("gpioConsumerCount").invoke(chip)) == 1
                     && validation.getText().contains("Observed consumer references: 1")
                     && java.util.Arrays.stream(parameterTable.getItems()).anyMatch(
@@ -233,6 +249,10 @@ public final class EditorSmoke implements IApplication {
             ((org.eclipse.swt.widgets.TabFolder) studioField(view, type, "tabs")).setSelection(1);
             dock.setSelection(1);
             captureNativeStudioScreenshot("gpio-bank-evidence.png");
+            grouped.setSelection(gpioController);
+            grouped.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            dock.setSelection(1);
+            captureNativeStudioScreenshot("gpio-source-candidate.png");
             kind.select(kind.indexOf("Other"));
             kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             var soc = hardware.getItem(0).getItem(0);
@@ -255,6 +275,7 @@ public final class EditorSmoke implements IApplication {
             dock.setSelection(1);
             captureNativeStudioScreenshot("visual-hardware-studio-built-fixture.png");
         } finally {
+            Files.deleteIfExists(gpioSource);
             snapshotField.set(view, original);
             clear.invoke(view);
             hardwareSearch.setText(""); hardwareState.select(0);
@@ -450,7 +471,7 @@ public final class EditorSmoke implements IApplication {
                     var overridesCount = (org.eclipse.swt.widgets.Label) overridesField.get(view);
                     check(!"—".equals(overridesCount.getText()),
                             "live project override summary is populated");
-                    verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw);
+                    verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw, fixture);
                     captureNativeStudioScreenshot();
                 } catch (Throwable error) { studioFailure.set(error); }
             });

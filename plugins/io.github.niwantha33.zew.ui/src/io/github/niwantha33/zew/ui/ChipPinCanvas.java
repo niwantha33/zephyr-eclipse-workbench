@@ -10,6 +10,7 @@ import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import io.github.niwantha33.zew.core.DevicetreeParameters.PinRoute;
 import io.github.niwantha33.zew.core.GpioBankEvidence;
+import io.github.niwantha33.zew.core.GpioSourceEvidence;
 
 /**
  * Read-only logical pin-route planner. Values come exclusively from generated
@@ -28,6 +29,7 @@ public final class ChipPinCanvas extends Canvas {
     private Consumer<PinRoute> selection = route -> {};
     private int selected = -1;
     private GpioBankEvidence.Bank bank;
+    private List<GpioSourceEvidence.Call> resolvedSourceCalls = List.of();
     private final List<Rectangle> bankHitAreas = new ArrayList<>();
     private final List<Integer> bankHitBits = new ArrayList<>();
     private Consumer<Integer> bankSelection = bit -> {};
@@ -177,7 +179,7 @@ public final class ChipPinCanvas extends Canvas {
         var display = getDisplay();
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
         gc.drawText("GPIO REGISTER BANK  /  LOGICAL INDEXES", 16, 12, true);
-        gc.drawText("Observed DTS consumers are highlighted. Grey means availability unknown.", 16, 36, true);
+        gc.drawText("DTS references: tinted. C-call candidates: marked C. Grey: unknown.", 16, 36, true);
         if (bank.bitPositions() < 1) {
             gc.drawText("GPIO width not recorded in the selected build.", 16, 79, true);
             gc.drawText("Inspect consumers in Connections; no pin range is invented.", 16, 105, true);
@@ -194,26 +196,34 @@ public final class ChipPinCanvas extends Canvas {
             int count = 0;
             for (var usage : bank.uses()) if (usage.bit() == bit) count++;
             boolean selectedSlot = selectedBit == bit;
+            boolean fromCode = false;
+            for (var call : resolvedSourceCalls) {
+                if (call.bit() == bit) {
+                    fromCode = true;
+                    break;
+                }
+            }
             gc.setBackground(display.getSystemColor(selectedSlot ? SWT.COLOR_LIST_SELECTION
                     : count > 0 ? SWT.COLOR_INFO_BACKGROUND : SWT.COLOR_WIDGET_BACKGROUND));
             gc.setForeground(display.getSystemColor(selectedSlot ? SWT.COLOR_LIST_SELECTION_TEXT
                     : SWT.COLOR_WIDGET_FOREGROUND));
             gc.fillRoundRectangle(x, y, width, 27, 5, 5);
             gc.drawRoundRectangle(x, y, width, 27, 5, 5);
-            gc.drawText(bank.bitLabel(bit), x + 6, y + 5, true);
+            gc.drawText(bank.bitLabel(bit) + (fromCode ? " C" : ""), x + 6, y + 5, true);
             bankHitAreas.add(new Rectangle(x, y, width, 27));
             bankHitBits.add(bit);
         }
         int bottom = startY + ((bank.bitPositions() + columns - 1) / columns) * 34 + 6;
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
-        gc.drawText(bank.uses().size() + " observed GPIO consumer references in the compiled DTS.", 16, bottom, true);
-        gc.drawText("Register bit indexes do NOT prove bonded pins or runtime direction.", 16, bottom + 24, true);
+        gc.drawText(bank.uses().size() + " built DTS references · "
+                + resolvedSourceCalls.size() + " C source candidates (not executed).", 16, bottom, true);
+        gc.drawText("Neither source calls nor DTS prove live direction or bonded pins.", 16, bottom + 24, true);
     }
 
     private void paintBankConnections(org.eclipse.swt.graphics.GC gc, Rectangle area) {
         var display = getDisplay();
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
-        gc.drawText("GPIO CONSUMERS  /  COMPILED DEVICETREE", 16, 12, true);
+        gc.drawText("GPIO REFERENCES  /  DTS + C SOURCE", 16, 12, true);
         gc.drawText("Select a reference to inspect the exact consumer and its source line.", 16, 34, true);
         if (bank.uses().isEmpty()) {
             gc.drawText("No resolvable GPIO consumers for this controller in the build.", 16, 72, true);
@@ -239,6 +249,21 @@ public final class ChipPinCanvas extends Canvas {
         }
         if (bank.uses().size() > 40)
             gc.drawText("Additional references in the evidence dock.", 16, 75 + row * 30, true);
+        for (var call : resolvedSourceCalls) {
+            if (row >= 40) break;
+            int y = 68 + row * 30;
+            gc.setBackground(display.getSystemColor(selectedBit == call.bit()
+                    ? SWT.COLOR_LIST_SELECTION : SWT.COLOR_WIDGET_BACKGROUND));
+            gc.setForeground(display.getSystemColor(selectedBit == call.bit()
+                    ? SWT.COLOR_LIST_SELECTION_TEXT : SWT.COLOR_WIDGET_FOREGROUND));
+            gc.fillRectangle(16, y, Math.max(150, area.width - 32), 26);
+            String summary = bank.bitLabel(call.bit()) + "  C candidate:  "
+                    + call.sourceFile() + ":" + call.line() + "  [" + call.flags() + "]";
+            gc.drawText(shorten(gc, summary, Math.max(90, area.width - 50)), 22, y + 5, true);
+            bankHitAreas.add(new Rectangle(16, y, Math.max(150, area.width - 32), 26));
+            bankHitBits.add(call.bit());
+            row++;
+        }
     }
 
     private void paintPackageUnavailable(org.eclipse.swt.graphics.GC gc, Rectangle area) {
@@ -305,7 +330,7 @@ public final class ChipPinCanvas extends Canvas {
                 + (routes.size() > MAX_VISIBLE_ROUTES ? 24 : 0);
         int h = mode == Mode.PACKAGE ? 480
                 : bank != null ? mode == Mode.CONNECTIONS
-                    ? Math.max(190, Math.min(40, bank.uses().size()) * 30 + 112)
+                    ? Math.max(190, Math.min(40, bank.uses().size() + resolvedSourceCalls.size()) * 30 + 112)
                     : Math.max(220, 67 + ((bank.bitPositions() + 7) / 8) * 34 + 67)
                 : mode == Mode.CONNECTIONS ? Math.max(190, count * 28 + 105)
                 : "Select a peripheral".equals(controller) ? 185 : Math.max(238, signalHeight);
@@ -330,6 +355,7 @@ public final class ChipPinCanvas extends Canvas {
 
     public void showRoutes(String path, List<PinRoute> newRoutes, Consumer<PinRoute> onSelection) {
         bank = null;
+        resolvedSourceCalls = List.of();
         selectedBit = -1;
         controller = path;
         routes = List.copyOf(newRoutes);
@@ -342,6 +368,7 @@ public final class ChipPinCanvas extends Canvas {
     public void showGpioBank(GpioBankEvidence.Bank evidence, Consumer<Integer> onSelection) {
         if (evidence == null) return;
         bank = evidence;
+        resolvedSourceCalls = List.of();
         bankSelection = onSelection == null ? bit -> {} : onSelection;
         controller = evidence.controllerPath();
         routes = List.of();
@@ -365,6 +392,17 @@ public final class ChipPinCanvas extends Canvas {
             redraw();
         }
     }
+
+    /** Only exact controller-name matches are marked as C candidates. */
+    public void showSourceCandidates(List<GpioSourceEvidence.Call> calls) {
+        if (bank == null) return;
+        resolvedSourceCalls = calls == null ? List.of() : calls.stream()
+                .filter(call -> bank.controllerPath().equals(call.controllerPath()))
+                .filter(call -> call.bit() < bank.bitPositions())
+                .toList();
+        setMode(mode);
+    }
+    public int sourceCandidateCount() { return resolvedSourceCalls.size(); }
 
     public int routeCount() { return routes.size(); }
     /** Read-only evidence counts used by installed SWT integration tests. */

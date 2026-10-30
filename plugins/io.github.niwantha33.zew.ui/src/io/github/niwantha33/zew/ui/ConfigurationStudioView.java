@@ -50,6 +50,7 @@ import io.github.niwantha33.zew.core.ConfigurationDiagnosis;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.GpioBankEvidence;
+import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
@@ -1086,6 +1087,32 @@ public final class ConfigurationStudioView extends ViewPart {
             }
         });
         if (gpio != null) {
+            List<GpioSourceEvidence.Call> sourceCalls = List.of();
+            String sourceScanNote = "";
+            if (project != null && project.isAccessible() && project.getLocation() != null) {
+                try {
+                    sourceCalls = GpioSourceEvidence.scanProject(
+                            project.getLocation().toFile().toPath(),
+                            DevicetreeHardware.inspect(snapshot.devicetree()));
+                } catch (java.io.IOException | IllegalArgumentException error) {
+                    sourceScanNote = "\nC SOURCE INSPECTION UNAVAILABLE: " + error.getClass().getSimpleName();
+                }
+            } else {
+                sourceScanNote = "\nC source scan unavailable: no accessible application.";
+            }
+            final List<GpioSourceEvidence.Call> appCalls = sourceCalls;
+            var resolvedForBank = appCalls.stream()
+                    .filter(call -> device.path().equals(call.controllerPath())).toList();
+            var unresolvedCalls = appCalls.stream().filter(call -> !call.resolved()).toList();
+            StringBuilder sourceNotes = new StringBuilder("\nC SOURCE CALLS (static candidates, NOT runtime proof):")
+                    .append("\nExact device-name matches for this bank: ").append(resolvedForBank.size())
+                    .append("\nUnresolved bindings in app: ").append(unresolvedCalls.size());
+            for (var call : appCalls) {
+                if (sourceNotes.length() > 2000) break;
+                if (device.path().equals(call.controllerPath()) || !call.resolved())
+                    sourceNotes.append("\n").append(call.description());
+            }
+            sourceNotes.append(sourceScanNote);
             hardwareValidation.setText("GPIO CONTROLLER FROM COMPILED DTS  |  " + device.path()
                     + "\nState: " + (device.enabled() ? "okay or inherited okay" : device.status())
                     + "\nObserved consumer references: " + gpio.uses().size()
@@ -1094,13 +1121,19 @@ public final class ConfigurationStudioView extends ViewPart {
                     + " runtime direction, or proof that the pin is bonded."
                     + (buildOutdated ? "\nBUILD REQUIRED: compiled values may be stale." : "")
                     + "\nSelect an index to inspect observed consumers; edit through a source overlay."
-                    + "\nRebuild the exact target to validate changes.");
+                    + "\nRebuild the exact target to validate changes."
+                    + sourceNotes);
             chipPins.showGpioBank(gpio, bit -> {
                 var matches = gpio.uses().stream().filter(usage -> usage.bit() == bit).toList();
                 StringBuilder info = new StringBuilder("GPIO LOGICAL INDEX  " + gpio.bitLabel(bit))
                         .append("\nController: ").append(gpio.controllerPath())
                         .append("\nCompiled consumer references: ").append(matches.size())
                         .append("\nThis is not a package pad, runtime register reading or available-pin claim.");
+                for (var call : resolvedForBank) if (call.bit() == bit)
+                    info.append("\nC SOURCE CANDIDATE (not executed): ").append(call.description());
+                for (var call : unresolvedCalls) if (call.bit() == bit)
+                    info.append("\nUNRESOLVED C REFERENCE: ").append(call.description())
+                            .append("\nNot assigned to this bank without a matching DTS device name.");
                 for (var usage : matches) {
                     info.append("\n").append(usage.consumerPath()).append(" / ")
                             .append(usage.property()).append(" at zephyr.dts:")
@@ -1116,6 +1149,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 }
                 hardwareInspector.setText(info.toString());
             });
+            chipPins.showSourceCandidates(resolvedForBank);
         }
         chipPins.setMode(chipPins.mode());
         parameterTitle.getParent().layout(true, true);
