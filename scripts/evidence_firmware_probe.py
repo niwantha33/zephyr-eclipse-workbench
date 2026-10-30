@@ -20,6 +20,7 @@ from zew_evidence.collector import collect
 from zew_evidence.compilation import inspect as compilation
 from zew_evidence.link_audit import audit as range_audit
 from zew_evidence.section_audit import audit as section_audit
+from zew_evidence.map_context import audit as map_context_audit
 
 ARTIFACTS = ("zephyr/.config", "compile_commands.json", "zephyr/zephyr.map",
              "zephyr/zephyr.elf")
@@ -50,6 +51,7 @@ def validate(build: Path, source_root: Path) -> dict:
     compiled = compilation(build, "src/main.c", source_root, graph=graph)["images"][0]
     linked = range_audit(build, graph=graph)["images"][0]
     sections = section_audit(build, graph=graph)["images"][0]
+    context = map_context_audit(build, graph=graph)["images"][0]
     after = fingerprints(build)
     if before != after:
         raise ValueError("Evidence inspection unexpectedly changed build artifact bytes")
@@ -66,6 +68,19 @@ def validate(build: Path, source_root: Path) -> dict:
         raise ValueError("Real linker-map analysis lost its provenance")
     if sections["provenance"]["elf"] is None:
         raise ValueError("Real ELF section analysis lost its provenance")
+    if (context["provenance"]["elf"] is None or context["provenance"]["map"] is None
+            or context["provenance"]["elf"]["sha256"] != before["zephyr/zephyr.elf"]
+            or context["provenance"]["map"]["sha256"] != before["zephyr/zephyr.map"]):
+        raise ValueError("GNU map context has incomplete or stale real-build provenance")
+    if context["status"] not in (
+            "gnu-map-output-context-partially-observed",
+            "gnu-map-context-unresolved", "no-supported-gnu-output-or-input-records"):
+        raise ValueError("GNU map context format or ELF unsupported; do not claim coverage")
+    counts = context["context"]
+    if (counts is None or
+            sum(counts["output_header_classes"].values()) != counts["output_headers"] or
+            sum(counts["input_context_classes"].values()) != counts["supported_input_rows"]):
+        raise ValueError("GNU map context accounting inconsistent")
     output = {
         "compilation": {"status": compiled["status"],
                         "matching_commands": compiled["matching_commands"]},
@@ -76,6 +91,8 @@ def validate(build: Path, source_root: Path) -> dict:
         "elf_sections": {"status": sections["status"],
                          "map_output_sections": sections["map_output_sections"],
                          "comparison": sections["comparison"]},
+        "gnu_map_context": {"status": context["status"], "confidence": context["confidence"],
+                            "observations": counts},
         "digests": {key: before[key] for key in ARTIFACTS},
         "claim_limit": "Generated build artifact inspection only; no runtime or flashed-device verification",
     }
