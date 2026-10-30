@@ -40,6 +40,11 @@ public final class CoreBuildCompatibilitySmoke {
         config.build(IncrementalProjectBuilder.FULL_BUILD, Map.of(), null, new NullProgressMonitor());
         check(project.findMarkers(UI + ".configurationProblem", false, IResource.DEPTH_ZERO).length == 1,
                 "native configuration waits for missing board without invoking host compiler");
+        // Capture the real selected native config before reproducing the
+        // queued CMake-to-West migration. It must survive the conversion.
+        var nativeBefore = Arrays.stream(project.getBuildConfigs()).map(IBuildConfiguration::getName)
+                .filter(name -> name.startsWith(UI + ".westProvider/")).toList();
+        check(!nativeBefore.isEmpty(), "West selection persisted before CMake migration");
         var launchbar = CCorePlugin.getService(ILaunchBarManager.class);
         var errors = Collections.synchronizedList(new ArrayList<IStatus>());
         var family = org.eclipse.cdt.debug.core.launch.CoreBuildLaunchBarTracker.JOB_FAMILY_CORE_BUILD_LAUNCH_BAR_TRACKER;
@@ -68,6 +73,9 @@ public final class CoreBuildCompatibilitySmoke {
             Job.getJobManager().join(family, new NullProgressMonitor());
             check(errors.isEmpty(), "queued Change Build Configurations jobs survive CMake-to-West conversion: " + errors);
         } finally { Job.getJobManager().removeJobChangeListener(observer); }
+        var nativeAfter = Arrays.stream(project.getBuildConfigs()).map(IBuildConfiguration::getName).toList();
+        check(nativeAfter.containsAll(nativeBefore),
+                "CMake conversion preserves preexisting selected native West configurations");
         verifyRestored();
     }
     public static void verifyRestored() throws Exception {
