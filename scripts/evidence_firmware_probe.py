@@ -72,7 +72,7 @@ def validate(build: Path, source_root: Path) -> dict:
         "link_range": {"status": linked["status"],
                        "map_sections": linked["map_sections"],
                        "elf_ranges": linked["elf_ranges"],
-                       "archive_references": linked["archive"]["referenced_unique_members"]},
+                       "archive_references": (linked["archive"] or {}).get("referenced_unique_members", 0)},
         "elf_sections": {"status": sections["status"],
                          "map_output_sections": sections["map_output_sections"],
                          "comparison": sections["comparison"]},
