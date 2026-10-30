@@ -102,7 +102,11 @@ public final class DevicetreeOverlayChanges {
         // A junction or symlink inside the project must not bypass the
         // explicit, original-path source-ownership check.
         Path sourceRoot = application.toAbsolutePath().normalize();
-        if (!original.startsWith(sourceRoot))
+        // commit() receives the canonical path from Preview; preview() may
+        // receive the spelling supplied by the user (including a Windows 8.3
+        // alias). Both must be accepted only after the canonical containment
+        // check above succeeded.
+        if (!original.startsWith(sourceRoot) && !original.startsWith(root))
             throw new IOException("Overlay does not belong to the selected application.");
         for (Path part = original; part != null && !part.equals(sourceRoot); part = part.getParent())
             if (Files.isSymbolicLink(part)) throw new IOException("Refusing to update a symlinked overlay path.");
