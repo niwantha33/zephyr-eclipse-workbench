@@ -38,6 +38,10 @@ public final class EditorSmoke implements IApplication {
                                 zephyr,resolution = <12>;
                             };
                         };
+                        uart@5000 {
+                            compatible = "ti,mspm0-uart";
+                            status = "okay";
+                        };
                     };
                     pinctrl {
                         adc-default {
@@ -105,6 +109,26 @@ public final class EditorSmoke implements IApplication {
             var revealParameter = type.getDeclaredMethod("revealParameterSource"); revealParameter.setAccessible(true);
             revealParameter.invoke(view);
             check(source.getSelectionText().contains("zephyr,gain"), "ADC parameter reveals its exact DTS declaration");
+            var kind = (org.eclipse.swt.widgets.Combo) studioField(view, type, "hardwareKind");
+            check(kind.indexOf("ADC") >= 0 && kind.indexOf("Other") >= 0,
+                    "installed hardware explorer exposes controller category navigation");
+            hardwareState.select(0);
+            hardwareSearch.setText("");
+            kind.select(kind.indexOf("ADC"));
+            kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(hardware.getItemCount() > 0
+                    && hardware.getItem(0).getItem(0).getItem(0).getText().equals("adc@4000")
+                    && hardware.getItem(0).getItem(0).getItem(0).getItemCount() == 1
+                    && hardware.getItem(0).getItem(0).getItem(0).getItem(0).getText().equals("channel@0"),
+                    "ADC category keeps child channels available for configuration");
+            kind.select(kind.indexOf("Other"));
+            kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            var soc = hardware.getItem(0).getItem(0);
+            check(java.util.Arrays.stream(soc.getItems()).noneMatch(
+                    node -> node.getText().equals("uart@5000")),
+                    "Other category never shows an unrelated UART via the generic SoC container");
+            kind.select(0);
+            kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             hardwareSearch.setText("no-such-controller");
             check(hardware.getItemCount() == 0, "hardware search has an honest empty state");
             var cancel = new org.eclipse.swt.widgets.Event(); cancel.detail = org.eclipse.swt.SWT.ICON_CANCEL;
