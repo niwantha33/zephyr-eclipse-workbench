@@ -71,6 +71,8 @@ def qualify(results: object) -> dict:
     unresolved_scenarios = 0
     total_uncovered = 0
     total_unallocated = 0
+    total_nonallocated_reconciled = 0
+    total_unexplained_outputs = 0
     for scenario, target in EXPECTED.items():
         raw = by_scenario[scenario]
         if raw.get("target") != target:
@@ -119,8 +121,21 @@ def qualify(results: object) -> dict:
             raise QualificationError(f"{scenario}: exact ELF output-section/byte evidence absent")
         if any(section_counts[key] > 0 for key in FATAL_SECTION_BUCKETS):
             raise QualificationError(f"{scenario}: actual address/size mismatch or ambiguous identity needs review")
+        reconciled = _number(counts, "nonallocated-exact-metadata", scenario)
+        unexplained = _number(counts, "unexplained-map-outputs", scenario)
+        if (reconciled > section_counts["missing-or-unallocated"]
+                or unexplained + reconciled != section_counts["missing-or-unallocated"]):
+            raise QualificationError(f"{scenario}: nonallocated ELF metadata accounting inconsistent")
+        # A real nonallocated ELF header explains its metadata identity but
+        # does not imply the section occupies device flash or PT_LOAD RAM.
+        # Status should not remain "disagreement" solely for this metadata.
+        vma_disagreement = sum(_number(counts, key, scenario) for key in (
+            "uncovered-vma", "ambiguous-vma", "other-vma"))
+        if (sections["status"] == "map-elf-section-disagreement-or-unknown") != bool(
+                unexplained + vma_disagreement):
+            raise QualificationError(f"{scenario}: ELF section status contradicts explained/unexplained counts")
         unresolved = (count["uncovered"] + count["ambiguous"] + count["invalid"]
-                      + section_counts["missing-or-unallocated"])
+                      + unexplained + vma_disagreement)
         partial = unresolved > 0
         if partial != (sections["status"] == "map-elf-section-disagreement-or-unknown"
                        or link["status"] == "elf-range-conflict-or-unknown"):
@@ -128,6 +143,8 @@ def qualify(results: object) -> dict:
         unresolved_scenarios += int(partial)
         total_uncovered += count["uncovered"]
         total_unallocated += section_counts["missing-or-unallocated"]
+        total_nonallocated_reconciled += reconciled
+        total_unexplained_outputs += unexplained
         observations.append({
             "scenario": scenario, "target": target,
             "compiler_command_observation": "confirmed-in-database-only",
@@ -136,6 +153,8 @@ def qualify(results: object) -> dict:
             "layout_coverage": "partial-unknown" if partial else "supported-records-consistent",
             "uncovered_map_input_ranges": count["uncovered"],
             "map_output_sections_without_allocated_elf_match": section_counts["missing-or-unallocated"],
+            "nonallocated_elf_output_metadata_matched": reconciled,
+            "unexplained_map_output_sections": unexplained,
             "file_backed_map_ranges": count["file-backed-vma"],
             "exact_elf_output_section_layouts": section_counts["exact-layout"],
             "sha256": {"map": digests["zephyr/zephyr.map"],
@@ -153,11 +172,14 @@ def qualify(results: object) -> dict:
         "unresolved_scenario_count": unresolved_scenarios,
         "uncovered_map_input_ranges": total_uncovered,
         "map_output_sections_without_allocated_elf_match": total_unallocated,
+        "nonallocated_elf_output_metadata_matched": total_nonallocated_reconciled,
+        "unexplained_map_output_sections": total_unexplained_outputs,
         "observations": observations,
         "limitations": [
             "CI passing proves the defined minimum observation contract, not complete coverage.",
             "Uncovered map input rows may represent non-loadable or non-allocated data; not firmware defects.",
-            "A map output name without an allocated ELF section is unresolved, not proven linker failure.",
+            "A map output without SHF_ALLOC can match real nonallocated ELF metadata; this does not mean it was flashed.",
+            "Only unmatched ELF output names and other explicit conflicts remain unresolved; none proves linker failure.",
             "Source compilation command presence is not source-to-binary causality.",
             "No device, flash, probe, execution or physical measurement is verified.",
         ],
