@@ -268,6 +268,68 @@ public final class ConfigurationStudioTests {
                     "right-click prj.conf focuses project choices");
             ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.hardware("boards/custom.overlay"),
                     "right-click overlay opens Devicetree tab");
+            String peripheralDts = """
+                    /* Generated build fixture */
+                    / {
+                        pinctrl {
+                            adc_pins: adc-default {
+                                phandle = <0x10>;
+                                group1 {
+                                    pinmux = <0x1234
+                                              0x5678>;
+                                    bias-disable;
+                                };
+                            };
+                        };
+                        soc {
+                            adc@4000 {
+                                compatible = "ti,mspm0-adc";
+                                status = "disabled";
+                                pinctrl-0 = <0x10>;
+                                pinctrl-names = "default";
+                                channel@0 {
+                                    reg = <0>;
+                                    zephyr,gain = "ADC_GAIN_1";
+                                    zephyr,reference = "ADC_REF_INTERNAL";
+                                    zephyr,resolution = <12>;
+                                };
+                            };
+                            uart@5000 {
+                                compatible = "vendor,uart";
+                                note = "https://example.invalid/device";
+                            };
+                        };
+                    };
+                    """;
+            var properties = io.github.niwantha33.zew.core.DevicetreeParameters.inspect(peripheralDts);
+            var adcParameters = io.github.niwantha33.zew.core.DevicetreeParameters.forDevice(properties, "/soc/adc@4000");
+            ok(adcParameters.stream().anyMatch(p -> p.path().equals("/soc/adc@4000/channel@0")
+                    && p.name().equals("zephyr,gain") && p.value().equals("\"ADC_GAIN_1\"")),
+                    "ADC parameter view retains per-channel values and DTS string syntax");
+            ok(adcParameters.stream().noneMatch(p -> p.path().equals("/soc/uart@5000")),
+                    "ADC parameters exclude unrelated controllers");
+            var routes = io.github.niwantha33.zew.core.DevicetreeParameters.pinRoutes(properties, "/soc/adc@4000");
+            ok(routes.size() == 1 && routes.get(0).path().equals("/pinctrl/adc-default/group1")
+                    && routes.get(0).value().contains("0x1234") && routes.get(0).value().contains("0x5678"),
+                    "chip schematic resolves numeric pinctrl phandles and multiline pinmux without guessing pads");
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.pinRoutes(properties, "/soc/uart@5000").isEmpty(),
+                    "a peripheral without pin data never gains invented chip pins");
+            ok(properties.stream().anyMatch(p -> p.name().equals("bias-disable") && p.value().isEmpty()),
+                    "boolean pinctrl parameters remain boolean");
+            ok(properties.stream().anyMatch(p -> p.name().equals("note") && p.value().contains("https://")),
+                    "comment stripping preserves slashes inside property strings");
+            var resolution = adcParameters.stream().filter(p -> p.name().equals("zephyr,resolution")).findFirst().orElseThrow();
+            ok(peripheralDts.split("\\R")[resolution.line() - 1].contains("zephyr,resolution"),
+                    "parameter source reveal uses its exact physical source line");
+            String request = io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(resolution, "<10>");
+            ok(request.contains("&{/soc/adc@4000/channel@0}") && request.contains("zephyr,resolution = <10>;"),
+                    "overlay draft targets only the selected ADC channel");
+            boolean malformedRequestRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(resolution, "<10>; evil;"); }
+            catch (IllegalArgumentException expected) { malformedRequestRejected = true; }
+            ok(malformedRequestRejected, "overlay draft rejects extra property statements");
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.inspect("").isEmpty(),
+                    "an unbuilt project has no fabricated ADC parameters");
             System.out.println("ConfigurationStudioTests PASS");
         } finally {
             try (var paths = Files.walk(root)) {

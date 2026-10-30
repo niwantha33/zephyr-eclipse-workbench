@@ -23,8 +23,32 @@ public final class EditorSmoke implements IApplication {
     }
     private static void verifyStudioNavigation(Object view, Class<?> type, java.lang.reflect.Field snapshotField,
             Object original, org.eclipse.swt.widgets.Table features, org.eclipse.swt.widgets.Tree hardware) throws Exception {
-        String dts = "/* Generated fixture */\n/ {\n    soc {\n        adc@4000 {\n"
-                + "            compatible = \"ti,mspm0-adc\";\n            status = \"disabled\";\n        };\n    };\n};\n";
+        String dts = """
+                /* Generated fixture */
+                / {
+                    soc {
+                        adc@4000 {
+                            compatible = "ti,mspm0-adc";
+                            status = "disabled";
+                            pinctrl-0 = <0x10>;
+                            channel@0 {
+                                reg = <0>;
+                                zephyr,gain = "ADC_GAIN_1";
+                                zephyr,reference = "ADC_REF_INTERNAL";
+                                zephyr,resolution = <12>;
+                            };
+                        };
+                    };
+                    pinctrl {
+                        adc-default {
+                            phandle = <0x10>;
+                            group1 {
+                                pinmux = <0x1234>;
+                            };
+                        };
+                    };
+                };
+                """;
         var data = new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Snapshot(java.util.List.of(
                 new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("ADC", "n", null, 0),
                 new io.github.niwantha33.zew.core.ConfigurationStudioFiles.Option("GPIO", "y", null, 0),
@@ -63,6 +87,24 @@ public final class EditorSmoke implements IApplication {
             hardware.setSelection(hardware.getItem(0).getItem(0).getItem(0));
             reveal.invoke(view);
             check(source.getSelectionText().contains("adc@4000 {"), "Reveal in source selects the exact generated DTS node line");
+            var adcPage = (org.eclipse.swt.widgets.Composite) domains.getItem(1).getControl();
+            var parametersAction = java.util.Arrays.stream(adcPage.getChildren())
+                    .filter(control -> control instanceof org.eclipse.swt.widgets.Button)
+                    .map(control -> (org.eclipse.swt.widgets.Button) control)
+                    .filter(button -> button.getText().startsWith("Parameters & pins")).findFirst().orElseThrow();
+            parametersAction.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            var parameterTable = (org.eclipse.swt.widgets.Table) studioField(view, type, "hardwareParameters");
+            var gain = java.util.Arrays.stream(parameterTable.getItems())
+                    .filter(row -> row.getText(0).contains("zephyr,gain")).findFirst().orElseThrow();
+            check(gain.getText(1).equals("\"ADC_GAIN_1\"") && gain.getText(2).endsWith("/channel@0"),
+                    "ADC Parameters & pins opens real channel gain rather than generic feature help");
+            var chip = studioField(view, type, "chipPins");
+            check(((Integer) chip.getClass().getMethod("routeCount").invoke(chip)) == 1,
+                    "native chip canvas contains the selected controller's resolved pinctrl route");
+            parameterTable.setSelection(gain);
+            var revealParameter = type.getDeclaredMethod("revealParameterSource"); revealParameter.setAccessible(true);
+            revealParameter.invoke(view);
+            check(source.getSelectionText().contains("zephyr,gain"), "ADC parameter reveals its exact DTS declaration");
             hardwareSearch.setText("no-such-controller");
             check(hardware.getItemCount() == 0, "hardware search has an honest empty state");
             var cancel = new org.eclipse.swt.widgets.Event(); cancel.detail = org.eclipse.swt.SWT.ICON_CANCEL;
