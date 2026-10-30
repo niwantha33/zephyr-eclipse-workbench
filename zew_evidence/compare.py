@@ -26,6 +26,8 @@ def compare(left: dict, right: dict) -> dict:
             "id": ident,
             "state": "added" if a is None else "removed" if b is None else "changed",
             "left_sha256": old, "right_sha256": new,
+            "left_provenance": a["provenance"] if a else None,
+            "right_provenance": b["provenance"] if b else None,
             "confidence": "confirmed",
             "interpretation": "Byte-level observation only; semantic cause unknown",
         })

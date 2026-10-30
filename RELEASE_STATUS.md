@@ -60,3 +60,21 @@ See [market evidence](docs/MARKET_EVIDENCE.md), [gap audit](docs/COMPETITIVE_GAP
   establish a cause, and ZIP hashes never establish publisher authenticity.
 - **Validation and gate status:** new branch CI pending. G0 remains open;
   Phase-0 prototype work is not a passed G1 milestone.
+
+
+## Phase-0 provenance verification increment
+
+- Reconciled against main `95ef87e` after the prior collector and offline evidence
+  PRs were merged; preserved earlier unfinished studio/peripheral work separately.
+- Added `zew verify` for deterministic archived-artifact hash comparison, with
+  explicit matching/missing/changed states and 0/1/2 exit codes.
+- Hardened offline graph import: exact metadata fields, image path confinement,
+  provenance cross-links, graph relationships, numeric-secret rejection and strict
+  JSON object parsing. Consistent forged metadata is still unauthenticated.
+- Added deterministic CLI packaging and hostile-input/freshness fixtures.
+- This increment remains a permitted Phase-0 feasibility test. **G0 remains OPEN**;
+  no R1–R4 gate, 30-rule pack, VEX accuracy or migration benchmark is claimed.
+
+Required next evidence remains hands-on competitor scenarios, complete dependency
+redistribution review and exact-head cross-host CI. These cannot be replaced by
+passing these prototype tests.

@@ -11,11 +11,12 @@ from pathlib import Path
 from zew_evidence.collector import InputError, SCHEMA_VERSION, collect, diagnose, why
 from zew_evidence.compare import compare
 from zew_evidence.bundle import preview, write, inspect
+from zew_evidence.freshness import verify
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="zew", description=__doc__)
-    parser.add_argument("--version", action="version", version="zew evidence prototype 0.1.0")
+    parser.add_argument("--version", action="version", version="zew evidence prototype 0.1.1")
     subs = parser.add_subparsers(dest="command", required=True)
     for command in ("graph", "diagnose", "why", "bundle"):
         sub = subs.add_parser(command)
@@ -40,9 +41,14 @@ def main(argv: list[str] | None = None) -> int:
     opening.add_argument("--input", type=Path, required=True)
     opening.add_argument("--show-graph", action="store_true",
                          help="Show integrity-validated, sanitised graph stored in archive")
+    checking = subs.add_parser("verify", help="Check archived artifact hashes against an existing build")
+    checking.add_argument("--input", type=Path, required=True, help="Integrity-checked evidence ZIP")
+    checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "inspect":
+        if args.command == "verify":
+            output = verify(inspect(args.input, include_graph=True)["graph"], args.build)
+        elif args.command == "inspect":
             output = inspect(args.input, include_graph=args.show_graph)
         elif args.command == "compare":
             if (args.left_bundle and args.left_image) or (args.right_bundle and args.right_image):
@@ -69,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
                           "message": str(error)}, sort_keys=True), file=sys.stderr)
         return 2
     print(json.dumps(output, sort_keys=True, indent=2, ensure_ascii=False))
-    return 0
+    return 1 if args.command == "verify" and output["status"] != "recorded-artifacts-match" else 0
 
 
 if __name__ == "__main__":

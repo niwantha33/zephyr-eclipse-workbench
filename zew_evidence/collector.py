@@ -32,6 +32,14 @@ TARGET = re.compile(r"[A-Za-z0-9_.@/+-]{1,160}")
 PRIVATE = re.compile(r"(?i)(?:PASSWORD|TOKEN|SECRET|AUTH|PRIVATE|KEY|PIN|SSID|CERT|CREDENTIAL|PSK)")
 ARCHES = ("ARM", "ARM64", "RISCV", "XTENSA", "X86", "ARC")
 
+LIMITATIONS = (
+    "Generated Kconfig values are observed, not dependency or inclusion explanations.",
+    "Devicetree content is hashed, not interpreted; use Zephyr edtlib for semantics.",
+    "ELF hashes identify bytes, not the firmware actually flashed on a target.",
+    "External image locations require explicit --image declarations.",
+    "No host paths, timestamps or unreviewed Kconfig strings are exported.",
+)
+
 
 class InputError(ValueError):
     pass
@@ -109,7 +117,7 @@ def _images(root: Path, images: list[str]) -> list[tuple[str, Path]]:
         if "=" not in value:
             raise InputError("Use --image NAME=relative/build/path")
         name, relative = value.split("=", 1)
-        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,60}", name) or name in seen:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,60}", name) or name in (".", "..") or name in seen:
             raise InputError("Duplicate or invalid image name")
         if not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
             raise InputError("Image build location must be relative and inside --build")
@@ -140,22 +148,28 @@ def collect(build: Path, images: list[str] | None = None) -> dict:
                       "data": {"name": name, "artifact_root": directory.relative_to(root).as_posix() or "."}})
         edges.append({"from": "project:root", "to": image_id, "type": "contains"})
         observed = {}
+        receipt_snapshot = None
         for kind, relative in FILES:
             path = _regular(directory, relative)
             if path is None:
                 if kind in ("kconfig", "devicetree"):
                     missing.append({"image": name, "artifact": relative, "state": "missing"})
                 continue
-            if kind == "kconfig":
+            if kind in ("kconfig", "workbench_receipt"):
+                limit = MAX_CONFIG_BYTES if kind == "kconfig" else 256
                 before = path.stat()
                 with path.open("rb") as handle:
-                    config_snapshot = handle.read(MAX_CONFIG_BYTES + 1)
+                    snapshot = handle.read(limit + 1)
                 after = path.stat()
                 if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
-                    raise InputError("Generated .config changed while collecting evidence; retry after build")
-                if len(config_snapshot) > MAX_CONFIG_BYTES:
-                    raise InputError("Generated .config is larger than the 8 MiB parsing limit")
-                checksum, size = hashlib.sha256(config_snapshot).hexdigest(), len(config_snapshot)
+                    raise InputError("Generated evidence changed while collecting; retry after build")
+                if len(snapshot) > limit:
+                    raise InputError("Generated evidence exceeds its parsing limit: " + relative)
+                checksum, size = hashlib.sha256(snapshot).hexdigest(), len(snapshot)
+                if kind == "kconfig":
+                    config_snapshot = snapshot
+                else:
+                    receipt_snapshot = snapshot
             else:
                 checksum, size = _digest(path)
             artifact_id = f"artifact:{name}:{kind}"
@@ -179,9 +193,8 @@ def collect(build: Path, images: list[str] | None = None) -> dict:
                                   "provenance": provenance})
                     edges.append({"from": artifact_id, "to": symbol_id, "type": "observed-in"})
         # A receipt is specific to this Workbench and not present in standard west builds.
-        receipt = _regular(directory, ".zew-built-target")
-        if receipt is not None and receipt.stat().st_size <= 256:
-            raw = receipt.read_text(encoding="utf-8", errors="replace").strip()
+        if receipt_snapshot is not None:
+            raw = receipt_snapshot.decode("utf-8", errors="replace").strip()
             board = observed.get("CONFIG_BOARD_TARGET")
             if board and board != "<redacted>" and raw != board:
                 missing.append({"image": name, "artifact": ".zew-built-target",
@@ -192,13 +205,7 @@ def collect(build: Path, images: list[str] | None = None) -> dict:
     missing.sort(key=lambda item: (item["image"], item["artifact"]))
     return {"schema_version": SCHEMA_VERSION, "status": "observations-only",
             "nodes": nodes, "edges": edges, "missing_evidence": missing,
-            "limitations": [
-                "Generated Kconfig values are observed, not dependency or inclusion explanations.",
-                "Devicetree content is hashed, not interpreted; use Zephyr edtlib for semantics.",
-                "ELF hashes identify bytes, not the firmware actually flashed on a target.",
-                "External image locations require explicit --image declarations.",
-                "No host paths, timestamps or unreviewed Kconfig strings are exported.",
-            ]}
+            "limitations": list(LIMITATIONS)}
 
 
 def diagnose(graph: dict) -> dict:
@@ -210,6 +217,10 @@ def diagnose(graph: dict) -> dict:
             "confidence": "confirmed", "severity": "error" if conflict else "warning",
             "condition": entry["state"], "image": entry["image"],
             "evidence": entry["artifact"],
+            "provenance": [node["provenance"] for node in graph["nodes"]
+                if node["type"] == "artifact" and node["id"].startswith("artifact:" + entry["image"] + ":")
+                and node["data"]["kind"] in ("kconfig", "workbench_receipt")] if conflict else [],
+            "observation_scope": "Recorded local artifact condition; hardware identity and source freshness remain unknown",
             "next_action": "Rebuild the selected exact board; verify its build receipt before flashing."
                 if conflict else "Configure/build this image and inspect the generated output.",
         })

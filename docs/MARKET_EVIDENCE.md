@@ -13,4 +13,9 @@ These are documentary checks, NOT hands-on competitor benchmarks.
 
 [Nordic west ncs-sbom](https://nrfconnectdocs.nordicsemi.com/ncs/latest/nrf/scripts/west_commands/sbom/README.html) walks Ninja dependencies and validates archive inputs. Any compiled-source attribution must integrate this existing capability or prove its own added value.
 
-Unverified: Eclipse maintenance status, ST VS Code product direction, precise Zephyr IDE/nRF/STM32 feature parity, competitor fault-core/MCP hands-on tests. No superiority claim.
+Documentary recheck on 2026-10-30:
+- [ST product description](https://www.st.com/en/development-tools/stm32cubeide) explicitly prioritises its VS Code variant as the primary IDE platform. This is a roadmap statement, not evidence that all Eclipse users will migrate.
+- [Eclipse Embedded CDT March 2026 review](https://projects.eclipse.org/projects/iot.embed-cdt/reviews/eclipse-embedded-cdt-cc-development-tools-2026.03-progress-review) describes that project as in maintenance. This does not establish abandonment of core Eclipse/CDT.
+- [Commission reporting guidance](https://digital-strategy.ec.europa.eu/en/policies/cra-reporting) distinguishes manufacturer reporting from 11 September 2026 and open-source steward reporting from 11 December 2027. The [implementation schedule](https://digital-strategy.ec.europa.eu/en/factpages/cyber-resilience-act-implementation) gives full application from 11 December 2027. Applicability is not inferred by this prototype; this is source documentation, not legal advice.
+
+Unverified: precise hands-on Zephyr IDE/nRF/STM32 feature parity, competitor fault-core/MCP exercises and demand for a separate evidence product. No superiority claim.

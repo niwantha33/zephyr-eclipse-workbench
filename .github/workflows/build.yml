@@ -42,6 +42,18 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3 west==1.5.0
       - name: Exercise process and command core
         run: python3 scripts/test_core.py
+      - name: Package deterministic offline CLI
+        run: |
+          mkdir -p build-cli
+          python3 scripts/package_cli.py --output build-cli/zew-0.1.1.pyz > build-cli/SHA256SUMS
+          python3 build-cli/zew-0.1.1.pyz --version
+      - name: Retain Phase-0 CLI distribution
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: zew-evidence-cli-prototype
+          path: build-cli/
+          if-no-files-found: error
+          retention-days: 7
       - name: Build plug-ins and p2 repository
         # PR packaging smoke-test for the forceContextQualifier contract used by
         # the automatic publisher. Actual release qualifiers come from updates.
