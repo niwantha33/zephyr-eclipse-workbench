@@ -37,16 +37,29 @@ public final class OpenOcdThreadCheckTests {
         var size = new Region("_kernel_thread_info_size_t_size", 0x1280, List.of(4));
         var offsets = new Region("_kernel_thread_info_offsets", 0x1300, List.of(1, 0, 0, 0));
         var commands = new ArrayList<String>();
-        yes(exercise(List.of("0x04", "1 0 0 0"), List.of(size, offsets), commands).isEmpty(), "matching metadata is accepted");
-        yes(commands.equals(List.of("read_memory 0x1280 8 1", "read_memory 0x1300 8 4")), "only exact static regions are read, no reset/flash/GDB connection");
+        yes(exercise(List.of("", "0x04", "1 0 0 0"), List.of(size, offsets), commands).isEmpty(), "matching metadata is accepted");
+        yes(commands.equals(List.of("wait_halt 5000", "read_memory 0x1280 8 1", "read_memory 0x1300 8 4")), "wait for runner halt before exact static reads; no reset/flash/GDB connection");
         commands.clear();
-        String mismatch = exercise(List.of("0"), List.of(size), commands);
+        String mismatch = exercise(List.of("", "0", "0"), List.of(size), commands);
         yes(mismatch.contains("expected byte 4, target byte 0") && mismatch.contains("0x1280"), "report observed address, expected and actual value");
         yes(mismatch.contains("GDB was not attached") && mismatch.contains("No firmware or metadata was written"), "mismatch prevents false thread decoding without repairing RAM");
-        String error = exercise(List.of("target not examined"), List.of(size), new ArrayList<>());
+        String error = exercise(List.of("", "target not examined"), List.of(size), new ArrayList<>());
         yes(error.contains("could not read") && error.contains("target not examined"), "preserve actual Tcl read error");
-        yes(exercise(List.of("4 4"), List.of(size), new ArrayList<>()).contains("could not read"), "wrong response length rejected");
-        yes(exercise(List.of("999999999999999999999"), List.of(size), new ArrayList<>()).contains("could not read"), "overflow rejected");
+        yes(exercise(List.of("", "4 4"), List.of(size), new ArrayList<>()).contains("could not read"), "wrong response length rejected");
+        yes(exercise(List.of("", "999999999999999999999"), List.of(size), new ArrayList<>()).contains("could not read"), "overflow rejected");
+        yes(mismatch.contains("persisted across two halted reads"), "stable mismatch distinguished from unstable probe reads");
+        String reported = exercise(List.of("", "15", "15"), List.of(
+                new Region("_kernel_thread_info_size_t_size", 0x4ea8, List.of(4))), new ArrayList<>());
+        yes(reported.contains("0x4ea8 expected byte 4, target byte 15"), "reported hardware symptom preserved exactly");
+        yes(exercise(List.of("", "15", "4"), List.of(size), new ArrayList<>()).contains("changed between two halted reads"),
+                "a later matching read never conceals unstable target access");
+        yes(exercise(List.of("", "15", "target not examined"), List.of(size), new ArrayList<>()).contains("diagnostic repeat read failed"),
+                "repeat read error retains original mismatch");
+        commands.clear();
+        yes(exercise(List.of("target did not halt"), List.of(size), commands).contains("not confirmed halted"), "halt failure is not labelled firmware mismatch");
+        yes(commands.equals(List.of("wait_halt 5000")), "no metadata read before runner halt");
+        String tables = exercise(List.of("", "15", "1 0 0 0", "15", "1 0 0 0"), List.of(size, offsets), new ArrayList<>());
+        yes(tables.contains("_kernel_thread_info_offsets@0x1300"), "all selected tables included in mismatch evidence");
         try { new Region("bad; flash erase_address 0 1000", 1, List.of(4)); throw new AssertionError("injection accepted"); }
         catch (IllegalArgumentException expected) { checks++; }
         try { new Region("_kernel_openocd_offsets", 1, List.of(256)); throw new AssertionError("invalid byte accepted"); }

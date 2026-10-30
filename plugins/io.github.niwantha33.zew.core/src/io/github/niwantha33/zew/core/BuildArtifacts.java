@@ -60,6 +60,99 @@ public final class BuildArtifacts {
         return Set.copyOf(outputs);
     }
 
+    /** Use the runner's exact debug symbols, never an unordered set of image byproducts. */
+    public static Path debugElf(Path build) throws IOException {
+        Path realBuild = build.toRealPath();
+        Path metadata = build.resolve("zephyr/runners.yaml");
+        if (!Files.isRegularFile(metadata) || Files.size(metadata) > 1024 * 1024
+                || !metadata.toRealPath().startsWith(realBuild))
+            throw new IOException("Missing, oversized or external Zephyr runner configuration.");
+        boolean config = false, seenConfig = false;
+        String declared = null;
+        for (String line : Files.readAllLines(metadata)) {
+            if (line.isBlank() || line.stripLeading().startsWith("#")) continue;
+            if (!Character.isWhitespace(line.charAt(0))) {
+                if (line.startsWith("\"") || line.startsWith("'")
+                        || line.matches("config[ \t]*:.*") && !line.equals("config:"))
+                    throw new IOException("Unsupported runner configuration mapping.");
+                config = line.equals("config:");
+                if (config && seenConfig) throw new IOException("Ambiguous runner config section.");
+                seenConfig |= config;
+                continue;
+            }
+            if (config && (line.startsWith("  \"") || line.startsWith("  '") || line.startsWith("  <<:")
+                    || line.matches("  elf_file[ \t]*:.*") && !line.startsWith("  elf_file:")))
+                throw new IOException("Unsupported runner ELF mapping.");
+            if (config && line.startsWith("  elf_file:")) {
+                if (declared != null) throw new IOException("Ambiguous runner ELF declaration.");
+                declared = runnerPathScalar(line.substring("  elf_file:".length()).trim());
+            }
+        }
+        if (declared == null || declared.isBlank() || declared.equals("null") || declared.equals("~"))
+            throw new IOException("Runner does not declare config.elf_file; rebuild this exact target.");
+        try {
+            Path elf = Path.of(declared);
+            if (!elf.isAbsolute()) elf = metadata.getParent().resolve(elf);
+            elf = elf.toRealPath();
+            if (!elf.startsWith(realBuild) || !Files.isRegularFile(elf))
+                throw new IOException("Runner debug ELF is outside the selected build: " + elf);
+            try (var input = Files.newInputStream(elf)) {
+                if (!java.util.Arrays.equals(input.readNBytes(4), new byte[] {0x7f, 'E', 'L', 'F'}))
+                    throw new IOException("Runner debug ELF header is invalid: " + elf);
+            }
+            return elf;
+        } catch (java.nio.file.InvalidPathException invalid) {
+            throw new IOException("Invalid runner debug ELF path", invalid);
+        }
+    }
+
+    /** Generated runner paths are single-line YAML scalars; reject unsupported YAML structures. */
+    private static String runnerPathScalar(String value) throws IOException {
+        if (value.isEmpty()) return value;
+        String result;
+        if (value.charAt(0) == '\'') {
+            if (value.length() < 2 || value.charAt(value.length() - 1) != '\'')
+                throw new IOException("Unsupported runner ELF path scalar.");
+            result = value.substring(1, value.length() - 1).replace("''", "'");
+            if (result.replace("'", "").length() != value.substring(1, value.length() - 1).replace("''", "").length())
+                throw new IOException("Unsupported runner ELF quoting.");
+        } else if (value.charAt(0) == '"') {
+            if (value.length() < 2 || value.charAt(value.length() - 1) != '"')
+                throw new IOException("Unsupported runner ELF path scalar.");
+            var decoded = new StringBuilder();
+            for (int i = 1; i < value.length() - 1; i++) {
+                char c = value.charAt(i);
+                if (c == '"') throw new IOException("Unsupported runner ELF quoting.");
+                if (c == '\\') {
+                    if (++i >= value.length() - 1) throw new IOException("Incomplete runner ELF escape.");
+                    c = value.charAt(i);
+                    if (c == '\\' || c == '"' || c == '/') decoded.append(c);
+                    else if (c == 'x' || c == 'u' || c == 'U') {
+                        int digits = c == 'x' ? 2 : c == 'u' ? 4 : 8;
+                        if (i + digits >= value.length() - 1) throw new IOException("Incomplete runner ELF Unicode escape.");
+                        try {
+                            int code = Integer.parseInt(value.substring(i + 1, i + 1 + digits), 16);
+                            if (!Character.isValidCodePoint(code) || code >= 0xd800 && code <= 0xdfff)
+                                throw new IllegalArgumentException();
+                            decoded.appendCodePoint(code);
+                        } catch (IllegalArgumentException invalid) {
+                            throw new IOException("Invalid runner ELF Unicode escape.", invalid);
+                        }
+                        i += digits;
+                    } else throw new IOException("Unsupported runner ELF path escape.");
+                } else decoded.append(c);
+            }
+            result = decoded.toString();
+        } else {
+            if ("!&*{|>[\"'".indexOf(value.charAt(0)) >= 0 || value.contains(" #") || value.contains(": "))
+                throw new IOException("Unsupported runner ELF path scalar.");
+            result = value;
+        }
+        if (result.chars().anyMatch(c -> Character.isISOControl(c)))
+            throw new IOException("Control character in runner ELF path.");
+        return result;
+    }
+
     public static void verify(Path build) throws IOException {
         Path realBuild = build.toRealPath();
         for (Path output : required(build)) {

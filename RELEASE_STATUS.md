@@ -280,3 +280,23 @@ passing these prototype tests.
   Check, physical hardware confirmation or learning-time percentage is claimed.
 - This is still Phase-0 feasibility; **G0 remains OPEN**. Do not merge or
   publish until approved and automated Windows + Linux gates pass.
+
+
+## Native debug metadata preflight repair (review branch)
+
+- Flash metadata validation and native Debug select the runner-declared ELF,
+  avoiding unordered selection among kernel/signing ELF byproducts.
+- Native Debug waits for the runner's halted target before comparing static
+  thread metadata. Halt failure is distinct from an observed byte mismatch.
+- A mismatch triggers one diagnostic repeat of the bounded static regions;
+  stable versus inconsistent reads are labelled, and neither bypasses the
+  launch guard. Initial table evidence is retained for probe investigation.
+- Regression includes the reported `0x4ea8`, expected `4`, observed `15` case.
+  Physical-board root cause and acceptance remain unverified. No release,
+  G0/G1 promotion, automatic flash or decoder metadata patch is included.
+- Local validation: `scripts/test_core.py` passed on Linux with OpenJDK 21:
+  287 Python tool tests and the full Java core suite, including 29 metadata
+  assertions and exact runner ELF selection regressions. Native Eclipse/p2
+  packaging, Windows CI and physical-board acceptance have not run for this
+  branch. Publication is pending authorization after automatic review blocked
+  the remote push check.

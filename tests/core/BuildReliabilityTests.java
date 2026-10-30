@@ -30,6 +30,42 @@ public class BuildReliabilityTests {
             rejects(() -> BuildArtifacts.verify(build), "configured signed byproduct must exist");
             Files.writeString(build.resolve("zephyr/firmware.signed.bin"), "signed-image");
             BuildArtifacts.verify(build);
+            // A signed ELF byproduct must never displace the runner-declared debug ELF.
+            Path signedElf = build.resolve("zephyr/firmware.signed.elf");
+            Files.write(signedElf, new byte[] {0x7f, 'E', 'L', 'F', 1});
+            Files.writeString(build.resolve("CMakeCache.txt"), "BYPRODUCT_KERNEL_SIGNED_ELF_NAME:FILEPATH=" + signedElf + "\n");
+            Path runners = build.resolve("zephyr/runners.yaml");
+            Path debugElf = build.resolve("zephyr/firmware.elf").toRealPath();
+            for (String path : List.of("firmware.elf", "'firmware.elf'", "\"firmware.elf\"", debugElf.toString().replace('\\', '/'))) {
+                Files.writeString(runners, "config:\n  elf_file: " + path + "\nargs:\n  openocd: []\n");
+                check(BuildArtifacts.debugElf(build).equals(debugElf), "runner ELF wins over signed byproduct; generated scalar quoting supported");
+            }
+            Files.writeString(runners, "config:\n  elf_file: firmware.signed.elf\n");
+            check(BuildArtifacts.debugElf(build).equals(signedElf.toRealPath()), "runner explicitly selecting signed debug ELF is honoured");
+            Path unicodeElf = build.resolve("zephyr/firmware Ω.elf");
+            Files.copy(debugElf, unicodeElf);
+            Files.writeString(runners, "config:\n  elf_file: \"firmware \\u03a9.elf\"\n");
+            check(BuildArtifacts.debugElf(build).equals(unicodeElf.toRealPath()), "PyYAML escaped Unicode path is decoded");
+            Path apostropheElf = build.resolve("zephyr/firmware's.elf");
+            Files.copy(debugElf, apostropheElf);
+            Files.writeString(runners, "config:\n  elf_file: 'firmware''s.elf'\n");
+            check(BuildArtifacts.debugElf(build).equals(apostropheElf.toRealPath()), "single quoted apostrophe path is decoded");
+            Path externalElf = root.resolve("external.elf");
+            Files.copy(debugElf, externalElf);
+            for (String yaml : List.of("config:\n  hex_file: firmware.hex\n", "config:\n  elf_file: missing.elf\n",
+                    "config:\n  elf_file: firmware.elf\n  elf_file: firmware.signed.elf\n",
+                    "config:\n  elf_file: firmware.elf\nconfig:\n  elf_file: firmware.signed.elf\n",
+                    "config:\n  elf_file: " + externalElf.toString().replace('\\', '/') + "\n",
+                    "config:\n  elf_file: firmware.elf\n  'elf_file': firmware.signed.elf\n",
+                    "config:\n  elf_file: firmware.elf\nconfig: {elf_file: firmware.signed.elf}\n",
+                    "config:\n  elf_file: [firmware.elf]\n", "config:\n  elf_file: &ref firmware.elf\n",
+                    "config:\n  elf_file: \"firmware\\u0000.elf\"\n", "config:\n  elf_file: 'firmware's.elf'\n")) {
+                Files.writeString(runners, yaml);
+                rejects(() -> BuildArtifacts.debugElf(build), "missing, ambiguous, external and unsupported runner ELF declarations fail closed");
+            }
+            Files.writeString(build.resolve("zephyr/bad.elf"), "not ELF");
+            Files.writeString(runners, "config:\n  elf_file: bad.elf\n");
+            rejects(() -> BuildArtifacts.debugElf(build), "declared file must have ELF magic");
             Files.writeString(build.resolve("CMakeCache.txt"), "BYPRODUCT_KERNEL_SIGNED_BIN_NAME:FILEPATH=" + root.resolve("user.bin") + "\n");
             rejects(() -> BuildArtifacts.required(build), "byproducts cannot leave managed build");
             Files.writeString(build.resolve("CMakeCache.txt"), "CMAKE_C_COMPILER:FILEPATH=C:/sdk/riscv64-zephyr-elf-gcc.exe\n");
