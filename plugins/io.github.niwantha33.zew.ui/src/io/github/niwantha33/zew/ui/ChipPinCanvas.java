@@ -136,7 +136,7 @@ public final class ChipPinCanvas extends Canvas {
         selection = onSelection;
         selected = -1;
         setSize(Math.max(620, getSize().x),
-                Math.max(295, ((visibleCount() + 1) / 2) * ROUTE_ROW + 150));
+                Math.max(295, ((visibleCount() + 1) / 2) * ROUTE_ROW + 185));
         redraw();
     }
 
