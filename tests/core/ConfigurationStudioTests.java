@@ -493,6 +493,74 @@ public final class ConfigurationStudioTests {
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.matches(uartController,
                     io.github.niwantha33.zew.core.HardwarePeripheralIndex.ALL),
                     "all peripherals includes disabled controllers");
+            String gpioDts = """
+                    / {
+                        soc {
+                            gpio@400a0000 {
+                                compatible = "ti,mspm0-gpio";
+                                status = "okay";
+                                gpio-controller;
+                                #gpio-cells = <2>;
+                                phandle = <0x10>;
+                            };
+                            gpio@400a2000 {
+                                compatible = "ti,mspm0-gpio";
+                                status = "okay";
+                                gpio-controller;
+                                #gpio-cells = <2>;
+                                phandle = <0x11>;
+                            };
+                        };
+                        leds {
+                            compatible = "gpio-leds";
+                            led_0 {
+                                gpios = <0x11 0x16 0x0>;
+                                label = "Blue LED";
+                            };
+                        };
+                        spi_device {
+                            cs-gpios = <0x10 8 1>, <0x11 7 0>;
+                        };
+                        invalid_gpio {
+                            gpios = <0x11 &unknown 0>;
+                        };
+                    };
+                    """;
+            var gpioProperties = io.github.niwantha33.zew.core.DevicetreeParameters.inspect(gpioDts);
+            var gpioNodes = io.github.niwantha33.zew.core.DevicetreeHardware.inspect(gpioDts);
+            var bankA = io.github.niwantha33.zew.core.GpioBankEvidence.inspect(
+                    gpioNodes.stream().filter(d -> d.name().equals("gpio@400a0000")).findFirst().orElseThrow(),
+                    gpioProperties);
+            var bankB = io.github.niwantha33.zew.core.GpioBankEvidence.inspect(
+                    gpioNodes.stream().filter(d -> d.name().equals("gpio@400a2000")).findFirst().orElseThrow(),
+                    gpioProperties);
+            ok(bankA != null && bankA.bitPositions() == 32 && !bankA.exactDtsWidth()
+                    && bankA.uses().size() == 1 && bankA.uses().get(0).bit() == 8
+                    && bankA.bitLabel(8).equals("PA8"),
+                    "MSPM0 GPIO A displays register indexes without claiming pad availability");
+            ok(bankB != null && bankB.bitPositions() == 32 && !bankB.exactDtsWidth()
+                    && bankB.uses().size() == 2 && bankB.uses().get(0).bit() == 7
+                    && bankB.uses().get(1).bit() == 22
+                    && bankB.uses().get(1).consumerPath().equals("/leds/led_0")
+                    && bankB.uses().get(1).line() > 0 && bankB.bitLabel(22).equals("PB22"),
+                    "real compiled GPIO phandle specifiers resolve LED on GPIO B bit 22");
+            ok(bankB.uses().stream().noneMatch(u -> u.consumerPath().equals("/invalid_gpio")),
+                    "ambiguous symbolic or malformed GPIO specifier cannot fabricate a line use");
+            // One unknown phandle anywhere in a combined gpios list makes
+            // the entire property ambiguous; do not publish a partial match.
+            String ambiguousGpioDts = gpioDts.replace(
+                    "cs-gpios = <0x10 8 1>, <0x11 7 0>;",
+                    "cs-gpios = <0xff 8 1>, <0x11 7 0>;");
+            var ambiguousGpioProperties = io.github.niwantha33.zew.core.DevicetreeParameters.inspect(ambiguousGpioDts);
+            var bankWithAmbiguity = io.github.niwantha33.zew.core.GpioBankEvidence.inspect(
+                    gpioNodes.stream().filter(d -> d.name().equals("gpio@400a2000")).findFirst().orElseThrow(),
+                    ambiguousGpioProperties);
+            ok(bankWithAmbiguity.uses().size() == 1
+                    && bankWithAmbiguity.uses().get(0).bit() == 22,
+                    "unknown specifier in a mixed GPIO list cannot produce a false partial line use");
+            var notGpio = io.github.niwantha33.zew.core.GpioBankEvidence.inspect(
+                    gpioNodes.stream().filter(d -> d.name().equals("leds")).findFirst().orElseThrow(), gpioProperties);
+            ok(notGpio == null, "GPIO consumer nodes cannot masquerade as a bank");
             System.out.println("ConfigurationStudioTests PASS");
         } finally {
             try (var paths = Files.walk(root)) {
