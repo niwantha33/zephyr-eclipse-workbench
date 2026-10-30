@@ -209,8 +209,12 @@ def main():
                     cwd=REPO, env=env, text=True, encoding='utf-8',
                     errors='replace', capture_output=True, timeout=120)
                 payload = parse_semantic_check(semantic)
-                if payload['images'][0]['semantic']['state'] != 'evaluated':
-                    raise ValueError('Real Kconfiglib semantic environment unavailable')
+                semantic_status = payload['images'][0]['semantic']
+                if semantic_status['state'] != 'evaluated':
+                    # This is a bounded reason code, never arbitrary Kconfig
+                    # source text or local paths. Keep the qualification strict.
+                    raise ValueError('Real Kconfiglib semantic environment unavailable: '
+                                     + str(semantic_status.get('reason', 'missing-reason'))[:100])
                 by_name = {item['symbol']: item['kconfiglib']
                            for item in payload['images'][0]['requests']}
                 if (by_name['CONFIG_GPIO']['state'] != 'defined-in-selected-tree'
