@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 
 from .collector import InputError, _digest, _images, _regular
 
@@ -112,13 +113,22 @@ def _semantics_for_image(build: Path, ninja: Path | None, names: list[str],
         return {"state": "unavailable", "reason": "ninja-command-inspection-failed", "symbols": {}}
     if len(result.stdout) > MAX_NINJA_TEXT:
         return {"state": "unavailable", "reason": "generated-command-too-large", "symbols": {}}
+    selected_import_path = None
     try:
         values, root = _generated_environment(result.stdout)
         zephyr = Path(values["srctree"]).resolve(strict=True)
         if not zephyr.is_dir():
             raise InputError("Selected Zephyr tree is not a directory")
+        # Zephyr's Kconfiglib dynamically imports kconfigfunctions while
+        # parsing the Kconfig root. Its directory must be importable for
+        # the entire evaluation, as in the native kconfig_inspect.py probe.
+        # Use the *selected* checkout only; never the host's kconfigfunctions.
+        selected_import_path = str(zephyr / "scripts" / "kconfig")
+        sys.path.insert(0, selected_import_path)
         library = _load_selected_kconfiglib(zephyr)
     except Exception:
+        if selected_import_path is not None and selected_import_path in sys.path:
+            sys.path.remove(selected_import_path)
         # A selected checkout's Kconfig module can fail to import. Never echo
         # arbitrary source paths or exception text into the public report.
         return {"state": "unavailable", "reason": "generated-kconfig-environment-unavailable", "symbols": {}}
@@ -157,6 +167,8 @@ def _semantics_for_image(build: Path, ninja: Path | None, names: list[str],
     finally:
         os.environ.clear()
         os.environ.update(original_env)
+        if selected_import_path in sys.path:
+            sys.path.remove(selected_import_path)
     after, _ = _digest(config)
     if after != before:
         return {"state": "unavailable", "reason": "generated-config-changed", "symbols": {}}
