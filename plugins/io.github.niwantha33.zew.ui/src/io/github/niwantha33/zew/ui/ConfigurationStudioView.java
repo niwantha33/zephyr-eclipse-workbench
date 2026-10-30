@@ -1014,9 +1014,17 @@ public final class ConfigurationStudioView extends ViewPart {
         if (hardwareParameters == null || hardwareParameters.isDisposed()) return;
         hardwareParameters.removeAll();
         if (device == null || snapshot == null) {
-            parameterTitle.setText("No controller selected. Build the exact board, then select a device.");
-            hardwareInspector.setText("No built peripheral selected. No parameters are inferred.");
-            hardwareValidation.setText("MISSING EVIDENCE  |  Build the exact target, then select a controller.");
+            boolean hasDts = snapshot != null && !snapshot.devicetree().isBlank();
+            String guidance = hasDts
+                    ? "No peripheral matches this filter. Change category/state or clear the search."
+                    : "No generated Devicetree. Build the exact target first.";
+            parameterTitle.setText(guidance);
+            hardwareInspector.setText(hasDts
+                    ? "A build is available, but no controller is selected."
+                    : "No built peripheral selected. No parameters are inferred.");
+            hardwareValidation.setText(hasDts
+                    ? "FILTER EMPTY  |  The generated Devicetree exists. Select a different peripheral category."
+                    : "MISSING EVIDENCE  |  Build the exact target, then select a controller.");
             chipPins.showRoutes("Select a peripheral", List.of(), route -> {});
             return;
         }
@@ -1349,7 +1357,8 @@ public final class ConfigurationStudioView extends ViewPart {
             } else {
                 hardwareDescription.setText(devices.isEmpty()
                         ? "Build the exact target to generate zephyr.dts. Existing overlays remain editable."
-                        : "No matching nodes. Clear the search or choose All nodes.");
+                        : "No matching built nodes for " + hardwareKind.getText()
+                                + ". Clear search or change category/status.");
                 showHardwareParameters(null);
             }
             hardwareSummary.setText(matches.size() + " matching nodes · " + devices.size()
