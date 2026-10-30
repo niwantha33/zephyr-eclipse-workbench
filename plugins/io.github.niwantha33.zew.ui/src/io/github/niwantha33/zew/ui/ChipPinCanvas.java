@@ -367,4 +367,7 @@ public final class ChipPinCanvas extends Canvas {
     }
 
     public int routeCount() { return routes.size(); }
+    /** Read-only evidence counts used by installed SWT integration tests. */
+    public int gpioBitPositions() { return bank == null ? 0 : bank.bitPositions(); }
+    public int gpioConsumerCount() { return bank == null ? 0 : bank.uses().size(); }
 }
