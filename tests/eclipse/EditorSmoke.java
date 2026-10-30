@@ -50,6 +50,7 @@ public final class EditorSmoke implements IApplication {
                                 reg = <0x400a0000 0x2000>;
                                 gpio-controller;
                                 #gpio-cells = <2>;
+                                phandle = <0x2a>;
                             };
                             gpio@400a2000 {
                                 compatible = "ti,mspm0-gpio";
@@ -57,6 +58,7 @@ public final class EditorSmoke implements IApplication {
                                 reg = <0x400a2000 0x2000>;
                                 gpio-controller;
                                 #gpio-cells = <2>;
+                                phandle = <0x2b>;
                             };
                             gpio-default {
                                 pinmux = <0x23>;
@@ -69,6 +71,13 @@ public final class EditorSmoke implements IApplication {
                             group1 {
                                 pinmux = <0x1234>;
                             };
+                        };
+                    };
+                    leds {
+                        compatible = "gpio-leds";
+                        led_0 {
+                            gpios = <0x2b 0x16 0x0>;
+                            label = "Blue LED";
                         };
                     };
                 };
@@ -209,6 +218,21 @@ public final class EditorSmoke implements IApplication {
                     "selecting GPIO exposes compiled controller parameters rather than an empty inspector");
             check(validation.getText().contains("gpio@400a0000"),
                     "GPIO selection updates the evidence dock to the actual built controller");
+            check(((Integer) chip.getClass().getMethod("gpioBitPositions").invoke(chip)) == 32
+                    && ((Integer) chip.getClass().getMethod("gpioConsumerCount").invoke(chip)) == 0,
+                    "GPIO A displays 32 possible register bit indexes, not 32 physical pads");
+            var gpioB = grouped.getItem(0).getItem(1);
+            grouped.setSelection(gpioB);
+            grouped.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(((Integer) chip.getClass().getMethod("gpioBitPositions").invoke(chip)) == 32
+                    && ((Integer) chip.getClass().getMethod("gpioConsumerCount").invoke(chip)) == 1
+                    && validation.getText().contains("Observed consumer references: 1")
+                    && java.util.Arrays.stream(parameterTable.getItems()).anyMatch(
+                            item -> item.getText(0).contains("gpios") && item.getText(2).contains("/leds/led_0")),
+                    "GPIO B visual bank resolves the compiled Blue LED GPIO reference");
+            ((org.eclipse.swt.widgets.TabFolder) studioField(view, type, "tabs")).setSelection(1);
+            dock.setSelection(1);
+            captureNativeStudioScreenshot("gpio-bank-evidence.png");
             kind.select(kind.indexOf("Other"));
             kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             var soc = hardware.getItem(0).getItem(0);
