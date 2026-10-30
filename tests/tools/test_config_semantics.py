@@ -122,6 +122,57 @@ class KconfigSemanticTests(unittest.TestCase):
         with self.assertRaises(InputError):
             semantic._generated_environment("cmake -E env srctree=bad /a/guiconfig.py /not/there")
 
+    def test_windows_nested_cmd_wrapper_with_quoted_kconfig_paths(self):
+        # Mirror the non-POSIX Ninja quoting already covered by the installed
+        # kconfig_inspect.py parser. Do not execute any recovered commands.
+        command = (
+            r'C:\Windows\system32\cmd.exe /C "cd /D C:\build && '
+            r'"C:\Program Files\CMake\bin\cmake.exe" -E env '
+            r'"srctree=C:\Zephyr Workspace\zephyr" '
+            r'"KCONFIG_BINARY_DIR=C:\Build Folder\zephyr\Kconfig" '
+            r'"EDT_PICKLE=C:\Build Folder\zephyr\edt.pickle" '
+            r'"C:\Python Tools\python.exe" '
+            r'"C:\Zephyr Workspace\zephyr\scripts\kconfig\guiconfig.py" '
+            f'"{self.kroot}""')
+        values, source = semantic._generated_environment(command)
+        self.assertEqual(source, self.kroot)
+        self.assertEqual(values["srctree"], r"C:\Zephyr Workspace\zephyr")
+        self.assertEqual(values["KCONFIG_BINARY_DIR"], r"C:\Build Folder\zephyr\Kconfig")
+        self.assertEqual(values["EDT_PICKLE"], r"C:\Build Folder\zephyr\edt.pickle")
+
+    def test_selected_zephyr_kconfig_helper_import_is_scoped_to_evaluation(self):
+        # Zephyr's Kconfiglib imports kconfigfunctions dynamically from the
+        # selected checkout at Kconfig() time, not necessarily module load time.
+        import importlib
+        import sys
+
+        helper = "zew_ci_selected_kconfig_helper"
+        package = self.source / "scripts" / "kconfig"
+        package.mkdir(parents=True)
+        (package / (helper + ".py")).write_text("functions = {}\n", encoding="utf-8")
+
+        class WithSelectedHelper(FakeLib):
+            class Kconfig(FakeLib.Kconfig):
+                def __init__(self, *args, **kwargs):
+                    importlib.import_module(helper)
+                    super().__init__(*args, **kwargs)
+
+        self.snippet.write_text("CONFIG_GPIO=y\n", encoding="utf-8")
+        before_path = list(sys.path)
+        sys.modules.pop(helper, None)
+        try:
+            with mock.patch.object(semantic.subprocess, "run",
+                                   return_value=SimpleNamespace(stdout=self.commands())), \
+                 mock.patch.object(semantic, "_load_selected_kconfiglib",
+                                   return_value=WithSelectedHelper):
+                report = semantic.enrich(check(collect(self.build), self.snippet),
+                                         self.build, [], self.ninja)
+            self.assertEqual(report["images"][0]["semantic"]["state"], "evaluated")
+            self.assertEqual(report["semantic_validation"]["state"], "evaluated-without-blockers")
+            self.assertEqual(sys.path, before_path)
+        finally:
+            sys.modules.pop(helper, None)
+
     def test_changed_config_cannot_be_confirmed(self):
         self.snippet.write_text("CONFIG_GPIO=y\n", encoding="utf-8")
         graph = collect(self.build)

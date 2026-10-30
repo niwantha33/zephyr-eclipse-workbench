@@ -76,6 +76,30 @@ def select_target(rows, board, soc, core=None):
     return selected[0]
 
 
+def parse_semantic_check(result):
+    """Require an actual JSON report; expose failures without false qualification.
+
+    The semantic checker is expected to return 1 when requested undefined
+    Kconfig symbols are correctly reported. A Python traceback can also exit
+    1, so the process status alone cannot authenticate the report.
+    """
+    if result.returncode != 1 or not result.stdout.strip():
+        raise ValueError(
+            'MSPM0 semantic checker did not return its expected JSON report '
+            f'(exit={result.returncode}; stderr={result.stderr.strip()[-1200:]!r}; '
+            f'stdout={result.stdout.strip()[-500:]!r})')
+    try:
+        report = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError) as error:
+        raise ValueError(
+            'MSPM0 semantic checker output is not JSON '
+            f'(stderr={result.stderr.strip()[-1200:]!r}; '
+            f'stdout={result.stdout.strip()[-500:]!r})') from error
+    if not isinstance(report, dict) or not isinstance(report.get('images'), list) or not report['images']:
+        raise ValueError('MSPM0 semantic checker returned an invalid evidence envelope')
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -184,11 +208,13 @@ def main():
                      '--semantic', '--ninja', str(ninja)],
                     cwd=REPO, env=env, text=True, encoding='utf-8',
                     errors='replace', capture_output=True, timeout=120)
-                if semantic.returncode != 1:
-                    raise ValueError('Real Kconfiglib semantic checker exit contract failed')
-                payload = json.loads(semantic.stdout)
-                if payload['images'][0]['semantic']['state'] != 'evaluated':
-                    raise ValueError('Real Kconfiglib semantic environment unavailable')
+                payload = parse_semantic_check(semantic)
+                semantic_status = payload['images'][0]['semantic']
+                if semantic_status['state'] != 'evaluated':
+                    # This is a bounded reason code, never arbitrary Kconfig
+                    # source text or local paths. Keep the qualification strict.
+                    raise ValueError('Real Kconfiglib semantic environment unavailable: '
+                                     + str(semantic_status.get('reason', 'missing-reason'))[:100])
                 by_name = {item['symbol']: item['kconfiglib']
                            for item in payload['images'][0]['requests']}
                 if (by_name['CONFIG_GPIO']['state'] != 'defined-in-selected-tree'

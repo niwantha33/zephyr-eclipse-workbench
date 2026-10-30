@@ -15,6 +15,33 @@ class FirmwareMatrixTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'did not uniquely resolve'):
             matrix.select_target(rows, 'nrf52840dk', 'not-a-soc')
 
+    def test_semantic_checker_requires_json_and_keeps_stderr_diagnostic(self):
+        from types import SimpleNamespace
+
+        crashed = SimpleNamespace(returncode=1, stdout='', stderr='Traceback: stale data')
+        with self.assertRaisesRegex(ValueError, 'stale data'):
+            matrix.parse_semantic_check(crashed)
+
+        wrong_exit = SimpleNamespace(returncode=0, stdout='{"images": [{}]}', stderr='')
+        with self.assertRaisesRegex(ValueError, 'exit=0'):
+            matrix.parse_semantic_check(wrong_exit)
+
+        malformed = SimpleNamespace(returncode=1, stdout='<invalid>', stderr='parse failed')
+        with self.assertRaisesRegex(ValueError, 'parse failed'):
+            matrix.parse_semantic_check(malformed)
+
+        valid = SimpleNamespace(returncode=1, stdout='{"images": [{"semantic": {"state": "evaluated"}}]}',
+                                stderr='')
+        self.assertEqual(matrix.parse_semantic_check(valid)['images'][0]['semantic']['state'],
+                         'evaluated')
+
+    def test_semantic_checker_rejects_empty_envelope(self):
+        from types import SimpleNamespace
+
+        result = SimpleNamespace(returncode=1, stdout='{"images": []}', stderr='')
+        with self.assertRaisesRegex(ValueError, 'invalid evidence envelope'):
+            matrix.parse_semantic_check(result)
+
     def test_secondary_core_is_never_guessed_for_primary_core_scenario(self):
         rows = [('espressif', 'espressif', 'esp32s3', 'esp32s3_devkitc', 'default', 'esp32s3/' + cpu,
                  'esp32s3_devkitc/esp32s3/' + cpu) for cpu in ('appcpu', 'procpu')]

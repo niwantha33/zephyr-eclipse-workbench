@@ -173,11 +173,12 @@ public final class EditorSmoke implements IApplication {
                     && adcControllerInGroup && adcChannelInGroup,
                     "ADC peripheral-first tree retains controller and channel: " + groupedDescription);
             var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
-            check(dock.getItemCount() == 3
+            check(dock.getItemCount() == 4
                     && dock.getItem(0).getText().startsWith("Changes")
                     && dock.getItem(1).getText().startsWith("Validation")
-                    && dock.getItem(2).getText().startsWith("Generated DTS"),
-                    "native Studio exposes a dedicated Changes/Validation/Generated DTS evidence dock");
+                    && dock.getItem(2).getText().startsWith("Generated DTS")
+                    && dock.getItem(3).getText().equals("GPIO Usage"),
+                    "native Studio includes GPIO Usage while retaining all existing evidence tabs");
             var validation = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareValidation");
             check(validation.getText().contains("PHYSICAL PINOUT: NOT VERIFIED"),
                     "physical package map is never invented from pinmux cells");
@@ -236,6 +237,36 @@ public final class EditorSmoke implements IApplication {
                     && validation.getText().contains("UNRESOLVED DEVICE NAME")
                     && validation.getText().contains("15, GPIO_OUTPUT_ACTIVE"),
                     "evidence shows C-call provenance and unknown device lookup without guessing its bank");
+            var gpioUsage = (org.eclipse.swt.widgets.Table) studioField(view, type, "gpioUsageTable");
+            var gpioUsageSummary = (org.eclipse.swt.widgets.Label) studioField(view, type, "gpioUsageSummary");
+            check(dock.getSelectionIndex() == 3
+                    && gpioUsage.getItemCount() == 3
+                    && gpioUsageSummary.getText().contains("Built DTS references: 1")
+                    && gpioUsageSummary.getText().contains("Unresolved C device names: 1"),
+                    "GPIO usage overview immediately lists all banks and unresolved source code");
+            check(java.util.Arrays.stream(gpioUsage.getItems()).anyMatch(row ->
+                        row.getText(0).equals("PB22") && row.getText(1).equals("DTS consumer"))
+                    && java.util.Arrays.stream(gpioUsage.getItems()).anyMatch(row ->
+                        row.getText(0).equals("PA15") && row.getText(1).equals("C source candidate"))
+                    && java.util.Arrays.stream(gpioUsage.getItems()).anyMatch(row ->
+                        row.getText(0).equals("Unresolved bit 12")
+                            && row.getText(1).equals("C unresolved device")),
+                    "cross-bank inventory separates PB22 DTS, PA15 C candidate, and unassigned C bit 12");
+            captureNativeStudioScreenshot("gpio-used-overview.png");
+            var unassigned = java.util.Arrays.stream(gpioUsage.getItems())
+                    .filter(row -> row.getText(0).equals("Unresolved bit 12")).findFirst().orElseThrow();
+            gpioUsage.setSelection(unassigned);
+            gpioUsage.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(((org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareInspector"))
+                    .getText().contains("Not allocated to any bank"),
+                    "clicking unresolved C source cannot invent a GPIO bank");
+            var blueLedUsage = java.util.Arrays.stream(gpioUsage.getItems())
+                    .filter(row -> row.getText(0).equals("PB22")).findFirst().orElseThrow();
+            gpioUsage.setSelection(blueLedUsage);
+            gpioUsage.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(((Integer) chip.getClass().getMethod("gpioConsumerCount").invoke(chip)) == 1
+                    && dock.getSelectionIndex() == 3,
+                    "selecting PB22 evidence navigates to GPIO B without losing the Usage tab");
             var gpioB = grouped.getItem(0).getItem(1);
             grouped.setSelection(gpioB);
             grouped.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
