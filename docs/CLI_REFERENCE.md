@@ -203,3 +203,20 @@ flash, test a physical device or establish source-to-binary causality.
 Linux CI additionally checks genuine host GNU ld and LLVM lld map formats
 via `scripts/evidence_native_linker_smoke.py`. See
 [real-build matrix](REAL_BUILD_EVIDENCE_MATRIX.md).
+
+## Validate real CI evidence qualification
+
+```sh
+python scripts/qualify_firmware_matrix.py \
+  --input windows-firmware-results.json \
+  --output windows-firmware-qualification.json
+```
+
+Runs offline on the seven real Windows managed firmware matrix results,
+after the firmware build jobs complete. It requires a **minimum**
+per-vendor artifact evidence contract, creates a sanitized deterministic
+qualification report, and marks unmatched GNU map/ELF observations as
+`partial-unknown`. A successful result explicitly does **not** prove
+source-to-binary causality or device flashing. See
+[qualification and measured baseline](EVIDENCE_QUALIFICATION_GATE.md),
+and [required branch settings](BRANCH_PROTECTION.md).

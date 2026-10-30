@@ -188,3 +188,27 @@ passing these prototype tests.
 - This matrix does not verify source-to-final-ELF causality, semantic
   correctness of unsupported vendor maps, embedded LLVM Zephyr
   compatibility or any physical hardware. G0 remains OPEN.
+
+## Phase-0 seven-vendor evidence qualification gate (development PR #72)
+
+- PR #71 exact-head CI (Linux and Windows) is **completed SUCCESS**; it
+  built seven real Zephyr scenarios. The evidence reports **did not**
+  show complete source-to-ELF coverage: each target had some supported
+  ELF layout observations and unmatched/non-loadable GNU map rows.
+- Provenance-grounded, redacted measurements preserved in
+  `docs/evidence/real_firmware_baseline_20261030.json`; this is a
+  historical observation baseline, not hardcoded section-count thresholds.
+- New `scripts/qualify_firmware_matrix.py` requires exact seven-scenario
+  target identity, build verification, valid SHA-256, exact source command,
+  real map and ELF section/byte observations, consistent counts and explicit
+  unknown coverage. It fails on unsupported/missing observations and
+  genuine ELF layout contradictions, **without** assuming that unallocated
+  map records are actual firmware faults.
+- PR CI now has an aggregate **Evidence qualification gate** job depending
+  on both installed Eclipse smoke and all seven Windows firmware builds,
+  including the qualification step. The workflow runs on every PR.
+- **Repository branch protection remains unverified** (connector returned
+  403). A maintainer must require the aggregate status in GitHub rulesets.
+  A CI job itself cannot stop merging when repository rules permit bypass.
+- No new G0 approval, G1 promotion, production claim, hardware measurement,
+  actual flashing or fully proven source-to-binary causality.
