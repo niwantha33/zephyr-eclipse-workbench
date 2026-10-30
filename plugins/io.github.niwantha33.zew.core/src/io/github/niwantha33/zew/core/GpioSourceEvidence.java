@@ -112,11 +112,12 @@ public final class GpioSourceEvidence {
             } catch (NumberFormatException invalid) { continue; }
             if (bit < 0 || bit > 63) continue;
             String path = "";
+            final String deviceName = binding.name();
             if (!reassigned) {
                 var eligible = devices.stream().filter(DevicetreeHardware.Device::enabled)
                         .filter(d -> HardwarePeripheralIndex.category(d).equals("GPIO"))
                         // DEVICE_DT_NAME uses label if present, otherwise node full name.
-                        .filter(d -> binding.name().equals(d.label()) || binding.name().equals(d.name()))
+                        .filter(d -> deviceName.equals(d.label()) || deviceName.equals(d.name()))
                         .toList();
                 if (eligible.size() == 1) path = eligible.get(0).path();
             }
