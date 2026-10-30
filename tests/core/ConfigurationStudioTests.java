@@ -546,6 +546,18 @@ public final class ConfigurationStudioTests {
                     "real compiled GPIO phandle specifiers resolve LED on GPIO B bit 22");
             ok(bankB.uses().stream().noneMatch(u -> u.consumerPath().equals("/invalid_gpio")),
                     "ambiguous symbolic or malformed GPIO specifier cannot fabricate a line use");
+            // One unknown phandle anywhere in a combined gpios list makes
+            // the entire property ambiguous; do not publish a partial match.
+            String ambiguousGpioDts = gpioDts.replace(
+                    "cs-gpios = <0x10 8 1>, <0x11 7 0>;",
+                    "cs-gpios = <0xff 8 1>, <0x11 7 0>;");
+            var ambiguousGpioProperties = io.github.niwantha33.zew.core.DevicetreeParameters.inspect(ambiguousGpioDts);
+            var bankWithAmbiguity = io.github.niwantha33.zew.core.GpioBankEvidence.inspect(
+                    gpioNodes.stream().filter(d -> d.name().equals("gpio@400a2000")).findFirst().orElseThrow(),
+                    ambiguousGpioProperties);
+            ok(bankWithAmbiguity.uses().size() == 1
+                    && bankWithAmbiguity.uses().get(0).bit() == 22,
+                    "unknown specifier in a mixed GPIO list cannot produce a false partial line use");
             var notGpio = io.github.niwantha33.zew.core.GpioBankEvidence.inspect(
                     gpioNodes.stream().filter(d -> d.name().equals("leds")).findFirst().orElseThrow(), gpioProperties);
             ok(notGpio == null, "GPIO consumer nodes cannot masquerade as a bank");
