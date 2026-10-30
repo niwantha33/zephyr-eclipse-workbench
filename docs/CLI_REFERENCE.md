@@ -155,3 +155,19 @@ database and map SHA-256 against the Evidence Graph. No commands are run.
 It does not infer contributions for archives or unsupported map formats.
 No recorded object, LOAD or section may be equated with a verified final
 ELF or a flashed target. See [linker evidence](LINKER_MAP_EVIDENCE.md).
+
+## Independent GNU archive and ELF virtual-range audit (Phase 0)
+
+```sh
+python zew.py link-audit --build ./build
+python zew.py link-audit --build ./sysbuild --image app=app --image boot=mcuboot
+python zew.py link --build ./build --source drivers/adc.c --source-root ./app --range-audit
+python zew.py why --build ./build --source drivers/adc.c --source-root ./app --link-evidence --range-audit
+```
+
+Reads generated GNU ld map input-section records, exact GNU regular archive
+members and ELF32/64 PT_LOAD virtual-address bounds. The map and ELF bytes
+must match the Evidence Graph's image-specific SHA-256 records. Results are
+observations only, **not source-to-binary causality, proof of runtime content,
+toolchain freshness, flashed firmware or vulnerability applicability**.
+See [archive/ELF audit constraints](ARCHIVE_ELF_RANGE_AUDIT.md).

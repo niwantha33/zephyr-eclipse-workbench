@@ -141,3 +141,19 @@ passing these prototype tests.
   paths and unsupported formats stay UNKNOWN.
 - Negative and cross-image fixtures added. G0 remains OPEN; G1/G2
   release acceptance is not implied by synthetic fixtures.
+
+## Phase-0 GNU archive and ELF range auditor (development PR)
+
+- Read-only `zew link-audit` and opt-in `--range-audit` on existing
+  `zew link` and `zew why --source --link-evidence` workflows.
+- Independent ELF32/64 little/big-endian PT_LOAD VMA bounds are compared
+  with nonzero GNU ld map input-section textual ranges; count file-backed,
+  zero-fill, mixed, uncovered and ambiguous intervals separately.
+- Exact regular GNU ar member names are inspected and SHA-256 hashed in
+  bounded streams without extraction. Thin, duplicate, missing and external
+  archive members remain unverified.
+- Map/ELF provenance is anchored to existing graph hashes; read-only CLI
+  omits raw local paths, section/member names and symbol data.
+- Does NOT prove source-to-final ELF inclusion, binary freshness, LMA/physical
+  mapping, archive extraction into linker output, target programming or
+  production qualification. G0 remains OPEN.
