@@ -2,22 +2,9 @@
 name: Build development update site
 on:
   workflow_dispatch:
+  # Run on every PR, including documentation-only changes: a required check
+  # must not remain pending or be bypassed by workflow path filters.
   pull_request:
-    paths:
-      - 'plugins/**'
-      - 'features/**'
-      - 'releng/**'
-      - 'scripts/**'
-      - 'tests/**'
-      - 'examples/**'
-      - 'zew.py'
-      - 'zew_evidence/**'
-      - 'schemas/**'
-      - 'AGENTS.md'
-      - 'docs/EVIDENCE_ENGINE_PROGRAM_V2.md'
-      - 'pom.xml'
-      - '.github/workflows/build.yml'
-      - '.github/workflows/private-update.yml'
 permissions:
   contents: read
 concurrency:
@@ -131,11 +118,37 @@ jobs:
         run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --setup-only
       - name: Cross-vendor managed firmware matrix including ADC diagnostic
         run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --run-only
+      - name: Qualify all seven real firmware evidence reports
+        run: python scripts/qualify_firmware_matrix.py --input windows-firmware-results.json --output windows-firmware-qualification.json
       - name: Retain verified target results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: windows-firmware-evidence
-          path: windows-firmware-results.json
+          path: |
+            windows-firmware-results.json
+            windows-firmware-qualification.json
           if-no-files-found: warn
           retention-days: 7
+
+  # This is the *single* status to require in branch protection. It cannot
+  # pass until both the native Eclipse and full 7-target Windows jobs succeed.
+  # Repository admins must configure it as a required check; this workflow
+  # cannot change protected branch settings by itself.
+  evidence-qualification-gate:
+    name: Evidence qualification gate
+    if: ${{ always() }}
+    needs: [package, windows-firmware]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require installed Eclipse smoke and all seven Windows firmware observations
+        env:
+          PACKAGE_RESULT: ${{ needs.package.result }}
+          WINDOWS_RESULT: ${{ needs.windows-firmware.result }}
+        run: |
+          if [ "$PACKAGE_RESULT" != "success" ] || [ "$WINDOWS_RESULT" != "success" ]; then
+            echo "Not qualified: Linux=$PACKAGE_RESULT, Windows=$WINDOWS_RESULT" >&2
+            exit 1
+          fi
+          echo "Both CI jobs passed; no source causality, device or production approval is implied."
