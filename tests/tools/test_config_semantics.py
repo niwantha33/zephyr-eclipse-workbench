@@ -140,6 +140,39 @@ class KconfigSemanticTests(unittest.TestCase):
         self.assertEqual(values["KCONFIG_BINARY_DIR"], r"C:\Build Folder\zephyr\Kconfig")
         self.assertEqual(values["EDT_PICKLE"], r"C:\Build Folder\zephyr\edt.pickle")
 
+    def test_selected_zephyr_kconfig_helper_import_is_scoped_to_evaluation(self):
+        # Zephyr's Kconfiglib imports kconfigfunctions dynamically from the
+        # selected checkout at Kconfig() time, not necessarily module load time.
+        import importlib
+        import sys
+
+        helper = "zew_ci_selected_kconfig_helper"
+        package = self.source / "scripts" / "kconfig"
+        package.mkdir(parents=True)
+        (package / (helper + ".py")).write_text("functions = {}\n", encoding="utf-8")
+
+        class WithSelectedHelper(FakeLib):
+            class Kconfig(FakeLib.Kconfig):
+                def __init__(self, *args, **kwargs):
+                    importlib.import_module(helper)
+                    super().__init__(*args, **kwargs)
+
+        self.snippet.write_text("CONFIG_GPIO=y\n", encoding="utf-8")
+        before_path = list(sys.path)
+        sys.modules.pop(helper, None)
+        try:
+            with mock.patch.object(semantic.subprocess, "run",
+                                   return_value=SimpleNamespace(stdout=self.commands())), \
+                 mock.patch.object(semantic, "_load_selected_kconfiglib",
+                                   return_value=WithSelectedHelper):
+                report = semantic.enrich(check(collect(self.build), self.snippet),
+                                         self.build, [], self.ninja)
+            self.assertEqual(report["images"][0]["semantic"]["state"], "evaluated")
+            self.assertEqual(report["semantic_validation"]["state"], "evaluated-without-blockers")
+            self.assertEqual(sys.path, before_path)
+        finally:
+            sys.modules.pop(helper, None)
+
     def test_changed_config_cannot_be_confirmed(self):
         self.snippet.write_text("CONFIG_GPIO=y\n", encoding="utf-8")
         graph = collect(self.build)
