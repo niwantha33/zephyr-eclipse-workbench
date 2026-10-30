@@ -22,6 +22,8 @@ python zew.py compare --left /path/to/working/build --right /path/to/failing/bui
 python zew.py bundle --build /path/to/working/build
 python zew.py bundle --build /path/to/working/build --output ./evidence.zip --write
 python zew.py inspect --input ./evidence.zip
+python zew.py inspect --input ./evidence.zip --show-graph
+python zew.py compare --left-bundle ./working.zip --right-bundle ./failing.zip
 ```
 
 `compare` reports only changed observed generated Kconfig values and byte-level
@@ -31,7 +33,10 @@ configuration values are **not compared**. Each command outputs stable JSON.
 
 `bundle` defaults to a preview, performs no write unless `--write` is
 explicit, and refuses to overwrite an existing ZIP. Package content is limited
-to a sanitized graph and integrity manifest. Raw ELF, DTS, source, private
+to a sanitized graph and integrity manifest. Inspection can expose that
+graph for offline analysis, and comparisons can use verified bundles directly.
+The imported graph is structurally validated and must retain redacted Kconfig
+values even if the archive manifest has been forged. Raw ELF, DTS, source, private
 configuration strings and logs are never included. `inspect` validates SHA-256
 and hardens archive processing without extracting anything, but **does not
 authenticate a producer**. Bundle format `zew-evidence-0.1`, two allowlisted
