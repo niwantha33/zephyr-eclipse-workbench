@@ -233,3 +233,27 @@ output section names, addresses, lengths and ELF allocation flags.
 Nonallocated output sections and unrecognised layouts remain distinct
 from loaded bytes; this is **not source inclusion or flash evidence**.
 Read [GNU map context limits](GNU_MAP_CONTEXT.md).
+
+
+## Configuration snippet request/snapshot check (Phase-0 feasibility)
+
+```sh
+python zew.py config-check --build /path/to/build --snippet /path/to/prj.conf
+python zew.py config-check --build /path/to/sysbuild --image app=app --snippet /path/to/ai-snippet.conf
+```
+
+This reads a user-selected local configuration snippet and the last generated
+`zephyr/.config` through the existing bounded Evidence Graph collector. It
+compares **only** explicit `y`/`m`/`n` requests (including
+`# CONFIG_FOO is not set`) with recorded values. Other values,
+missing symbols, missing builds and contradictory requests are explicitly
+reported without claiming that the symbol is invalid or the dependency is
+known. Snippet raw values and paths are omitted from deterministic JSON output.
+
+Return codes: 0 when all supported requests match the selected snapshot(s);
+1 for partial, mismatched, malformed or unavailable observations;
+2 for invalid/unsafe inputs or collection errors.
+A zero exit code **does not prove** current source freshness, Kconfig semantics,
+successful hardware operation, or valid AI suggestions. This is deliberately
+not the proposed full Kconfiglib/edtlib Truth Check or a learning-study result.
+See [the checker guide](CONFIG_REQUEST_CHECK.md) and its tests.
