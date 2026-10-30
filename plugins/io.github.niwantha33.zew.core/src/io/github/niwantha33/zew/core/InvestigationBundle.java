@@ -13,7 +13,7 @@ public final class InvestigationBundle {
     private InvestigationBundle() {}
     private static final int LIMIT = 2_000_000;
     private static final Set<String> NAMES = Set.of("source/prj.conf", "generated/.config",
-            "generated/zephyr.dts", "diagnosis.txt");
+            "generated/zephyr.dts", "build/build-identity.txt", "diagnosis.txt");
     public record Preview(Map<String, byte[]> entries) {
         public Preview { entries = copy(entries); }
         @Override public Map<String, byte[]> entries() { return copy(entries); }
@@ -36,10 +36,78 @@ public final class InvestigationBundle {
         if (build != null) {
             add(entries, "generated/.config", build.resolve("zephyr/.config"));
             add(entries, "generated/zephyr.dts", build.resolve("zephyr/zephyr.dts"));
+            if (Files.isRegularFile(build.resolve("zephyr/.config"), LinkOption.NOFOLLOW_LINKS))
+                entries.put("build/build-identity.txt", buildIdentity(build).getBytes(StandardCharsets.UTF_8));
         }
         entries.put("diagnosis.txt", ConfigurationDiagnosis.inspect(app, build, null).display().getBytes(StandardCharsets.UTF_8));
         return new Preview(entries);
     }
+    /**
+     * Export only allowlisted identity fields and a bounded ELF digest.
+     * A build receipt and ELF hash identify snapshots, not authenticity or
+     * physical flashing. Never export local SDK paths or the ELF itself.
+     */
+    private static String buildIdentity(Path build) throws IOException {
+        var cfg = BuildArtifacts.configuration(build);
+        StringBuilder out = new StringBuilder("Zephyr build evidence (not a hardware-verification certificate)\n");
+        String target = cfg.getOrDefault("CONFIG_BOARD_TARGET", "(not reported)").replace("\"", "");
+        String soc = cfg.getOrDefault("CONFIG_SOC", "(not reported)").replace("\"", "");
+        out.append("CONFIG_BOARD_TARGET: ").append(target).append('\n')
+                .append("CONFIG_SOC: ").append(soc).append('\n');
+        for (String arch : List.of("ARM", "ARM64", "RISCV", "XTENSA", "X86", "ARC"))
+            if ("y".equals(cfg.get("CONFIG_" + arch)))
+                out.append("Architecture flag: CONFIG_").append(arch).append("=y\n");
+        Path receipt = build.resolve(".zew-built-target");
+        if (Files.isRegularFile(receipt, LinkOption.NOFOLLOW_LINKS) && Files.size(receipt) <= 256) {
+            String recorded = Files.readString(receipt, StandardCharsets.UTF_8).strip();
+            // No command line or filesystem paths are emitted in the package.
+            if (recorded.matches("[A-Za-z0-9_][A-Za-z0-9_.@/+-]{0,255}")) {
+                out.append("Recorded target: ").append(recorded).append('\n');
+                out.append("Target agreement: ").append("(not reported)".equals(target)
+                        ? "unverified (generated Kconfig target missing)"
+                        : recorded.equals(target) ? "matches generated config" : "MISMATCH").append('\n');
+            } else out.append("Recorded target: unavailable or invalid\n");
+        } else out.append("Recorded target: unavailable; build identity unverified\n");
+        String kernel = cfg.getOrDefault("CONFIG_KERNEL_BIN_NAME", "\"zephyr\"");
+        if (kernel.length() >= 2 && kernel.startsWith("\"") && kernel.endsWith("\""))
+            kernel = kernel.substring(1, kernel.length() - 1);
+        if (!kernel.matches("[A-Za-z0-9_.-]+") || kernel.equals(".") || kernel.equals("..")) {
+            out.append("ELF identity: invalid kernel output name in generated Kconfig\n");
+            return out.toString();
+        }
+        Path elf = build.resolve("zephyr").resolve(kernel + ".elf");
+        if (!Files.isRegularFile(elf, LinkOption.NOFOLLOW_LINKS)) {
+            out.append("ELF identity: not available\n");
+            return out.toString();
+        }
+        if (!elf.toRealPath().startsWith(build.toRealPath()))
+            throw new IOException("ELF identity file escapes the selected build.");
+        long size = Files.size(elf);
+        if (size < 4 || size > 128L * 1024 * 1024) {
+            out.append("ELF identity: unavailable (empty or exceeds 128 MiB)\n");
+            return out.toString();
+        }
+        try (var input = Files.newInputStream(elf)) {
+            if (!java.util.Arrays.equals(input.readNBytes(4), new byte[] {0x7f, 'E', 'L', 'F'})) {
+                out.append("ELF identity: invalid ELF magic\n");
+                return out.toString();
+            }
+        }
+        try {
+            var digest = MessageDigest.getInstance("SHA-256");
+            try (var input = Files.newInputStream(elf)) {
+                byte[] block = new byte[64 * 1024];
+                for (int n; (n = input.read(block)) != -1;) digest.update(block, 0, n);
+            }
+            out.append("ELF file: ").append(elf.getFileName()).append('\n')
+                    .append("ELF size: ").append(size).append(" bytes\n")
+                    .append("ELF SHA-256: ").append(HexFormat.of().formatHex(digest.digest())).append('\n');
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+        return out.toString();
+    }
+
     private static void add(Map<String, byte[]> entries, String name, Path file) throws IOException {
         if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return;
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Not a regular evidence file: " + file);
