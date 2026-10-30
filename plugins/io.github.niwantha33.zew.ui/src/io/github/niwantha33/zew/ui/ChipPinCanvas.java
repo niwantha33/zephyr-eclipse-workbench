@@ -196,7 +196,13 @@ public final class ChipPinCanvas extends Canvas {
             int count = 0;
             for (var usage : bank.uses()) if (usage.bit() == bit) count++;
             boolean selectedSlot = selectedBit == bit;
-            boolean fromCode = resolvedSourceCalls.stream().anyMatch(call -> call.bit() == bit);
+            boolean fromCode = false;
+            for (var call : resolvedSourceCalls) {
+                if (call.bit() == bit) {
+                    fromCode = true;
+                    break;
+                }
+            }
             gc.setBackground(display.getSystemColor(selectedSlot ? SWT.COLOR_LIST_SELECTION
                     : count > 0 ? SWT.COLOR_INFO_BACKGROUND : SWT.COLOR_WIDGET_BACKGROUND));
             gc.setForeground(display.getSystemColor(selectedSlot ? SWT.COLOR_LIST_SELECTION_TEXT
