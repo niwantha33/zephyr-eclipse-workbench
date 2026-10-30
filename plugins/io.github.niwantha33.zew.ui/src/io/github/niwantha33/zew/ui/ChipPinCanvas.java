@@ -30,7 +30,8 @@ public final class ChipPinCanvas extends Canvas {
     public ChipPinCanvas(Composite parent) {
         super(parent, SWT.DOUBLE_BUFFERED | SWT.BORDER);
         setBackground(getDisplay().getSystemColor(SWT.COLOR_LIST_BACKGROUND));
-        setToolTipText("Logical routes from built zephyr.dts. These are NOT physical package pads.");
+        // Keep the canvas free of a long hover tooltip: the page already
+        // explains the evidence boundary and the tooltip obscures the chip.
         getAccessible().addAccessibleListener(new org.eclipse.swt.accessibility.AccessibleAdapter() {
             @Override public void getName(org.eclipse.swt.accessibility.AccessibleEvent event) {
                 event.result = "Logical pin planner for " + controller + ". "
@@ -71,6 +72,14 @@ public final class ChipPinCanvas extends Canvas {
         Rectangle area = getClientArea();
         var display = getDisplay();
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
+        if ("Select a peripheral".equals(controller)) {
+            hitAreas.clear();
+            gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
+            gc.drawText("SELECT A PERIPHERAL", 24, 42, true);
+            gc.drawText("Choose ADC, GPIO, UART, SPI or another controller from the explorer.", 24, 76, true);
+            gc.drawText("Only actual last-build values will appear here.", 24, 105, true);
+            return;
+        }
         if (mode == Mode.PACKAGE) {
             paintPackageUnavailable(gc, area);
             return;
@@ -80,7 +89,7 @@ public final class ChipPinCanvas extends Canvas {
             return;
         }
         gc.drawText("LOGICAL SIGNAL PLANNER", 16, 12, true);
-        gc.drawText("Built pinctrl/GPIO values   |   Package pads not verified", 16, 32, true);
+        gc.drawText("Compiled logical routes  |  Physical pads unverified", 16, 32, true);
 
         int count = visibleCount();
         int rows = (count + 1) / 2;
@@ -88,7 +97,7 @@ public final class ChipPinCanvas extends Canvas {
         int chipWidth = 190;
         int left = center - chipWidth / 2;
         int top = 64;
-        int chipHeight = Math.max(166, rows * ROUTE_ROW + 48);
+        int chipHeight = Math.max(144, rows * ROUTE_ROW + 48);
         int sideWidth = Math.max(105, Math.min(185, (area.width - chipWidth) / 2 - 32));
         gc.setBackground(display.getSystemColor(SWT.COLOR_DARK_GRAY));
         gc.setForeground(display.getSystemColor(SWT.COLOR_BLACK));
@@ -124,20 +133,23 @@ public final class ChipPinCanvas extends Canvas {
             hitAreas.add(new Rectangle(x, y, sideWidth, 28));
         }
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
-        int footer = top + chipHeight + 14;
-        gc.drawText("Select a route to inspect its exact built property and source.", 16, footer, true);
-        if (routes.size() > count)
-            gc.drawText("Showing first " + count + " of " + routes.size()
-                    + " routes. Use the parameters table for the complete set.", 16, footer + 23, true);
-        else if (routes.isEmpty())
-            gc.drawText("No logical routes found for this controller in the last build.", 16, footer + 23, true);
+        int footer = top + chipHeight + 9;
+        if (routes.isEmpty()) {
+            gc.drawText(shorten(gc, "No direct pinctrl/GPIO routes; inspect the built properties.",
+                    Math.max(80, area.width - 30)), 16, footer, true);
+        } else {
+            gc.drawText("Select a route to inspect its exact built property and source.", 16, footer, true);
+            if (routes.size() > count)
+                gc.drawText("Showing first " + count + " of " + routes.size()
+                        + " routes. Full set: parameters table.", 16, footer + 23, true);
+        }
     }
 
     private void paintPackageUnavailable(org.eclipse.swt.graphics.GC gc, Rectangle area) {
         var display = getDisplay();
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
         gc.drawText("PACKAGE / PINOUT", 16, 15, true);
-        gc.drawText("Physical package pads have NOT been resolved for this target.", 16, 41, true);
+        gc.drawText("Exact part and package mapping not verified", 16, 41, true);
         int width = Math.min(360, Math.max(170, area.width - 64));
         int height = Math.min(270, Math.max(160, area.height - 150));
         int left = Math.max(20, (area.width - width) / 2);
@@ -153,8 +165,10 @@ public final class ChipPinCanvas extends Canvas {
         gc.drawText(shorten(gc, chip, width - 36), left + 18, top + 90, true);
         gc.drawText("No pad numbers shown", left + 18, top + 120, true);
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
-        gc.drawText("Choose Logical signals for actual built pinctrl / GPIO values.", 16, top + height + 20, true);
-        gc.drawText("Supply verified, licence-cleared MCU part and package mapping to enable a pinout.", 16, top + height + 44, true);
+        gc.drawText(shorten(gc, "Logical signals shows built pinctrl/GPIO values.",
+                Math.max(80, area.width - 24)), 16, top + height + 20, true);
+        gc.drawText(shorten(gc, "Physical pad numbering requires verified part and package metadata.",
+                Math.max(80, area.width - 24)), 16, top + height + 44, true);
         hitAreas.clear();
     }
 
@@ -191,12 +205,16 @@ public final class ChipPinCanvas extends Canvas {
         mode = requested;
         int count = mode == Mode.CONNECTIONS ? visibleCount()
                 : (visibleCount() + 1) / 2;
-        int h = mode == Mode.CONNECTIONS ? count * 28 + 105
-                : mode == Mode.PACKAGE ? 480 : count * ROUTE_ROW + 185;
-        setSize(Math.max(620, getSize().x), Math.max(295, h));
+        int signalHeight = Math.max(144, count * ROUTE_ROW + 48) + 94
+                + (routes.size() > MAX_VISIBLE_ROUTES ? 24 : 0);
+        int h = mode == Mode.CONNECTIONS ? Math.max(190, count * 28 + 105)
+                : mode == Mode.PACKAGE ? 480
+                : "Select a peripheral".equals(controller) ? 185 : Math.max(238, signalHeight);
+        // Expanding into a larger pane must not lock in a stale wide/tall canvas.
+        setSize(540, h);
         var parent = getParent();
         if (parent instanceof org.eclipse.swt.custom.ScrolledComposite scroll) {
-            scroll.setMinSize(620, Math.max(295, h));
+            scroll.setMinSize(540, h);
         }
         redraw();
     }

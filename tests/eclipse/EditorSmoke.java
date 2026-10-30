@@ -42,6 +42,26 @@ public final class EditorSmoke implements IApplication {
                             compatible = "ti,mspm0-uart";
                             status = "okay";
                         };
+                        pin-controller@400a0000 {
+                            compatible = "ti,mspm0-pinctrl";
+                            gpio@400a0000 {
+                                compatible = "ti,mspm0-gpio";
+                                status = "okay";
+                                reg = <0x400a0000 0x2000>;
+                                gpio-controller;
+                                #gpio-cells = <2>;
+                            };
+                            gpio@400a2000 {
+                                compatible = "ti,mspm0-gpio";
+                                status = "okay";
+                                reg = <0x400a2000 0x2000>;
+                                gpio-controller;
+                                #gpio-cells = <2>;
+                            };
+                            gpio-default {
+                                pinmux = <0x23>;
+                            };
+                        };
                     };
                     pinctrl {
                         adc-default {
@@ -105,6 +125,11 @@ public final class EditorSmoke implements IApplication {
             var chip = studioField(view, type, "chipPins");
             check(((Integer) chip.getClass().getMethod("routeCount").invoke(chip)) == 1,
                     "native chip canvas contains the selected controller's resolved pinctrl route");
+            var plannerCanvas = (org.eclipse.swt.widgets.Canvas) chip;
+            var plannerScroll = (org.eclipse.swt.custom.ScrolledComposite) plannerCanvas.getParent();
+            check(plannerCanvas.getToolTipText() == null && plannerScroll.getMinWidth() <= 540
+                    && plannerScroll.getMinHeight() <= 250,
+                    "small-route planner avoids obscuring tooltips and needless horizontal/vertical scrolling");
             // The redesigned native Hardware workspace must have real
             // peripheral navigation, planner modes and a separate evidence dock.
             var grouped = (org.eclipse.swt.widgets.Tree) studioField(view, type, "hardwarePeripheralTree");
@@ -166,6 +191,24 @@ public final class EditorSmoke implements IApplication {
                     && hardware.getItem(0).getItem(0).getItem(0).getItemCount() == 1
                     && hardware.getItem(0).getItem(0).getItem(0).getItem(0).getText().equals("channel@0"),
                     "ADC category keeps child channels available for configuration");
+            kind.select(kind.indexOf("GPIO"));
+            kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(grouped.getItemCount() == 1
+                    && grouped.getItem(0).getText().startsWith("GPIO (2)")
+                    && grouped.getItem(0).getItemCount() == 2,
+                    "GPIO explorer discovers both compatible-bearing MSPM0 controllers nested under pinctrl");
+            var gpioController = grouped.getItem(0).getItem(0);
+            check(gpioController.getText().startsWith("gpio@400a0000"),
+                    "GPIO A is shown as a real controller, not a pinctrl group");
+            grouped.setSelection(gpioController);
+            grouped.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(java.util.Arrays.stream(parameterTable.getItems())
+                    .anyMatch(item -> item.getText(0).contains("gpio-controller"))
+                    && java.util.Arrays.stream(parameterTable.getItems())
+                    .anyMatch(item -> item.getText(0).contains("#gpio-cells")),
+                    "selecting GPIO exposes compiled controller parameters rather than an empty inspector");
+            check(validation.getText().contains("gpio@400a0000"),
+                    "GPIO selection updates the evidence dock to the actual built controller");
             kind.select(kind.indexOf("Other"));
             kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             var soc = hardware.getItem(0).getItem(0);
@@ -176,6 +219,9 @@ public final class EditorSmoke implements IApplication {
             kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             hardwareSearch.setText("no-such-controller");
             check(hardware.getItemCount() == 0, "hardware search has an honest empty state");
+            var guidance = (org.eclipse.swt.widgets.Label) studioField(view, type, "parameterTitle");
+            check(guidance.getText().contains("No peripheral matches this filter"),
+                    "built target with empty filter never falsely asks the user to rebuild");
             var cancel = new org.eclipse.swt.widgets.Event(); cancel.detail = org.eclipse.swt.SWT.ICON_CANCEL;
             hardwareSearch.notifyListeners(org.eclipse.swt.SWT.Selection, cancel);
             check(hardwareSearch.getText().isEmpty() && hardware.getItemCount() > 0,

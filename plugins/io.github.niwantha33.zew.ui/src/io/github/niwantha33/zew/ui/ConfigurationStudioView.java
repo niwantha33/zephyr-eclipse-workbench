@@ -367,9 +367,8 @@ public final class ConfigurationStudioView extends ViewPart {
         Composite hardware = tab(tabs, "Hardware");
         hardware.setLayout(new GridLayout(1, false));
         Label warning = new Label(hardware, SWT.WRAP);
-        warning.setText("VISUAL HARDWARE STUDIO 2.0  /  Selected build snapshot  ·  "
-                + "The package diagram is unavailable until an exact verified part + package map is provided. "
-                + "Pinmux values are logical routes, NEVER physical package pads.");
+        warning.setText("VISUAL HARDWARE STUDIO 2.0  /  Last generated build  ·  "
+                + "Logical routes are not physical package pins; verified package mapping is unavailable.");
         warning.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         var studioVertical = new SashForm(hardware, SWT.VERTICAL);
@@ -448,7 +447,7 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareSummary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         hardwareDescription = new Text(devicePanel, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL | SWT.BORDER);
         GridData descriptionLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
-        descriptionLayout.heightHint = 70;
+        descriptionLayout.heightHint = 48;
         hardwareDescription.setLayoutData(descriptionLayout);
         hardwareDescription.setText("Build the exact board to discover peripheral controllers and channels.");
         hardwareSearch.addModifyListener(event -> refreshHardware());
@@ -488,7 +487,7 @@ public final class ConfigurationStudioView extends ViewPart {
         chipScroll.setContent(chipPins);
         chipScroll.setExpandHorizontal(true);
         chipScroll.setExpandVertical(true);
-        chipScroll.setMinSize(620, 295);
+        chipScroll.setMinSize(540, 295);
         packageMode.addListener(SWT.Selection, event -> {
             if (packageMode.getSelection()) chipPins.setMode(ChipPinCanvas.Mode.PACKAGE);
         });
@@ -1015,9 +1014,17 @@ public final class ConfigurationStudioView extends ViewPart {
         if (hardwareParameters == null || hardwareParameters.isDisposed()) return;
         hardwareParameters.removeAll();
         if (device == null || snapshot == null) {
-            parameterTitle.setText("No controller selected. Build the exact board, then select a device.");
-            hardwareInspector.setText("No built peripheral selected. No parameters are inferred.");
-            hardwareValidation.setText("MISSING EVIDENCE  |  Build the exact target, then select a controller.");
+            boolean hasDts = snapshot != null && !snapshot.devicetree().isBlank();
+            String guidance = hasDts
+                    ? "No peripheral matches this filter. Change category/state or clear the search."
+                    : "No generated Devicetree. Build the exact target first.";
+            parameterTitle.setText(guidance);
+            hardwareInspector.setText(hasDts
+                    ? "A build is available, but no controller is selected."
+                    : "No built peripheral selected. No parameters are inferred.");
+            hardwareValidation.setText(hasDts
+                    ? "FILTER EMPTY  |  The generated Devicetree exists. Select a different peripheral category."
+                    : "MISSING EVIDENCE  |  Build the exact target, then select a controller.");
             chipPins.showRoutes("Select a peripheral", List.of(), route -> {});
             return;
         }
@@ -1145,7 +1152,15 @@ public final class ConfigurationStudioView extends ViewPart {
                 String parent = slash <= 0 ? "/" : device.path().substring(0, slash);
                 var parentItem = accepted.get(parent);
                 String category = HardwarePeripheralIndex.category(device);
-                // Child channels are shown only beneath visible, matched owners.
+                // Never bury a real GPIO controller inside the Pinctrl group:
+                // the raw DTS parent may be a pin-controller, but navigation
+                // must respect this node's own compatible/category.
+                if (parentItem != null) {
+                    var parentDevice = (DevicetreeHardware.Device) parentItem.getData();
+                    if (!category.equals(HardwarePeripheralIndex.category(parentDevice))
+                            && !name.startsWith("channel@")) parentItem = null;
+                }
+                // Child ADC channels remain under their actual controller.
                 boolean child = parentItem != null;
                 if (!child && (!HardwarePeripheralIndex.matches(device, categoryFilter)
                         || !DevicetreeHardware.matches(device, query, state))) continue;
@@ -1342,7 +1357,8 @@ public final class ConfigurationStudioView extends ViewPart {
             } else {
                 hardwareDescription.setText(devices.isEmpty()
                         ? "Build the exact target to generate zephyr.dts. Existing overlays remain editable."
-                        : "No matching nodes. Clear the search or choose All nodes.");
+                        : "No matching built nodes for " + hardwareKind.getText()
+                                + ". Clear search or change category/status.");
                 showHardwareParameters(null);
             }
             hardwareSummary.setText(matches.size() + " matching nodes · " + devices.size()
