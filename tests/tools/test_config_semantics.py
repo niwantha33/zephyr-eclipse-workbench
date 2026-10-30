@@ -141,9 +141,9 @@ class KconfigSemanticTests(unittest.TestCase):
         self.assertEqual(checked["images"][0]["semantic"]["reason"], "ninja-command-inspection-failed")
 
     def test_cli_semantic_success_and_rejection(self):
-        self.snippet.write_text("CONFIG_GPIO=y\\n", encoding="utf-8")
+        self.snippet.write_text("CONFIG_GPIO=y\n", encoding="utf-8")
         with mock.patch.object(semantic.subprocess, "run",
-                               return_value=SimpleNamespace(stdout=self.commands())), \\
+                               return_value=SimpleNamespace(stdout=self.commands())), \
              mock.patch.object(semantic, "_load_selected_kconfiglib", return_value=FakeLib):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
@@ -153,9 +153,9 @@ class KconfigSemanticTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(out.getvalue())
         self.assertEqual(payload["semantic_validation"]["state"], "evaluated-without-blockers")
-        self.snippet.write_text("CONFIG_UNDEFINED=y\\n", encoding="utf-8")
+        self.snippet.write_text("CONFIG_UNDEFINED=y\n", encoding="utf-8")
         with mock.patch.object(semantic.subprocess, "run",
-                               return_value=SimpleNamespace(stdout=self.commands())), \\
+                               return_value=SimpleNamespace(stdout=self.commands())), \
              mock.patch.object(semantic, "_load_selected_kconfiglib", return_value=FakeLib):
             with contextlib.redirect_stdout(io.StringIO()):
                 code = main(["config-check", "--build", str(self.build),
