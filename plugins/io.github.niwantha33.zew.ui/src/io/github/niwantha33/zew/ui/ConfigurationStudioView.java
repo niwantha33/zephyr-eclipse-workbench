@@ -48,6 +48,7 @@ import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
+import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains.Domain;
@@ -82,6 +83,10 @@ public final class ConfigurationStudioView extends ViewPart {
     private final java.util.List<String> navigationHistory = new java.util.ArrayList<>();
     private int navigationPosition = -1;
     private Text hardwareDescription;
+    private TabFolder hardwareDetails;
+    private Table hardwareParameters;
+    private Label parameterTitle;
+    private ChipPinCanvas chipPins;
     private Button enableButton, disableButton, editButton, removeButton;
     private Combo category;
     private TabFolder tabs;
@@ -172,6 +177,10 @@ public final class ConfigurationStudioView extends ViewPart {
             information.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
             information.setText(domain.description());
             peripheralInfo.put(domain, information);
+            if (!domain.driverSymbol().isBlank()) {
+                action(body, "Parameters & pins →", () -> openPeripheralParameters(domain))
+                        .setToolTipText("Inspect this peripheral's actual controller/channel parameters and pin routes");
+            }
             tab.setControl(body);
         }
         peripheralTabs.setSelection(0);
@@ -397,13 +406,45 @@ public final class ConfigurationStudioView extends ViewPart {
             if (event.keyCode == SWT.ESC) hardwareSearch.setText("");
         });
         hardwareState.addListener(SWT.Selection, event -> refreshHardware());
-        var sourcePanel = new Composite(hardwareSplit, SWT.NONE);
+        var detailsPanel = new Composite(hardwareSplit, SWT.NONE);
+        detailsPanel.setLayout(new GridLayout(1, false));
+        hardwareDetails = new TabFolder(detailsPanel, SWT.NONE);
+        hardwareDetails.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        var chipPage = tab(hardwareDetails, "Chip & parameters");
+        chipPage.setLayout(new GridLayout(1, false));
+        parameterTitle = new Label(chipPage, SWT.WRAP);
+        parameterTitle.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        parameterTitle.setText("Select a controller or channel to inspect its built parameters.");
+        var parameterSplit = new SashForm(chipPage, SWT.HORIZONTAL);
+        parameterSplit.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        var chipScroll = new org.eclipse.swt.custom.ScrolledComposite(parameterSplit, SWT.H_SCROLL | SWT.V_SCROLL);
+        chipPins = new ChipPinCanvas(chipScroll);
+        chipScroll.setContent(chipPins);
+        chipScroll.setExpandHorizontal(true);
+        chipScroll.setExpandVertical(true);
+        chipScroll.setMinSize(560, 295);
+        var parameterPanel = new Composite(parameterSplit, SWT.NONE);
+        parameterPanel.setLayout(new GridLayout(1, false));
+        hardwareParameters = new Table(parameterPanel, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.H_SCROLL | SWT.V_SCROLL);
+        hardwareParameters.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        hardwareParameters.setHeaderVisible(true);
+        hardwareParameters.setLinesVisible(true);
+        for (String name : new String[] {"Parameter", "Last built value", "Node / channel"}) {
+            var column = new TableColumn(hardwareParameters, SWT.LEFT); column.setText(name);
+        }
+        hardwareParameters.addListener(SWT.DefaultSelection, event -> prepareHardwareOverride());
+        var parameterActions = new Composite(parameterPanel, SWT.NONE);
+        parameterActions.setLayout(new GridLayout(2, false));
+        action(parameterActions, "Prepare overlay request…", this::prepareHardwareOverride);
+        action(parameterActions, "Show declaration", this::revealParameterSource);
+        parameterSplit.setWeights(new int[] {50, 50});
+        var sourcePanel = tab(hardwareDetails, "Generated source");
         sourcePanel.setLayout(new GridLayout(1, false));
         var sourceCaption = new Label(sourcePanel, SWT.NONE);
         sourceCaption.setText("Compiled Devicetree source (read-only)");
         tree = new Text(sourcePanel, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        hardwareSplit.setWeights(new int[] {60, 40});
+        hardwareSplit.setWeights(new int[] {40, 60});
         var hardwareActions = new Composite(hardware, SWT.NONE);
         hardwareActions.setLayout(new GridLayout(3, false));
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
@@ -700,14 +741,99 @@ public final class ConfigurationStudioView extends ViewPart {
         if (hardwareDevices.getSelectionCount() == 0) return;
         var device = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
         hardwareDescription.setText(DevicetreeHardware.explanation(device));
+        showHardwareParameters(device);
+    }
+
+    private void openPeripheralParameters(Domain domain) {
+        tabs.setSelection(1);
+        hardwareDetails.setSelection(0);
+        hardwareState.select(0);
+        hardwareSearch.setText(domain.id());
+        refreshHardware();
+        if (hardwareDevices.getSelectionCount() == 0)
+            status.setText("No " + domain.title() + " controller in the last generated Devicetree. Build the exact board first.");
+    }
+
+    private void showHardwareParameters(DevicetreeHardware.Device device) {
+        if (hardwareParameters == null || hardwareParameters.isDisposed()) return;
+        hardwareParameters.removeAll();
+        if (device == null || snapshot == null) {
+            parameterTitle.setText("No controller selected. Build the exact board, then select a device.");
+            chipPins.showRoutes("Select a peripheral", List.of(), route -> {});
+            return;
+        }
+        var properties = DevicetreeParameters.inspect(snapshot.devicetree());
+        String owner = device.path();
+        if (device.name().startsWith("channel@")) owner = owner.substring(0, owner.lastIndexOf('/'));
+        var routes = DevicetreeParameters.pinRoutes(properties, owner);
+        var shown = new java.util.LinkedHashSet<>(DevicetreeParameters.forDevice(properties, device.path()));
+        for (var route : routes)
+            properties.stream().filter(p -> p.path().equals(route.path()) && p.name().equals(route.property()))
+                    .forEach(shown::add);
+        for (var property : shown) {
+            var item = new TableItem(hardwareParameters, SWT.NONE);
+            item.setText(new String[] {property.title() + " · " + property.name(), property.displayValue(), property.path()});
+            item.setData(property);
+        }
+        for (int i = 0; i < hardwareParameters.getColumnCount(); i++) {
+            hardwareParameters.getColumn(i).pack();
+            hardwareParameters.getColumn(i).setWidth(Math.max(130, Math.min(i == 0 ? 250 : 320,
+                    hardwareParameters.getColumn(i).getWidth())));
+        }
+        if (hardwareParameters.getItemCount() > 0) hardwareParameters.select(0);
+        parameterTitle.setText(device.path() + " · " + shown.size() + " built parameters · "
+                + routes.size() + " pin routes · physical package pads require a device mapping");
+        chipPins.showRoutes(owner, routes, route -> {
+            for (var row : hardwareParameters.getItems()) {
+                var property = (DevicetreeParameters.Property) row.getData();
+                if (property.path().equals(route.path()) && property.name().equals(route.property())) {
+                    hardwareParameters.setSelection(row); hardwareParameters.showSelection(); break;
+                }
+            }
+        });
+        var scroll = (org.eclipse.swt.custom.ScrolledComposite) chipPins.getParent();
+        scroll.setMinSize(560, Math.max(295, ((routes.size() + 1) / 2) * 35 + 110));
+        parameterTitle.getParent().layout(true, true);
+    }
+
+    private void prepareHardwareOverride() {
+        if (hardwareParameters.getSelectionCount() == 0) return;
+        var property = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
+        var dialog = new InputDialog(getSite().getShell(), property.title(),
+                property.path() + "\n" + property.name()
+                + "\nEnter Devicetree value syntax. This prepares a draft, not a validated pin assignment.",
+                property.value(), value -> {
+                    try { DevicetreeParameters.overlayRequest(property, value); return null; }
+                    catch (IllegalArgumentException invalid) { return invalid.getMessage(); }
+                });
+        if (dialog.open() != Window.OK) return;
+        String draft = DevicetreeParameters.overlayRequest(property, dialog.getValue());
+        if (!MessageDialog.openConfirm(getSite().getShell(), "Review overlay request",
+                draft + "\nCopy this draft to the clipboard? Review the device binding before adding it to the active overlay."
+                + "\nNo files will be changed. Rebuild to validate the request.")) return;
+        var clipboard = new Clipboard(hardwareParameters.getDisplay());
+        try { clipboard.setContents(new Object[] {draft}, new Transfer[] {TextTransfer.getInstance()}); }
+        finally { clipboard.dispose(); }
+        status.setText("Overlay request copied. Add it to the active application overlay and Build & validate.");
+    }
+
+    private void revealParameterSource() {
+        if (hardwareParameters.getSelectionCount() == 0) return;
+        var property = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
+        revealHardwareLine(property.line(), property.path() + " · " + property.name());
     }
 
     private void revealHardwareSource() {
         if (hardwareDevices.getSelectionCount() == 0 || snapshot == null) return;
         var device = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+        revealHardwareLine(device.line(), device.path());
+    }
+
+    private void revealHardwareLine(int number, String path) {
+        hardwareDetails.setSelection(1);
         String source = tree.getText();
         int start = 0;
-        for (int line = 1; line < device.line(); line++) {
+        for (int line = 1; line < number; line++) {
             int end = source.indexOf('\n', start);
             if (end < 0) return;
             start = end + 1;
@@ -716,7 +842,7 @@ public final class ConfigurationStudioView extends ViewPart {
         tree.setSelection(start, end < 0 ? source.length() : end);
         tree.showSelection();
         tree.setFocus();
-        status.setText(device.path() + " · generated zephyr.dts:" + device.line());
+        status.setText(path + " · generated zephyr.dts:" + number);
     }
 
     private void copyHardwarePath() {
@@ -780,9 +906,12 @@ public final class ConfigurationStudioView extends ViewPart {
                 hardwareDevices.setSelection(selection);
                 hardwareDevices.showSelection();
                 describeHardware();
-            } else hardwareDescription.setText(devices.isEmpty()
-                    ? "Build the exact target to generate zephyr.dts. Existing overlays remain editable."
-                    : "No matching nodes. Clear the search or choose All nodes.");
+            } else {
+                hardwareDescription.setText(devices.isEmpty()
+                        ? "Build the exact target to generate zephyr.dts. Existing overlays remain editable."
+                        : "No matching nodes. Clear the search or choose All nodes.");
+                showHardwareParameters(null);
+            }
             hardwareSummary.setText(matches.size() + " matching nodes · " + devices.size()
                     + " in this build · ancestors shown for context · double-click to reveal source");
         } finally { hardwareDevices.setRedraw(true); }
