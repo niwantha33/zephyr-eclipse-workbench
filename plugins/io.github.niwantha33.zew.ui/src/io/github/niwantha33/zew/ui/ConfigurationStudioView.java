@@ -1067,7 +1067,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 matches.add(device.path());
         var visible = new java.util.HashSet<>(matches);
         // Keep ADC channels and other descendants accessible under matching controllers.
-        if (hardwareKind.getSelectionIndex() > 0) {
+        if (hardwareKind.getSelectionIndex() > 0 && !"Other".equals(hardwareKind.getText())) {
             for (var device : devices) {
                 String ancestor = device.path();
                 for (int slash = ancestor.lastIndexOf('/'); slash > 0; slash = ancestor.lastIndexOf('/', slash - 1)) {
