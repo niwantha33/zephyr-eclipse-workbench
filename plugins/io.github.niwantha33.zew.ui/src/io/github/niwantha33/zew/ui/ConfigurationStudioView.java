@@ -1115,6 +1115,10 @@ public final class ConfigurationStudioView extends ViewPart {
         if (hardwareParameters == null || hardwareParameters.isDisposed()) return;
         hardwareParameters.removeAll();
         if (device == null || snapshot == null) {
+            if (gpioUsageTable != null && !gpioUsageTable.isDisposed()) {
+                gpioUsageTable.removeAll();
+                gpioUsageSummary.setText("No selected GPIO controller. Select GPIO to inspect source and DTS usage.");
+            }
             boolean hasDts = snapshot != null && !snapshot.devicetree().isBlank();
             String guidance = hasDts
                     ? "No peripheral matches this filter. Change category/state or clear the search."
@@ -1200,9 +1204,17 @@ public final class ConfigurationStudioView extends ViewPart {
                 sourceScanNote = "\nC source scan unavailable: no accessible application.";
             }
             final List<GpioSourceEvidence.Call> appCalls = sourceCalls;
+            populateGpioUsageOverview(properties, appCalls, sourceScanNote);
+            hardwareDetails.setSelection(3);
             var resolvedForBank = appCalls.stream()
                     .filter(call -> device.path().equals(call.controllerPath())).toList();
             var unresolvedCalls = appCalls.stream().filter(call -> !call.resolved()).toList();
+            parameterTitle.setText(device.name() + " · "
+                    + gpio.bitPositions() + " logical GPIO indexes"
+                    + " · DTS " + gpio.uses().size()
+                    + " · C matched " + resolvedForBank.size()
+                    + " · unresolved C " + unresolvedCalls.size()
+                    + " (see GPIO Usage)");
             StringBuilder sourceNotes = new StringBuilder("\nC SOURCE CALLS (static candidates, NOT runtime proof):")
                     .append("\nExact device-name matches for this bank: ").append(resolvedForBank.size())
                     .append("\nUnresolved bindings in app: ").append(unresolvedCalls.size());
@@ -1249,6 +1261,9 @@ public final class ConfigurationStudioView extends ViewPart {
                 hardwareInspector.setText(info.toString());
             });
             chipPins.showSourceCandidates(resolvedForBank);
+        } else if (gpioUsageTable != null && !gpioUsageTable.isDisposed()) {
+            gpioUsageTable.removeAll();
+            gpioUsageSummary.setText("Select a GPIO controller to inspect compiled and C-source references.");
         }
         chipPins.setMode(chipPins.mode());
         parameterTitle.getParent().layout(true, true);
