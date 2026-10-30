@@ -1,5 +1,7 @@
 # Zephyr Eclipse Workbench
 
+**New development direction (2026-10-30):** [Evidence Engine Program v2](docs/EVIDENCE_ENGINE_PROGRAM_V2.md) supersedes the earlier sixteen-area release plan. [Current gate-based status](RELEASE_STATUS.md) and [Phase-0 CLI contract](docs/CLI_REFERENCE.md). The existing Eclipse IDE remains supported; the new evidence core is a separate, limited, read-only prototype, not a production release.
+
 An Eclipse-based development environment for Zephyr applications across semiconductor vendors.
 
 ## Install from the beginning
