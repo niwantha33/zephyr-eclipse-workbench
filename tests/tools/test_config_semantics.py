@@ -140,6 +140,29 @@ class KconfigSemanticTests(unittest.TestCase):
         self.assertNotIn(str(self.root), json.dumps(checked))
         self.assertEqual(checked["images"][0]["semantic"]["reason"], "ninja-command-inspection-failed")
 
+    def test_cli_semantic_success_and_rejection(self):
+        self.snippet.write_text("CONFIG_GPIO=y\\n", encoding="utf-8")
+        with mock.patch.object(semantic.subprocess, "run",
+                               return_value=SimpleNamespace(stdout=self.commands())), \\
+             mock.patch.object(semantic, "_load_selected_kconfiglib", return_value=FakeLib):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = main(["config-check", "--build", str(self.build),
+                             "--snippet", str(self.snippet), "--semantic",
+                             "--ninja", str(self.ninja)])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue())
+        self.assertEqual(payload["semantic_validation"]["state"], "evaluated-without-blockers")
+        self.snippet.write_text("CONFIG_UNDEFINED=y\\n", encoding="utf-8")
+        with mock.patch.object(semantic.subprocess, "run",
+                               return_value=SimpleNamespace(stdout=self.commands())), \\
+             mock.patch.object(semantic, "_load_selected_kconfiglib", return_value=FakeLib):
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = main(["config-check", "--build", str(self.build),
+                             "--snippet", str(self.snippet), "--semantic",
+                             "--ninja", str(self.ninja)])
+        self.assertEqual(code, 1)
+
     def test_semantic_flag_not_required_for_existing_snapshot_cli(self):
         self.snippet.write_text("CONFIG_GPIO=y\n", encoding="utf-8")
         out = io.StringIO()
