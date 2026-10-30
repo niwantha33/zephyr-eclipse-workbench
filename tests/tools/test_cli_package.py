@@ -13,6 +13,30 @@ from scripts.package_cli import build
 
 
 class CliPackageTests(unittest.TestCase):
+    def test_checkout_cli_can_import_sibling_package_in_isolated_python(self):
+        # Windows embedded Python's python313._pth behaves like -I: it omits
+        # script-directory imports even when the script path is absolute.
+        repo = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory(prefix="zew-isolated-cli-") as temporary:
+            root = Path(temporary)
+            build = root / "build"
+            (build / "zephyr").mkdir(parents=True)
+            (build / "zephyr/.config").write_text("CONFIG_GPIO=y\\n", encoding="utf-8")
+            request = root / "requested.conf"
+            request.write_text("CONFIG_GPIO=y\\nCONFIG_FAKE_UNDEFINED=y\\n", encoding="utf-8")
+            ninja = root / "ninja.exe"
+            ninja.write_text("unused", encoding="utf-8")
+            command = [sys.executable, "-I", str(repo / "zew.py"), "config-check",
+                       "--build", str(build), "--snippet", str(request),
+                       "--semantic", "--ninja", str(ninja)]
+            isolated = subprocess.run(command, cwd=root,
+                                      env=dict(os.environ, PYTHONPATH="", PYTHONDONTWRITEBYTECODE="1"),
+                                      text=True, capture_output=True, timeout=20)
+            self.assertEqual(isolated.returncode, 1, isolated.stderr)
+            report = json.loads(isolated.stdout)
+            self.assertEqual(report["images"][0]["semantic"]["state"], "unavailable")
+            self.assertEqual(report["semantic_validation"]["state"], "incomplete-or-blocked")
+
     def test_repeatable_standalone_zipapp_and_no_overwrite(self):
         with tempfile.TemporaryDirectory(prefix="zew-cli-Ω ") as temporary:
             root = Path(temporary)
