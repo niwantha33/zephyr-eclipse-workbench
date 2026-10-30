@@ -25,6 +25,32 @@ public class InvestigationBundleTests {
             String diff = InvestigationBundle.compare(original, InvestigationBundle.collect(app, null));
             check(diff.contains("CONFIG_GPIO: y → n") && diff.contains("CONFIG_ADC: <absent> → y"), "semantic difference");
             check(Files.readString(app.resolve("prj.conf")).startsWith("# CONFIG_GPIO"), "source remains unchanged");
+            // Archive identifies the exact build image without exporting the
+            // executable, local SDK paths or other unrelated files.
+            Path build = Files.createDirectory(root.resolve("build"));
+            Path zephyr = Files.createDirectory(build.resolve("zephyr"));
+            Files.writeString(zephyr.resolve(".config"),
+                    "CONFIG_BOARD_TARGET=\"nucleo_f446re/stm32f446xx\"\n"
+                            + "CONFIG_SOC=\"stm32f446xx\"\nCONFIG_ARM=y\n");
+            Files.writeString(build.resolve(".zew-built-target"), "nucleo_f446re/stm32f446xx");
+            Files.write(zephyr.resolve("zephyr.elf"), new byte[] {0x7f, 0x45, 0x4c, 0x46, 1, 2, 3, 4});
+            var withIdentity = InvestigationBundle.collect(app, build);
+            String identity = new String(withIdentity.entries().get("build/build-identity.txt"),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            check(identity.contains("nucleo_f446re/stm32f446xx")
+                    && identity.contains("matches generated config")
+                    && identity.contains("ELF SHA-256:")
+                    && identity.contains("CONFIG_ARM=y"), "build identity and bounded ELF fingerprint exported");
+            check(!withIdentity.entries().containsKey("zephyr/zephyr.elf")
+                    && !identity.contains(root.toString()), "local paths and ELF content excluded");
+            Path withBuild = root.resolve("snapshot-build.zip");
+            InvestigationBundle.write(withBuild, withIdentity);
+            check(InvestigationBundle.read(withBuild).entries().containsKey("build/build-identity.txt"),
+                    "build identity survives offline archive verification");
+            Files.writeString(build.resolve(".zew-built-target"), "wrong_board");
+            check(new String(InvestigationBundle.collect(app, build).entries().get("build/build-identity.txt"),
+                    java.nio.charset.StandardCharsets.UTF_8).contains("MISMATCH"),
+                    "mismatched build target never reported verified");
             Path bad = root.resolve("bad.zip");
             zip(bad, "../escape", "bad");
             expectFailure(() -> InvestigationBundle.read(bad), "reject traversal without extracting");
