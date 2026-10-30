@@ -39,6 +39,11 @@ class RealFirmwareProbeContractTests(unittest.TestCase):
         self.assertEqual(first["compilation"]["status"], "compile-command-observed")
         self.assertEqual(first["link_range"]["map_sections"], 1)
         self.assertEqual(first["elf_sections"]["status"], "map-elf-output-layout-observed")
+        self.assertEqual(first["gnu_map_context"]["status"],
+                         "gnu-map-output-context-partially-observed")
+        self.assertEqual(
+            first["gnu_map_context"]["observations"]["input_context_classes"][
+                "within-allocated-output"], 1)
         self.assertIn("no runtime or flashed-device", first["claim_limit"])
         payload = json.dumps(first)
         self.assertNotIn(str(self.root), payload)

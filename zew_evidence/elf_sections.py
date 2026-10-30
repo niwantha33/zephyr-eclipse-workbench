@@ -14,11 +14,12 @@ MAX_SECTION_HASH = 64 * 1024 * 1024
 MAX_TOTAL_HASH = 128 * 1024 * 1024
 
 
-def inspect_sections(path: Path) -> list[dict]:
+def inspect_sections(path: Path, *, include_unallocated: bool = False) -> list[dict]:
     """Read ELF32/64 section table, require explicit string table and valid offsets.
 
-    Returns internal section names for exact same-file matching only. Callers
-    must never export names, source paths or file offsets.
+    Returns internal section names for exact same-file matching only. The
+    optional unallocated view contains metadata, never hashes nonallocated
+    contents. Callers must never export names, paths or file offsets.
     """
     before = path.stat()
     size = before.st_size
@@ -77,11 +78,14 @@ def inspect_sections(path: Path) -> list[dict]:
                 name = strings[noff:end].decode("utf-8", "strict")
             except UnicodeError as error:
                 raise InputError("Unsupported ELF section-name encoding") from error
-            # Exclude synthetic, unallocated, zero length or symbol sections.
-            if idx == 0 or not name or not flags & 2 or not length:
+            # The default must remain SHF_ALLOC-only for existing analyzers.
+            # Optional nonallocated records supply *metadata* only; they
+            # never become proof of loaded bytes or source inclusion.
+            allocated = bool(flags & 2)
+            if idx == 0 or not name or not length or (not allocated and not include_unallocated):
                 continue
             digest = None
-            if typ != 8 and length <= MAX_SECTION_HASH and length <= hash_budget:
+            if allocated and typ != 8 and length <= MAX_SECTION_HASH and length <= hash_budget:
                 f.seek(offset)
                 sha = hashlib.sha256()
                 left = length
@@ -94,9 +98,10 @@ def inspect_sections(path: Path) -> list[dict]:
                 digest = sha.hexdigest()
                 hash_budget -= length
             rows.append({"name": name, "address": addr, "bytes": length,
-                         "data_kind": "zero-fill" if typ == 8 else
+                         "data_kind": "not-allocated" if not allocated else
+                         "zero-fill" if typ == 8 else
                          "file-backed" if digest else "file-backed-unhashed",
-                         "sha256": digest})
+                         "sha256": digest, "allocated": allocated})
     after = path.stat()
     if (before.st_size, before.st_mtime_ns, before.st_ino) != (
             after.st_size, after.st_mtime_ns, after.st_ino):
