@@ -76,3 +76,47 @@ than invent a parser or claim that absent symbols are hallucinations.
 
 The programme's G0 release gate remains **open**. This incremental,
 headless feasibility tool does not establish a learning-curve improvement.
+
+## Optional real Kconfiglib semantic inspection (new development increment)
+
+```sh
+python zew.py config-check --build /path/to/build --snippet /path/to/prj.conf --semantic
+python zew.py config-check --build /path/to/build --snippet /path/to/prj.conf --semantic --ninja /path/to/ninja
+```
+
+The `--semantic` flag is **opt-in**, preserving the original fast, strictly
+observational snapshot comparison. The checker invokes the selected Ninja
+binary **only** with `-t commands guiconfig`, which prints the original
+configured environment without executing the generated guiconfig command.
+It reconstructs the same literal `srctree`, `KCONFIG_BINARY_DIR`,
+`EDT_PICKLE` and Kconfig root used by this build, then loads Kconfiglib
+directly from that exact Zephyr checkout. It does not guess SoC or board
+settings, fetch a network package, compile, or write any project file.
+
+New per-symbol metadata is restricted to Kconfiglib-defined existence, type,
+current effective y/m/n, current assignable y/m/n, dependency evaluation,
+visibility and number of definitions. No Kconfig help text, literal dependency
+expressions, paths or arbitrary user string values are exported. States include
+`undefined-in-selected-tree`, `request-not-assignable-in-current-state`,
+`non-boolean-type`, `effective-but-not-user-assignable`, and
+`assignable-in-current-state`.
+
+A missing or stale generated snapshot, absent guiconfig target, Ninja failure
+or unavailable selected Zephyr Kconfiglib yields an **unknown** semantic state.
+When `--semantic` is used, CLI exit 0 requires all supported snapshot
+requests to match AND no outstanding Kconfiglib blockers; otherwise return 1,
+or return 2 for invalid CLI/input arguments.
+
+**Important limits:** The generated Kconfig environment may refer to source
+files changed since the build. Assignable values describe the *current* symbol
+dependency state, not the result of applying a proposed batch of settings.
+Neither a matched value nor an assignable state proves the snippet would
+reconfigure successfully, initialise a peripheral, or run on hardware.
+Strings/integers are recognised by Kconfiglib's types but their values are not
+compared yet. Devicetree binding validation remains future work.
+
+The Linux unit fixtures exercise safe parsing, missing context, identity
+checks and error/report contracts. The Windows firmware matrix exercises
+defined and deliberately undefined symbols through **actual** Kconfiglib on
+an MSPM0 Zephyr build. This feature is a Phase-0 incremental feasibility
+result, not the completed v3 Truth Check or a measured learning outcome.

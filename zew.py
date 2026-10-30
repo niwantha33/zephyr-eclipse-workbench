@@ -20,6 +20,7 @@ from zew_evidence.link_audit import audit as audit_link_map
 from zew_evidence.section_audit import audit as audit_elf_sections
 from zew_evidence.map_context import audit as audit_gnu_context
 from zew_evidence.config_request_check import check as check_config_requests
+from zew_evidence.config_semantics import enrich as evaluate_config_semantics
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -72,6 +73,10 @@ def main(argv: list[str] | None = None) -> int:
     request_check.add_argument("--snippet", type=Path, required=True,
                                help="Explicit local prj.conf or snippet; read-only, values redacted")
     request_check.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
+    request_check.add_argument("--semantic", action="store_true",
+                               help="Opt-in evaluation using exact selected Zephyr Kconfiglib and Ninja build")
+    request_check.add_argument("--ninja", type=Path,
+                               help="Explicit Ninja executable; --semantic only (else use PATH)")
     diff = subs.add_parser("compare", help="Compare two builds or verified offline bundles")
     lg = diff.add_mutually_exclusive_group(required=True)
     lg.add_argument("--left", type=Path, help="Generated build root")
@@ -95,7 +100,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "config-check":
+            if args.ninja is not None and not args.semantic:
+                raise InputError("--ninja requires --semantic")
             output = check_config_requests(collect(args.build, args.image), args.snippet)
+            if args.semantic:
+                output = evaluate_config_semantics(output, args.build, args.image, args.ninja)
         elif args.command == "map-context":
             output = audit_gnu_context(args.build, args.image)
         elif args.command == "section-audit":
@@ -189,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "verify":
         return 0 if output["status"] == "recorded-artifacts-match" else 1
     if args.command == "config-check":
+        if args.semantic and output["semantic_validation"]["state"] != "evaluated-without-blockers":
+            return 1
         return 0 if output["status"] == "matching-snapshot" else 1
     return 0
 
