@@ -217,3 +217,9 @@ Automated remote-debug smoke now installs a workspace C line breakpoint through
 Eclipse's breakpoint manager, verifies installation and a hit with a compiler
 source alias, and checks global Skip All state preservation. The fixture uses a
 host GDB server, not an MSPM0 probe or physical hardware.
+
+PR p2 artifacts use a current UTC qualifier so the tested archive can be installed
+as a newer preview rather than the old fixed October-25 smoke-test version. This
+does not publish or change the normal Workbench update channel. Use the artifact
+from the successful exact-head package job; install it through **Help > Install
+New Software > Add > Archive**, then restart Eclipse before retesting Debug.
