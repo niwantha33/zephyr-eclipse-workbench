@@ -92,3 +92,21 @@ schema. Source text line endings and ZIP timestamps are normalised for repeatabl
 bytes. Packaging refuses existing destinations and prints a SHA-256 digest.
 CI retains the zipapp and SHA256SUMS as **zew-evidence-cli-prototype**. This is an
 unsigned Phase-0 test distribution, not a production release or a signed asset.
+
+## Upstream Zephyr SBOM evidence (read-only Phase-0 adapter)
+
+```sh
+python zew.py sbom --build /path/to/zephyr/build
+python zew.py sbom --build /path/to/sysbuild --image app=app --image boot=mcuboot
+```
+
+This inspects the existing upstream `west spdx` outputs without generating or
+rewriting files. It reports exact SHA-256 and byte counts for observed
+`spdx/{app,zephyr,build,modules-deps}` files, metadata prerequisite state and
+observed SPDX 3 Build elements and build-scoped relationship counts.
+No source/tool paths, user-controlled component names, PURLs or CPEs are
+exported. Missing outputs receive the exact upstream generation instructions.
+
+**Not asserted:** full SPDX validity, source-to-ELF identity, physical
+flashing, CVE applicability, VEX, licence compliance or certification.
+See [upstream SPDX evidence guide](UPSTREAM_SPDX_EVIDENCE.md).
