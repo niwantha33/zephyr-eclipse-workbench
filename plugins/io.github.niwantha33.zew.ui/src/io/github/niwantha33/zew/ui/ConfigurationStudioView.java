@@ -89,6 +89,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private Table hardwareParameters;
     private Label parameterTitle;
     private ChipPinCanvas chipPins;
+    private Snapshot hardwarePropertiesSnapshot;
+    private List<DevicetreeParameters.Property> builtHardwareProperties = List.of();
     private Button enableButton, disableButton, editButton, removeButton;
     private Combo category;
     private TabFolder tabs;
@@ -921,7 +923,12 @@ public final class ConfigurationStudioView extends ViewPart {
             chipPins.showRoutes("Select a peripheral", List.of(), route -> {});
             return;
         }
-        var properties = DevicetreeParameters.inspect(snapshot.devicetree());
+        if (hardwarePropertiesSnapshot != snapshot) {
+            // Parse only when a new build snapshot is loaded, not on every click.
+            builtHardwareProperties = DevicetreeParameters.inspect(snapshot.devicetree());
+            hardwarePropertiesSnapshot = snapshot;
+        }
+        var properties = builtHardwareProperties;
         String owner = device.path();
         if (device.name().startsWith("channel@")) owner = owner.substring(0, owner.lastIndexOf('/'));
         var routes = DevicetreeParameters.pinRoutes(properties, owner);
@@ -1103,6 +1110,11 @@ public final class ConfigurationStudioView extends ViewPart {
                         Math.min(i == 0 ? 360 : 240, hardwareDevices.getColumn(i).getWidth())));
             }
             var selection = nodes.get(previous);
+            if (selection == null) selection = nodes.values().stream()
+                    .filter(item -> matches.contains(((DevicetreeHardware.Device) item.getData()).path()))
+                    .filter(item -> !HardwarePeripheralIndex.category(
+                            (DevicetreeHardware.Device) item.getData()).equals("Other"))
+                    .findFirst().orElse(null);
             if (selection == null) selection = nodes.values().stream()
                     .filter(item -> matches.contains(((DevicetreeHardware.Device) item.getData()).path()))
                     .findFirst().orElse(null);
