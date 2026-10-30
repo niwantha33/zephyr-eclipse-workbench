@@ -68,7 +68,7 @@ public final class GpioBankEvidence {
                     if (!numbers.get(i).equals(handle)) continue;
                     long bit = numbers.get(i + 1);
                     if (bit < 0 || bit >= MAX_BIT_POSITIONS) continue;
-                    String key = p.path() + "\u0000" + p.name() + "\u0000" + bit;
+                    String key = p.path() + ":" + p.name() + ":" + bit;
                     if (!seen.add(key)) continue;
                     uses.add(new Usage((int) bit, p.path(), p.name(),
                             "0x" + Long.toHexString(numbers.get(i + 2)), p.line()));
