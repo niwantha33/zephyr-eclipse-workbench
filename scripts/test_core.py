@@ -55,3 +55,5 @@ subprocess.run([tool('java'), '-cp', str(out), 'InvestigationBundleTests'], chec
 subprocess.run([tool('java'), '-cp', str(out), 'PhysicalOperationLockTests'], check=True, cwd=root, timeout=90)
 
 subprocess.run([tool('java'), '-cp', str(out), 'FaultLogAnalysisTests'], check=True, cwd=root, timeout=90)
+
+subprocess.run([tool('java'), '-cp', str(out), 'DebugSourcePathsTests'], check=True, cwd=root, timeout=90)

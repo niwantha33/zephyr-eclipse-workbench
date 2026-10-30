@@ -131,7 +131,53 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_PORT, Integer.toString(ports.gdb()));
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUG_NAME, params.gdb());
         configureThreadTracking(working);
-        return super.getLaunch(working.doSave(), mode);
+        ILaunch launch = super.getLaunch(working.doSave(), mode);
+        try {
+            configureSourceMappings(launch, io.github.niwantha33.zew.core.DebugSourcePaths.inspect(
+                    params.plan().buildDirectory(), Path.of(params.settings().getProperty("application")),
+                    Path.of(params.settings().getProperty("workspace"), "zephyr")));
+        } catch (IOException error) {
+            throw failure("Cannot verify debug source aliases: " + error.getMessage(), error);
+        }
+        return launch;
+    }
+
+    /** Configure CDT's own bidirectional source mapping before DSF adapters and breakpoint tracking start. */
+    static void configureSourceMappings(ILaunch launch,
+            List<io.github.niwantha33.zew.core.DebugSourcePaths.Mapping> mappings) throws CoreException {
+        if (mappings.isEmpty()) return;
+        if (!(launch.getSourceLocator() instanceof org.eclipse.cdt.dsf.gdb.launching.GdbSourceLookupDirector director))
+            throw failure("Native GDB source lookup is unavailable for verified build aliases.", null);
+        var previous = director.getSourceContainers();
+        var entries = new java.util.ArrayList<org.eclipse.debug.core.sourcelookup.ISourceContainer>();
+        var explicit = director.getSubstitutionsPaths();
+        var type = DebugPlugin.getDefault().getLaunchManager().getSourceContainerType(
+                "org.eclipse.cdt.debug.core.containerType.mapping");
+        if (type == null) throw failure("CDT source-path mapping support is missing. Repair the CDT Debug installation.", null);
+        StringBuilder memento = new StringBuilder("<mapping name=\"Workbench verified source aliases\" backend_enabled=\"true\">");
+        int added = 0;
+        for (var mapping : mappings) {
+            boolean covered = director.getCompilationPath(mapping.localPath()) != null
+                    || explicit.keySet().stream().map(path -> path.replace('\\', '/'))
+                        .anyMatch(path -> mapping.compilationPath().equals(path)
+                                || mapping.compilationPath().startsWith(path.endsWith("/") ? path : path + "/"));
+            if (!covered) {
+                String entry = "<mapEntry backendPath=\"" + xmlAttribute(mapping.compilationPath())
+                        + "\" localPath=\"" + xmlAttribute(mapping.localPath()) + "\"/>";
+                memento.append("<mapEntry memento=\"").append(xmlAttribute(entry)).append("\"/>");
+                added++;
+            }
+        }
+        if (added == 0) return;
+        memento.append("</mapping>");
+        entries.add(type.createSourceContainer(memento.toString()));
+        entries.addAll(java.util.Arrays.asList(previous));
+        director.setSourceContainers(entries.toArray(org.eclipse.debug.core.sourcelookup.ISourceContainer[]::new));
+    }
+
+    private static String xmlAttribute(String value) {
+        return value.replace("&", "&amp;").replace("\"", "&quot;")
+                .replace("<", "&lt;").replace(">", "&gt;").replace("'", "&apos;");
     }
 
     /** RTOS threads may appear after reset without target-side creation notifications. */
@@ -183,11 +229,14 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 info.println("Debug endpoints: GDB=" + params.port()
                         + ", TCL=" + configuration.getAttribute(TCL_PORT, 6333)
                         + ", Telnet=" + configuration.getAttribute(TELNET_PORT, 4444));
+                info.println("Symbols: " + params.elf() + " | target: " + params.plan().board()
+                        + " | profile: " + params.settings().getProperty("zew.buildConfiguration", "default")
+                        + ". Debug attaches without flashing; use Flash when the device firmware differs from this build.");
                 info.println("CPU registers: select a suspended frame, then Window > Show View > Other > Debug > Registers. "
                         + "SoC peripheral registers: Window > Show View > Other > Debug > SoC Registers; "
                         + "load the exact chip vendor SVD, select a register and Refresh while halted.");
                 info.println("Zephyr thread tracking: refresh the native CDT thread list after every suspend. "
-                        + "Repetitive OpenOCD INFO register-polling lines are condensed; warnings and errors are preserved.");
+                        + "Routine OpenOCD INFO register-polling is hidden after one explanation; warnings and errors are preserved.");
             }
             Process server = builder.start();
             session = new ManagedServer(server, console.newMessageStream(), lease, launch, params.port(),
@@ -232,6 +281,16 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             // Superclass initializes a true GdbLaunch with Eclipse breakpoints,
             // registers, variables, call stacks, memory and source stepping.
             super.launch(configuration, mode, launch, monitor);
+            if (!monitor.isCanceled() && !launch.isTerminated()) {
+                try (var info = console.newMessageStream()) {
+                    String name = configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, "");
+                    info.println(DebugBreakpointStatus.describe(ResourcesPlugin.getWorkspace().getRoot().getProject(name)));
+                    if (launch.getSourceLocator() instanceof org.eclipse.cdt.dsf.gdb.launching.GdbSourceLookupDirector source
+                            && !source.getSubstitutionsPaths().isEmpty())
+                        info.println("Verified debug source substitutions: " + source.getSubstitutionsPaths());
+                }
+                SocRegistersHandler.showDebugDataOnLaunch();
+            }
             if (monitor.isCanceled() || launch.isTerminated()) session.close();
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();

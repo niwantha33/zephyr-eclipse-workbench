@@ -55,9 +55,11 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Build plug-ins and p2 repository
-        # PR packaging smoke-test for the forceContextQualifier contract used by
-        # the automatic publisher. Actual release qualifiers come from updates.
-        run: mvn --batch-mode --no-transfer-progress "-DforceContextQualifier=20261025000001" verify
+        # Use a current UTC qualifier so a reviewed PR artifact can update an
+        # existing preview installation. This does not publish the update channel.
+        run: |
+          zew_test_qualifier="$(date -u +%Y%m%d%H%M%S)"
+          mvn --batch-mode --no-transfer-progress "-DforceContextQualifier=${zew_test_qualifier}" verify
       - name: Verify packaged site
         run: python3 scripts/verify_site.py
       - name: Compile and exercise installed native Eclipse UI before merge

@@ -72,7 +72,13 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
         run([gcc, f'-m{bits}', '-nostdlib', '-static', '-Wl,-e,entry', metadata_source, '-o', fixture / f'thread-{bits}.elf'])
         run([shutil.which('objcopy'), '-O', 'ihex', fixture / f'thread-{bits}.elf', fixture / f'thread-{bits}.hex'])
     if args.native_workbench:
-        run([gcc, '-pthread', '-g', '-O0', '-no-pie', ROOT / 'tests/eclipse/remote_threads.c', '-o', fixture / 'remote-threads'])
+        # Compile through a real alias, while the breakpoint belongs to the workspace file.
+        # This reproduces managed Windows junction/DWARF spelling differences on Linux.
+        remote_source = fixture / 'src/remote_threads.c'
+        shutil.copyfile(ROOT / 'tests/eclipse/remote_threads.c', remote_source)
+        compiler_alias = temporary / 'compiler-source-alias'
+        compiler_alias.symlink_to(fixture, target_is_directory=True)
+        run([gcc, '-pthread', '-g', '-O0', '-no-pie', compiler_alias / 'src/remote_threads.c', '-o', fixture / 'remote-threads'])
     classes = temporary / 'classes'; classes.mkdir()
     classpath = os.pathsep.join(map(str, (eclipse / 'plugins').glob('*.jar')))
     run([jdk / 'bin/javac', '--release', '21', '-encoding', 'UTF-8', '-cp', classpath, '-d', classes, ROOT / 'tests/eclipse/EditorSmoke.java', ROOT / 'tests/eclipse/ProjectImportSmoke.java', ROOT / 'tests/eclipse/StandardProjectFlowSmoke.java', ROOT / 'tests/eclipse/WorkbenchSmoke.java', ROOT / 'tests/eclipse/SocRegistersSmoke.java', ROOT / 'tests/eclipse/CoreBuildCompatibilitySmoke.java', ROOT / 'tests/eclipse/OpenOcdMetadataSmoke.java', ROOT / 'tests/eclipse/RemoteSmokeDelegate.java', ROOT / 'tests/eclipse/RemoteDebugSmoke.java'])
@@ -114,7 +120,8 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
                                 raise RuntimeError(server_log.read_text(errors='replace'))
                             time.sleep(0.05)
                         properties = [f'-Dzew.remote.gdb={wrapper}', f'-Dzew.remote.port={port}',
-                                      f'-Dzew.remote.terminateRunning={str(bool(attempt)).lower()}']
+                                      f'-Dzew.remote.terminateRunning={str(bool(attempt)).lower()}',
+                                      f'-Dzew.remote.compilationRoot={compiler_alias}']
                     try:
                         run([jdk / 'bin/java', *properties, '-jar', launcher, '-nosplash', '-consolelog', '-clean', '-data', temporary / 'workspace', '-application', 'zew.editor.smoke.workbench' if args.native_workbench else 'zew.editor.smoke.run', fixture, 'verify' if attempt else 'apply'])
                     except subprocess.CalledProcessError:

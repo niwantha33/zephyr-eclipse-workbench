@@ -67,10 +67,15 @@ public final class RemoteDebugSmoke {
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_PORT, port);
         // Reproduce an old saved configuration. The real product settings must migrate it.
         working.setAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_UPDATE_THREADLIST_ON_SUSPEND, false);
+        working.setAttribute("zew.test.compilationRoot", System.getProperty("zew.remote.compilationRoot", ""));
+        working.setAttribute("zew.test.sourceRoot", fixture.toString());
         var configuration = working.doSave();
         GdbLaunch launch = null;
         DsfServicesTracker services = null;
+        org.eclipse.cdt.debug.core.model.ICLineBreakpoint workspaceBreakpoint = null;
+        boolean breakpointsWereEnabled = DebugPlugin.getDefault().getBreakpointManager().isEnabled();
         try {
+            DebugPlugin.getDefault().getBreakpointManager().setEnabled(true);
             launch = (GdbLaunch) configuration.launch("debug", new NullProgressMonitor());
             check(launch.getLaunchConfiguration().getAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_UPDATE_THREADLIST_ON_SUSPEND, false),
                     "saved launch now refreshes threads at every halt");
@@ -86,11 +91,36 @@ public final class RemoteDebugSmoke {
             awaitState(session, tracker, container, true);
             IExecutionDMContext[] initial = ask(session, result -> tracker.getService(IRunControl.class).getExecutionContexts(container, result));
             check(initial.length == 1, "initial thread list cached before worker creation");
-            RemoteDebugSmoke.<org.eclipse.cdt.dsf.mi.service.command.output.MIBreakInsertInfo>ask(session, result -> {
-                var control = tracker.getService(IGDBControl.class);
-                var target = DMContexts.getAncestorOfType(container, IBreakpoints.IBreakpointsTargetDMContext.class);
-                control.queueCommand(control.getCommandFactory().createMIBreakInsert(target, "zew_second_stop"), result);
-            });
+            var uiBundle = Platform.getBundle("io.github.niwantha33.zew.ui");
+            var diagnostic = uiBundle.loadClass("io.github.niwantha33.zew.ui.DebugBreakpointStatus")
+                    .getDeclaredMethod("describe", org.eclipse.core.resources.IProject.class);
+            diagnostic.setAccessible(true);
+            DebugPlugin.getDefault().getBreakpointManager().setEnabled(false);
+            String skipped = (String) diagnostic.invoke(null, org.eclipse.core.resources.ResourcesPlugin.getWorkspace()
+                    .getRoot().getProject("HelloZephyrEditorSmoke"));
+            check(skipped.contains("Skip All Breakpoints is ON"), "global breakpoint skip is diagnosed without silently overriding it");
+            check(!DebugPlugin.getDefault().getBreakpointManager().isEnabled(), "diagnosis preserves the user's global skip state");
+            DebugPlugin.getDefault().getBreakpointManager().setEnabled(true);
+            var source = org.eclipse.core.resources.ResourcesPlugin.getWorkspace().getRoot()
+                    .getProject("HelloZephyrEditorSmoke").getFile("src/remote_threads.c");
+            check(source.exists(), "breakpoint belongs to the actual workspace C source");
+            var lines = java.nio.file.Files.readAllLines(source.getLocation().toFile().toPath());
+            int sourceLine = 0;
+            for (int i = 0; i < lines.size(); i++)
+                if (lines.get(i).contains("void zew_second_stop(void)")) { sourceLine = i + 1; break; }
+            check(sourceLine > 0, "source fixture exposes an executable breakpoint line");
+            workspaceBreakpoint = org.eclipse.cdt.debug.core.CDIDebugModel.createLineBreakpoint(
+                    source.getLocation().toOSString(), source,
+                    org.eclipse.cdt.debug.core.model.ICBreakpointType.REGULAR, sourceLine,
+                    true, 0, "", true);
+            long installDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (!workspaceBreakpoint.isInstalled() && System.nanoTime() < installDeadline) Thread.sleep(25);
+            check(workspaceBreakpoint.isInstalled(), "native Eclipse C line breakpoint installs through the DSF breakpoint manager");
+            var sourceDirector = (org.eclipse.cdt.dsf.gdb.launching.GdbSourceLookupDirector) launch.getSourceLocator();
+            check(sourceDirector.getSubstitutionsPaths().containsKey(System.getProperty("zew.remote.compilationRoot")),
+                    "compiler source alias is mapped to the workspace source root");
+            check(sourceDirector.getCompilationPath(source.getLocation().toOSString()) != null,
+                    "CDT breakpoint source lookup recognises the backend-enabled mapping container");
             RemoteDebugSmoke.<Object>ask(session, result -> tracker.getService(IRunControl.class).resume(container,
                     new RequestMonitor(session.getExecutor(), result) { @Override protected void handleSuccess() { result.done(); } }));
             awaitState(session, tracker, container, false);
@@ -147,6 +177,8 @@ public final class RemoteDebugSmoke {
             while (!launch.isTerminated() && System.nanoTime() < stopDeadline) Thread.sleep(50);
             check(launch.isTerminated(), "inferior Terminate ends the launch and local GDB process");
         } finally {
+            if (workspaceBreakpoint != null) workspaceBreakpoint.delete();
+            DebugPlugin.getDefault().getBreakpointManager().setEnabled(breakpointsWereEnabled);
             if (services != null) services.dispose();
             if (launch != null && launch.canTerminate()) launch.terminate();
             configuration.delete();

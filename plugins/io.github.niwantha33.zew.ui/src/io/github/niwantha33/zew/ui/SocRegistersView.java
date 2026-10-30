@@ -19,6 +19,7 @@ import org.eclipse.cdt.dsf.debug.service.IRunControl;
 import org.eclipse.cdt.dsf.debug.service.ICachingService;
 import org.eclipse.cdt.dsf.service.DsfServicesTracker;
 import org.eclipse.cdt.dsf.service.DsfSession;
+import org.eclipse.cdt.dsf.service.DsfServiceEventHandler;
 import org.eclipse.cdt.dsf.ui.viewmodel.datamodel.IDMVMContext;
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.debug.ui.DebugUITools;
@@ -47,6 +48,9 @@ public final class SocRegistersView extends ViewPart {
     private Tree tree;
     private Label status;
     private Label summary;
+    private Label contextInfo;
+    private org.eclipse.swt.widgets.Display ui;
+    private volatile DsfSession listenedSession;
     private Text search;
     private SvdDevice device;
     private String svdPath;
@@ -63,6 +67,7 @@ public final class SocRegistersView extends ViewPart {
         if (memento != null) svdPath = memento.getString("svdPath");
     }
     @Override public void createPartControl(Composite parent) {
+        ui = parent.getDisplay();
         parent.setLayout(new GridLayout(1, false));
         var bar = new Composite(parent, SWT.NONE);
         bar.setLayout(new GridLayout(4, false));
@@ -87,9 +92,13 @@ public final class SocRegistersView extends ViewPart {
         search.addModifyListener(e -> render());
         status = new Label(parent, SWT.WRAP);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        status.setText("Load the exact chip's vendor SVD, halt Debug and select a stack frame. Reads are explicit.");
+        status.setText("Load the exact chip's vendor SVD to show named peripherals. This view works with the native Zephyr DSF debugger; an unrelated Peripherals view may remain empty.");
+        contextInfo = new Label(parent, SWT.WRAP);
+        contextInfo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        contextInfo.setText("No selected debug frame. CPU registers, Variables and Expressions are separate native Debug views.");
         summary = new Label(parent, SWT.NONE);
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        summary.setText("No SVD model loaded. Use Load SVD…; chip/package models are never guessed or downloaded.");
         tree = new Tree(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         tree.setHeaderVisible(true); tree.setLinesVisible(true);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -103,18 +112,73 @@ public final class SocRegistersView extends ViewPart {
             tree.setToolTipText(item == null ? null : (String) item.getData("description"));
         });
         contextListener = e -> {
-            // Never apply a response from another selection/session to this view.
-            if (!tree.isDisposed()) tree.getDisplay().asyncExec(() -> {
-                if (!tree.isDisposed()) {
-                    generation++; busy = false; values.clear(); errors.clear(); render();
-                    status.setText("Debug context changed. Halt and select a frame, then Refresh.");
-                }
+            if (!ui.isDisposed()) ui.asyncExec(() -> {
+                if (!tree.isDisposed()) contextChanged();
             });
         };
         DebugUITools.getDebugContextManager().getContextService(getSite().getWorkbenchWindow())
                 .addDebugContextListener(contextListener);
         if (svdPath != null) load(svdPath);
+        contextChanged();
     }
+
+    /** No implicit peripheral read: selection/resume/step only invalidates snapshots. */
+    private void contextChanged() {
+        generation++; busy = false; values.clear(); errors.clear(); render();
+        var context = debugContext();
+        var selectedSession = context == null ? null : DsfSession.getSession(context.getSessionId());
+        listenTo(selectedSession);
+        contextInfo.setText(selectedSession == null
+                ? "No selected DSF frame. Select a suspended stack frame in Debug to read values."
+                : "Native debug session " + selectedSession.getId() + "; selected context: "
+                    + context.getClass().getSimpleName() + ". Reads require a halted execution context.");
+        contextInfo.getParent().layout(true, true);
+        status.setText(device == null
+                ? "Load the exact chip's vendor SVD. No peripheral model is automatically matched to this debug target."
+                : "Debug context changed. Confirm model " + device.name() + " matches this target, then select a register and Refresh.");
+    }
+
+    private final RunListener runListener = new RunListener();
+
+    /** Public because DSF invokes annotated listener methods reflectively across bundles. */
+    public final class RunListener {
+        @DsfServiceEventHandler public void eventDispatched(IRunControl.IResumedDMEvent event) {
+            invalidateSnapshot(event.getDMContext(), "Target resumed. Previous register values were cleared; halt and Refresh for a new snapshot.");
+        }
+        @DsfServiceEventHandler public void eventDispatched(IRunControl.ISuspendedDMEvent event) {
+            invalidateSnapshot(event.getDMContext(), "Target suspended. Select its stack frame, then Refresh selected registers and watches.");
+        }
+        @DsfServiceEventHandler public void eventDispatched(IRunControl.IExitedDMEvent event) {
+            invalidateSnapshot(event.getDMContext(), "Debug execution exited. No live peripheral values are available.");
+        }
+    }
+
+    private void invalidateSnapshot(IDMContext context, String message) {
+        var session = listenedSession;
+        if (closed || session == null || !session.getId().equals(context.getSessionId()) || ui.isDisposed()) return;
+        ui.asyncExec(() -> {
+            if (tree.isDisposed() || listenedSession != session) return;
+            generation++; busy = false; values.clear(); errors.clear(); render();
+            status.setText(message);
+        });
+    }
+
+    private void listenTo(DsfSession next) {
+        DsfSession previous = listenedSession;
+        if (previous == next) return;
+        listenedSession = next;
+        if (previous != null) {
+            try { previous.getExecutor().execute(() -> previous.removeServiceEventListener(runListener)); }
+            catch (RejectedExecutionException ended) { /* session disposal removes its services/listeners */ }
+        }
+        if (next != null) {
+            try { next.getExecutor().execute(() -> {
+                if (!closed && listenedSession == next) next.addServiceEventListener(runListener, null);
+            }); }
+            catch (RejectedExecutionException ended) { listenedSession = null; }
+        }
+    }
+
     private void button(Composite parent, String label, Runnable action) {
         var button = new Button(parent, SWT.PUSH); button.setText(label);
         button.addListener(SWT.Selection, e -> action.run());
@@ -199,7 +263,11 @@ public final class SocRegistersView extends ViewPart {
         return null;
     }
     private void refresh() {
-        if (device == null || busy) return;
+        if (device == null) {
+            status.setText("Load the exact chip's vendor SVD first. Native CPU registers do not require an SVD; use the Registers view.");
+            return;
+        }
+        if (busy) { status.setText("A register refresh is already in progress."); return; }
         var chosen = selected();
         var targets = device.registers().stream().filter(r -> watches.contains(r.key()) || r.equals(chosen)).toList();
         if (targets.isEmpty()) { status.setText("Select a register or add a watch first."); return; }
@@ -260,8 +328,8 @@ public final class SocRegistersView extends ViewPart {
         });
     }
     private void deliver(long request, Register r, BigInteger value, String error) {
-        if (tree.isDisposed()) return;
-        tree.getDisplay().asyncExec(() -> {
+        if (closed || ui.isDisposed()) return;
+        ui.asyncExec(() -> {
             if (tree.isDisposed() || request != generation) return;
             values.remove(r.key()); errors.remove(r.key());
             if (value != null) values.put(r.key(), value);
@@ -270,8 +338,8 @@ public final class SocRegistersView extends ViewPart {
         });
     }
     private void finish(long request, String message) {
-        if (tree.isDisposed()) return;
-        tree.getDisplay().asyncExec(() -> {
+        if (closed || ui.isDisposed()) return;
+        ui.asyncExec(() -> {
             if (!tree.isDisposed() && request == generation) { busy = false; status.setText(message); }
         });
     }
@@ -281,6 +349,7 @@ public final class SocRegistersView extends ViewPart {
     @Override public void setFocus() { if (tree != null) tree.setFocus(); }
     @Override public void dispose() {
         closed = true; generation++;
+        listenTo(null);
         if (contextListener != null) DebugUITools.getDebugContextManager()
                 .getContextService(getSite().getWorkbenchWindow()).removeDebugContextListener(contextListener);
         super.dispose();

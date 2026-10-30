@@ -23,7 +23,17 @@ public final class RemoteSmokeDelegate extends GdbLaunchDelegate {
             var settings = ui.loadClass("io.github.niwantha33.zew.ui.ZephyrNativeDebugDelegate")
                     .getDeclaredMethod("configureThreadTracking", ILaunchConfigurationWorkingCopy.class);
             settings.setAccessible(true); settings.invoke(null, working);
-            return super.getLaunch(working.doSave(), mode);
+            ILaunch launch = super.getLaunch(working.doSave(), mode);
+            String compilation = configuration.getAttribute("zew.test.compilationRoot", "");
+            if (!compilation.isBlank()) {
+                String source = configuration.getAttribute("zew.test.sourceRoot", "");
+                var mapping = ui.loadClass("io.github.niwantha33.zew.ui.ZephyrNativeDebugDelegate")
+                        .getDeclaredMethod("configureSourceMappings", ILaunch.class, java.util.List.class);
+                mapping.setAccessible(true);
+                mapping.invoke(null, launch, java.util.List.of(
+                        new io.github.niwantha33.zew.core.DebugSourcePaths.Mapping(compilation, source)));
+            }
+            return launch;
         } catch (Exception error) { throw new CoreException(new Status(IStatus.ERROR, "zew.editor.smoke", "Remote launch settings", error)); }
     }
     @Override protected IDsfDebugServicesFactory newServiceFactory(ILaunchConfiguration configuration, String version) {

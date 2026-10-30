@@ -166,3 +166,60 @@ container. Tests exercise a real socket with an emulated Tcl peer for matching,
 mismatched and malformed responses; installed Eclipse tests extract metadata
 from compiler-generated ELF32/ELF64 files and check the actual DSF command.
 These tests do not establish successful RTOS enumeration on hardware.
+
+## Native debugging data and peripheral views
+
+Use **Zephyr > Show Debug Data / SoC Peripherals** to open native Variables,
+Expressions and CPU Registers alongside **SoC Registers**. A successful Zephyr
+launch opens these views and initially activates CPU Registers. Select a suspended
+stack frame to inspect its locals; globals can be added explicitly in Expressions.
+Values may be unavailable for optimised code, missing symbols or a running target.
+
+A separately installed view titled **Peripherals** is not the Workbench SVD view
+and may require a different launch integration. Use **SoC Registers > Load SVD…**
+and choose the exact physical chip's vendor file. Loading a model does not prove
+it matches the device. Peripheral reads remain explicit and honour the SVD access
+restrictions; the tool does not infer package/register definitions from a board name.
+
+Routine OpenOCD `Getting thread … reg list` polling is hidden after one explanatory
+message. A pending count is printed when a real diagnostic arrives or output ends;
+there is no timer-driven polling spam. Errors, warnings, connection events and
+unrelated output are preserved. The debug-server console is not automatically an
+application UART or RTT console: firmware logging must use its configured transport.
+
+These software changes require native Eclipse smoke and named-hardware acceptance.
+Do not infer breakpoint hits or physical register correctness from packaging success.
+
+### Source breakpoint checks
+
+Native launches now install bidirectional CDT/GDB source mappings for build aliases
+recorded in CMakeCache (`APPLICATION_SOURCE_DIR`, `CMAKE_HOME_DIRECTORY`,
+`ZEPHYR_BASE`) only when both paths identify the same existing directory. Existing
+explicit mappings are preserved. This addresses builds compiled through verified
+junction/symlink aliases while the editor opens the original application path.
+Unrelated paths are not guessed or substituted.
+
+The startup console reports enabled/disabled C breakpoints and warns when Eclipse
+**Run > Skip All Breakpoints** is enabled, without changing that user setting.
+Installed counts can include another active target and may still be pending at
+startup. Inspect the native Breakpoints view for insertion errors, conditions and
+hit counts. Hardware breakpoint limits, optimised/non-executable lines and a
+mismatched flashed image remain separate possible causes.
+
+For the blinky loop, set an enabled breakpoint on the executable GPIO toggle line
+and Resume. Selecting `main` in the thread list shows that thread's saved frame;
+it is not evidence that the target stopped because of a breakpoint. Debug loads
+symbols and attaches; it does not flash. Confirm that the device contains the
+matching build. Globals such as `led` can be entered in native Expressions;
+CPU Registers shows actual register data for the selected suspended context.
+
+Automated remote-debug smoke now installs a workspace C line breakpoint through
+Eclipse's breakpoint manager, verifies installation and a hit with a compiler
+source alias, and checks global Skip All state preservation. The fixture uses a
+host GDB server, not an MSPM0 probe or physical hardware.
+
+PR p2 artifacts use a current UTC qualifier so the tested archive can be installed
+as a newer preview rather than the old fixed October-25 smoke-test version. This
+does not publish or change the normal Workbench update channel. Use the artifact
+from the successful exact-head package job; install it through **Help > Install
+New Software > Add > Archive**, then restart Eclipse before retesting Debug.
