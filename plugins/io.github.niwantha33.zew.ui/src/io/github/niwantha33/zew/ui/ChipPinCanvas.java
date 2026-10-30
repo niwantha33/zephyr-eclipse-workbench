@@ -402,6 +402,12 @@ public final class ChipPinCanvas extends Canvas {
                 .toList();
         setMode(mode);
     }
+    /** Highlight a verified controller's register bit, never a physical package pad. */
+    public void selectGpioBit(int bit) {
+        if (bank == null || bit < 0 || bit >= bank.bitPositions()) return;
+        selectedBit = bit;
+        redraw();
+    }
     public int sourceCandidateCount() { return resolvedSourceCalls.size(); }
 
     public int routeCount() { return routes.size(); }
