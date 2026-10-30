@@ -17,6 +17,7 @@ from zew_evidence.inclusion import explain
 from zew_evidence.compilation import inspect as inspect_compilation
 from zew_evidence.linker import inspect as inspect_linker
 from zew_evidence.link_audit import audit as audit_link_map
+from zew_evidence.section_audit import audit as audit_elf_sections
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -55,6 +56,11 @@ def main(argv: list[str] | None = None) -> int:
     audit = subs.add_parser("link-audit", help="Read-only per-image GNU archive/ELF/map range audit")
     audit.add_argument("--build", type=Path, required=True)
     audit.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
+    audit.add_argument("--section-evidence", action="store_true",
+                       help="Append independent GNU output-section to ELF metadata checks")
+    sections = subs.add_parser("section-audit", help="Read-only GNU output-section to ELF byte-hash evidence")
+    sections.add_argument("--build", type=Path, required=True)
+    sections.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
     diff = subs.add_parser("compare", help="Compare two builds or verified offline bundles")
     lg = diff.add_mutually_exclusive_group(required=True)
     lg.add_argument("--left", type=Path, help="Generated build root")
@@ -77,8 +83,16 @@ def main(argv: list[str] | None = None) -> int:
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "link-audit":
+        if args.command == "section-audit":
+            output = audit_elf_sections(args.build, args.image)
+        elif args.command == "link-audit":
             output = audit_link_map(args.build, args.image)
+            if args.section_evidence:
+                sections = audit_elf_sections(args.build, args.image)
+                by_image = {item["image"]: item for item in sections["images"]}
+                for item in output["images"]:
+                    item["independent_section_audit"] = by_image[item["image"]]
+                output["limitations"].extend(sections["limitations"])
         elif args.command == "link":
             output = inspect_linker(args.build, args.source, args.source_root, args.image)
             if args.range_audit:
