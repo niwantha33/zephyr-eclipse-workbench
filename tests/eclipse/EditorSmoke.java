@@ -108,10 +108,26 @@ public final class EditorSmoke implements IApplication {
             // The redesigned native Hardware workspace must have real
             // peripheral navigation, planner modes and a separate evidence dock.
             var grouped = (org.eclipse.swt.widgets.Tree) studioField(view, type, "hardwarePeripheralTree");
-            check(grouped.getItemCount() == 1 && grouped.getItem(0).getText().startsWith("ADC")
+            var groupedDescription = new java.util.ArrayList<String>();
+            boolean adcControllerInGroup = false, adcChannelInGroup = false;
+            for (var group : grouped.getItems()) {
+                groupedDescription.add(group.getText() + ":" + group.getItemCount());
+                for (var controller : group.getItems()) {
+                    groupedDescription.add("  " + controller.getText() + ":" + controller.getItemCount());
+                    if (controller.getText().startsWith("adc@4000")) {
+                        adcControllerInGroup = true;
+                        for (var child : controller.getItems()) {
+                            groupedDescription.add("    " + child.getText());
+                            if (child.getText().startsWith("channel@0")) adcChannelInGroup = true;
+                        }
+                    }
+                }
+            }
+            check(grouped.getItemCount() == 1
+                    && grouped.getItem(0).getText().startsWith("ADC")
                     && grouped.getItem(0).getItemCount() == 1
-                    && grouped.getItem(0).getItem(0).getItem(0).getText().startsWith("channel@0"),
-                    "ADC peripheral-first tree retains the detected controller and channel");
+                    && adcControllerInGroup && adcChannelInGroup,
+                    "ADC peripheral-first tree retains controller and channel: " + groupedDescription);
             var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
             check(dock.getItemCount() == 3
                     && dock.getItem(0).getText().startsWith("Changes")
@@ -290,6 +306,7 @@ public final class EditorSmoke implements IApplication {
                 "installed Eclipse popup expression hides Configuration Studio for unrelated C file");
 
         if (Boolean.getBoolean("zew.nativeFlow")) {
+            var studioFailure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
             org.eclipse.swt.widgets.Display.getDefault().syncExec(() -> {
                 try {
                     var windows = org.eclipse.ui.PlatformUI.getWorkbench().getWorkbenchWindows();
@@ -365,8 +382,10 @@ public final class EditorSmoke implements IApplication {
                             "live project override summary is populated");
                     verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw);
                     captureNativeStudioScreenshot();
-                } catch (Exception error) { throw new IllegalStateException("Native Studio smoke failed", error); }
+                } catch (Throwable error) { studioFailure.set(error); }
             });
+            if (studioFailure.get() != null)
+                throw new IllegalStateException("Native Studio smoke failed", studioFailure.get());
         }
         var parsed = EditorSettings.parse(Files.readString(fixture.resolve(".zew-build/first/editor-settings.tsv"), StandardCharsets.UTF_8));
         OpenOcdMetadataSmoke.run(ui, fixture);

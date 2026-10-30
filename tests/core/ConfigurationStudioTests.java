@@ -468,6 +468,14 @@ public final class ConfigurationStudioTests {
                     "PWM LED consumer is not represented as a PWM controller");
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(pinctrlController).equals("Pinctrl"),
                     "vendor pin controller is navigable");
+            var misleadingPinctrlState = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/pinctrl/adc-default", "adc-default", "", "", "okay", "", 18);
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(misleadingPinctrlState)
+                    .equals("Pinctrl"), "ADC pinctrl state is not an ADC controller");
+            var uartPinGroup = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/soc/pin-controller@400a0000/uart-tx", "uart-tx", "", "", "okay", "", 19);
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(uartPinGroup)
+                    .equals("Pinctrl"), "UART pinctrl state is not a UART controller");
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(uartController).equals("UART")
                     && !uartController.enabled(), "disabled UART remains discoverable but never claimed enabled");
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.matches(uartController,
