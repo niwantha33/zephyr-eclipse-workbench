@@ -57,6 +57,10 @@ def sample_matrix():
                         "address-mismatch": 0, "size-mismatch": 0,
                         "ambiguous-map-name": 0, "ambiguous-elf-name": 0,
                         "elf-section-byte-hashes": 1,
+                        "nonallocated-exact-metadata": 0,
+                        "unexplained-map-outputs": unresolved,
+                        "uncovered-vma": 0, "ambiguous-vma": 0,
+                        "other-vma": 0,
                     },
                 },
             },
@@ -157,6 +161,7 @@ class QualifyRealFirmwareMatrixTests(unittest.TestCase):
             data = sample_matrix()
             summary = data[0]["evidence_engine"]["elf_sections"]["comparison"]
             summary["missing-or-unallocated"] -= 1
+            summary["unexplained-map-outputs"] -= 1
             summary[bucket] = 1
             with self.subTest(bucket=bucket), self.assertRaises(QualificationError):
                 qualify(data)
@@ -174,12 +179,51 @@ class QualifyRealFirmwareMatrixTests(unittest.TestCase):
             summary = section["comparison"]
             summary["exact-layout"] += summary["missing-or-unallocated"]
             summary["missing-or-unallocated"] = 0
+            summary["unexplained-map-outputs"] = 0
             section["status"] = "map-elf-output-layout-observed"
         result = qualify(data)
         self.assertEqual(result["unresolved_scenario_count"], 0)
         self.assertEqual(result["coverage_status"], "limited-to-supported-metadata")
         self.assertFalse(result["full_evidence_coverage"])
         self.assertEqual(result["observations"][0]["flashed_hardware"], "not-observed")
+
+    def test_measured_nonallocated_elf_metadata_reconciliation_keeps_ranges_unknown(self):
+        cases = sample_matrix()
+        baseline = json.loads(BASELINE.read_text(encoding="utf-8"))["observations"]
+        by_scenario = {row["scenario"]: row for row in baseline}
+        for case in cases:
+            scenario = case["scenario"]
+            measured = by_scenario[scenario]["output_names_without_allocated_elf_match"]
+            section = case["evidence_engine"]["elf_sections"]
+            counts = section["comparison"]
+            counts["nonallocated-exact-metadata"] = measured
+            counts["unexplained-map-outputs"] = 0
+            section["status"] = "map-elf-output-layout-observed"
+        qualified = qualify(cases)
+        self.assertEqual(qualified["unexplained_map_output_sections"], 0)
+        self.assertEqual(qualified["nonallocated_elf_output_metadata_matched"], 66)
+        self.assertEqual(qualified["unresolved_scenario_count"], 7)  # PT_LOAD map rows still unresolved.
+        self.assertIs(qualified["full_evidence_coverage"], False)
+        for row in qualified["observations"]:
+            self.assertEqual(row["unexplained_map_output_sections"], 0)
+            self.assertEqual(row["layout_coverage"], "partial-unknown")
+            self.assertEqual(row["source_to_final_elf_causality"], "not-established")
+
+    def test_false_reconciliation_and_status_mismatch_fail_closed(self):
+        for mutation in ("too-many", "no-explanation", "wrong-status"):
+            cases = sample_matrix()
+            section = cases[0]["evidence_engine"]["elf_sections"]
+            counts = section["comparison"]
+            if mutation == "too-many":
+                counts["nonallocated-exact-metadata"] = counts["missing-or-unallocated"] + 1
+            elif mutation == "no-explanation":
+                counts["nonallocated-exact-metadata"] = 1
+            else:
+                counts["unexplained-map-outputs"] = 0
+                counts["nonallocated-exact-metadata"] = counts["missing-or-unallocated"]
+                section["status"] = "map-elf-section-disagreement-or-unknown"
+            with self.subTest(mutation=mutation), self.assertRaises(QualificationError):
+                qualify(cases)
 
     def test_cli_emits_sanitized_deterministic_summary_without_overwriting(self):
         with tempfile.TemporaryDirectory(prefix="zew-qual-Ω ") as temp:
