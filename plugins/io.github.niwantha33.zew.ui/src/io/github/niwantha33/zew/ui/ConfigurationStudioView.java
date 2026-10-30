@@ -437,9 +437,9 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareDevices.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         hardwareDevices.setHeaderVisible(true);
         hardwareDevices.setLinesVisible(true);
-        for (String name : new String[] {"Device / hierarchy", "Compatible", "Node status"}) {
+        for (String columnName : new String[] {"Device / hierarchy", "Compatible", "Node status"}) {
             var column = new org.eclipse.swt.widgets.TreeColumn(hardwareDevices, SWT.LEFT);
-            column.setText(name);
+            column.setText(columnName);
         }
         hardwareDevices.addListener(SWT.Selection, event -> describeHardware());
         hardwareDevices.addListener(SWT.DefaultSelection, event -> revealHardwareSource());
