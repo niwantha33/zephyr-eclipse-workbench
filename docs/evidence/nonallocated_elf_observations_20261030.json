@@ -1,0 +1,86 @@
+{
+  "schema_version": "0.1.0",
+  "source": "https://github.com/niwantha33/zephyr-eclipse-workbench/actions/runs/41097914018",
+  "source_head_sha": "7c5d5c7e2a97e92984cfd458b80171928afff6f3",
+  "basis": "Actual seven Windows Zephyr build results from PR #76, not synthesized examples",
+  "interpretation": "Output section name, VMA and size match to nonallocated ELF metadata is not evidence of flashed or file-backed bytes",
+  "observations": [
+    {
+      "scenario": "ti",
+      "target": "lp_mspm0g3507/mspm0g3507",
+      "previous_missing_or_unallocated": 9,
+      "exact_nonallocated_elf_metadata": 9,
+      "exact_allocated_elf_output": 1,
+      "outside_parent_bounds": 90,
+      "parent_unobserved": 329,
+      "map_sha256": "a614eef3d234d8fea3dc184f3b9186f13be475790b99860fe60f12b651554b5d",
+      "elf_sha256": "3cefa14c77622f04e87f1626130f0c93d396bbaf04e93e3509ca5f869d44d975"
+    },
+    {
+      "scenario": "stm32",
+      "target": "nucleo_f446re/stm32f446xx",
+      "previous_missing_or_unallocated": 9,
+      "exact_nonallocated_elf_metadata": 9,
+      "exact_allocated_elf_output": 2,
+      "outside_parent_bounds": 116,
+      "parent_unobserved": 434,
+      "map_sha256": "619d7e2f9eb7af03a58fac3e68ef4d5fe2d40e4709a70bce4209b18f796abe72",
+      "elf_sha256": "37d1ec69b2aec75041037b67ced9b02209685fec2c44bb8b4e998b3f60c78279"
+    },
+    {
+      "scenario": "nordic",
+      "target": "nrf52840dk/nrf52840",
+      "previous_missing_or_unallocated": 9,
+      "exact_nonallocated_elf_metadata": 9,
+      "exact_allocated_elf_output": 1,
+      "outside_parent_bounds": 122,
+      "parent_unobserved": 471,
+      "map_sha256": "1d97917c574715698ab2e12fe798438ec76038794e86b18fc23c4100bfcdf853",
+      "elf_sha256": "ada6f9304c93638c657647ca2ef50c753da824e2d242f622b921b99a0354a53c"
+    },
+    {
+      "scenario": "adc-nrf",
+      "target": "nrf52840dk/nrf52840",
+      "previous_missing_or_unallocated": 9,
+      "exact_nonallocated_elf_metadata": 9,
+      "exact_allocated_elf_output": 2,
+      "outside_parent_bounds": 128,
+      "parent_unobserved": 521,
+      "map_sha256": "1394cfd4f2eb52b18adc9c311d3b0c23b105c5db6843b2979c9400ceb592aa55",
+      "elf_sha256": "44c84ebaaaed53f7ab3e2b8e1e47b143fb02a33870f4750e65d4ac8830cba538"
+    },
+    {
+      "scenario": "xtensa",
+      "target": "esp32s3_devkitc/esp32s3/procpu",
+      "previous_missing_or_unallocated": 12,
+      "exact_nonallocated_elf_metadata": 12,
+      "exact_allocated_elf_output": 11,
+      "outside_parent_bounds": 223,
+      "parent_unobserved": 21,
+      "map_sha256": "6377f79b40527683e52c1479dcf34a3055617d1c808aa91720bccedabb07ebb4",
+      "elf_sha256": "6a77754831e36a38c1a66c5cade2b3d4987d13498911aedf8dec0ba16493348b"
+    },
+    {
+      "scenario": "riscv",
+      "target": "esp32c3_devkitm/esp32c3",
+      "previous_missing_or_unallocated": 9,
+      "exact_nonallocated_elf_metadata": 9,
+      "exact_allocated_elf_output": 11,
+      "outside_parent_bounds": 217,
+      "parent_unobserved": 255,
+      "map_sha256": "5ec9450f26171a8ce4260dceb1d9ebfa4db41bfcf9d4752dd4e657b4970147bc",
+      "elf_sha256": "b541d53197762757b2de4456014e26b230f17c6314a3547a4a92d05acbe40b16"
+    },
+    {
+      "scenario": "mcuboot",
+      "target": "nrf52840dk/nrf52840",
+      "previous_missing_or_unallocated": 9,
+      "exact_nonallocated_elf_metadata": 9,
+      "exact_allocated_elf_output": 1,
+      "outside_parent_bounds": 124,
+      "parent_unobserved": 473,
+      "map_sha256": "72044bb9671d0d9d8662acd23399fa42d9f52369021072277e7f884e5b2495b0",
+      "elf_sha256": "cd26d991beecdd45f5caccf25d1e5c6be5711b2d201d9996149634505b6b0054"
+    }
+  ]
+}
