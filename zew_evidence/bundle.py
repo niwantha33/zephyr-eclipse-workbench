@@ -8,12 +8,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import tempfile
 import zipfile
 from pathlib import Path
-from .collector import InputError, SCHEMA_VERSION
+from .collector import InputError, SCHEMA_VERSION, SAFE_VALUE, TARGET, PRIVATE
 
 FORMAT = "zew-evidence-0.1"
 MAX_GRAPH_BYTES = 12 * 1024 * 1024
@@ -101,6 +102,73 @@ def write(graph: dict, output: Path) -> dict:
     return {"status": "written", "output": destination.name, **plan}
 
 
+def _validate_graph(graph: object) -> None:
+    """Fail closed on malformed or unsanitised vendor-provided snapshot values."""
+    if not isinstance(graph, dict) or graph.get("schema_version") != SCHEMA_VERSION:
+        raise InputError("Unsupported evidence graph version")
+    if graph.get("status") != "observations-only":
+        raise InputError("Bundle is not an observational evidence graph")
+    nodes = graph.get("nodes")
+    edges = graph.get("edges")
+    missing = graph.get("missing_evidence")
+    limitations = graph.get("limitations")
+    if (not isinstance(nodes, list) or not isinstance(edges, list)
+            or not isinstance(missing, list) or not isinstance(limitations, list)
+            or len(nodes) > 100000 or len(edges) > 200000):
+        raise InputError("Malformed or excessively large evidence graph")
+    valid_ids = set()
+    for item in nodes:
+        if not isinstance(item, dict):
+            raise InputError("Invalid graph node")
+        ident, kind = item.get("id"), item.get("type")
+        if (not isinstance(ident, str) or len(ident) > 256
+                or not re.fullmatch(r"[A-Za-z0-9_:@./+-]+", ident)
+                or ident in valid_ids
+                or kind not in ("project", "image", "artifact", "kconfig_observation")
+                or not isinstance(item.get("data"), dict)):
+            raise InputError("Invalid or duplicate graph node")
+        valid_ids.add(ident)
+        if kind not in ("artifact", "kconfig_observation"):
+            continue
+        evidence = item.get("provenance")
+        if not isinstance(evidence, dict):
+            raise InputError("Graph observation has no provenance")
+        artifact, sha = evidence.get("artifact"), evidence.get("sha256")
+        if (not isinstance(artifact, str) or not artifact
+                or artifact.startswith(("/", "~")) or ".." in artifact.split("/")
+                or len(artifact) > 512
+                or not isinstance(sha, str) or not re.fullmatch(r"[a-f0-9]{64}", sha)):
+            raise InputError("Graph provenance is invalid")
+        if kind == "kconfig_observation":
+            data = item["data"]
+            name, value = data.get("name"), data.get("observed_value")
+            if not isinstance(name, str) or not re.fullmatch(r"CONFIG_[A-Z0-9_]+", name):
+                raise InputError("Invalid Kconfig evidence symbol")
+            public_id = name in ("CONFIG_BOARD_TARGET", "CONFIG_SOC", "CONFIG_BOARD", "CONFIG_KERNEL_BIN_NAME")
+            valid_value = (
+                isinstance(value, str)
+                and (value == "<redacted>" or bool(SAFE_VALUE.fullmatch(value))
+                     or (public_id and bool(TARGET.fullmatch(value))
+                         and not value.startswith(("/", ".", "~"))
+                         and not PRIVATE.search(value)))
+            )
+            if not valid_value:
+                raise InputError("Unredacted or malformed Kconfig value in imported graph")
+        elif not isinstance(item["data"].get("bytes"), int):
+            raise InputError("Invalid artifact size metadata")
+    for edge in edges:
+        if (not isinstance(edge, dict) or edge.get("from") not in valid_ids
+                or edge.get("to") not in valid_ids
+                or edge.get("type") not in ("contains", "observed-in")):
+            raise InputError("Malformed evidence relationship")
+    for row in missing:
+        if (not isinstance(row, dict)
+                or not isinstance(row.get("image"), str)
+                or not isinstance(row.get("artifact"), str)
+                or row.get("state") not in ("missing", "conflicting-board-identity")):
+            raise InputError("Malformed missing-evidence entry")
+
+
 def inspect(bundle: Path, include_graph: bool = False) -> dict:
     source = Path(bundle)
     if source.is_symlink() or not source.is_file():
@@ -142,11 +210,7 @@ def inspect(bundle: Path, include_graph: bool = False) -> dict:
             or record["sha256"] != hashlib.sha256(raw_graph).hexdigest()
             or record["bytes"] != len(raw_graph)):
         raise InputError("Bundle SHA-256 or size mismatch")
-    if (not isinstance(graph, dict) or graph.get("schema_version") != SCHEMA_VERSION
-            or graph.get("status") != "observations-only"
-            or not isinstance(graph.get("nodes"), list)
-            or not isinstance(graph.get("edges"), list)):
-        raise InputError("Not a supported Zephyr evidence graph")
+    _validate_graph(graph)
     result = {
         "status": "verified-integrity-only", "format": FORMAT,
         "schema_version": SCHEMA_VERSION, "graph_sha256": record["sha256"],
