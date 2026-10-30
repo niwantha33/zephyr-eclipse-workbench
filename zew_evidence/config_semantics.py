@@ -11,7 +11,6 @@ import importlib.util
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 
@@ -25,10 +24,30 @@ MAX_NINJA_TEXT = 256 * 1024
 _ALLOWED_TRISTATES = ("n", "m", "y")
 
 
-def _unquote(token: str) -> str:
-    if len(token) >= 2 and token[0] == token[-1] and token[0] in ("'", '"'):
-        return token[1:-1]
-    return token
+def _environment_tokens(text: str) -> list[str]:
+    """Split literal env assignments without treating Windows backslashes as escapes."""
+    output: list[str] = []
+    buffer: list[str] = []
+    quoted = None
+    for char in text:
+        if quoted:
+            if char == quoted:
+                quoted = None
+            else:
+                buffer.append(char)
+        elif char in ("'", '"'):
+            quoted = char
+        elif char.isspace():
+            if buffer:
+                output.append("".join(buffer))
+                buffer.clear()
+        else:
+            buffer.append(char)
+    if quoted:
+        raise ValueError("Unterminated generated environment quote")
+    if buffer:
+        output.append("".join(buffer))
+    return output
 
 
 def _generated_environment(commands: str) -> tuple[dict[str, str], Path]:
@@ -41,12 +60,11 @@ def _generated_environment(commands: str) -> tuple[dict[str, str], Path]:
             continue
         prefix, tail = command[:script.start()], command[script.end():]
         try:
-            tokens = shlex.split(prefix.rsplit("-E env", 1)[1], posix=False)
+            tokens = _environment_tokens(prefix.rsplit("-E env", 1)[1])
         except ValueError:
             continue
         values = {}
         for token in tokens:
-            token = _unquote(token)
             if "=" not in token:
                 continue
             name, value = token.split("=", 1)
