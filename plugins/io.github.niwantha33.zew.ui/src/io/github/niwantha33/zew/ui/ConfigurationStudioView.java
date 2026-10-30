@@ -85,6 +85,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private final java.util.List<String> navigationHistory = new java.util.ArrayList<>();
     private int navigationPosition = -1;
     private Text hardwareDescription, hardwareInspector, hardwarePreview, hardwareValidation;
+    private String proposedOverlayDraft = "";
     private TabFolder hardwareDetails;
     private Table hardwareParameters;
     private Label parameterTitle;
@@ -1067,8 +1068,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 }
             }
         });
-        var scroll = (org.eclipse.swt.custom.ScrolledComposite) chipPins.getParent();
-        scroll.setMinSize(620, Math.max(295, ((Math.min(routes.size(), ChipPinCanvas.MAX_VISIBLE_ROUTES) + 1) / 2) * 36 + 185));
+        chipPins.setMode(chipPins.mode());
         parameterTitle.getParent().layout(true, true);
     }
 
@@ -1085,8 +1085,8 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void copyHardwarePreview() {
         if (hardwarePreview == null || hardwarePreview.isDisposed()) return;
-        String value = hardwarePreview.getText();
-        if (!value.startsWith("PROPOSED SOURCE CHANGE")) {
+        String value = proposedOverlayDraft;
+        if (value.isBlank()) {
             status.setText("No proposed change to copy. Choose a built property and Configure property… first.");
             return;
         }
@@ -1184,6 +1184,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 });
         if (dialog.open() != Window.OK) return;
         String draft = DevicetreeParameters.overlayRequest(property, dialog.getValue());
+        proposedOverlayDraft = draft;
         hardwarePreview.setText("PROPOSED SOURCE CHANGE (not applied)\n\n" + draft
                 + "\n\nNo package-pin mapping or binding semantics have been validated."
                 + "\nReview the active overlay and rebuild the exact target.");
