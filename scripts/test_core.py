@@ -53,3 +53,5 @@ subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationDiagnosisTests'], c
 
 subprocess.run([tool('java'), '-cp', str(out), 'InvestigationBundleTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'PhysicalOperationLockTests'], check=True, cwd=root, timeout=90)
+
+subprocess.run([tool('java'), '-cp', str(out), 'FaultLogAnalysisTests'], check=True, cwd=root, timeout=90)

@@ -8,6 +8,7 @@ It resets and resumes the target, then leaves it halted after capture.
 from __future__ import annotations
 
 import argparse
+from analyze_trace import analyze
 from collections import deque
 import hashlib
 import json
@@ -107,7 +108,7 @@ class GdbMI:
 
 
 def read_snapshot(gdb: Path, elf: Path, port: int, duration: float,
-                  timeout: float) -> tuple[bytes, int, str]:
+                  timeout: float, evidence=None) -> tuple[bytes, int, str]:
     session = GdbMI(gdb, elf, timeout + duration)
     try:
         session.command('-gdb-set remotetimeout 5')
@@ -122,6 +123,14 @@ def read_snapshot(gdb: Path, elf: Path, port: int, duration: float,
         time.sleep(duration)
         session.command('-interpreter-exec console "monitor halt"')
         pos = session.integer("'tracing_backend_ram.c'::pos")
+        if not 0 < size <= 64 * 1024 * 1024 or address <= 0:
+            raise RuntimeError(f'Invalid RAM trace address/capacity: {address} / {size}')
+        if evidence is not None:
+            try:
+                full = session.integer("(unsigned int)'tracing_backend_ram.c'::buffer_full")
+                evidence['backend_buffer_full'] = bool(full) if full in (0, 1) else 'unknown'
+            except RuntimeError:
+                evidence['backend_buffer_full'] = 'unknown'
         if not 0 < pos <= size:
             raise RuntimeError(f'Invalid or empty RAM trace: {pos} / {size}')
         # Read bounded chunks. Require each whole requested range, since GDB MI
@@ -168,7 +177,8 @@ def capture(gdb: Path, elf: Path, metadata: Path, destination: Path, port: int,
         ctf.mkdir()
         binary = ctf / 'channel0_0'
         try:
-            data, capacity, gdb_output = read_snapshot(gdb, elf, port, duration, timeout)
+            evidence = {}
+            data, capacity, gdb_output = read_snapshot(gdb, elf, port, duration, timeout, evidence)
         except RuntimeError as exc:
             raise RuntimeError('GDB trace capture failed:\n' + str(exc)) from exc
         binary.write_bytes(data)
@@ -180,7 +190,12 @@ def capture(gdb: Path, elf: Path, metadata: Path, destination: Path, port: int,
                    'trace_bytes': binary.stat().st_size,
                    'buffer_capacity': capacity,
                    'capture_seconds_requested': duration,
-                   'capture_full': 'unknown',
+                   'capture_full': evidence.get('backend_buffer_full', 'unknown'),
+                   'capture_full_evidence': 'Halted target tracing_backend_ram.c::buffer_full, when available',
+                   'loss_count': 'unknown: backend fullness indicates rejected output, not an event count',
+                   'transport_read_complete': len(data) <= capacity,
+                   'trace_sha256': hashlib.sha256(data).hexdigest(),
+                   'ctf_analysis': analyze(ctf),
                    'firmware_matches_elf': 'not verified',
                    'gdb_output': gdb_output}
         (stage / 'capture.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
@@ -206,7 +221,7 @@ def main() -> int:
     try:
         elf, metadata = validate(args.build, args.zephyr, args.gdb)
         path = capture(args.gdb.resolve(), elf, metadata, args.output, args.port, args.seconds)
-        print(f'Trace saved to {path}; target halted. Firmware/ELF match and buffer fullness are not verified.')
+        print(f'Trace saved to {path}; target halted. See capture.json for decoder validation, buffer-full evidence and timing limits. Firmware/ELF match is not verified.')
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
         print(f'Capture failed: {exc}', file=__import__('sys').stderr)

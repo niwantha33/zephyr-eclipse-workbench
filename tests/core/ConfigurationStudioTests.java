@@ -370,6 +370,74 @@ public final class ConfigurationStudioTests {
             try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(bytes, "[1 123]"); }
             catch (IllegalArgumentException expected) { invalidBytes = true; }
             ok(invalidBytes, "malformed byte array rejected");
+            StringBuilder largeTree = new StringBuilder("/ {\n");
+            for (int nodeIndex = 0; nodeIndex < 520; nodeIndex++)
+                largeTree.append(" device@").append(Integer.toHexString(nodeIndex)).append(" { /* node comment */\n")
+                        .append("  status = \"okay\";\n  channel = <").append(nodeIndex).append(">;\n };\n");
+            largeTree.append("};\n");
+            var largeDevices = io.github.niwantha33.zew.core.DevicetreeHardware.inspect(largeTree.toString());
+            var largeParameters = io.github.niwantha33.zew.core.DevicetreeParameters.inspect(largeTree.toString());
+            ok(largeDevices.size() == 521 && largeDevices.getLast().path().equals("/device@207"),
+                    "generated hardware trees are not silently truncated after 500 nodes");
+            ok(largeParameters.stream().anyMatch(p -> p.path().equals("/device@207") && p.name().equals("channel")
+                    && p.value().equals("<519>")), "later properties retain exact node ownership despite inline comments");
+            StringBuilder tooManyNodes = new StringBuilder("/ {\n");
+            for (int nodeIndex = 0; nodeIndex < 10_000; nodeIndex++)
+                tooManyNodes.append(" node@").append(Integer.toHexString(nodeIndex)).append(" {\n };\n");
+            tooManyNodes.append("};\n");
+            boolean excessiveNodesRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeHardware.inspect(tooManyNodes.toString()); }
+            catch (IllegalArgumentException expected) { excessiveNodesRejected = true; }
+            ok(excessiveNodesRejected, "excessively large trees fail explicitly rather than returning misleading partial metadata");
+            Path overlayTarget = app.resolve("reviewed.overlay");
+            String originalOverlay = "/* Existing user configuration */\r\n&uart0 { status = \"okay\"; };\r\n";
+            Files.writeString(overlayTarget, originalOverlay);
+            var overlayPreview = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(
+                    app, overlayTarget, resolution, "<10>");
+            ok(Files.readString(overlayTarget).equals(originalOverlay), "overlay preview never writes source");
+            ok(overlayPreview.updated().startsWith(originalOverlay)
+                    && overlayPreview.addition().contains("\r\n"), "overlay preview preserves user content and CRLF");
+            Files.writeString(overlayTarget, originalOverlay + "/* external edit */");
+            boolean concurrentOverlayRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, overlayPreview); }
+            catch (java.io.IOException expected) { concurrentOverlayRejected = true; }
+            ok(concurrentOverlayRejected && Files.readString(overlayTarget).endsWith("/* external edit */"),
+                    "changed overlay is never overwritten by an old preview");
+            Files.writeString(overlayTarget, originalOverlay);
+            Path overlayBackup = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, overlayPreview);
+            ok(Files.readString(overlayTarget).equals(overlayPreview.updated())
+                    && Files.readString(overlayBackup).equals(originalOverlay), "atomic overlay save retains exact backup");
+            var duplicatePreview = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(
+                    app, overlayTarget, resolution, "<10>");
+            ok(!duplicatePreview.changed(), "repeating identical last overlay request does not append duplicates");
+            Path newOverlay = app.resolve("new-reviewed.overlay");
+            var newPreview = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(app, newOverlay, resolution, "<8>");
+            Files.writeString(newOverlay, "/* created elsewhere */");
+            boolean createdOverlayRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, newPreview); }
+            catch (java.io.IOException expected) { createdOverlayRejected = true; }
+            ok(createdOverlayRejected && Files.readString(newOverlay).contains("created elsewhere"),
+                    "new overlay is not allowed to replace a file created after preview");
+            Files.delete(newOverlay);
+            io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, newPreview);
+            ok(Files.readString(newOverlay).equals(newPreview.updated()), "new overlay publishes complete contents");
+            boolean generatedOverlayRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(app, app.resolve("zephyr.dts"), resolution, "<8>"); }
+            catch (java.io.IOException expected) { generatedOverlayRejected = true; }
+            ok(generatedOverlayRejected, "generated DTS is never an overlay save target");
+            boolean outsideOverlayRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(app, root.resolve("outside.overlay"), resolution, "<8>"); }
+            catch (java.io.IOException expected) { outsideOverlayRejected = true; }
+            ok(outsideOverlayRejected, "overlay target must remain inside the application");
+            if (!System.getProperty("os.name").toLowerCase().contains("win")) {
+                Path linkOverlay = app.resolve("link.overlay");
+                Files.createSymbolicLink(linkOverlay, overlayTarget);
+                boolean symlinkOverlayRejected = false;
+                try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(app, linkOverlay, resolution, "<8>"); }
+                catch (java.io.IOException expected) { symlinkOverlayRejected = true; }
+                ok(symlinkOverlayRejected, "symlinked overlay is rejected");
+                Files.delete(linkOverlay);
+            }
             ok(io.github.niwantha33.zew.core.DevicetreeParameters.inspect("").isEmpty(),
                     "an unbuilt project has no fabricated ADC parameters");
             System.out.println("ConfigurationStudioTests PASS");

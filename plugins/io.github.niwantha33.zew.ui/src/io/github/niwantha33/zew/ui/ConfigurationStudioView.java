@@ -141,7 +141,7 @@ public final class ConfigurationStudioView extends ViewPart {
 
         var secondary = new Composite(outer, SWT.NONE);
         secondary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        secondary.setLayout(new GridLayout(8, false));
+        secondary.setLayout(new GridLayout(5, false));
         action(secondary, "Open prj.conf", () -> openResource("prj.conf"))
                 .setToolTipText("Open the exact application configuration source");
         action(secondary, "Edit hardware overlay", this::openOverlay)
@@ -150,9 +150,6 @@ public final class ConfigurationStudioView extends ViewPart {
                 .setToolTipText("Reload project and generated configuration after editing or building");
         action(secondary, "Diagnose", this::diagnoseConfiguration)
                 .setToolTipText("Read-only checks of the selected build and, in Hardware, the selected peripheral");
-        action(secondary, "Export evidence…", this::exportEvidence);
-        action(secondary, "Open evidence…", () -> openEvidence(false));
-        action(secondary, "Compare evidence…", () -> openEvidence(true));
         action(secondary, "Copy selected symbol", this::copySymbol)
                 .setToolTipText("Copy CONFIG_<symbol> to the clipboard");
 
@@ -443,7 +440,7 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareParameters.addListener(SWT.DefaultSelection, event -> prepareHardwareOverride());
         var parameterActions = new Composite(parameterPanel, SWT.NONE);
         parameterActions.setLayout(new GridLayout(2, false));
-        action(parameterActions, "Prepare overlay request…", this::prepareHardwareOverride);
+        action(parameterActions, "Configure property…", this::prepareHardwareOverride);
         action(parameterActions, "Show declaration", this::revealParameterSource);
         parameterSplit.setWeights(new int[] {50, 50});
         var sourcePanel = tab(hardwareDetails, "Generated source");
@@ -462,6 +459,11 @@ public final class ConfigurationStudioView extends ViewPart {
 
         Composite reports = tab(tabs, "Insights");
         reports.setLayout(new GridLayout(1, false));
+        var evidenceActions = new Composite(reports, SWT.NONE);
+        evidenceActions.setLayout(new GridLayout(3, false));
+        action(evidenceActions, "Export evidence…", this::exportEvidence);
+        action(evidenceActions, "Open evidence…", () -> openEvidence(false));
+        action(evidenceActions, "Compare evidence…", () -> openEvidence(true));
         analysis = new Text(reports, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
         analysis.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
@@ -935,20 +937,51 @@ public final class ConfigurationStudioView extends ViewPart {
         var property = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
         var dialog = new InputDialog(getSite().getShell(), property.title(),
                 property.path() + "\n" + property.name()
-                + "\nEnter Devicetree value syntax. This prepares a draft, not a validated pin assignment.",
+                + "\nValue shape: " + property.kind()
+                + ". Syntax checks only; rebuild validates the device binding. Use the source editor for other syntax.",
                 property.value(), value -> {
                     try { DevicetreeParameters.overlayRequest(property, value); return null; }
                     catch (IllegalArgumentException invalid) { return invalid.getMessage(); }
                 });
         if (dialog.open() != Window.OK) return;
         String draft = DevicetreeParameters.overlayRequest(property, dialog.getValue());
-        if (!MessageDialog.openConfirm(getSite().getShell(), "Review overlay request",
-                draft + "\nCopy this draft to the clipboard? Review the device binding before adding it to the active overlay."
-                + "\nNo files will be changed. Rebuild to validate the request.")) return;
-        var clipboard = new Clipboard(hardwareParameters.getDisplay());
-        try { clipboard.setContents(new Object[] {draft}, new Transfer[] {TextTransfer.getInstance()}); }
-        finally { clipboard.dispose(); }
-        status.setText("Overlay request copied. Add it to the active application overlay and Build & validate.");
+        var choice = new MessageDialog(getSite().getShell(), "Review overlay request", null,
+                draft + "\nBinding semantics and hardware behaviour are validated separately."
+                + "\nSave appends an override to an explicitly selected source overlay; earlier values may be superseded.",
+                MessageDialog.QUESTION, new String[] {"Choose overlay and save…", "Copy draft", "Cancel"}, 2);
+        int result = choice.open();
+        if (result == 1) {
+            var clipboard = new Clipboard(hardwareParameters.getDisplay());
+            try { clipboard.setContents(new Object[] {draft}, new Transfer[] {TextTransfer.getInstance()}); }
+            finally { clipboard.dispose(); }
+            status.setText("Draft copied. Add it to the selected overlay and Build & validate.");
+            return;
+        }
+        if (result != 0 || project == null || project.getLocation() == null) return;
+        try {
+            Path app = project.getLocation().toFile().toPath();
+            var select = new org.eclipse.swt.widgets.FileDialog(getSite().getShell(), SWT.SAVE);
+            select.setText("Choose a source overlay inside this application");
+            select.setFilterPath(app.toString());
+            select.setFileName(selectedOverlay);
+            select.setFilterExtensions(new String[] {"*.overlay"});
+            String chosen = select.open();
+            if (chosen == null) return;
+            var preview = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(
+                    app, Path.of(chosen), property, dialog.getValue());
+            if (!MessageDialog.openConfirm(getSite().getShell(), "Save reviewed overlay change",
+                    "Destination: " + preview.file() + "\n\nAppend:\n" + preview.addition()
+                    + "\nExisting content is preserved and backed up. This does not activate a new overlay."
+                    + "\nVerify the file is selected in your build configuration, then Build & validate.")) return;
+            Path backup = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, preview);
+            project.refreshLocal(IResource.DEPTH_INFINITE, null);
+            selectedOverlay = app.toRealPath().relativize(preview.file()).toString();
+            openResource(selectedOverlay);
+            status.setText("Saved " + selectedOverlay + (backup == null ? "" : "; backup: " + backup.getFileName())
+                    + ". Check overlay selection and rebuild; generated values are unchanged until then.");
+        } catch (Exception error) {
+            MessageDialog.openError(getSite().getShell(), "Overlay change not saved", error.getMessage());
+        }
     }
 
     private void revealParameterSource() {

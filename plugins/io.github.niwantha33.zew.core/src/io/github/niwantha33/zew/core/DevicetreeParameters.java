@@ -67,7 +67,7 @@ public final class DevicetreeParameters {
     }
 
     /** Strip comments while retaining line numbers and quoted string contents. */
-    private static String withoutComments(String source) {
+    static String withoutComments(String source) {
         var out = new StringBuilder(source.length());
         boolean block = false, line = false, quoted = false, escape = false;
         for (int i = 0; i < source.length(); i++) {

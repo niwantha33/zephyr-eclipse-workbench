@@ -124,7 +124,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                     if (!owned.isAlive() || !diagnostics.isListening(ports.gdb()))
                         throw new IOException(diagnostics.describe(plan.board(), ports.gdb(), owned.isAlive() ? null : owned.exitValue()));
                     staging = Files.createTempDirectory("zew-trace-tool-");
-                    for (String name : List.of("capture_snapshot.py", "Zephyr_RTOS_Timeline.xml")) {
+                    for (String name : List.of("capture_snapshot.py", "analyze_trace.py", "Zephyr_RTOS_Timeline.xml")) {
                         var resource = Activator.getDefault().getBundle().getEntry("tools/rtos_analysis/" + name);
                         if (resource == null) throw new IOException("Trace component missing: " + name + ". Reinstall Workbench.");
                         try (var input = resource.openStream()) { Files.copy(input, staging.resolve(name)); }
@@ -141,7 +141,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                         if (!shell.isDisposed()) {
                             MessageDialog.openInformation(shell, "RTOS trace captured",
                                     "Snapshot saved in:\n" + out + "\n\nImport the ctf folder inside the newest capture in Trace Compass. "
-                                    + "The supplied XML analysis must be imported once. Buffer fullness and firmware identity are not verified.");
+                                    + "The supplied XML analysis must be imported once. Inspect capture.json for buffer-full and decoder evidence; firmware identity is not verified.");
                             Program.launch(out.toString());
                         }
                     });

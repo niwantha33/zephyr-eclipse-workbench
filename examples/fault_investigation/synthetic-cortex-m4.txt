@@ -1,0 +1,8 @@
+SYNTHETIC TEST FIXTURE — not a physical hardware capture.
+Architecture: ARMv7E-M. Addresses are illustrative and have no matching ELF.
+[00:00:01.000,000] <err> os: r0/a1: 0x00000000 r1/a2: 0x00000001 r2/a3: 0x00000002
+[00:00:01.000,010] <err> os: r3/a4: 0x00000003 r12/ip: 0x0000000c r14/lr: 0x08000109
+[00:00:01.000,020] <err> os: xpsr: 0x61000000
+[00:00:01.000,030] <err> os: Faulting instruction address (r15/pc): 0x08000104
+[00:00:01.000,040] <err> os: >>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0
+CFSR=0x00008200 HFSR=0x40000000 BFAR=0x2000ffff SP=0x20001000

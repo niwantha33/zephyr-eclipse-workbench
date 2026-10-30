@@ -118,6 +118,8 @@
   </extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.UpdateStartup"/></extension>
   <extension point="org.eclipse.ui.views">
+    <view id="io.github.niwantha33.zew.ui.faultAnalysis" name="Zephyr Fault Investigation"
+          category="org.eclipse.debug.ui" class="io.github.niwantha33.zew.ui.FaultAnalysisView" restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.socRegisters" name="SoC Registers"
           category="org.eclipse.debug.ui"
           class="io.github.niwantha33.zew.ui.SocRegistersView" restorable="true"/>
@@ -130,6 +132,7 @@
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="io.github.niwantha33.zew.faultAnalysis" name="Investigate Fatal Log" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.trace" name="Capture RTOS Trace" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugserver" name="Start Debug Server" categoryId="io.github.niwantha33.zew.commands"/>
@@ -152,6 +155,7 @@
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
   </extension>
   <extension point="org.eclipse.ui.handlers">
+    <handler commandId="io.github.niwantha33.zew.faultAnalysis" class="io.github.niwantha33.zew.ui.FaultAnalysisHandler"/>
     <handler commandId="io.github.niwantha33.zew.configurationStudio" class="io.github.niwantha33.zew.ui.ConfigurationStudioHandler"/>
     <handler commandId="org.eclipse.ui.project.buildProject" class="io.github.niwantha33.zew.ui.ZephyrBuildHandler">
       <activeWhen>
@@ -202,6 +206,7 @@
         <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debug" label="Debug Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.faultAnalysis" label="Investigate Fatal Log…" style="push"/>
         <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace (Preview)..." style="push"/>
         <separator name="updates" visible="true"/>
         <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check for Workbench Updates..." style="push"/>
