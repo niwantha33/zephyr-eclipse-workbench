@@ -1037,6 +1037,80 @@ public final class ConfigurationStudioView extends ViewPart {
             status.setText("No " + domain.title() + " controller in the last generated Devicetree. Build the exact board first.");
     }
 
+    /** Cross-controller inventory: compiled DTS and saved C-source usages are distinct. */
+    private void populateGpioUsageOverview(List<DevicetreeParameters.Property> properties,
+            List<GpioSourceEvidence.Call> calls, String scanNote) {
+        if (gpioUsageTable == null || gpioUsageTable.isDisposed()) return;
+        gpioUsageTable.setRedraw(false);
+        int dtsCount = 0, codeCount = 0, unresolvedCount = 0;
+        try {
+            gpioUsageTable.removeAll();
+            var banks = new java.util.LinkedHashMap<String, GpioBankEvidence.Bank>();
+            for (var device : DevicetreeHardware.inspect(snapshot.devicetree())) {
+                var bank = GpioBankEvidence.inspect(device, properties);
+                if (bank == null) continue;
+                banks.put(device.path(), bank);
+                for (var usage : bank.uses()) {
+                    var item = new TableItem(gpioUsageTable, SWT.NONE);
+                    String detail = "Compiled GPIO specifier: " + usage.consumerPath() + " / "
+                            + usage.property() + " (flags " + usage.flags() + ")";
+                    item.setText(new String[] {bank.bitLabel(usage.bit()), "DTS consumer",
+                            usage.consumerPath() + " / " + usage.property(),
+                            "generated zephyr.dts:" + usage.line()});
+                    item.setData(new GpioUsageSelection(bank.controllerPath(), usage.bit(), detail));
+                    dtsCount++;
+                }
+            }
+            for (var call : calls) {
+                boolean resolved = call.resolved() && banks.containsKey(call.controllerPath());
+                var bank = banks.get(call.controllerPath());
+                String bitLabel = resolved ? bank.bitLabel(call.bit()) : "Unresolved bit " + call.bit();
+                String detail = "C source configuration candidate (NOT runtime proof): "
+                        + call.description();
+                var item = new TableItem(gpioUsageTable, SWT.NONE);
+                item.setText(new String[] {bitLabel,
+                        resolved ? "C source candidate" : "C unresolved device",
+                        "gpio_pin_configure(" + call.variable() + ", " + call.bit() + ", " + call.flags() + ")",
+                        call.sourceFile() + ":" + call.line() + "  [" + call.bindingName() + "]"});
+                item.setData(new GpioUsageSelection(resolved ? call.controllerPath() : "", call.bit(), detail));
+                if (resolved) codeCount++;
+                else unresolvedCount++;
+            }
+            gpioUsageSummary.setText("Built DTS references: " + dtsCount
+                    + "    C candidates with exact controller: " + codeCount
+                    + "    Unresolved C device names: " + unresolvedCount
+                    + ". References do NOT prove configured live direction, level, or package bonding."
+                    + (scanNote.isBlank() ? "" : "  " + scanNote.strip()));
+        } finally {
+            gpioUsageTable.setRedraw(true);
+        }
+    }
+
+    /** Selecting an unresolved call never marks a guessed GPIO controller. */
+    private void inspectSelectedGpioUsage() {
+        if (gpioUsageTable == null || gpioUsageTable.isDisposed()
+                || gpioUsageTable.getSelectionCount() == 0) return;
+        var usage = (GpioUsageSelection) gpioUsageTable.getSelection()[0].getData();
+        if (usage == null) return;
+        if (!usage.controllerPath().isBlank()) {
+            for (var node : hardwareItems()) {
+                var device = (DevicetreeHardware.Device) node.getData();
+                if (!device.path().equals(usage.controllerPath())) continue;
+                hardwareDevices.setSelection(node);
+                hardwareDevices.showSelection();
+                describeHardware();
+                chipPins.selectGpioBit(usage.bit());
+                break;
+            }
+        }
+        hardwareInspector.setText(usage.detail() + "\n"
+                + (usage.controllerPath().isBlank()
+                    ? "Not allocated to any bank: the device-name lookup is unresolved."
+                    : "Compiled GPIO controller: " + usage.controllerPath())
+                + "\nSource and Devicetree references are not live readings.");
+        hardwareDetails.setSelection(3);
+    }
+
     private void showHardwareParameters(DevicetreeHardware.Device device) {
         if (hardwareParameters == null || hardwareParameters.isDisposed()) return;
         hardwareParameters.removeAll();
