@@ -440,6 +440,39 @@ public final class ConfigurationStudioTests {
             }
             ok(io.github.niwantha33.zew.core.DevicetreeParameters.inspect("").isEmpty(),
                     "an unbuilt project has no fabricated ADC parameters");
+            // Visual Hardware Studio navigation is derived from real DTS identities.
+            // It must never confuse a GPIO consumer with the GPIO controller.
+            var adcController = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/soc/adc@4000", "adc@4000", "", "ti,mspm0-adc12", "okay", "", 11);
+            var adcChannel = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/soc/adc@4000/channel@0", "channel@0", "", "", "", "", 12);
+            var ledConsumer = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/leds", "leds", "", "gpio-leds", "okay", "", 14);
+            var pinctrlController = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/soc/pin-controller@400a0000", "pin-controller@400a0000",
+                    "", "ti,mspm0-pinctrl", "okay", "", 17);
+            var uartController = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/soc/serial@4000", "serial@4000", "", "vendor,serial", "disabled", "", 19);
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(adcController).equals("ADC"),
+                    "ADC controller appears in ADC group");
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.matches(adcController, "ADC")
+                    && !io.github.niwantha33.zew.core.HardwarePeripheralIndex.matches(adcController, "GPIO"),
+                    "category filtering excludes unrelated nodes");
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(adcChannel).equals("Other"),
+                    "channel is a child of the controller and is not incorrectly counted as another ADC");
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(ledConsumer).equals("Other"),
+                    "GPIO LED consumer is not represented as an extra GPIO controller");
+            var pwmConsumer = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/pwmleds", "pwmleds", "", "pwm-leds", "okay", "", 15);
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(pwmConsumer).equals("Other"),
+                    "PWM LED consumer is not represented as a PWM controller");
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(pinctrlController).equals("Pinctrl"),
+                    "vendor pin controller is navigable");
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(uartController).equals("UART")
+                    && !uartController.enabled(), "disabled UART remains discoverable but never claimed enabled");
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.matches(uartController,
+                    io.github.niwantha33.zew.core.HardwarePeripheralIndex.ALL),
+                    "all peripherals includes disabled controllers");
             System.out.println("ConfigurationStudioTests PASS");
         } finally {
             try (var paths = Files.walk(root)) {

@@ -49,6 +49,7 @@ import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationDiagnosis;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
+import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
@@ -78,7 +79,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private Table options;
     private org.eclipse.swt.widgets.Tree hardwareDevices;
     private Text hardwareSearch;
-    private Combo hardwareState;
+    private Combo hardwareState, hardwareKind;
     private Label hardwareSummary, navigationLocation;
     private Button backButton, forwardButton;
     private final java.util.List<String> navigationHistory = new java.util.ArrayList<>();
@@ -88,6 +89,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private Table hardwareParameters;
     private Label parameterTitle;
     private ChipPinCanvas chipPins;
+    private Snapshot hardwarePropertiesSnapshot;
+    private List<DevicetreeParameters.Property> builtHardwareProperties = List.of();
     private Button enableButton, disableButton, editButton, removeButton;
     private Combo category;
     private TabFolder tabs;
@@ -365,25 +368,38 @@ public final class ConfigurationStudioView extends ViewPart {
                 + "and pinctrl overrides. The generated Devicetree below is read-only. "
                 + "Do not assume an enabled driver means the board has an enabled controller.");
         warning.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        var hardwareSplit = new SashForm(hardware, SWT.VERTICAL);
+        var hardwareSplit = new SashForm(hardware, SWT.HORIZONTAL);
         hardwareSplit.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         var devicePanel = new Composite(hardwareSplit, SWT.NONE);
         devicePanel.setLayout(new GridLayout(1, false));
         var deviceTitle = new Label(devicePanel, SWT.NONE);
-        deviceTitle.setText("Detected hardware from the selected build");
+        deviceTitle.setText("Peripheral Explorer / Last built Devicetree");
         deviceTitle.setFont(metricFont);
         var hardwareNavigation = new Composite(devicePanel, SWT.NONE);
         hardwareNavigation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        hardwareNavigation.setLayout(new GridLayout(4, false));
+        hardwareNavigation.setLayout(new GridLayout(2, false));
         hardwareSearch = new Text(hardwareNavigation, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL | SWT.BORDER);
         hardwareSearch.setMessage("Find node, compatible, label or address…");
-        hardwareSearch.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        GridData searchLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        searchLayout.horizontalSpan = 2;
+        hardwareSearch.setLayoutData(searchLayout);
+        hardwareKind = new Combo(hardwareNavigation, SWT.DROP_DOWN | SWT.READ_ONLY);
+        hardwareKind.setItems(HardwarePeripheralIndex.FILTERS.toArray(String[]::new));
+        hardwareKind.select(0);
+        hardwareKind.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        hardwareKind.setToolTipText("Grouping from built nodes; not evidence of package pin availability");
         hardwareState = new Combo(hardwareNavigation, SWT.DROP_DOWN | SWT.READ_ONLY);
         hardwareState.setItems("All nodes", "Okay/default", "Disabled");
         hardwareState.select(0);
+        hardwareState.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         hardwareState.setToolTipText("Filter the node's own status; ancestors remain visible as context");
-        action(hardwareNavigation, "Expand all", () -> expandHardware(true));
-        action(hardwareNavigation, "Collapse all", () -> expandHardware(false));
+        var treeTools = new Composite(hardwareNavigation, SWT.NONE);
+        GridData treeToolsLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        treeToolsLayout.horizontalSpan = 2;
+        treeTools.setLayoutData(treeToolsLayout);
+        treeTools.setLayout(new GridLayout(2, false));
+        action(treeTools, "Expand all", () -> expandHardware(true));
+        action(treeTools, "Collapse all", () -> expandHardware(false));
         hardwareSummary = new Label(devicePanel, SWT.WRAP);
         hardwareSummary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         hardwareDevices = new org.eclipse.swt.widgets.Tree(devicePanel,
@@ -411,6 +427,7 @@ public final class ConfigurationStudioView extends ViewPart {
             if (event.keyCode == SWT.ESC) hardwareSearch.setText("");
         });
         hardwareState.addListener(SWT.Selection, event -> refreshHardware());
+        hardwareKind.addListener(SWT.Selection, event -> refreshHardware());
         var detailsPanel = new Composite(hardwareSplit, SWT.NONE);
         detailsPanel.setLayout(new GridLayout(1, false));
         hardwareDetails = new TabFolder(detailsPanel, SWT.NONE);
@@ -438,6 +455,11 @@ public final class ConfigurationStudioView extends ViewPart {
             var column = new TableColumn(hardwareParameters, SWT.LEFT); column.setText(caption);
         }
         hardwareParameters.addListener(SWT.DefaultSelection, event -> prepareHardwareOverride());
+        hardwareParameters.addListener(SWT.Selection, event -> {
+            if (hardwareParameters.getSelectionCount() == 0) return;
+            var selected = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
+            chipPins.selectRoute(selected.path(), selected.name());
+        });
         var parameterActions = new Composite(parameterPanel, SWT.NONE);
         parameterActions.setLayout(new GridLayout(2, false));
         action(parameterActions, "Configure property…", this::prepareHardwareOverride);
@@ -449,7 +471,7 @@ public final class ConfigurationStudioView extends ViewPart {
         sourceCaption.setText("Compiled Devicetree source (read-only)");
         tree = new Text(sourcePanel, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        hardwareSplit.setWeights(new int[] {40, 60});
+        hardwareSplit.setWeights(new int[] {32, 68});
         var hardwareActions = new Composite(hardware, SWT.NONE);
         hardwareActions.setLayout(new GridLayout(4, false));
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
@@ -884,7 +906,10 @@ public final class ConfigurationStudioView extends ViewPart {
         tabs.setSelection(1);
         hardwareDetails.setSelection(0);
         hardwareState.select(0);
-        hardwareSearch.setText(domain.id());
+        String name = domain.id().toUpperCase(java.util.Locale.ROOT);
+        int kind = hardwareKind.indexOf(name);
+        hardwareKind.select(kind >= 0 ? kind : 0);
+        hardwareSearch.setText(kind >= 0 ? "" : domain.id());
         refreshHardware();
         if (hardwareDevices.getSelectionCount() == 0)
             status.setText("No " + domain.title() + " controller in the last generated Devicetree. Build the exact board first.");
@@ -898,7 +923,12 @@ public final class ConfigurationStudioView extends ViewPart {
             chipPins.showRoutes("Select a peripheral", List.of(), route -> {});
             return;
         }
-        var properties = DevicetreeParameters.inspect(snapshot.devicetree());
+        if (hardwarePropertiesSnapshot != snapshot) {
+            // Parse only when a new build snapshot is loaded, not on every click.
+            builtHardwareProperties = DevicetreeParameters.inspect(snapshot.devicetree());
+            hardwarePropertiesSnapshot = snapshot;
+        }
+        var properties = builtHardwareProperties;
         String owner = device.path();
         if (device.name().startsWith("channel@")) owner = owner.substring(0, owner.lastIndexOf('/'));
         var routes = DevicetreeParameters.pinRoutes(properties, owner);
@@ -918,7 +948,7 @@ public final class ConfigurationStudioView extends ViewPart {
         }
         if (hardwareParameters.getItemCount() > 0) hardwareParameters.select(0);
         parameterTitle.setText(device.path() + " · " + shown.size() + " built parameters · "
-                + routes.size() + " pin routes · physical package pads require a device mapping");
+                + routes.size() + " logical pin routes · physical package pads unverified");
         chipPins.showRoutes(owner, routes, route -> {
             for (var row : hardwareParameters.getItems()) {
                 var property = (DevicetreeParameters.Property) row.getData();
@@ -928,7 +958,7 @@ public final class ConfigurationStudioView extends ViewPart {
             }
         });
         var scroll = (org.eclipse.swt.custom.ScrolledComposite) chipPins.getParent();
-        scroll.setMinSize(560, Math.max(295, ((routes.size() + 1) / 2) * 35 + 110));
+        scroll.setMinSize(620, Math.max(295, ((Math.min(routes.size(), ChipPinCanvas.MAX_VISIBLE_ROUTES) + 1) / 2) * 36 + 185));
         parameterTitle.getParent().layout(true, true);
     }
 
@@ -1032,9 +1062,23 @@ public final class ConfigurationStudioView extends ViewPart {
                 : DevicetreeHardware.inspect(snapshot.devicetree());
         var matches = new java.util.LinkedHashSet<String>();
         for (var device : devices)
-            if (DevicetreeHardware.matches(device, hardwareSearch.getText(), hardwareState.getText()))
+            if (HardwarePeripheralIndex.matches(device, hardwareKind.getText())
+                    && DevicetreeHardware.matches(device, hardwareSearch.getText(), hardwareState.getText()))
                 matches.add(device.path());
         var visible = new java.util.HashSet<>(matches);
+        // Keep ADC channels and other descendants accessible under matching controllers.
+        if (hardwareKind.getSelectionIndex() > 0) {
+            for (var device : devices) {
+                String ancestor = device.path();
+                for (int slash = ancestor.lastIndexOf('/'); slash > 0; slash = ancestor.lastIndexOf('/', slash - 1)) {
+                    ancestor = ancestor.substring(0, slash);
+                    if (matches.contains(ancestor)) {
+                        visible.add(device.path());
+                        break;
+                    }
+                }
+            }
+        }
         for (String path : matches) {
             for (int slash = path.lastIndexOf('/'); slash > 0; slash = path.lastIndexOf('/', slash - 1))
                 visible.add(path.substring(0, slash));
@@ -1068,6 +1112,11 @@ public final class ConfigurationStudioView extends ViewPart {
             var selection = nodes.get(previous);
             if (selection == null) selection = nodes.values().stream()
                     .filter(item -> matches.contains(((DevicetreeHardware.Device) item.getData()).path()))
+                    .filter(item -> !HardwarePeripheralIndex.category(
+                            (DevicetreeHardware.Device) item.getData()).equals("Other"))
+                    .findFirst().orElse(null);
+            if (selection == null) selection = nodes.values().stream()
+                    .filter(item -> matches.contains(((DevicetreeHardware.Device) item.getData()).path()))
                     .findFirst().orElse(null);
             if (selection != null) {
                 hardwareDevices.setSelection(selection);
@@ -1080,7 +1129,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 showHardwareParameters(null);
             }
             hardwareSummary.setText(matches.size() + " matching nodes · " + devices.size()
-                    + " in this build · ancestors shown for context · double-click to reveal source");
+                    + " in build · child nodes and ancestors shown as context · double-click opens source");
         } finally { hardwareDevices.setRedraw(true); }
     }
 
