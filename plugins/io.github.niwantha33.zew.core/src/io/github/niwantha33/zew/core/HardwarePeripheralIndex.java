@@ -24,7 +24,8 @@ public final class HardwarePeripheralIndex {
                 || name.equals("chosen") || name.equals("cpus") || name.startsWith("channel@"))
             return "Other";
         // gpio-leds and gpio-keys are consumers, not GPIO controllers.
-        if (compatible.contains("gpio-leds") || compatible.contains("gpio-keys"))
+        if (compatible.contains("gpio-leds") || compatible.contains("gpio-keys")
+                || compatible.contains("pwm-leds") || compatible.contains("adc-keys"))
             return "Other";
         if (named(name, "adc") || compatible.contains("-adc")) return "ADC";
         if (named(name, "gpio") || compatible.contains("-gpio")) return "GPIO";
