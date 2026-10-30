@@ -1,3 +1,5 @@
+> **SUPERSEDED:** This historical sixteen-area instruction was replaced by [Evidence Engine Program v2](../docs/EVIDENCE_ENGINE_PROGRAM_V2.md) on 2026-10-30. The authoritative agent entrypoint is [AGENTS.md](../AGENTS.md). Preserve working functionality; do not continue expanding this historical plan.
+
 Complete Zephyr Eclipse Workbench as a cohesive, attractive, reliable public release.
 
 Repository: https://github.com/niwantha33/zephyr-eclipse-workbench

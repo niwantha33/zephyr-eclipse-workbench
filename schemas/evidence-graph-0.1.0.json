@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/niwantha33/zephyr-eclipse-workbench/blob/main/schemas/evidence-graph-0.1.0.json",
+  "title": "Zephyr Evidence Graph v0.1.0 (observational prototype)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "nodes",
+    "edges",
+    "missing_evidence",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "status": {
+      "const": "observations-only"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "confidence",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "project",
+              "image",
+              "artifact",
+              "kconfig_observation"
+            ]
+          },
+          "confidence": {
+            "enum": [
+              "confirmed",
+              "derived",
+              "possible",
+              "unknown"
+            ]
+          },
+          "data": {
+            "type": "object"
+          },
+          "provenance": {
+            "type": "object",
+            "required": [
+              "artifact",
+              "sha256",
+              "producing_tool",
+              "tool_version",
+              "extraction"
+            ]
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "type"
+        ]
+      }
+    },
+    "missing_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "image",
+          "artifact",
+          "state"
+        ]
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
