@@ -122,6 +122,24 @@ class KconfigSemanticTests(unittest.TestCase):
         with self.assertRaises(InputError):
             semantic._generated_environment("cmake -E env srctree=bad /a/guiconfig.py /not/there")
 
+    def test_windows_nested_cmd_wrapper_with_quoted_kconfig_paths(self):
+        # Mirror the non-POSIX Ninja quoting already covered by the installed
+        # kconfig_inspect.py parser. Do not execute any recovered commands.
+        command = (
+            r'C:\Windows\system32\cmd.exe /C "cd /D C:\build && '
+            r'"C:\Program Files\CMake\bin\cmake.exe" -E env '
+            r'"srctree=C:\Zephyr Workspace\zephyr" '
+            r'"KCONFIG_BINARY_DIR=C:\Build Folder\zephyr\Kconfig" '
+            r'"EDT_PICKLE=C:\Build Folder\zephyr\edt.pickle" '
+            r'"C:\Python Tools\python.exe" '
+            r'"C:\Zephyr Workspace\zephyr\scripts\kconfig\guiconfig.py" '
+            f'"{self.kroot}""')
+        values, source = semantic._generated_environment(command)
+        self.assertEqual(source, self.kroot)
+        self.assertEqual(values["srctree"], r"C:\Zephyr Workspace\zephyr")
+        self.assertEqual(values["KCONFIG_BINARY_DIR"], r"C:\Build Folder\zephyr\Kconfig")
+        self.assertEqual(values["EDT_PICKLE"], r"C:\Build Folder\zephyr\edt.pickle")
+
     def test_changed_config_cannot_be_confirmed(self):
         self.snippet.write_text("CONFIG_GPIO=y\n", encoding="utf-8")
         graph = collect(self.build)
