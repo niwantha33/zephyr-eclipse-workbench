@@ -112,7 +112,8 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
             "exact-layout", "address-mismatch", "size-mismatch", "missing-or-unallocated",
             "ambiguous-map-name", "ambiguous-elf-name", "file-backed-vma",
             "zero-fill-vma", "mixed-file-and-zero-fill-vma", "uncovered-vma",
-            "ambiguous-vma", "other-vma")}
+            "ambiguous-vma", "other-vma", "elf-section-byte-hashes",
+            "file-backed-sections-unhashed")}
         names = {}
         for section_name, address, size in rows:
             names[section_name] = names.get(section_name, 0) + 1
@@ -143,6 +144,10 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
             counts[key] += 1
             # Bytes are SHA-256-hashed from the exact ELF file section offsets.
             # Do not reveal section names, source filenames or address ranges.
+            if sec["sha256"]:
+                counts["elf-section-byte-hashes"] += 1
+            elif sec["data_kind"] == "file-backed-unhashed":
+                counts["file-backed-sections-unhashed"] += 1
             if len(row["observed_elf_section_hashes"]) < MAX_EXPORTED_HASHES and sec["sha256"]:
                 row["observed_elf_section_hashes"].append({
                     "sha256": sec["sha256"], "bytes": sec["bytes"]})
@@ -167,6 +172,7 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
             "Checks only single-line GNU ld output-section headers with exact ELF SHF_ALLOC section names.",
             "An identical name, VMA and size is metadata agreement, not source-to-output causality.",
             "Section SHA-256 values are bytes read from ELF, not a comparison against map or object bytes.",
+            "Section hashing has per-section and aggregate byte budgets; un-hashed sections remain explicit.",
             "ELF PT_LOAD VMA coverage is not a proof of LMA/flash address or runtime memory contents.",
             "Duplicate names, absent sections, extended ELF numbering and unsupported map formats stay unknown.",
             "Map/ELF may be stale or forged; no device target is read or verified.",
