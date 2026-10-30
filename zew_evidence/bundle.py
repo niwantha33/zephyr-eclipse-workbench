@@ -81,13 +81,19 @@ def write(graph: dict, output: Path) -> dict:
                 zf.writestr(item, data)
         # Exclusive create prevents replacing existing user data. Copy only a
         # fully validated temporary ZIP; on error remove the incomplete output.
+        created = False
         try:
-            with destination.open("xb") as target, tmp_name.open("rb") as original:
-                shutil.copyfileobj(original, target, length=64 * 1024)
+            # FileExistsError must never delete a file another process just
+            # created between our preliminary checks and exclusive open.
+            with destination.open("xb") as target:
+                created = True
+                with tmp_name.open("rb") as original:
+                    shutil.copyfileobj(original, target, length=64 * 1024)
                 target.flush()
                 os.fsync(target.fileno())
         except BaseException:
-            destination.unlink(missing_ok=True)
+            if created:
+                destination.unlink(missing_ok=True)
             raise
     finally:
         if tmp_name is not None:
