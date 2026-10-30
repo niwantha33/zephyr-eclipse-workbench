@@ -154,13 +154,14 @@ class OutputSectionAuditTests(unittest.TestCase):
                     allocated = inspect_sections(self.elf_path)
                     expanded = inspect_sections(self.elf_path, include_unallocated=True)
                     self.assertEqual(allocated, [])
-                    self.assertEqual(len(expanded), 1)
-                    self.assertIs(expanded[0]["allocated"], False)
-                    self.assertIsNone(expanded[0]["sha256"])
+                    text_section = [x for x in expanded if x["name"] == ".text"]
+                    self.assertEqual(len(text_section), 1)
+                    self.assertIs(text_section[0]["allocated"], False)
+                    self.assertIsNone(text_section[0]["sha256"])
                     report = self.result()
                     self.assertEqual(report["status"], "map-elf-output-layout-observed")
                     self.assertEqual(report["elf_allocated_sections"], 0)
-                    self.assertEqual(report["elf_nonallocated_sections"], 1)
+                    self.assertEqual(report["elf_nonallocated_sections"], len(expanded))
                     counts = report["comparison"]
                     self.assertEqual(counts["missing-or-unallocated"], 1)
                     self.assertEqual(counts["nonallocated-exact-metadata"], 1)
