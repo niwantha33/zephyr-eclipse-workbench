@@ -367,9 +367,8 @@ public final class ConfigurationStudioView extends ViewPart {
         Composite hardware = tab(tabs, "Hardware");
         hardware.setLayout(new GridLayout(1, false));
         Label warning = new Label(hardware, SWT.WRAP);
-        warning.setText("VISUAL HARDWARE STUDIO 2.0  /  Selected build snapshot  ·  "
-                + "The package diagram is unavailable until an exact verified part + package map is provided. "
-                + "Pinmux values are logical routes, NEVER physical package pads.");
+        warning.setText("VISUAL HARDWARE STUDIO 2.0  /  Last generated build  ·  "
+                + "Logical routes are not physical package pins; verified package mapping is unavailable.");
         warning.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         var studioVertical = new SashForm(hardware, SWT.VERTICAL);
@@ -448,7 +447,7 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareSummary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         hardwareDescription = new Text(devicePanel, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL | SWT.BORDER);
         GridData descriptionLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
-        descriptionLayout.heightHint = 70;
+        descriptionLayout.heightHint = 48;
         hardwareDescription.setLayoutData(descriptionLayout);
         hardwareDescription.setText("Build the exact board to discover peripheral controllers and channels.");
         hardwareSearch.addModifyListener(event -> refreshHardware());
@@ -488,7 +487,7 @@ public final class ConfigurationStudioView extends ViewPart {
         chipScroll.setContent(chipPins);
         chipScroll.setExpandHorizontal(true);
         chipScroll.setExpandVertical(true);
-        chipScroll.setMinSize(620, 295);
+        chipScroll.setMinSize(540, 295);
         packageMode.addListener(SWT.Selection, event -> {
             if (packageMode.getSelection()) chipPins.setMode(ChipPinCanvas.Mode.PACKAGE);
         });
@@ -1145,7 +1144,15 @@ public final class ConfigurationStudioView extends ViewPart {
                 String parent = slash <= 0 ? "/" : device.path().substring(0, slash);
                 var parentItem = accepted.get(parent);
                 String category = HardwarePeripheralIndex.category(device);
-                // Child channels are shown only beneath visible, matched owners.
+                // Never bury a real GPIO controller inside the Pinctrl group:
+                // the raw DTS parent may be a pin-controller, but navigation
+                // must respect this node's own compatible/category.
+                if (parentItem != null) {
+                    var parentDevice = (DevicetreeHardware.Device) parentItem.getData();
+                    if (!category.equals(HardwarePeripheralIndex.category(parentDevice))
+                            && !name.startsWith("channel@")) parentItem = null;
+                }
+                // Child ADC channels remain under their actual controller.
                 boolean child = parentItem != null;
                 if (!child && (!HardwarePeripheralIndex.matches(device, categoryFilter)
                         || !DevicetreeHardware.matches(device, query, state))) continue;
