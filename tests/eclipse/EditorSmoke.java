@@ -105,6 +105,35 @@ public final class EditorSmoke implements IApplication {
             var chip = studioField(view, type, "chipPins");
             check(((Integer) chip.getClass().getMethod("routeCount").invoke(chip)) == 1,
                     "native chip canvas contains the selected controller's resolved pinctrl route");
+            // The redesigned native Hardware workspace must have real
+            // peripheral navigation, planner modes and a separate evidence dock.
+            var grouped = (org.eclipse.swt.widgets.Tree) studioField(view, type, "hardwarePeripheralTree");
+            check(grouped.getItemCount() == 1 && grouped.getItem(0).getText().startsWith("ADC")
+                    && grouped.getItem(0).getItemCount() == 1
+                    && grouped.getItem(0).getItem(0).getItem(0).getText().startsWith("channel@0"),
+                    "ADC peripheral-first tree retains the detected controller and channel");
+            var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
+            check(dock.getItemCount() == 3
+                    && dock.getItem(0).getText().startsWith("Changes")
+                    && dock.getItem(1).getText().startsWith("Validation")
+                    && dock.getItem(2).getText().startsWith("Generated DTS"),
+                    "native Studio exposes a dedicated Changes/Validation/Generated DTS evidence dock");
+            var validation = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareValidation");
+            check(validation.getText().contains("PHYSICAL PINOUT: NOT VERIFIED"),
+                    "physical package map is never invented from pinmux cells");
+            var preview = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwarePreview");
+            check(!preview.getEditable() && preview.getText().contains("No proposed changes"),
+                    "hardware overlay draft starts read-only with no implicit edits");
+            var mode = chip.getClass().getDeclaredClasses()[0];
+            var chooseMode = chip.getClass().getMethod("setMode", mode);
+            var packageMode = java.util.Arrays.stream(mode.getEnumConstants())
+                    .filter(value -> value.toString().equals("PACKAGE")).findFirst().orElseThrow();
+            chooseMode.invoke(chip, packageMode);
+            check(chip.getClass().getMethod("mode").invoke(chip).toString().equals("PACKAGE"),
+                    "unverified package placeholder is a selectable real SWT planner mode");
+            var signalsMode = java.util.Arrays.stream(mode.getEnumConstants())
+                    .filter(value -> value.toString().equals("SIGNALS")).findFirst().orElseThrow();
+            chooseMode.invoke(chip, signalsMode);
             parameterTable.setSelection(gain);
             var revealParameter = type.getDeclaredMethod("revealParameterSource"); revealParameter.setAccessible(true);
             revealParameter.invoke(view);
