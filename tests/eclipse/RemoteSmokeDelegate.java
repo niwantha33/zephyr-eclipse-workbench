@@ -32,6 +32,13 @@ public final class RemoteSmokeDelegate extends GdbLaunchDelegate {
                 mapping.setAccessible(true);
                 mapping.invoke(null, launch, java.util.List.of(
                         new io.github.niwantha33.zew.core.DebugSourcePaths.Mapping(compilation, source)));
+                // The installed product helper must make an actual backend-enabled
+                // CDT mapping, not merely resolve a path via a fallback container.
+                var director = (org.eclipse.cdt.dsf.gdb.launching.GdbSourceLookupDirector) launch.getSourceLocator();
+                var backend = director.getSubstitutionsPaths();
+                if (!source.replace('\\', '/').equals(
+                        java.util.Objects.toString(backend.get(compilation), "").replace('\\', '/')))
+                    throw new IllegalStateException("Production helper failed to install a GDB source substitution: " + backend);
             }
             return launch;
         } catch (Exception error) { throw new CoreException(new Status(IStatus.ERROR, "zew.editor.smoke", "Remote launch settings", error)); }
