@@ -31,7 +31,9 @@
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9_:@./+-]+$"
           },
           "type": {
             "enum": [
@@ -60,10 +62,32 @@
               "producing_tool",
               "tool_version",
               "extraction"
-            ]
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "producing_tool": {
+                "const": "unknown"
+              },
+              "tool_version": {
+                "const": "unknown"
+              },
+              "extraction": {
+                "const": "read-only SHA-256 file observation"
+              }
+            }
           }
-        }
-      }
+        },
+        "additionalProperties": false
+      },
+      "maxItems": 100000
     },
     "edges": {
       "type": "array",
@@ -73,8 +97,24 @@
           "from",
           "to",
           "type"
-        ]
-      }
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "contains",
+              "observed-in"
+            ]
+          }
+        }
+      },
+      "maxItems": 200000
     },
     "missing_evidence": {
       "type": "array",
@@ -85,13 +125,15 @@
           "artifact",
           "state"
         ]
-      }
+      },
+      "maxItems": 10000
     },
     "limitations": {
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "maxItems": 100
     }
   }
 }

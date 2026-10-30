@@ -46,3 +46,49 @@ sharing: even permitted board names and public metadata may be sensitive.
 These are still **Phase-0 feasibility features**: no rule-causality engine,
 automatic Zephyr semantic evaluation, independent hardware measurements,
 production security certification or G1 gate.
+
+
+## Verify archived artifact identities (prototype 0.1.1)
+
+```sh
+python zew.py verify --input ./evidence.zip --build /path/to/build
+```
+
+The archive is integrity-checked and structurally validated first. Each recorded
+artifact is then rehashed in the explicitly selected build root, using the
+snapshot's image-relative mappings. Output is deterministic JSON with expected
+and observed SHA-256, provenance and `matching`, `changed` or `missing` states.
+It never rebuilds, writes the build or touches hardware.
+
+Exit codes for `verify`: **0** when all recorded artifacts match; **1** for an
+artifact mismatch or no recorded artifacts; **2** for malformed inputs, unsafe
+paths or I/O errors. Other commands retain their existing 0/2 contract.
+
+Matching artifact bytes do not establish source/configuration freshness,
+a successful build, producer authenticity or firmware identity on a device.
+Missing evidence in the original snapshot remains explicitly listed. The command
+compares snapshots; it cannot independently verify a malicious producer's claims.
+
+Importer validation now checks exact node metadata, image-relative paths, allowed
+artifact identities, matching Kconfig-to-artifact provenance and complete graph
+relationships. Secret-bearing numeric values, arbitrary extra metadata, duplicate
+JSON keys and malformed nested JSON are rejected. This is strict schema-0.1.0
+validation, not cryptographic attestation.
+
+
+## Standalone CLI distribution
+
+Build without installing a packaging framework or fetching dependencies:
+
+```sh
+python scripts/package_cli.py --output ./dist/zew-0.1.1.pyz
+python ./dist/zew-0.1.1.pyz --version
+python ./dist/zew-0.1.1.pyz graph --build /path/to/build
+```
+
+Requires Python 3.10+; Windows and Linux use the same `python file.pyz` invocation.
+The zipapp includes original source, Apache-2.0 licence, CLI reference and graph
+schema. Source text line endings and ZIP timestamps are normalised for repeatable
+bytes. Packaging refuses existing destinations and prints a SHA-256 digest.
+CI retains the zipapp and SHA256SUMS as **zew-evidence-cli-prototype**. This is an
+unsigned Phase-0 test distribution, not a production release or a signed asset.
