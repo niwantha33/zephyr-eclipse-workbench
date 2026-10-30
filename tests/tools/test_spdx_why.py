@@ -54,7 +54,7 @@ class SpdxWhyTests(unittest.TestCase):
             rel("hasInput", self.build_id, [self.file_id, self.package_id]),
             rel("hasOutput", self.build_id, ["urn:artifact:library"]),
             rel("usesTool", self.build_id, ["urn:tool:compiler"]),
-            rel("hasInput", "urn:build:unrelated", ["urn:file:other"]),
+            rel("hasInput", "urn:not-a-build", ["urn:file:other"]),
             rel("hasInput", self.build_id, ["urn:file:other"], "test"),
         ])
 
