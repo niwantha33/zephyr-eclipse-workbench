@@ -110,3 +110,18 @@ passing these prototype tests.
   conflicting identities, scope, ambiguities and CLI backwards compatibility.
 - **G0 still OPEN**; exact-head CI and real Zephyr v4.5 build-profile tests
   are still prerequisites for progressing into the release trains.
+
+
+## Phase-0 exact compiler command observation (development PR)
+
+- Added `zew compile` with explicit `--source-root` and optional
+  `zew why --source --source-root` enrichment.
+- Source identity is an exact local path under the caller-selected source
+  root, matched against bounded `compile_commands.json` records.
+- All observed command counts are scoped per declared build image and
+  anchored to the existing Evidence Graph compiler-database digest.
+- No command text, source path, flags, environment or credentials is exported.
+  Invalid/foreign-host paths and absence remain UNKNOWN; no execution,
+  linker, final ELF or flashed-target assertion is made.
+- Tests cover tampering, adversarial JSON, existing/missing database, path
+  matching, privacy and multi-image isolation. G0 remains OPEN.
