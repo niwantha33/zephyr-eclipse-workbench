@@ -46,6 +46,7 @@ import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.part.ViewPart;
+import io.github.niwantha33.zew.core.ConfigurationDiagnosis;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
@@ -138,13 +139,15 @@ public final class ConfigurationStudioView extends ViewPart {
 
         var secondary = new Composite(outer, SWT.NONE);
         secondary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        secondary.setLayout(new GridLayout(4, false));
+        secondary.setLayout(new GridLayout(5, false));
         action(secondary, "Open prj.conf", () -> openResource("prj.conf"))
                 .setToolTipText("Open the exact application configuration source");
         action(secondary, "Edit hardware overlay", this::openOverlay)
                 .setToolTipText("Open the selected overlay; no pins or clocks are generated automatically");
         action(secondary, "Refresh", this::reload)
                 .setToolTipText("Reload project and generated configuration after editing or building");
+        action(secondary, "Diagnose", this::diagnoseConfiguration)
+                .setToolTipText("Read-only checks of the selected build and, in Hardware, the selected peripheral");
         action(secondary, "Copy selected symbol", this::copySymbol)
                 .setToolTipText("Copy CONFIG_<symbol> to the clipboard");
 
@@ -446,9 +449,10 @@ public final class ConfigurationStudioView extends ViewPart {
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         hardwareSplit.setWeights(new int[] {40, 60});
         var hardwareActions = new Composite(hardware, SWT.NONE);
-        hardwareActions.setLayout(new GridLayout(3, false));
+        hardwareActions.setLayout(new GridLayout(4, false));
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
+        action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
         action(hardwareActions, "Edit application overlay…", this::openOverlay);
 
         Composite reports = tab(tabs, "Insights");
@@ -584,6 +588,48 @@ public final class ConfigurationStudioView extends ViewPart {
         category.select(1);
         tabs.setSelection(0);
         refreshOptions();
+    }
+
+
+    /** Diagnose using generated evidence without mutating source or generated files. */
+    private void diagnoseConfiguration() {
+        if (project == null || !project.isAccessible()) {
+            MessageDialog.openInformation(getSite().getShell(), "Diagnose",
+                    "Select a Zephyr application in Project Explorer first.");
+            return;
+        }
+        IProject selectedProject = project;
+        Path build = inspectionBuild;
+        Path app = selectedProject.getLocation().toFile().toPath();
+        String selectedNode = null;
+        if (tabs.getSelectionIndex() == 1 && hardwareDevices.getSelectionCount() > 0) {
+            var selected = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+            selectedNode = selected.path();
+        }
+        String node = selectedNode;
+        var display = analysis.getDisplay();
+        status.setText("Checking available generated configuration evidence…");
+        new Job("Diagnose Zephyr configuration") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                String message;
+                try {
+                    message = ConfigurationDiagnosis.inspect(app, build, node).display();
+                } catch (Exception error) {
+                    message = "Configuration diagnosis could not finish: " + error.getMessage()
+                            + "\nNo files were changed. Check project settings and regenerate the selected build.";
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                String report = message;
+                display.asyncExec(() -> {
+                    if (analysis.isDisposed() || project != selectedProject
+                            || !java.util.Objects.equals(inspectionBuild, build)) return;
+                    analysis.setText(report);
+                    tabs.setSelection(2);
+                    status.setText("Read-only diagnosis complete. Findings are scoped to the selected build.");
+                });
+                return Status.OK_STATUS;
+            }
+        }.schedule();
     }
 
     private void reload() {
