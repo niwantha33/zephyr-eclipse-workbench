@@ -27,20 +27,29 @@ def main(argv: list[str] | None = None) -> int:
         if command == "bundle":
             sub.add_argument("--output", type=Path, help="Target ZIP (required only with --write)")
             sub.add_argument("--write", action="store_true", help="Explicitly save a new ZIP; never overwrite")
-    diff = subs.add_parser("compare", help="Observed differences between two generated Zephyr build roots")
-    diff.add_argument("--left", type=Path, required=True)
-    diff.add_argument("--right", type=Path, required=True)
+    diff = subs.add_parser("compare", help="Compare two builds or verified offline bundles")
+    lg = diff.add_mutually_exclusive_group(required=True)
+    lg.add_argument("--left", type=Path, help="Generated build root")
+    lg.add_argument("--left-bundle", type=Path, help="Portable evidence ZIP")
+    rg = diff.add_mutually_exclusive_group(required=True)
+    rg.add_argument("--right", type=Path, help="Generated build root")
+    rg.add_argument("--right-bundle", type=Path, help="Portable evidence ZIP")
     diff.add_argument("--left-image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
     diff.add_argument("--right-image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
-    opening = subs.add_parser("inspect", help="Validate a portable ZIP without extracting it")
+    opening = subs.add_parser("inspect", help="Validate and inspect a portable ZIP without extracting")
     opening.add_argument("--input", type=Path, required=True)
+    opening.add_argument("--show-graph", action="store_true",
+                         help="Show integrity-validated, sanitised graph stored in archive")
     args = parser.parse_args(argv)
     try:
         if args.command == "inspect":
-            output = inspect(args.input)
+            output = inspect(args.input, include_graph=args.show_graph)
         elif args.command == "compare":
-            output = compare(collect(args.left, args.left_image),
-                             collect(args.right, args.right_image))
+            if (args.left_bundle and args.left_image) or (args.right_bundle and args.right_image):
+                raise InputError("--left-image/--right-image apply only to live build roots")
+            left = inspect(args.left_bundle, include_graph=True)["graph"] if args.left_bundle else collect(args.left, args.left_image)
+            right = inspect(args.right_bundle, include_graph=True)["graph"] if args.right_bundle else collect(args.right, args.right_image)
+            output = compare(left, right)
         else:
             graph = collect(args.build, args.image)
             if args.command == "graph":
