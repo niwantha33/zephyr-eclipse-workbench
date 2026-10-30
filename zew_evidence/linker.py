@@ -131,7 +131,7 @@ def inspect(build: Path, source: str, source_root: Path,
         database = _regular(directory, "compile_commands.json")
         link_map = _regular(directory, "zephyr/zephyr.map")
         record = {
-            "image": image, "status": "unknown",
+            "image": image, "status": "unknown", "confidence": "unknown",
             "matching_compile_commands": 0, "distinct_declared_outputs": 0,
             "observed_object_sha256": None, "map_observation": None,
             "provenance": {
@@ -175,6 +175,7 @@ def inspect(build: Path, source: str, source_root: Path,
             continue
         obj_hash, obj_bytes = _digest(obj_path)
         record["observed_object_sha256"] = obj_hash
+        record["object_confidence"] = "confirmed"
         record["observed_object_bytes"] = obj_bytes
         if link_map is None:
             if map_id in fingerprints:
@@ -189,12 +190,16 @@ def inspect(build: Path, source: str, source_root: Path,
         record["provenance"]["linker_map"] = {"node_id": map_id, "sha256": map_hash}
         observation = _map_observations(_map_snapshot(link_map, map_hash), directory, obj)
         record["map_observation"] = observation
+        record["map_confidence"] = ("confirmed" if observation["format"] == "gnu-ld-text-recognised"
+                                    and (observation["load_entries"] or observation["assigned_section_entries"])
+                                    else "unknown")
         record["status"] = ("map-section-contribution-observed"
                             if observation["assigned_section_entries"] else
                             "map-load-observed" if observation["load_entries"] else
                             "unknown-map-contribution")
         if observation["format"] == "unsupported-map":
             record["status"] = "unsupported-map-format"
+        record["confidence"] = record["map_confidence"]
         reports.append(record)
     return {
         "schema_version": SCHEMA_VERSION,
