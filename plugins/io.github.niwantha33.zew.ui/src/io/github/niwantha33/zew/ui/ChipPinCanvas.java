@@ -97,7 +97,7 @@ public final class ChipPinCanvas extends Canvas {
         int chipWidth = 190;
         int left = center - chipWidth / 2;
         int top = 64;
-        int chipHeight = Math.max(166, rows * ROUTE_ROW + 48);
+        int chipHeight = Math.max(144, rows * ROUTE_ROW + 48);
         int sideWidth = Math.max(105, Math.min(185, (area.width - chipWidth) / 2 - 32));
         gc.setBackground(display.getSystemColor(SWT.COLOR_DARK_GRAY));
         gc.setForeground(display.getSystemColor(SWT.COLOR_BLACK));
@@ -133,13 +133,16 @@ public final class ChipPinCanvas extends Canvas {
             hitAreas.add(new Rectangle(x, y, sideWidth, 28));
         }
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
-        int footer = top + chipHeight + 14;
-        gc.drawText("Select a route to inspect its exact built property and source.", 16, footer, true);
-        if (routes.size() > count)
-            gc.drawText("Showing first " + count + " of " + routes.size()
-                    + " routes. Use the parameters table for the complete set.", 16, footer + 23, true);
-        else if (routes.isEmpty())
-            gc.drawText("No logical routes found for this controller in the last build.", 16, footer + 23, true);
+        int footer = top + chipHeight + 9;
+        if (routes.isEmpty()) {
+            gc.drawText(shorten(gc, "No direct pinctrl/GPIO routes; inspect the built properties.",
+                    Math.max(80, area.width - 30)), 16, footer, true);
+        } else {
+            gc.drawText("Select a route to inspect its exact built property and source.", 16, footer, true);
+            if (routes.size() > count)
+                gc.drawText("Showing first " + count + " of " + routes.size()
+                        + " routes. Full set: parameters table.", 16, footer + 23, true);
+        }
     }
 
     private void paintPackageUnavailable(org.eclipse.swt.graphics.GC gc, Rectangle area) {
@@ -202,14 +205,16 @@ public final class ChipPinCanvas extends Canvas {
         mode = requested;
         int count = mode == Mode.CONNECTIONS ? visibleCount()
                 : (visibleCount() + 1) / 2;
-        int h = mode == Mode.CONNECTIONS ? count * 28 + 105
-                : mode == Mode.PACKAGE ? 480 : count * ROUTE_ROW + 185;
-        // Avoid stale canvas widths when the splitter is resized narrower.
-        // ScrolledComposite expands it to the visible client width as needed.
-        setSize(540, Math.max(295, h));
+        int signalHeight = Math.max(144, count * ROUTE_ROW + 48) + 94
+                + (routes.size() > MAX_VISIBLE_ROUTES ? 24 : 0);
+        int h = mode == Mode.CONNECTIONS ? Math.max(190, count * 28 + 105)
+                : mode == Mode.PACKAGE ? 480
+                : "Select a peripheral".equals(controller) ? 185 : Math.max(238, signalHeight);
+        // Expanding into a larger pane must not lock in a stale wide/tall canvas.
+        setSize(540, h);
         var parent = getParent();
         if (parent instanceof org.eclipse.swt.custom.ScrolledComposite scroll) {
-            scroll.setMinSize(540, Math.max(295, h));
+            scroll.setMinSize(540, h);
         }
         redraw();
     }
