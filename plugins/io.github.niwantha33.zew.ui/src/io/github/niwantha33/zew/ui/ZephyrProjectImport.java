@@ -106,8 +106,20 @@ public final class ZephyrProjectImport {
             ICommand command = description.newCommand(); command.setBuilderName(BUILDER);
             description.setBuildSpec(new ICommand[] {command});
             if (cmake) {
-                description.setBuildConfigs(new String[] {"default"});
-                description.setActiveBuildConfig("default");
+                // A queued CDT launch-bar request may already have created the
+                // West configuration before this CMake-to-West conversion.
+                // Deleting all configurations loses that real native selection
+                // and triggers a persisted-configuration failure on reload.
+                // Keep only configurations owned by our West provider, never
+                // stale generic CMake configurations.
+                var nativeConfigs = new java.util.LinkedHashSet<String>();
+                nativeConfigs.add("default");
+                for (String config : description.getBuildConfigs()) {
+                    if (config.startsWith(ZephyrCoreBuildProvider.ID + "/")) nativeConfigs.add(config);
+                }
+                description.setBuildConfigs(nativeConfigs.toArray(String[]::new));
+                description.setActiveBuildConfig(nativeConfigs.contains(description.getActiveBuildConfig())
+                        ? description.getActiveBuildConfig() : "default");
             }
             // Apply after open: Eclipse may reload the original .project during open.
             project.setDescription(description, monitor);
