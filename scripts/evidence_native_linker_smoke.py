@@ -23,6 +23,7 @@ from zew_evidence.collector import collect
 from zew_evidence.compilation import inspect as inspect_compile
 from zew_evidence.link_audit import audit as audit_ranges
 from zew_evidence.section_audit import audit as audit_sections
+from zew_evidence.map_context import audit as audit_context
 from zew import main as zew_main
 
 
@@ -63,6 +64,7 @@ def _build(root: Path, compiler: str, linker_flavour: str) -> dict:
     compiled = inspect_compile(build, "src/main.c", app, graph=graph)["images"][0]
     ranges = audit_ranges(build, graph=graph)["images"][0]
     sections = audit_sections(build, graph=graph)["images"][0]
+    context = audit_context(build, graph=graph)["images"][0]
     if compiled["status"] != "compile-command-observed":
         raise AssertionError("Exact native source identity not observed")
     if ranges["status"] in ("missing-elf", "unsupported-or-invalid-elf"):
@@ -73,6 +75,11 @@ def _build(root: Path, compiler: str, linker_flavour: str) -> dict:
         raise AssertionError("Real GNU ld map not recognised")
     if linker_flavour == "gnu-ld" and sections["status"] == "unsupported-map-format":
         raise AssertionError("Real GNU ld output map not recognised")
+    if context["status"] == "unsupported-or-invalid-elf-sections":
+        raise AssertionError("Real ELF section metadata unexpectedly invalid")
+    if linker_flavour == "gnu-ld" and context["status"] in (
+            "unsupported-map-format", "no-supported-gnu-output-or-input-records"):
+        raise AssertionError("Genuine GNU ld map did not expose supported input/output context")
     # Execute the zipapp-equivalent CLI contract for native linker evidence.
     stream = io.StringIO()
     with contextlib.redirect_stdout(stream):
@@ -80,6 +87,8 @@ def _build(root: Path, compiler: str, linker_flavour: str) -> dict:
     if code != 0 or json.loads(stream.getvalue())["images"][0]["status"] != sections["status"]:
         raise AssertionError("Native CLI disagrees with headless section analyzer")
     report = {"toolchain": linker_flavour,
+              "map_context_status": context["status"],
+              "map_context": context["context"],
               "compilation": compiled["status"],
               "range_status": ranges["status"],
               "map_sections": ranges["map_sections"],
