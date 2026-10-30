@@ -80,7 +80,13 @@ def _kconfig(path: Path) -> dict[str, str]:
             if PRIVATE.search(name) or not SAFE_VALUE.fullmatch(raw):
                 if name in ("CONFIG_BOARD_TARGET", "CONFIG_SOC", "CONFIG_BOARD", "CONFIG_KERNEL_BIN_NAME"):
                     plain = raw.removeprefix('"').removesuffix('"')
-                    values[name] = plain if TARGET.fullmatch(plain) and not PRIVATE.search(plain) else "<redacted>"
+                    # Reject paths and unquoted strings; names and values are untrusted.
+                    public = (raw.startswith('"') and raw.endswith('"')
+                              and bool(TARGET.fullmatch(plain))
+                              and not plain.startswith(('/', '.', '~'))
+                              and '..' not in plain.split('/')
+                              and not PRIVATE.search(plain))
+                    values[name] = plain if public else "<redacted>"
                 else:
                     values[name] = "<redacted>"
             else:

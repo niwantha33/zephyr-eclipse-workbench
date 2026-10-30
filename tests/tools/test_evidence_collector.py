@@ -39,6 +39,16 @@ class EvidenceCollectorTests(unittest.TestCase):
         self.assertEqual(why(first, "CONFIG_ADC")["observations"][0]["observed_value"], "n")
         self.assertEqual(why(first, "CONFIG_USER_NOTE")["observations"][0]["observed_value"], "<redacted>")
 
+    def test_public_id_does_not_export_paths(self):
+        cfg = self.image / "zephyr/.config"
+        cfg.write_text('CONFIG_BOARD_TARGET="/home/user/private-board"\n'
+                       'CONFIG_SOC="C:/Users/person"\n'
+                       'CONFIG_GPIO=y\n', encoding="utf-8")
+        output = json.dumps(collect(self.image))
+        self.assertNotIn("/home/user", output)
+        self.assertNotIn("C:/Users", output)
+        self.assertIn("<redacted>", output)
+
     def test_hash_changes_when_build_changes(self):
         first = collect(self.image)
         (self.image / "zephyr/.config").write_text("CONFIG_GPIO=n\n", encoding="utf-8")
