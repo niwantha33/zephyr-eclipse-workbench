@@ -51,6 +51,18 @@ diagnosis *before rebuilding* to see the explicit stale-snapshot finding.
 Use **Build & validate** to re-evaluate actual Zephyr semantics. The report itself
 is not a substitute for a Zephyr build or physical peripheral test.
 
+
+## MCU Register Viewer reuse decision
+
+The separate niwantha33/mcu_register_viewer repository declares a **proprietary,
+all-rights-reserved licence** in LICENSE.txt. Its VS Code implementation and
+bundled data therefore cannot simply be copied or redistributed under the
+Workbench's Apache-2.0 terms. No source from that repository is imported in
+this change. A separate explicit licence grant or appropriately licensed
+reimplementation and review of SVD/data provenance is required before reuse.
+The independent existing Eclipse SvdDevice/SocRegistersView implementation
+remains the current baseline.
+
 ## Release decisions and acceptance
 
 - [ ] Current PR automated core, Tycho p2, native Linux UI and Windows firmware CI all pass.
