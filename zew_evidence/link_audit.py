@@ -19,6 +19,7 @@ ARCHIVE = re.compile(r"^(.+\.a)\(([^()]+\.(?:o|obj))\)$")
 MAX_SECTIONS = 150000
 MAX_ARCHIVE_REFS = 2000
 MAX_DIGEST_EXPORT = 32
+MAX_TOTAL_ARCHIVE_IO = 512 * 1024 * 1024
 
 
 def _archive_path(directory: Path, value: str) -> Path | None:
@@ -131,13 +132,23 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
         archive_counts = {status: 0 for status in (
             "exact-archive-member-observed", "missing-member", "ambiguous-member",
             "unsupported-thin-archive", "unsupported-archive-format",
-            "unavailable-archive")}
+            "unavailable-archive", "inspection-budget-exceeded")}
         digests = []
+        archive_io = 0
         for archive_name, member_name in references:
             file = _archive_path(directory, archive_name)
             if file is None:
                 archive_counts["unavailable-archive"] += 1
                 continue
+            # Bound aggregate worst-case I/O across independently referenced
+            # archive members. Some generated maps contain thousands of them.
+            # Stop inspecting when budget is exhausted; never infer success.
+            archive_size = file.stat().st_size
+            cost = archive_size * 2  # scan/member read + optional digest
+            if archive_io + cost > MAX_TOTAL_ARCHIVE_IO:
+                archive_counts["inspection-budget-exceeded"] += 1
+                continue
+            archive_io += cost
             result = observe_member(file, member_name)
             archive_counts[result["status"]] += 1
             if result["status"] == "exact-archive-member-observed":
@@ -149,7 +160,8 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
         report["archive"] = {"referenced_unique_members": len(references),
                               "status_counts": archive_counts,
                               "member_hash_evidence": digests,
-                              "hash_evidence_limit": MAX_DIGEST_EXPORT}
+                              "hash_evidence_limit": MAX_DIGEST_EXPORT,
+                              "inspection_io_budget_bytes": MAX_TOTAL_ARCHIVE_IO}
         if counts["uncovered"] or counts["ambiguous"] or counts["invalid"]:
             report["status"] = "elf-range-conflict-or-unknown"
         elif rows:
@@ -166,6 +178,7 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
             "ELF PT_LOAD VMA range containment does not verify map source membership or section bytes.",
             "LMA/physical addresses, linker relocations, overlay sections and vendor maps are not interpreted.",
             "GNU archive-member bytes are observed only for exact unambiguous regular archive identities.",
+            "Archive-inspection I/O is bounded; budget-exceeded references remain unknown.",
             "A recognised map input section does not prove object or archive contents were linked into the ELF.",
             "Neither matched ELF/map hashes nor archive member checks prove source freshness or device flashing.",
             "No section names, host paths, archive names, symbols or raw evidence contents are exported.",
