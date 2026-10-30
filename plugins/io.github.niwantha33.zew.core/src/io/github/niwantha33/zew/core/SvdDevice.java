@@ -11,11 +11,22 @@ import org.w3c.dom.Element;
 
 /** Bounded, offline CMSIS-SVD reader. Unsupported constructs fail explicitly. */
 public record SvdDevice(String name, List<Register> registers) {
-    public record Field(String name, int offset, int width, String description) {}
+    public record Field(String name, int offset, int width, String description,
+            String access, String readAction) {}
     public record Register(String peripheral, String name, BigInteger address, int size,
             BigInteger reset, BigInteger resetMask, String access, String readAction,
             String description, List<Field> fields) {
-        public boolean readable() { return !access.equals("write-only") && readAction.isEmpty(); }
+        public boolean readable() { return readBlockReason().isEmpty(); }
+        /** Conservatively block a full-width read if any included field is unsafe to read. */
+        public String readBlockReason() {
+            if (!readAccess(access)) return "register access: " + access;
+            if (!readAction.isEmpty()) return "register readAction: " + readAction;
+            for (var field : fields) {
+                if (!readAccess(field.access())) return "field " + field.name() + " access: " + field.access();
+                if (!field.readAction().isEmpty()) return "field " + field.name() + " readAction: " + field.readAction();
+            }
+            return "";
+        }
         public String key() { return peripheral + "." + name; }
     }
     public static SvdDevice read(InputStream input) throws Exception {
@@ -78,6 +89,8 @@ public record SvdDevice(String name, List<Register> registers) {
                 if (!List.of(8, 16, 32).contains(size)) throw new IllegalArgumentException("Unsupported register width: " + size);
                 if (!address.mod(BigInteger.valueOf(size / 8)).equals(BigInteger.ZERO))
                     throw new IllegalArgumentException("Unaligned register: " + name);
+                String access = inherit(r, parent, device, "access", "read-write");
+                String action = inherit(r, parent, device, "readAction", "");
                 var fields = new ArrayList<Field>();
                 var fs = child(r, "fields");
                 if (fs != null) for (var f : children(fs)) {
@@ -96,13 +109,9 @@ public record SvdDevice(String name, List<Register> registers) {
                         offset = Integer.parseInt(text(f, "bitOffset", "")); width = Integer.parseInt(text(f, "bitWidth", ""));
                     }
                     if (offset < 0 || width < 1 || offset + width > size) throw new IllegalArgumentException("Invalid field: " + name);
-                    fields.add(new Field(text(f, "name", ""), offset, width, text(f, "description", "")));
+                    fields.add(new Field(text(f, "name", ""), offset, width, text(f, "description", ""),
+                            text(f, "access", access), text(f, "readAction", "")));
                 }
-                String access = inherit(r, parent, device, "access", "read-write");
-                String action = inherit(r, parent, device, "readAction", "");
-                // A read side effect declared on any field applies to the whole register.
-                if (fs != null) for (var f : children(fs))
-                    if (child(f, "readAction") != null) action = text(f, "readAction", "");
                 String resetText = inherit(r, parent, device, "resetValue", "");
                 BigInteger reset = resetText.isEmpty() ? null : number(resetText);
                 BigInteger mask = number(inherit(r, parent, device, "resetMask", BigInteger.ONE.shiftLeft(size).subtract(BigInteger.ONE).toString()));
@@ -112,6 +121,10 @@ public record SvdDevice(String name, List<Register> registers) {
                         text(r, "description", ""), List.copyOf(fields)));
             }
         }
+    }
+    private static boolean readAccess(String access) {
+        // Unknown/vendor-specific access modes cannot authorise an MMIO read.
+        return List.of("read-only", "read-write", "read-writeOnce").contains(access);
     }
     private static List<String> indices(String value, int count) {
         var result = new ArrayList<String>();

@@ -43,6 +43,8 @@ jobs:
       - name: Verify packaged site
         run: python3 scripts/verify_site.py
       - name: Compile and exercise installed native Eclipse UI before merge
+        env:
+          ZEW_SCREENSHOT_DIR: ${{ github.workspace }}/release-smoke-screenshots
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -60,6 +62,14 @@ jobs:
             -installIU org.eclipse.cdt.core,org.eclipse.cdt.ui,org.eclipse.cdt.debug.core,org.eclipse.cdt.dsf.gdb,org.eclipse.cdt.dsf.gdb.ui,org.eclipse.cdt.cmake.ui,org.eclipse.cdt.build.gcc.core
           xvfb-run -a python3 scripts/editor_smoke.py --native-workbench \
             --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
+      - name: Retain native Eclipse screenshots from the actual installed UI
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: zephyr-native-ui-evidence
+          path: release-smoke-screenshots/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Retain private development update site
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

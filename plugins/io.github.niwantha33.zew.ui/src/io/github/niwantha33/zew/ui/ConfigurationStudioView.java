@@ -46,6 +46,7 @@ import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.part.ViewPart;
+import io.github.niwantha33.zew.core.ConfigurationDiagnosis;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
@@ -98,6 +99,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private String filter = "";
     private String selectedOverlay = "app.overlay";
     private Job helpJob;
+    private Job diagnosisJob;
+    private final java.util.concurrent.atomic.AtomicInteger diagnosisGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger helpGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ConcurrentMap<String, String> definitionCache =
             new java.util.concurrent.ConcurrentHashMap<>();
@@ -138,13 +141,15 @@ public final class ConfigurationStudioView extends ViewPart {
 
         var secondary = new Composite(outer, SWT.NONE);
         secondary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        secondary.setLayout(new GridLayout(4, false));
+        secondary.setLayout(new GridLayout(5, false));
         action(secondary, "Open prj.conf", () -> openResource("prj.conf"))
                 .setToolTipText("Open the exact application configuration source");
         action(secondary, "Edit hardware overlay", this::openOverlay)
                 .setToolTipText("Open the selected overlay; no pins or clocks are generated automatically");
         action(secondary, "Refresh", this::reload)
                 .setToolTipText("Reload project and generated configuration after editing or building");
+        action(secondary, "Diagnose", this::diagnoseConfiguration)
+                .setToolTipText("Read-only checks of the selected build and, in Hardware, the selected peripheral");
         action(secondary, "Copy selected symbol", this::copySymbol)
                 .setToolTipText("Copy CONFIG_<symbol> to the clipboard");
 
@@ -435,7 +440,7 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareParameters.addListener(SWT.DefaultSelection, event -> prepareHardwareOverride());
         var parameterActions = new Composite(parameterPanel, SWT.NONE);
         parameterActions.setLayout(new GridLayout(2, false));
-        action(parameterActions, "Prepare overlay request…", this::prepareHardwareOverride);
+        action(parameterActions, "Configure property…", this::prepareHardwareOverride);
         action(parameterActions, "Show declaration", this::revealParameterSource);
         parameterSplit.setWeights(new int[] {50, 50});
         var sourcePanel = tab(hardwareDetails, "Generated source");
@@ -446,13 +451,19 @@ public final class ConfigurationStudioView extends ViewPart {
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         hardwareSplit.setWeights(new int[] {40, 60});
         var hardwareActions = new Composite(hardware, SWT.NONE);
-        hardwareActions.setLayout(new GridLayout(3, false));
+        hardwareActions.setLayout(new GridLayout(4, false));
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
+        action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
         action(hardwareActions, "Edit application overlay…", this::openOverlay);
 
         Composite reports = tab(tabs, "Insights");
         reports.setLayout(new GridLayout(1, false));
+        var evidenceActions = new Composite(reports, SWT.NONE);
+        evidenceActions.setLayout(new GridLayout(3, false));
+        action(evidenceActions, "Export evidence…", this::exportEvidence);
+        action(evidenceActions, "Open evidence…", () -> openEvidence(false));
+        action(evidenceActions, "Compare evidence…", () -> openEvidence(true));
         analysis = new Text(reports, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
         analysis.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
@@ -586,7 +597,132 @@ public final class ConfigurationStudioView extends ViewPart {
         refreshOptions();
     }
 
+
+    /** Diagnose using generated evidence without mutating source or generated files. */
+    private void diagnoseConfiguration() {
+        if (project == null || !project.isAccessible()) {
+            MessageDialog.openInformation(getSite().getShell(), "Diagnose",
+                    "Select a Zephyr application in Project Explorer first.");
+            return;
+        }
+        int generation = diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
+        IProject selectedProject = project;
+        Path build = inspectionBuild;
+        Path app = selectedProject.getLocation().toFile().toPath();
+        String selectedNode = null;
+        if (tabs.getSelectionIndex() == 1 && hardwareDevices.getSelectionCount() > 0) {
+            var selected = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+            selectedNode = selected.path();
+        }
+        String node = selectedNode;
+        var display = analysis.getDisplay();
+        status.setText("Checking available generated configuration evidence…");
+        diagnosisJob = new Job("Diagnose Zephyr configuration") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                String message;
+                try {
+                    message = ConfigurationDiagnosis.inspect(app, build, node).display();
+                } catch (Exception error) {
+                    message = "Configuration diagnosis could not finish: " + error.getMessage()
+                            + "\nNo files were changed. Check project settings and regenerate the selected build.";
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                String report = message;
+                display.asyncExec(() -> {
+                    if (analysis.isDisposed() || generation != diagnosisGeneration.get() || project != selectedProject
+                            || !java.util.Objects.equals(inspectionBuild, build)) return;
+                    analysis.setText(report);
+                    tabs.setSelection(2);
+                    status.setText("Read-only diagnosis complete. Findings are scoped to the selected build.");
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        diagnosisJob.schedule();
+    }
+
+    private void showEvidence(String text) {
+        analysis.setText(text);
+        tabs.setSelection(2);
+        status.setText("Offline configuration evidence; no target operation was performed.");
+    }
+
+    private Path chooseEvidence(String title, int mode) {
+        var dialog = new org.eclipse.swt.widgets.FileDialog(getSite().getShell(), mode);
+        dialog.setText(title);
+        dialog.setFilterExtensions(new String[] {"*.zew-evidence.zip", "*.zip"});
+        String selected = dialog.open();
+        return selected == null ? null : Path.of(selected);
+    }
+
+    private void exportEvidence() {
+        if (project == null || !project.isAccessible() || project.getLocation() == null) {
+            MessageDialog.openInformation(getSite().getShell(), "Export evidence", "Select an accessible local project first.");
+            return;
+        }
+        Path app = project.getLocation().toFile().toPath();
+        Path build = inspectionBuild;
+        var display = analysis.getDisplay();
+        new Job("Prepare configuration evidence") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                try {
+                    var preview = io.github.niwantha33.zew.core.InvestigationBundle.collect(app, build);
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    display.asyncExec(() -> {
+                        if (analysis.isDisposed()) return;
+                        showEvidence(io.github.niwantha33.zew.core.InvestigationBundle.inspect(preview));
+                        if (!MessageDialog.openConfirm(getSite().getShell(), "Review evidence export",
+                                preview.display() + "\nThe captured contents are now visible in Insights. Export this snapshot?")) return;
+                        Path output = chooseEvidence("Save evidence to a new file", SWT.SAVE);
+                        if (output == null) return;
+                        evidenceJob("Export configuration evidence", () -> {
+                            io.github.niwantha33.zew.core.InvestigationBundle.write(output, preview);
+                            return "Evidence saved to " + output + "\n" + preview.display();
+                        });
+                    });
+                    return Status.OK_STATUS;
+                } catch (Exception error) {
+                    display.asyncExec(() -> { if (!analysis.isDisposed()) showEvidence("Export failed: " + error.getMessage()); });
+                    return Status.OK_STATUS;
+                }
+            }
+        }.schedule();
+    }
+
+    @FunctionalInterface private interface EvidenceWork { String run() throws Exception; }
+
+    private void evidenceJob(String title, EvidenceWork work) {
+        var display = analysis.getDisplay();
+        new Job(title) {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                String result;
+                try { result = work.run(); }
+                catch (Exception error) { result = title + " failed: " + error.getMessage(); }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                String report = result;
+                display.asyncExec(() -> { if (!analysis.isDisposed()) showEvidence(report); });
+                return Status.OK_STATUS;
+            }
+        }.schedule();
+    }
+
+    private void openEvidence(boolean compare) {
+        Path first = chooseEvidence(compare ? "Select first evidence package" : "Open evidence package", SWT.OPEN);
+        if (first == null) return;
+        Path second = compare ? chooseEvidence("Select second evidence package", SWT.OPEN) : null;
+        if (compare && second == null) return;
+        evidenceJob(compare ? "Compare configuration evidence" : "Open configuration evidence", () -> {
+            var before = io.github.niwantha33.zew.core.InvestigationBundle.read(first);
+            return compare ? io.github.niwantha33.zew.core.InvestigationBundle.compare(before,
+                    io.github.niwantha33.zew.core.InvestigationBundle.read(second))
+                    : io.github.niwantha33.zew.core.InvestigationBundle.inspect(before);
+        });
+    }
+
     private void reload() {
+        diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         definitionCache.clear();
@@ -801,20 +937,51 @@ public final class ConfigurationStudioView extends ViewPart {
         var property = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
         var dialog = new InputDialog(getSite().getShell(), property.title(),
                 property.path() + "\n" + property.name()
-                + "\nEnter Devicetree value syntax. This prepares a draft, not a validated pin assignment.",
+                + "\nValue shape: " + property.kind()
+                + ". Syntax checks only; rebuild validates the device binding. Use the source editor for other syntax.",
                 property.value(), value -> {
                     try { DevicetreeParameters.overlayRequest(property, value); return null; }
                     catch (IllegalArgumentException invalid) { return invalid.getMessage(); }
                 });
         if (dialog.open() != Window.OK) return;
         String draft = DevicetreeParameters.overlayRequest(property, dialog.getValue());
-        if (!MessageDialog.openConfirm(getSite().getShell(), "Review overlay request",
-                draft + "\nCopy this draft to the clipboard? Review the device binding before adding it to the active overlay."
-                + "\nNo files will be changed. Rebuild to validate the request.")) return;
-        var clipboard = new Clipboard(hardwareParameters.getDisplay());
-        try { clipboard.setContents(new Object[] {draft}, new Transfer[] {TextTransfer.getInstance()}); }
-        finally { clipboard.dispose(); }
-        status.setText("Overlay request copied. Add it to the active application overlay and Build & validate.");
+        var choice = new MessageDialog(getSite().getShell(), "Review overlay request", null,
+                draft + "\nBinding semantics and hardware behaviour are validated separately."
+                + "\nSave appends an override to an explicitly selected source overlay; earlier values may be superseded.",
+                MessageDialog.QUESTION, new String[] {"Choose overlay and save…", "Copy draft", "Cancel"}, 2);
+        int result = choice.open();
+        if (result == 1) {
+            var clipboard = new Clipboard(hardwareParameters.getDisplay());
+            try { clipboard.setContents(new Object[] {draft}, new Transfer[] {TextTransfer.getInstance()}); }
+            finally { clipboard.dispose(); }
+            status.setText("Draft copied. Add it to the selected overlay and Build & validate.");
+            return;
+        }
+        if (result != 0 || project == null || project.getLocation() == null) return;
+        try {
+            Path app = project.getLocation().toFile().toPath();
+            var select = new org.eclipse.swt.widgets.FileDialog(getSite().getShell(), SWT.SAVE);
+            select.setText("Choose a source overlay inside this application");
+            select.setFilterPath(app.toString());
+            select.setFileName(selectedOverlay);
+            select.setFilterExtensions(new String[] {"*.overlay"});
+            String chosen = select.open();
+            if (chosen == null) return;
+            var preview = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(
+                    app, Path.of(chosen), property, dialog.getValue());
+            if (!MessageDialog.openConfirm(getSite().getShell(), "Save reviewed overlay change",
+                    "Destination: " + preview.file() + "\n\nAppend:\n" + preview.addition()
+                    + "\nExisting content is preserved and backed up. This does not activate a new overlay."
+                    + "\nVerify the file is selected in your build configuration, then Build & validate.")) return;
+            Path backup = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, preview);
+            project.refreshLocal(IResource.DEPTH_INFINITE, null);
+            selectedOverlay = app.toRealPath().relativize(preview.file()).toString();
+            openResource(selectedOverlay);
+            status.setText("Saved " + selectedOverlay + (backup == null ? "" : "; backup: " + backup.getFileName())
+                    + ". Check overlay selection and rebuild; generated values are unchanged until then.");
+        } catch (Exception error) {
+            MessageDialog.openError(getSite().getShell(), "Overlay change not saved", error.getMessage());
+        }
     }
 
     private void revealParameterSource() {
@@ -1380,6 +1547,8 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     @Override public void dispose() {
+        diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();

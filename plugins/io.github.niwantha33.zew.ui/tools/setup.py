@@ -8,6 +8,7 @@ The Java bootstrap reserves the directory and holds its installation lock.
 import argparse
 from email.parser import BytesParser
 import hashlib
+import http.client
 import importlib
 import json
 import os
@@ -78,7 +79,7 @@ def fetch(artifact, cache):
                 raise ValueError('Size or SHA-256 mismatch: ' + target.name)
             temporary.replace(target)
             return target
-        except (OSError, ValueError) as error:
+        except (OSError, ValueError, http.client.HTTPException) as error:
             temporary.unlink(missing_ok=True)
             if attempt == 3:
                 raise
@@ -232,9 +233,14 @@ def install_sdk(root):
     import py7zr
     destination = root / 'sdk'
     complete = destination / '.zew-sdk-ready'
-    if complete.is_file() and (destination / 'sdk_version').read_text().strip() == '1.0.1':
-        log('Reusing verified managed SDK')
-        return destination
+    if complete.is_file():
+        version = destination / 'sdk_version'
+        compiler = destination / 'gnu/x86_64-zephyr-elf/bin/x86_64-zephyr-elf-gcc.exe'
+        if (version.is_file() and version.read_text().strip() == '1.0.1' and compiler.is_file()):
+            log('Reusing verified managed SDK')
+            return destination
+        raise ValueError('Managed SDK readiness marker has missing or incompatible contents; '
+                         'existing SDK was preserved. Restore it or move it aside before retrying: ' + str(destination))
     if destination.exists():
         raise ValueError('Incomplete SDK destination; move it aside before retrying: ' + str(destination))
     artifacts = [fetch(a, root / 'cache') for a in SDK_ASSETS]
@@ -287,20 +293,35 @@ def ensure_source(root, git, lock, environment):
 
 def create_application(root):
     project = root / 'projects/hello_world'
+    marker_text = 'schema=1\nboard=qemu_x86/atom\nzephyr=4.4.0\nmodules=none\n'
     marker = project / '.zew/project.properties'
     if project.exists():
-        if not marker.is_file() or marker.read_text() != 'schema=1\nboard=qemu_x86/atom\nzephyr=4.4.0\nmodules=none\n':
+        if not marker.is_file() or marker.read_text() != marker_text:
             raise ValueError('Existing application is not this managed starter; it was preserved')
+        required = ('src/main.c', 'CMakeLists.txt', 'prj.conf')
+        missing = [name for name in required if not (project / name).is_file()]
+        if missing:
+            raise ValueError('Existing managed starter is incomplete (' + ', '.join(missing)
+                             + '); it was preserved. Restore its missing files or move it aside before retrying.')
         return project
-    project.mkdir(parents=True)
-    marker.parent.mkdir()
-    marker.write_text('schema=1\nboard=qemu_x86/atom\nzephyr=4.4.0\nmodules=none\n')
-    (project / 'src').mkdir()
-    (project / 'src/main.c').write_text('#include <zephyr/kernel.h>\n#include <zephyr/sys/printk.h>\n\nint main(void)\n{\n    printk("Hello from Zephyr Eclipse Workbench!\\n");\n    return 0;\n}\n')
-    (project / 'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.20.5)\nfind_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})\nproject(hello_world)\ntarget_sources(app PRIVATE src/main.c)\n')
-    (project / 'prj.conf').write_text('# Application Kconfig options go here.\n')
-    (project / '.gitignore').write_text('.zew-build/\n')
-    (project / 'README.md').write_text('# Hello Zephyr\n\nZephyr 4.4.0, qemu_x86/atom. This profile compiles without physical hardware.\nUse Eclipse Project > Build Project. Hardware flashing/debugging and QEMU execution are separate steps.\n')
+    # Never activate the ownership marker before all source files exist. An
+    # interrupted write used to leave a marked but incomplete application that
+    # every retry accepted. Stage the complete starter and activate it once.
+    project.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='hello-world-stage-', dir=project.parent) as temporary:
+        stage = Path(temporary) / 'application'
+        stage.mkdir()
+        (stage / 'src').mkdir()
+        (stage / 'src/main.c').write_text('#include <zephyr/kernel.h>\n#include <zephyr/sys/printk.h>\n\nint main(void)\n{\n    printk("Hello from Zephyr Eclipse Workbench!\\n");\n    return 0;\n}\n')
+        (stage / 'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.20.5)\nfind_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})\nproject(hello_world)\ntarget_sources(app PRIVATE src/main.c)\n')
+        (stage / 'prj.conf').write_text('# Application Kconfig options go here.\n')
+        (stage / '.gitignore').write_text('.zew-build/\n')
+        (stage / 'README.md').write_text('# Hello Zephyr\n\nZephyr 4.4.0, qemu_x86/atom. This profile compiles without physical hardware.\nUse Eclipse Project > Build Project. Hardware flashing/debugging and QEMU execution are separate steps.\n')
+        (stage / '.zew').mkdir()
+        (stage / '.zew/project.properties').write_text(marker_text)
+        if project.exists():
+            raise ValueError('Application destination appeared during setup; it was preserved')
+        stage.rename(project)
     return project
 
 

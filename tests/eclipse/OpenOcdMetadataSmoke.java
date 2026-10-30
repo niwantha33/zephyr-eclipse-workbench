@@ -36,7 +36,7 @@ public final class OpenOcdMetadataSmoke {
         if (!text.contains("extended-remote") || !text.contains("127.0.0.1:3333")) throw new AssertionError(text);
         System.out.println("PASS thread metadata: native DSF OpenOCD connection uses extended-remote");
         verifyFlashCompletion(ui);
-        verifyDebugServerCleanup(ui);
+        for (int cycle = 0; cycle < 3; cycle++) verifyDebugServerCleanup(ui);
     }
     private static void verifyDebugServerCleanup(org.osgi.framework.Bundle ui) throws Exception {
         var guard = ui.loadClass("io.github.niwantha33.zew.ui.TargetOperationGuard");
@@ -53,6 +53,7 @@ public final class OpenOcdMetadataSmoke {
         Process process = new ProcessBuilder(System.getenv("ZEW_TEST_PYTHON"), "-u", "-c",
                 "import subprocess,sys;p=subprocess.Popen([sys.executable,'-u','-c',sys.argv[1]]);"
                         + "print('PID',p.pid,flush=True);p.wait()", child).start();
+        Process unrelated = new ProcessBuilder(System.getenv("ZEW_TEST_PYTHON"), "-c", "import time;time.sleep(30)").start();
         AutoCloseable owned = null;
         ProcessHandle descendant = null;
         try {
@@ -84,9 +85,12 @@ public final class OpenOcdMetadataSmoke {
             }
             if (next == null) throw new AssertionError("Debug operation lease was not released");
             next.close();
+            if (!unrelated.isAlive()) throw new AssertionError("Cleanup terminated an unrelated process");
             owned.close(); // repeat cleanup is harmless
             System.out.println("PASS debug lifecycle: asynchronous stop reaps quiet child, releases TCP port and operation lease");
         } finally {
+            unrelated.destroyForcibly();
+            unrelated.waitFor();
             if (owned != null) owned.close();
             else lease.close();
             if (descendant != null && descendant.isAlive()) descendant.destroyForcibly();

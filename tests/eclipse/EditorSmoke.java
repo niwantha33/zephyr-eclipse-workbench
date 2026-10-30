@@ -119,6 +119,33 @@ public final class EditorSmoke implements IApplication {
             refresh.invoke(view);
         }
     }
+    /** Capture a real installed-workbench screen, not a mockup or generated illustration. */
+    private static void captureNativeStudioScreenshot() throws Exception {
+        String directory = System.getenv("ZEW_SCREENSHOT_DIR");
+        if (directory == null || directory.isBlank()) return;
+        var window = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+        if (window == null) throw new IllegalStateException("No active native Eclipse window to capture.");
+        var shell = window.getShell();
+        var screen = shell.getDisplay().getPrimaryMonitor().getBounds();
+        var area = shell.getBounds().intersection(screen);
+        if (area.width < 400 || area.height < 200)
+            throw new IllegalStateException("Workbench window is too small for screenshot evidence.");
+        var output = Path.of(directory).resolve("configuration-studio-source-only.png");
+        Files.createDirectories(output.getParent());
+        var image = new org.eclipse.swt.graphics.Image(shell.getDisplay(), area.width, area.height);
+        try {
+            var gc = new org.eclipse.swt.graphics.GC(shell.getDisplay());
+            try { gc.copyArea(image, area.x, area.y); }
+            finally { gc.dispose(); }
+            var writer = new org.eclipse.swt.graphics.ImageLoader();
+            writer.data = new org.eclipse.swt.graphics.ImageData[] {image.getImageData()};
+            writer.save(output.toString(), org.eclipse.swt.SWT.IMAGE_PNG);
+        } finally { image.dispose(); }
+        if (Files.size(output) < 2048)
+            throw new IllegalStateException("Installed workbench screenshot is unexpectedly empty: " + output);
+        System.out.println("Native Eclipse screenshot captured (source-only UI): " + output);
+    }
+
     @Override public Object start(IApplicationContext context) throws Exception {
         String[] args = (String[]) context.getArguments().get(IApplicationContext.APPLICATION_ARGS);
         Path fixture = Path.of(args[0]);
@@ -277,6 +304,7 @@ public final class EditorSmoke implements IApplication {
                     check(!"—".equals(overridesCount.getText()),
                             "live project override summary is populated");
                     verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw);
+                    captureNativeStudioScreenshot();
                 } catch (Exception error) { throw new IllegalStateException("Native Studio smoke failed", error); }
             });
         }
@@ -401,15 +429,35 @@ public final class EditorSmoke implements IApplication {
         org.eclipse.core.runtime.jobs.Job.getJobManager().join(
                 org.eclipse.cdt.debug.core.launch.CoreBuildLaunchBarTracker.JOB_FAMILY_CORE_BUILD_LAUNCH_BAR_TRACKER,
                 new NullProgressMonitor());
-        manager.reindex(CoreModel.getDefault().create(project));
-        // Reindex schedules a setup job before it queues indexer work. Joining the
-        // indexer alone can report idle before that job has submitted anything.
-        org.eclipse.core.runtime.jobs.Job.getJobManager().join(manager, new NullProgressMonitor());
-        check(manager.joinIndexer(30000, new NullProgressMonitor()), "indexer completed");
-        var index = manager.getIndex(CoreModel.getDefault().create(project)); index.acquireReadLock();
+        // Import/configuration jobs may invalidate the index immediately after
+        // the first reindex. CDT can report an idle indexer before a queued
+        // model refresh has installed the project's source entries. Require real
+        // expected bindings, with bounded retries; never accept an empty PDOM.
+        var cproject = CoreModel.getDefault().create(project);
+        var index = manager.getIndex(cproject);
+        boolean hasHeader = false, hasCpp = false;
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
+        int passes = 0;
+        do {
+            manager.reindex(cproject);
+            org.eclipse.core.runtime.jobs.Job.getJobManager().join(manager, new NullProgressMonitor());
+            check(manager.joinIndexer(5000, new NullProgressMonitor()), "indexer completed");
+            index.acquireReadLock();
+            try {
+                hasHeader = index.findBindings(Pattern.compile("k_sleep"), false, IndexFilter.ALL,
+                        new NullProgressMonitor()).length > 0;
+                hasCpp = index.findBindings(Pattern.compile("cpp_user"), false, IndexFilter.ALL,
+                        new NullProgressMonitor()).length > 0;
+            } finally { index.releaseReadLock(); }
+            if (hasHeader && hasCpp) break;
+            System.out.println("CDT index not populated yet (pass " + ++passes
+                    + ", header=" + hasHeader + ", C++=" + hasCpp + "); retry after model jobs");
+            Thread.sleep(200);
+        } while (System.nanoTime() < deadline);
+        check(hasHeader, "header function indexed for symbol navigation");
+        check(hasCpp, "C++ source indexed");
+        index.acquireReadLock();
         try {
-            check(index.findBindings(Pattern.compile("k_sleep"), false, IndexFilter.ALL, new NullProgressMonitor()).length > 0, "header function indexed for symbol navigation");
-            check(index.findBindings(Pattern.compile("cpp_user"), false, IndexFilter.ALL, new NullProgressMonitor()).length > 0, "C++ source indexed");
             var tu = (ITranslationUnit) CoreModel.getDefault().create(project.getFile("src/main.c"));
             var ast = tu.getAST(index, 0); check(ast != null, "editor AST created");
             check(Arrays.stream(ast.getIncludeDirectives()).allMatch(IASTPreprocessorIncludeStatement::isResolved), "Zephyr header resolved");

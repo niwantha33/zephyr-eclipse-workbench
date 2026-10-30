@@ -328,6 +328,116 @@ public final class ConfigurationStudioTests {
             try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(resolution, "<10>; evil;"); }
             catch (IllegalArgumentException expected) { malformedRequestRejected = true; }
             ok(malformedRequestRejected, "overlay draft rejects extra property statements");
+            for (String invalidDraft : new String[] { "<10", "<10>>", "<10> /*", "<10> //comment",
+                    "<((10)>", "<(10))>", "<10>,", "<10> other", "<10]", "", "\"12\"", "<10>\n" }) {
+                boolean rejected = false;
+                try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(resolution, invalidDraft); }
+                catch (IllegalArgumentException expected) { rejected = true; }
+                ok(rejected, "invalid or shape-changing overlay draft rejected: " + invalidDraft);
+            }
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(resolution,
+                    "<(1 << 3)>").contains("<(1 << 3)>"), "balanced cell expressions remain supported");
+            var gain = adcParameters.stream().filter(p -> p.name().equals("zephyr,gain")).findFirst().orElseThrow();
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(gain,
+                    "\"ADC_GAIN_1_6\"").contains("ADC_GAIN_1_6"), "quoted ADC enum draft");
+            boolean unterminatedString = false;
+            try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(gain, "\"ADC_GAIN_1"); }
+            catch (IllegalArgumentException expected) { unterminatedString = true; }
+            ok(unterminatedString, "unterminated string cannot swallow overlay closing syntax");
+            var url = properties.stream().filter(p -> p.name().equals("note")).findFirst().orElseThrow();
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(url,
+                    "\"https://example.invalid/path\"").contains("https://"), "comment-like text inside strings retained");
+            var numericRoute = properties.stream().filter(p -> p.name().equals("pinctrl-0")).findFirst().orElseThrow();
+            boolean numericPhandleRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(numericRoute, "<0x10>"); }
+            catch (IllegalArgumentException expected) { numericPhandleRejected = true; }
+            ok(numericPhandleRejected, "generated phandle identity cannot be copied into portable source");
+            boolean mixedPhandleRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(numericRoute, "<0x10 &adc_default>"); }
+            catch (IllegalArgumentException expected) { mixedPhandleRejected = true; }
+            ok(mixedPhandleRejected, "one symbolic reference does not authorise other numeric pinctrl identities");
+            var invalidHandleProperties = new java.util.ArrayList<>(properties);
+            invalidHandleProperties.add(new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                    "/invalid", "phandle", "<999999999999999999999999999>", 1));
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.pinRoutes(invalidHandleProperties,
+                    "/soc/adc@4000").equals(routes), "malformed out-of-range phandle does not crash or invent routes");
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(numericRoute,
+                    "<&adc_default>").contains("<&adc_default>"), "symbolic pinctrl reference can be drafted");
+            var bytes = new io.github.niwantha33.zew.core.DevicetreeParameters.Property("/", "data", "[00 ff]", 1);
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(bytes, "[01 aF]").contains("[01 aF]"),
+                    "byte array syntax is retained");
+            boolean invalidBytes = false;
+            try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(bytes, "[1 123]"); }
+            catch (IllegalArgumentException expected) { invalidBytes = true; }
+            ok(invalidBytes, "malformed byte array rejected");
+            StringBuilder largeTree = new StringBuilder("/ {\n");
+            for (int nodeIndex = 0; nodeIndex < 520; nodeIndex++)
+                largeTree.append(" device@").append(Integer.toHexString(nodeIndex)).append(" { /* node comment */\n")
+                        .append("  status = \"okay\";\n  channel = <").append(nodeIndex).append(">;\n };\n");
+            largeTree.append("};\n");
+            var largeDevices = io.github.niwantha33.zew.core.DevicetreeHardware.inspect(largeTree.toString());
+            var largeParameters = io.github.niwantha33.zew.core.DevicetreeParameters.inspect(largeTree.toString());
+            ok(largeDevices.size() == 521 && largeDevices.getLast().path().equals("/device@207"),
+                    "generated hardware trees are not silently truncated after 500 nodes");
+            ok(largeParameters.stream().anyMatch(p -> p.path().equals("/device@207") && p.name().equals("channel")
+                    && p.value().equals("<519>")), "later properties retain exact node ownership despite inline comments");
+            StringBuilder tooManyNodes = new StringBuilder("/ {\n");
+            for (int nodeIndex = 0; nodeIndex < 10_000; nodeIndex++)
+                tooManyNodes.append(" node@").append(Integer.toHexString(nodeIndex)).append(" {\n };\n");
+            tooManyNodes.append("};\n");
+            boolean excessiveNodesRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeHardware.inspect(tooManyNodes.toString()); }
+            catch (IllegalArgumentException expected) { excessiveNodesRejected = true; }
+            ok(excessiveNodesRejected, "excessively large trees fail explicitly rather than returning misleading partial metadata");
+            Path overlayTarget = app.resolve("reviewed.overlay");
+            String originalOverlay = "/* Existing user configuration */\r\n&uart0 { status = \"okay\"; };\r\n";
+            Files.writeString(overlayTarget, originalOverlay);
+            var overlayPreview = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(
+                    app, overlayTarget, resolution, "<10>");
+            ok(Files.readString(overlayTarget).equals(originalOverlay), "overlay preview never writes source");
+            ok(overlayPreview.updated().startsWith(originalOverlay)
+                    && overlayPreview.addition().contains("\r\n"), "overlay preview preserves user content and CRLF");
+            Files.writeString(overlayTarget, originalOverlay + "/* external edit */");
+            boolean concurrentOverlayRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, overlayPreview); }
+            catch (java.io.IOException expected) { concurrentOverlayRejected = true; }
+            ok(concurrentOverlayRejected && Files.readString(overlayTarget).endsWith("/* external edit */"),
+                    "changed overlay is never overwritten by an old preview");
+            Files.writeString(overlayTarget, originalOverlay);
+            Path overlayBackup = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, overlayPreview);
+            ok(Files.readString(overlayTarget).equals(overlayPreview.updated())
+                    && Files.readString(overlayBackup).equals(originalOverlay), "atomic overlay save retains exact backup");
+            var duplicatePreview = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(
+                    app, overlayTarget, resolution, "<10>");
+            ok(!duplicatePreview.changed(), "repeating identical last overlay request does not append duplicates");
+            Path newOverlay = app.resolve("new-reviewed.overlay");
+            var newPreview = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(app, newOverlay, resolution, "<8>");
+            Files.writeString(newOverlay, "/* created elsewhere */");
+            boolean createdOverlayRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, newPreview); }
+            catch (java.io.IOException expected) { createdOverlayRejected = true; }
+            ok(createdOverlayRejected && Files.readString(newOverlay).contains("created elsewhere"),
+                    "new overlay is not allowed to replace a file created after preview");
+            Files.delete(newOverlay);
+            io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, newPreview);
+            ok(Files.readString(newOverlay).equals(newPreview.updated()), "new overlay publishes complete contents");
+            boolean generatedOverlayRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(app, app.resolve("zephyr.dts"), resolution, "<8>"); }
+            catch (java.io.IOException expected) { generatedOverlayRejected = true; }
+            ok(generatedOverlayRejected, "generated DTS is never an overlay save target");
+            boolean outsideOverlayRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(app, root.resolve("outside.overlay"), resolution, "<8>"); }
+            catch (java.io.IOException expected) { outsideOverlayRejected = true; }
+            ok(outsideOverlayRejected, "overlay target must remain inside the application");
+            if (!System.getProperty("os.name").toLowerCase().contains("win")) {
+                Path linkOverlay = app.resolve("link.overlay");
+                Files.createSymbolicLink(linkOverlay, overlayTarget);
+                boolean symlinkOverlayRejected = false;
+                try { io.github.niwantha33.zew.core.DevicetreeOverlayChanges.preview(app, linkOverlay, resolution, "<8>"); }
+                catch (java.io.IOException expected) { symlinkOverlayRejected = true; }
+                ok(symlinkOverlayRejected, "symlinked overlay is rejected");
+                Files.delete(linkOverlay);
+            }
             ok(io.github.niwantha33.zew.core.DevicetreeParameters.inspect("").isEmpty(),
                     "an unbuilt project has no fabricated ADC parameters");
             System.out.println("ConfigurationStudioTests PASS");

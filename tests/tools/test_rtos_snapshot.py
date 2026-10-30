@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 MODULE = Path(__file__).resolve().parents[2] / 'plugins/io.github.niwantha33.zew.ui/tools/rtos_analysis/capture_snapshot.py'
 spec = importlib.util.spec_from_file_location('capture_snapshot', MODULE)
 subject = importlib.util.module_from_spec(spec)
+sys.path.insert(0, str(MODULE.parent))
 spec.loader.exec_module(subject)
 
 
@@ -68,13 +69,33 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual({p.name for p in (first / 'ctf').iterdir()}, {'channel0_0', 'metadata'})
         self.assertFalse((first / 'capture.gdb').exists())
         receipt = json.loads((second / 'capture.json').read_text())
-        self.assertEqual(receipt['capture_full'], 'unknown')
+        self.assertFalse(receipt['capture_full'])
+        self.assertTrue(receipt['transport_read_complete'])
+        self.assertEqual(len(receipt['trace_sha256']), 64)
         self.assertEqual(receipt['firmware_matches_elf'], 'not verified')
         self.assertEqual(receipt['buffer_capacity'], 4096)
         commands = [json.loads(line) for line in log.read_text().splitlines()]
         self.assertEqual(commands.count('-target-select extended-remote localhost:3335'), 2)
         self.assertEqual(commands.count('-interpreter-exec console "monitor halt"'), 2)
         self.assertFalse(any('python' in c.lower() for c in commands))
+
+    def test_backend_full_can_happen_before_capacity_is_reached(self):
+        elf, metadata = subject.validate(self.build, self.z, self.gdb)
+        fake, _ = self.fake_gdb('full', pos=4082)
+        with fake:
+            capture = subject.capture(self.gdb, elf, metadata, self.root / 'captures', 3335, 0.05)
+        receipt = json.loads((capture / 'capture.json').read_text())
+        self.assertTrue(receipt['capture_full'])
+        self.assertLess(receipt['trace_bytes'], receipt['buffer_capacity'])
+        self.assertIn('unknown', receipt['loss_count'])
+
+    def test_unknown_buffer_flag_is_not_reported_as_false(self):
+        elf, metadata = subject.validate(self.build, self.z, self.gdb)
+        fake, _ = self.fake_gdb('nofull')
+        with fake:
+            capture = subject.capture(self.gdb, elf, metadata, self.root / 'captures', 3335, 0.05)
+        receipt = json.loads((capture / 'capture.json').read_text())
+        self.assertEqual(receipt['capture_full'], 'unknown')
 
     def test_reads_multiple_chunks_without_truncation(self):
         fake, _ = self.fake_gdb(pos=2556)
@@ -181,8 +202,11 @@ for line in sys.stdin:
         expression = json.loads(command[len('-data-evaluate-expression '):])
         values = {'sizeof(ram_tracing)': capacity,
                   '(unsigned long)&ram_tracing[0]': '536870912',
-                  "'tracing_backend_ram.c'::pos": pos if resumed else '0'}
+                  "'tracing_backend_ram.c'::pos": pos if resumed else '0',
+                  "(unsigned int)'tracing_backend_ram.c'::buffer_full": '1' if behavior == 'full' else '0'}
         result = '^done,value=' + json.dumps(values[expression])
+        if behavior == 'nofull' and 'buffer_full' in expression:
+            result = '^error,msg="No symbol buffer_full in current context"'
         if behavior == 'missing':
             result = '^error,msg="No symbol ram_tracing in current context"'
     elif command.startswith('-data-read-memory-bytes '):

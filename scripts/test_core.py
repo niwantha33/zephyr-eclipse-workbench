@@ -49,3 +49,9 @@ subprocess.run([tool('java'), '-cp', str(out), 'OpenOcdThreadCheckTests'], check
 subprocess.run([tool('java'), '-cp', str(out), 'DebugConsoleOutputTests'], check=True, cwd=root, timeout=90)
 
 subprocess.run([tool('java'), '-cp', str(out), 'SvdDeviceTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationDiagnosisTests'], check=True, cwd=root, timeout=90)
+
+subprocess.run([tool('java'), '-cp', str(out), 'InvestigationBundleTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'PhysicalOperationLockTests'], check=True, cwd=root, timeout=90)
+
+subprocess.run([tool('java'), '-cp', str(out), 'FaultLogAnalysisTests'], check=True, cwd=root, timeout=90)

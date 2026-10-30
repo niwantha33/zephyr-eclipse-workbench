@@ -20,16 +20,18 @@ public final class DevicetreeHardware {
             "^\\s*(?:(?:[A-Za-z_][\\w,-]*):\\s*)?([A-Za-z_][\\w,.-]*(?:@[0-9a-fA-F,]+)?|/)\\s*\\{\\s*(?://.*)?$");
     private static final Pattern PROP = Pattern.compile(
             "^\\s*(compatible|status|label|reg)\\s*=\\s*(.*?);\\s*$");
-    private static final int LIMIT = 500;
+    private static final int LIMIT = 10_000;
     private record Open(String path, String name, int line) {}
     public static List<Device> inspect(String generatedDts) {
         if (generatedDts == null || generatedDts.isBlank()) return List.of();
+        if (generatedDts.length() > 2_000_000)
+            throw new IllegalArgumentException("Generated Devicetree exceeds 2 MB");
         var result = new ArrayList<Device>();
         var stack = new ArrayList<Open>();
         int lineNumber = 0;
         // The generated DTS has ordinary braced nodes. Only a top-level
         // property on a device node is associated with that node.
-        for (String raw : generatedDts.split("\\R", -1)) {
+        for (String raw : DevicetreeParameters.withoutComments(generatedDts).split("\\R", -1)) {
             lineNumber++;
             String line = raw.strip();
             var node = NODE.matcher(line);
@@ -38,6 +40,8 @@ public final class DevicetreeHardware {
                 String parent = stack.isEmpty() ? "" : stack.get(stack.size() - 1).path();
                 String path = "/".equals(name) ? "/" : ("/".equals(parent) ? "/" : parent + "/") + name;
                 stack.add(new Open(path, name, result.size()));
+                if (result.size() >= LIMIT)
+                    throw new IllegalArgumentException("Generated Devicetree exceeds " + LIMIT + " nodes; no partial tree is returned");
                 result.add(new Device(path, name, "", "", "", "", lineNumber));
                 continue;
             }
@@ -62,7 +66,6 @@ public final class DevicetreeHardware {
                         "status".equals(key) ? value : old.status(),
                         "reg".equals(key) ? value : old.reg(), old.line()));
             }
-            if (result.size() > LIMIT) break;
         }
         return List.copyOf(result);
     }

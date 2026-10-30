@@ -1,6 +1,6 @@
 # Contributing
 
-The project is currently private and in its planning stage.
+The repository is public and contains a working development preview; the feature-completion and production-release gates remain open. See docs/RELEASE_STATUS_2026-10-30.md.
 
 Read docs/ARCHITECTURE.md, docs/ROADMAP.md and docs/COMPATIBILITY.md before implementation.
 
@@ -24,4 +24,4 @@ Include exact board/SoC/core/revision, host, Zephyr commit, SDK and programming/
 
 ## Publication
 
-Do not change repository visibility or publish an installer/update site without the owner's explicit instruction.
+Only publish an installer/update site after the applicable release acceptance checks and the owner's release approval. Do not publish unfinished or unverified features as production-ready.
