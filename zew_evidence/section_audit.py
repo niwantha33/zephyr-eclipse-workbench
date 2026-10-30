@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Exact GNU map output-section header versus ELF SHF_ALLOC section evidence.
+"""Exact GNU map output-section header versus ELF allocation-aware section metadata.
 
 The map cannot supply the bytes to compare. This reports agreement of
 addresses/sizes and SHA-256 of bytes that exist in the ELF, not causal
@@ -92,7 +92,9 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
         if elf_hash != proofs.get(elf_id):
             raise InputError("ELF differs from Evidence Graph snapshot")
         try:
-            sections = inspect_sections(elf_path)
+            # One bounded ELF read covers allocated sections and nonallocated
+            # metadata. The latter is NEVER hashed or PT_LOAD-classified.
+            sections = inspect_sections(elf_path, include_unallocated=True)
             segments = load_segments(elf_path)
         except InputError:
             row["status"] = "unsupported-or-invalid-elf-sections"
@@ -104,7 +106,8 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
         if (new_hash, new_size) != (elf_hash, elf_size):
             raise InputError("ELF changed while inspecting output sections")
         row["provenance"]["elf"] = {"node_id": elf_id, "sha256": elf_hash, "bytes": elf_size}
-        row["elf_allocated_sections"] = len(sections)
+        row["elf_allocated_sections"] = sum(bool(sec["allocated"]) for sec in sections)
+        row["elf_nonallocated_sections"] = sum(not sec["allocated"] for sec in sections)
         by_name = {}
         for section in sections:
             by_name.setdefault(section["name"], []).append(section)
@@ -113,7 +116,8 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
             "ambiguous-map-name", "ambiguous-elf-name", "file-backed-vma",
             "zero-fill-vma", "mixed-file-and-zero-fill-vma", "uncovered-vma",
             "ambiguous-vma", "other-vma", "elf-section-byte-hashes",
-            "file-backed-sections-unhashed")}
+            "file-backed-sections-unhashed", "nonallocated-exact-metadata",
+            "unexplained-map-outputs")}
         names = {}
         for section_name, address, size in rows:
             names[section_name] = names.get(section_name, 0) + 1
@@ -135,6 +139,12 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
             if sec["bytes"] != size:
                 counts["size-mismatch"] += 1
                 continue
+            if not sec["allocated"]:
+                # Preserve the historical "without an allocated ELF match"
+                # bucket. This match proves metadata agreement only.
+                counts["missing-or-unallocated"] += 1
+                counts["nonallocated-exact-metadata"] += 1
+                continue
             counts["exact-layout"] += 1
             vma = coverage(segments, address, size)
             key = vma if vma in ("file-backed-vma", "zero-fill-vma",
@@ -151,9 +161,14 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
             if len(row["observed_elf_section_hashes"]) < MAX_EXPORTED_HASHES and sec["sha256"]:
                 row["observed_elf_section_hashes"].append({
                     "sha256": sec["sha256"], "bytes": sec["bytes"]})
+        # Backward compatible missing-or-unallocated is an aggregate of
+        # truly absent names PLUS exact nonallocated metadata matches.
+        # Only the unexplained remainder contributes to disagreement.
+        counts["unexplained-map-outputs"] = (
+            counts["missing-or-unallocated"] - counts["nonallocated-exact-metadata"])
         row["comparison"] = counts
-        disagreement = sum(counts[k] for k in (
-            "address-mismatch", "size-mismatch", "missing-or-unallocated",
+        disagreement = counts["unexplained-map-outputs"] + sum(counts[k] for k in (
+            "address-mismatch", "size-mismatch",
             "ambiguous-map-name", "ambiguous-elf-name", "uncovered-vma",
             "ambiguous-vma", "other-vma"))
         if not rows:
@@ -169,7 +184,9 @@ def audit(build: Path, images: list[str] | None = None, graph: dict | None = Non
         "status": "elf-output-section-observation",
         "images": images_out,
         "limitations": [
-            "Checks only single-line GNU ld output-section headers with exact ELF SHF_ALLOC section names.",
+            "Checks only supported single-line GNU ld output-section headers against exact ELF section names.",
+            "Nonallocated ELF section matches are metadata only: no PT_LOAD, file-byte, source or flash claim.",
+            "Legacy missing-or-unallocated includes reconciled nonallocated metadata; unexplained-map-outputs excludes them.",
             "An identical name, VMA and size is metadata agreement, not source-to-output causality.",
             "Section SHA-256 values are bytes read from ELF, not a comparison against map or object bytes.",
             "Section hashing has per-section and aggregate byte budgets; un-hashed sections remain explicit.",
