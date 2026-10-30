@@ -132,13 +132,15 @@ public final class EditorSmoke implements IApplication {
             throw new IllegalStateException("Workbench window is too small for screenshot evidence.");
         var output = Path.of(directory).resolve("configuration-studio-source-only.png");
         Files.createDirectories(output.getParent());
-        try (var image = new org.eclipse.swt.graphics.Image(shell.getDisplay(), area.width, area.height);
-                var gc = new org.eclipse.swt.graphics.GC(shell.getDisplay())) {
-            gc.copyArea(image, area.x, area.y);
+        var image = new org.eclipse.swt.graphics.Image(shell.getDisplay(), area.width, area.height);
+        try {
+            var gc = new org.eclipse.swt.graphics.GC(shell.getDisplay());
+            try { gc.copyArea(image, area.x, area.y); }
+            finally { gc.dispose(); }
             var writer = new org.eclipse.swt.graphics.ImageLoader();
             writer.data = new org.eclipse.swt.graphics.ImageData[] {image.getImageData()};
             writer.save(output.toString(), org.eclipse.swt.SWT.IMAGE_PNG);
-        }
+        } finally { image.dispose(); }
         if (Files.size(output) < 2048)
             throw new IllegalStateException("Installed workbench screenshot is unexpectedly empty: " + output);
         System.out.println("Native Eclipse screenshot captured (source-only UI): " + output);
