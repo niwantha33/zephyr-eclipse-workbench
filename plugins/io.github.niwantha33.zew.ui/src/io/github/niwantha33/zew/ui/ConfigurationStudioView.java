@@ -994,6 +994,7 @@ public final class ConfigurationStudioView extends ViewPart {
         var device = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
         hardwareDescription.setText(DevicetreeHardware.explanation(device));
         showHardwareParameters(device);
+        selectPeripheralNavigation(device.path());
     }
 
     private void openPeripheralParameters(Domain domain) {
@@ -1014,6 +1015,8 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareParameters.removeAll();
         if (device == null || snapshot == null) {
             parameterTitle.setText("No controller selected. Build the exact board, then select a device.");
+            hardwareInspector.setText("No built peripheral selected. No parameters are inferred.");
+            hardwareValidation.setText("MISSING EVIDENCE  |  Build the exact target, then select a controller.");
             chipPins.showRoutes("Select a peripheral", List.of(), route -> {});
             return;
         }
@@ -1040,7 +1043,20 @@ public final class ConfigurationStudioView extends ViewPart {
             hardwareParameters.getColumn(i).setWidth(Math.max(130, Math.min(i == 0 ? 250 : 320,
                     hardwareParameters.getColumn(i).getWidth())));
         }
-        if (hardwareParameters.getItemCount() > 0) hardwareParameters.select(0);
+        if (hardwareParameters.getItemCount() > 0) {
+            hardwareParameters.select(0);
+            updateHardwareInspector((DevicetreeParameters.Property) hardwareParameters.getItem(0).getData());
+        } else {
+            hardwareInspector.setText("Node: " + device.path() + "\nNo built properties for this selection.");
+        }
+        hardwareValidation.setText("DISCOVERED FROM BUILD  |  " + device.path()
+                + "\nController state: " + (device.enabled() ? "okay or inherited okay" : device.status())
+                + "\nBuilt parameter rows: " + shown.size()
+                + "\nResolved logical route entries: " + routes.size()
+                + "\nPHYSICAL PINOUT: NOT VERIFIED - exact part/package data not supplied."
+                + "\nNo pin conflict or electrical-capability claim is possible."
+                + (buildOutdated ? "\nBUILD REQUIRED - generated configuration may be stale." : "")
+                + "\nAfter any overlay change, Build & validate with Zephyr.");
         parameterTitle.setText(device.path() + " · " + shown.size() + " built parameters · "
                 + routes.size() + " logical pin routes · physical package pads unverified");
         chipPins.showRoutes(owner, routes, route -> {
@@ -1056,6 +1072,105 @@ public final class ConfigurationStudioView extends ViewPart {
         parameterTitle.getParent().layout(true, true);
     }
 
+    /** Read-only parameter provenance; no inferred binding defaults. */
+    private void updateHardwareInspector(DevicetreeParameters.Property property) {
+        if (hardwareInspector == null || hardwareInspector.isDisposed()) return;
+        hardwareInspector.setText("PROPERTY  " + property.title()
+                + "\nNode / channel: " + property.path()
+                + "\nDTS name: " + property.name()
+                + "\nBuilt value: " + property.displayValue()
+                + "\nSource: generated zephyr.dts, line " + property.line()
+                + "\nShape: " + property.kind() + " (not binding validation)");
+    }
+
+    private void copyHardwarePreview() {
+        if (hardwarePreview == null || hardwarePreview.isDisposed()) return;
+        String value = hardwarePreview.getText();
+        if (!value.startsWith("PROPOSED SOURCE CHANGE")) {
+            status.setText("No proposed change to copy. Choose a built property and Configure property… first.");
+            return;
+        }
+        var clipboard = new Clipboard(hardwarePreview.getDisplay());
+        try {
+            clipboard.setContents(new Object[] {value}, new Transfer[] {TextTransfer.getInstance()});
+        } finally {
+            clipboard.dispose();
+        }
+        status.setText("Unapplied draft copied. Verify active overlay selection and build before relying on it.");
+    }
+
+    private void selectPeripheralNavigation(String path) {
+        if (hardwarePeripheralTree == null || hardwarePeripheralTree.isDisposed()) return;
+        var pending = new java.util.ArrayDeque<org.eclipse.swt.widgets.TreeItem>();
+        pending.addAll(java.util.List.of(hardwarePeripheralTree.getItems()));
+        while (!pending.isEmpty()) {
+            var item = pending.removeFirst();
+            if (item.getData() instanceof DevicetreeHardware.Device device && device.path().equals(path)) {
+                hardwarePeripheralTree.setSelection(item);
+                hardwarePeripheralTree.showSelection();
+                return;
+            }
+            pending.addAll(java.util.List.of(item.getItems()));
+        }
+    }
+
+    /** Group actual generated nodes, preserving children of matched controllers. */
+    private void refreshPeripheralNavigation(List<DevicetreeHardware.Device> devices) {
+        if (hardwarePeripheralTree == null || hardwarePeripheralTree.isDisposed()) return;
+        String categoryFilter = hardwareKind.getText();
+        String query = hardwareSearch.getText();
+        String state = hardwareState.getText();
+        String currentPath = hardwareDevices.getSelectionCount() == 0 ? null
+                : ((DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData()).path();
+        hardwarePeripheralTree.setRedraw(false);
+        try {
+            hardwarePeripheralTree.removeAll();
+            var groups = new java.util.LinkedHashMap<String, org.eclipse.swt.widgets.TreeItem>();
+            for (String group : HardwarePeripheralIndex.FILTERS) {
+                if (HardwarePeripheralIndex.ALL.equals(group)) continue;
+                if (!HardwarePeripheralIndex.ALL.equals(categoryFilter) && !group.equals(categoryFilter))
+                    continue;
+                var root = new org.eclipse.swt.widgets.TreeItem(hardwarePeripheralTree, SWT.NONE);
+                root.setText(group);
+                root.setExpanded(true);
+                groups.put(group, root);
+            }
+            var accepted = new java.util.LinkedHashMap<String, org.eclipse.swt.widgets.TreeItem>();
+            for (var device : devices) {
+                String name = device.name();
+                // Generic DTS containers are not user-selectable peripherals.
+                if (name.equals("/") || name.equals("soc") || name.equals("aliases")
+                        || name.equals("chosen") || name.equals("cpus")) continue;
+                int slash = device.path().lastIndexOf('/');
+                String parent = slash <= 0 ? "/" : device.path().substring(0, slash);
+                var parentItem = accepted.get(parent);
+                String category = HardwarePeripheralIndex.category(device);
+                // Child channels are shown only beneath visible, matched owners.
+                boolean child = parentItem != null;
+                if (!child && (!HardwarePeripheralIndex.matches(device, categoryFilter)
+                        || !DevicetreeHardware.matches(device, query, state))) continue;
+                if (!child && name.startsWith("channel@")) continue;
+                var group = groups.get(category);
+                if (parentItem == null && group == null) continue;
+                var item = parentItem != null
+                        ? new org.eclipse.swt.widgets.TreeItem(parentItem, SWT.NONE)
+                        : new org.eclipse.swt.widgets.TreeItem(group, SWT.NONE);
+                item.setText(name + (device.enabled() ? "" : "  [disabled]"));
+                item.setData(device);
+                item.setToolTipText(device.path() + "  |  " + device.compatible());
+                item.setExpanded(true);
+                accepted.put(device.path(), item);
+            }
+            for (var entry : groups.entrySet()) {
+                var group = entry.getValue();
+                group.setText(entry.getKey() + " (" + group.getItemCount() + ")");
+            }
+            if (currentPath != null) selectPeripheralNavigation(currentPath);
+        } finally {
+            hardwarePeripheralTree.setRedraw(true);
+        }
+    }
+
     private void prepareHardwareOverride() {
         if (hardwareParameters.getSelectionCount() == 0) return;
         var property = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
@@ -1069,6 +1184,13 @@ public final class ConfigurationStudioView extends ViewPart {
                 });
         if (dialog.open() != Window.OK) return;
         String draft = DevicetreeParameters.overlayRequest(property, dialog.getValue());
+        hardwarePreview.setText("PROPOSED SOURCE CHANGE (not applied)\n\n" + draft
+                + "\n\nNo package-pin mapping or binding semantics have been validated."
+                + "\nReview the active overlay and rebuild the exact target.");
+        hardwareDetails.setSelection(0);
+        hardwareValidation.setText("PROPOSED CHANGE - NOT BUILT\n" + property.path() + " / " + property.name()
+                + "\nSyntax shape inspected. A Zephyr build, binding check and physical pin"
+                + " verification are still required before the result can be trusted.");
         var choice = new MessageDialog(getSite().getShell(), "Review overlay request", null,
                 draft + "\nBinding semantics and hardware behaviour are validated separately."
                 + "\nSave appends an override to an explicitly selected source overlay; earlier values may be superseded.",
@@ -1223,7 +1345,8 @@ public final class ConfigurationStudioView extends ViewPart {
                 showHardwareParameters(null);
             }
             hardwareSummary.setText(matches.size() + " matching nodes · " + devices.size()
-                    + " in build · child nodes and ancestors shown as context · double-click opens source");
+                    + " in build · source tree and grouped peripherals are read-only");
+            refreshPeripheralNavigation(devices);
         } finally { hardwareDevices.setRedraw(true); }
     }
 
