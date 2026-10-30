@@ -194,7 +194,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                     params.plan().westArguments().get(params.plan().westArguments().indexOf("--runner") + 1));
             lease = null; // ManagedServer now owns this physical operation.
             var owned = session;
-            server.onExit().thenRun(() -> { owned.awaitLogDrain(1500); owned.close(); });
+            server.onExit().thenRun(owned::serverExited);
             session.startLogPump();
             long deadline = System.nanoTime() + Duration.ofSeconds(25).toNanos();
             boolean ready = false;
@@ -232,6 +232,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             // Superclass initializes a true GdbLaunch with Eclipse breakpoints,
             // registers, variables, call stacks, memory and source stepping.
             super.launch(configuration, mode, launch, monitor);
+            if (monitor.isCanceled() || launch.isTerminated()) session.close();
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             if (session != null) session.close();
@@ -266,6 +267,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         private final AtomicBoolean closeScheduled = new AtomicBoolean();
         private final DebugServerDiagnostics diagnostics;
         private volatile Thread logThread;
+        private volatile Thread childTracker;
         private final java.util.Set<ProcessHandle> ownedChildren = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
         String diagnose(String board, int port, Integer exitCode) {
@@ -283,7 +285,33 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             this.diagnostics = new DebugServerDiagnostics(port, runner);
             this.process = process; this.stream = stream; this.lease = lease; this.launch = launch;
         }
+        void serverExited() {
+            // A server failure must also end GDB; otherwise the launch appears live
+            // and its resources can prevent a retry after the server has gone.
+            var worker = new Thread(() -> {
+                awaitLogDrain(1500);
+                boolean unexpected = !closed.get();
+                close();
+                if (unexpected && launch.canTerminate()) {
+                    try { launch.terminate(); }
+                    catch (CoreException error) { Activator.getDefault().getLog().log(error.getStatus()); }
+                }
+            }, "zew-debugserver-exited");
+            worker.setDaemon(true);
+            worker.start();
+        }
         void startLogPump() {
+            // Do not depend on console traffic to discover children: a quiet
+            // runner may exit while its GDB-server child continues owning a port.
+            childTracker = new Thread(() -> {
+                while (!closed.get() && process.isAlive()) {
+                    ownedChildren.addAll(process.descendants().toList());
+                    try { Thread.sleep(50); }
+                    catch (InterruptedException stop) { return; }
+                }
+            }, "zew-owned-debugserver-children");
+            childTracker.setDaemon(true);
+            childTracker.start();
             var reader = new Thread(() -> {
                 var output = new io.github.niwantha33.zew.core.DebugConsoleOutput();
                 try (var input = new BufferedReader(
@@ -304,10 +332,17 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             reader.start();
         }
         void register() {
+            if (closed.get()) return;
             DebugPlugin.getDefault().getLaunchManager().addLaunchListener(this);
             if (launch instanceof org.eclipse.cdt.dsf.gdb.launching.GdbLaunch gdb) {
-                gdb.getSession().getExecutor().execute(() -> gdb.getSession().addServiceEventListener(this, null));
+                try {
+                    gdb.getSession().getExecutor().execute(() -> {
+                        if (!closed.get()) gdb.getSession().addServiceEventListener(this, null);
+                    });
+                } catch (java.util.concurrent.RejectedExecutionException ignored) { closeAsync(); }
             }
+            // Close can race listener registration after server startup fails.
+            if (closed.get()) DebugPlugin.getDefault().getLaunchManager().removeLaunchListener(this);
         }
         @org.eclipse.cdt.dsf.service.DsfServiceEventHandler
         public void commandControlStopped(
@@ -335,6 +370,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                     gdb.getSession().getExecutor().execute(() -> gdb.getSession().removeServiceEventListener(this));
                 } catch (java.util.concurrent.RejectedExecutionException ignored) { /* session already ended */ }
             }
+            Thread tracker = childTracker;
+            if (tracker != null) tracker.interrupt();
             ownedChildren.addAll(process.descendants().toList());
             for (var child : ownedChildren) if (child.isAlive()) child.destroy();
             process.destroy();
@@ -343,6 +380,16 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 Thread.currentThread().interrupt(); process.destroyForcibly();
             }
             for (var child : ownedChildren) if (child.isAlive()) child.destroyForcibly();
+            // Releasing the operation lease before forcible exit finishes causes
+            // immediate retries to race the previous server's USB/port teardown.
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while ((process.isAlive() || ownedChildren.stream().anyMatch(ProcessHandle::isAlive))
+                    && System.nanoTime() < deadline) {
+                try { Thread.sleep(25); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); break; }
+            }
+            try { process.getInputStream().close(); } catch (IOException ignored) {}
+            try { process.getOutputStream().close(); } catch (IOException ignored) {}
             try { stream.close(); } catch (IOException ignored) {}
             lease.close();
         }

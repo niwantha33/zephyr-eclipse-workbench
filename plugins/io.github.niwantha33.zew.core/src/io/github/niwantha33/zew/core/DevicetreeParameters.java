@@ -7,7 +7,10 @@ import java.util.regex.Pattern;
 /** Exact generated-DTS properties and pin routes; never a package-pin decoder. */
 public final class DevicetreeParameters {
     private DevicetreeParameters() {}
+    public enum ValueKind { BOOLEAN, STRING, CELLS, BYTES, REFERENCE, UNSUPPORTED }
     public record Property(String path, String name, String value, int line) {
+        /** Shape from generated syntax, not a substitute for the device's binding type. */
+        public ValueKind kind() { return valueKind(value); }
         public String displayValue() { return value.isEmpty() ? "Present (boolean)" : value; }
         public String title() {
             return switch (name) {
@@ -95,7 +98,10 @@ public final class DevicetreeParameters {
         var phandles = new HashMap<Long, String>();
         for (var p : properties) if (p.name().equals("phandle")) {
             var cells = CELLS.matcher(p.value());
-            if (cells.find()) phandles.put(Long.decode(cells.group()), p.path());
+            if (cells.find()) {
+                Long handle = phandle(cells.group());
+                if (handle != null) phandles.put(handle, p.path());
+            }
         }
         var routes = new ArrayList<PinRoute>();
         var visited = new HashSet<String>();
@@ -104,7 +110,7 @@ public final class DevicetreeParameters {
                 boolean resolved = false;
                 var cells = CELLS.matcher(p.value());
                 while (cells.find()) {
-                    String state = phandles.get(Long.decode(cells.group()));
+                    String state = phandles.get(phandle(cells.group()));
                     if (state == null || !visited.add(state)) continue;
                     for (var route : forDevice(properties, state)) if (pinProperty(route.name())) {
                         routes.add(new PinRoute(owner, route.path(), route.name(), route.value(), route.line()));
@@ -116,8 +122,103 @@ public final class DevicetreeParameters {
         }
         return List.copyOf(routes);
     }
+    private static Long phandle(String value) {
+        try {
+            long result = value.startsWith("0x") || value.startsWith("0X")
+                    ? Long.parseLong(value.substring(2), 16) : Long.parseLong(value, 10);
+            return result > 0 && result <= 0xffff_ffffL ? result : null;
+        } catch (NumberFormatException invalid) { return null; }
+    }
     private static boolean pinProperty(String name) {
         return Set.of("pinmux", "pins", "psels", "gpios").contains(name) || name.endsWith("-gpios");
+    }
+
+    private static ValueKind valueKind(String value) {
+        String v = value.strip();
+        if (v.isEmpty()) return ValueKind.BOOLEAN;
+        return switch (v.charAt(0)) {
+            case '"' -> ValueKind.STRING;
+            case '<' -> ValueKind.CELLS;
+            case '[' -> ValueKind.BYTES;
+            case '&' -> ValueKind.REFERENCE;
+            default -> ValueKind.UNSUPPORTED;
+        };
+    }
+
+    /** Validate a conservative editable subset; Zephyr still validates binding semantics on rebuild. */
+    private static void validateDraftValue(Property property, String value) {
+        if (Set.of("phandle", "linux,phandle").contains(property.name()))
+            throw new IllegalArgumentException("Phandles are generated identities; edit a symbolic source reference instead");
+        if (value == null || value.length() > 8192 || value.matches("(?s).*[;{}\\r\\n\\x00].*"))
+            throw new IllegalArgumentException("Enter a single property value without semicolons, braces or line breaks");
+        ValueKind kind = valueKind(value);
+        if (property.kind() == ValueKind.UNSUPPORTED || kind == ValueKind.UNSUPPORTED)
+            throw new IllegalArgumentException("This value syntax requires the source overlay editor");
+        if (kind != property.kind())
+            throw new IllegalArgumentException("Keep the built value shape: " + property.kind()
+                    + ". This check does not validate the device binding.");
+        if (kind == ValueKind.BOOLEAN) return;
+        String v = value.strip();
+        if (referenceProperty(property.name()) && kind == ValueKind.CELLS
+                && !Pattern.compile("&[A-Za-z_][A-Za-z0-9_]*").matcher(v).find())
+            throw new IllegalArgumentException("Generated numeric phandles are not portable; use the source node's &label reference");
+        if (property.name().matches("pinctrl-[0-9]+")
+                && !v.replaceAll("&[A-Za-z_][A-Za-z0-9_]*", "").matches("[<>,\\s]*"))
+            throw new IllegalArgumentException("Every pinctrl state must use a symbolic &label, not a generated numeric phandle");
+        int at = 0;
+        while (at < v.length()) {
+            int start = at;
+            if (kind == ValueKind.STRING) {
+                if (v.charAt(at++) != '"') throw new IllegalArgumentException("Expected a quoted string");
+                boolean closed = false;
+                while (at < v.length()) {
+                    char c = v.charAt(at++);
+                    if (c == '\\') { if (at == v.length()) break; at++; }
+                    else if (c == '"') { closed = true; break; }
+                }
+                if (!closed) throw new IllegalArgumentException("Unterminated quoted string");
+            } else if (kind == ValueKind.REFERENCE) {
+                var reference = Pattern.compile("&[A-Za-z_][A-Za-z0-9_]*").matcher(v);
+                reference.region(at, v.length());
+                if (!reference.lookingAt()) throw new IllegalArgumentException("Use a symbolic &node_label reference");
+                at = reference.end();
+            } else {
+                char open = kind == ValueKind.CELLS ? '<' : '[';
+                char close = kind == ValueKind.CELLS ? '>' : ']';
+                if (v.charAt(at++) != open) throw new IllegalArgumentException("Expected " + open + " value group");
+                int content = at, parentheses = 0;
+                while (at < v.length()) {
+                    char c = v.charAt(at);
+                    if (c == close && parentheses == 0) break;
+                    if (c == '(' && kind == ValueKind.CELLS) parentheses++;
+                    else if (c == ')' && kind == ValueKind.CELLS && --parentheses < 0)
+                        throw new IllegalArgumentException("Unbalanced cell expression");
+                    else if (c == '"' || c == '[' || c == ']' || (c == '<' && parentheses == 0))
+                        throw new IllegalArgumentException("Unexpected delimiter inside value group");
+                    at++;
+                }
+                if (at == v.length() || parentheses != 0) throw new IllegalArgumentException("Unterminated value group");
+                String body = v.substring(content, at++).strip();
+                if (body.contains("/*") || body.contains("//") || body.contains("*/"))
+                    throw new IllegalArgumentException("Comments are not supported inside draft values");
+                if (kind == ValueKind.BYTES && !body.matches("(?:[0-9a-fA-F]{2}(?:\\s+|$))*"))
+                    throw new IllegalArgumentException("Byte arrays require whitespace-separated two-digit hexadecimal bytes");
+                if (kind == ValueKind.CELLS && !body.matches("[A-Za-z0-9_\\s&()+*/%|~^!<>=?:.\\-]*"))
+                    throw new IllegalArgumentException("Unsupported cell expression; use the source overlay editor");
+            }
+            if (at <= start) throw new IllegalArgumentException("Invalid property value");
+            while (at < v.length() && Character.isWhitespace(v.charAt(at))) at++;
+            if (at == v.length()) break;
+            if (v.charAt(at++) != ',') throw new IllegalArgumentException("Separate value groups with a comma");
+            while (at < v.length() && Character.isWhitespace(v.charAt(at))) at++;
+            if (at == v.length()) throw new IllegalArgumentException("Missing value after comma");
+        }
+    }
+
+    private static boolean referenceProperty(String name) {
+        return name.matches("pinctrl-[0-9]+") || name.equals("gpios") || name.endsWith("-gpios")
+                || name.endsWith("-supply") || Set.of("io-channels", "pwms", "clocks", "resets", "dmas",
+                        "interrupt-parent", "interrupts-extended", "memory-region").contains(name);
     }
 
     /** A draft for review in an application overlay; no generated file is written. */
@@ -125,8 +226,7 @@ public final class DevicetreeParameters {
         if (!property.path().matches("/(?:[A-Za-z0-9_,.@+-]+(?:/[A-Za-z0-9_,.@+-]+)*)?")
                 || !property.name().matches("[A-Za-z_#][A-Za-z0-9_,#.+-]*"))
             throw new IllegalArgumentException("Invalid Devicetree property target");
-        if (value == null || value.length() > 8192 || value.matches("(?s).*[;{}\\r\\n\\x00].*"))
-            throw new IllegalArgumentException("Enter a single property value without semicolons or braces");
+        validateDraftValue(property, value);
         return "/* Review against this device's binding, then rebuild. */\n&{" + property.path() + "} {\n    "
                 + property.name() + (value.isBlank() ? "" : " = " + value.strip()) + ";\n};\n";
     }

@@ -99,6 +99,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private String filter = "";
     private String selectedOverlay = "app.overlay";
     private Job helpJob;
+    private Job diagnosisJob;
+    private final java.util.concurrent.atomic.AtomicInteger diagnosisGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger helpGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ConcurrentMap<String, String> definitionCache =
             new java.util.concurrent.ConcurrentHashMap<>();
@@ -139,7 +141,7 @@ public final class ConfigurationStudioView extends ViewPart {
 
         var secondary = new Composite(outer, SWT.NONE);
         secondary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        secondary.setLayout(new GridLayout(5, false));
+        secondary.setLayout(new GridLayout(8, false));
         action(secondary, "Open prj.conf", () -> openResource("prj.conf"))
                 .setToolTipText("Open the exact application configuration source");
         action(secondary, "Edit hardware overlay", this::openOverlay)
@@ -148,6 +150,9 @@ public final class ConfigurationStudioView extends ViewPart {
                 .setToolTipText("Reload project and generated configuration after editing or building");
         action(secondary, "Diagnose", this::diagnoseConfiguration)
                 .setToolTipText("Read-only checks of the selected build and, in Hardware, the selected peripheral");
+        action(secondary, "Export evidence…", this::exportEvidence);
+        action(secondary, "Open evidence…", () -> openEvidence(false));
+        action(secondary, "Compare evidence…", () -> openEvidence(true));
         action(secondary, "Copy selected symbol", this::copySymbol)
                 .setToolTipText("Copy CONFIG_<symbol> to the clipboard");
 
@@ -598,6 +603,8 @@ public final class ConfigurationStudioView extends ViewPart {
                     "Select a Zephyr application in Project Explorer first.");
             return;
         }
+        int generation = diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
         IProject selectedProject = project;
         Path build = inspectionBuild;
         Path app = selectedProject.getLocation().toFile().toPath();
@@ -609,7 +616,7 @@ public final class ConfigurationStudioView extends ViewPart {
         String node = selectedNode;
         var display = analysis.getDisplay();
         status.setText("Checking available generated configuration evidence…");
-        new Job("Diagnose Zephyr configuration") {
+        diagnosisJob = new Job("Diagnose Zephyr configuration") {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 String message;
                 try {
@@ -621,7 +628,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 String report = message;
                 display.asyncExec(() -> {
-                    if (analysis.isDisposed() || project != selectedProject
+                    if (analysis.isDisposed() || generation != diagnosisGeneration.get() || project != selectedProject
                             || !java.util.Objects.equals(inspectionBuild, build)) return;
                     analysis.setText(report);
                     tabs.setSelection(2);
@@ -629,10 +636,91 @@ public final class ConfigurationStudioView extends ViewPart {
                 });
                 return Status.OK_STATUS;
             }
+        };
+        diagnosisJob.schedule();
+    }
+
+    private void showEvidence(String text) {
+        analysis.setText(text);
+        tabs.setSelection(2);
+        status.setText("Offline configuration evidence; no target operation was performed.");
+    }
+
+    private Path chooseEvidence(String title, int mode) {
+        var dialog = new org.eclipse.swt.widgets.FileDialog(getSite().getShell(), mode);
+        dialog.setText(title);
+        dialog.setFilterExtensions(new String[] {"*.zew-evidence.zip", "*.zip"});
+        String selected = dialog.open();
+        return selected == null ? null : Path.of(selected);
+    }
+
+    private void exportEvidence() {
+        if (project == null || !project.isAccessible() || project.getLocation() == null) {
+            MessageDialog.openInformation(getSite().getShell(), "Export evidence", "Select an accessible local project first.");
+            return;
+        }
+        Path app = project.getLocation().toFile().toPath();
+        Path build = inspectionBuild;
+        var display = analysis.getDisplay();
+        new Job("Prepare configuration evidence") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                try {
+                    var preview = io.github.niwantha33.zew.core.InvestigationBundle.collect(app, build);
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    display.asyncExec(() -> {
+                        if (analysis.isDisposed()) return;
+                        showEvidence(io.github.niwantha33.zew.core.InvestigationBundle.inspect(preview));
+                        if (!MessageDialog.openConfirm(getSite().getShell(), "Review evidence export",
+                                preview.display() + "\nThe captured contents are now visible in Insights. Export this snapshot?")) return;
+                        Path output = chooseEvidence("Save evidence to a new file", SWT.SAVE);
+                        if (output == null) return;
+                        evidenceJob("Export configuration evidence", () -> {
+                            io.github.niwantha33.zew.core.InvestigationBundle.write(output, preview);
+                            return "Evidence saved to " + output + "\n" + preview.display();
+                        });
+                    });
+                    return Status.OK_STATUS;
+                } catch (Exception error) {
+                    display.asyncExec(() -> { if (!analysis.isDisposed()) showEvidence("Export failed: " + error.getMessage()); });
+                    return Status.OK_STATUS;
+                }
+            }
         }.schedule();
     }
 
+    @FunctionalInterface private interface EvidenceWork { String run() throws Exception; }
+
+    private void evidenceJob(String title, EvidenceWork work) {
+        var display = analysis.getDisplay();
+        new Job(title) {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                String result;
+                try { result = work.run(); }
+                catch (Exception error) { result = title + " failed: " + error.getMessage(); }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                String report = result;
+                display.asyncExec(() -> { if (!analysis.isDisposed()) showEvidence(report); });
+                return Status.OK_STATUS;
+            }
+        }.schedule();
+    }
+
+    private void openEvidence(boolean compare) {
+        Path first = chooseEvidence(compare ? "Select first evidence package" : "Open evidence package", SWT.OPEN);
+        if (first == null) return;
+        Path second = compare ? chooseEvidence("Select second evidence package", SWT.OPEN) : null;
+        if (compare && second == null) return;
+        evidenceJob(compare ? "Compare configuration evidence" : "Open configuration evidence", () -> {
+            var before = io.github.niwantha33.zew.core.InvestigationBundle.read(first);
+            return compare ? io.github.niwantha33.zew.core.InvestigationBundle.compare(before,
+                    io.github.niwantha33.zew.core.InvestigationBundle.read(second))
+                    : io.github.niwantha33.zew.core.InvestigationBundle.inspect(before);
+        });
+    }
+
     private void reload() {
+        diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         definitionCache.clear();
@@ -1426,6 +1514,8 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     @Override public void dispose() {
+        diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();

@@ -3,32 +3,39 @@ package io.github.niwantha33.zew.ui;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.nio.file.Path;
+import io.github.niwantha33.zew.core.PhysicalOperationLock;
 
 /**
  * Fail-closed physical-operation guard until per-probe identities and
- * cross-IDE ownership can be verified. This intentionally serializes
- * physical operations inside one Eclipse process, regardless of project.
- * It is not a substitute for OS-level or hardware probe ownership.
+ * cross-IDE ownership can be verified. Serializes physical operations across
+ * cooperating Workbench processes for the same OS user, regardless of project.
+ * Other IDEs do not participate in this advisory lock.
  */
 final class TargetOperationGuard {
-    private static final AtomicBoolean physicalBusy = new AtomicBoolean();
     private TargetOperationGuard() {}
 
     static Lease acquire(String action) throws IOException {
-        if ("run".equals(action)) return new Lease(false);
+        if ("run".equals(action)) return new Lease(null);
         if (!"flash".equals(action) && !"debugserver".equals(action))
             throw new IOException("Unsupported operation: " + action);
-        if (!physicalBusy.compareAndSet(false, true))
-            throw new IOException("A Flash or Debug Server operation already owns the hardware interface in this Eclipse instance. Terminate it before starting another.");
-        return new Lease(true);
+        return new Lease(PhysicalOperationLock.acquire(Path.of(System.getProperty("user.home"),
+                ".zephyr-eclipse-workbench", "locks")));
     }
 
     static final class Lease implements AutoCloseable {
-        private final boolean physical;
+        private final PhysicalOperationLock physical;
         private final AtomicBoolean closed = new AtomicBoolean();
-        private Lease(boolean physical) { this.physical = physical; }
+        private Lease(PhysicalOperationLock physical) { this.physical = physical; }
         @Override public void close() {
-            if (closed.compareAndSet(false, true) && physical) physicalBusy.set(false);
+            if (closed.compareAndSet(false, true) && physical != null) {
+                try { physical.close(); }
+                catch (IOException error) {
+                    if (Activator.getDefault() != null) Activator.getDefault().getLog().log(
+                            new org.eclipse.core.runtime.Status(org.eclipse.core.runtime.IStatus.ERROR,
+                                    Activator.ID, "Could not close hardware-operation lock", error));
+                }
+            }
         }
     }
 }

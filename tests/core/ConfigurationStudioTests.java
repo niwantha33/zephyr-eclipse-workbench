@@ -328,6 +328,48 @@ public final class ConfigurationStudioTests {
             try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(resolution, "<10>; evil;"); }
             catch (IllegalArgumentException expected) { malformedRequestRejected = true; }
             ok(malformedRequestRejected, "overlay draft rejects extra property statements");
+            for (String invalidDraft : new String[] { "<10", "<10>>", "<10> /*", "<10> //comment",
+                    "<((10)>", "<(10))>", "<10>,", "<10> other", "<10]", "", "\"12\"", "<10>\n" }) {
+                boolean rejected = false;
+                try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(resolution, invalidDraft); }
+                catch (IllegalArgumentException expected) { rejected = true; }
+                ok(rejected, "invalid or shape-changing overlay draft rejected: " + invalidDraft);
+            }
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(resolution,
+                    "<(1 << 3)>").contains("<(1 << 3)>"), "balanced cell expressions remain supported");
+            var gain = adcParameters.stream().filter(p -> p.name().equals("zephyr,gain")).findFirst().orElseThrow();
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(gain,
+                    "\"ADC_GAIN_1_6\"").contains("ADC_GAIN_1_6"), "quoted ADC enum draft");
+            boolean unterminatedString = false;
+            try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(gain, "\"ADC_GAIN_1"); }
+            catch (IllegalArgumentException expected) { unterminatedString = true; }
+            ok(unterminatedString, "unterminated string cannot swallow overlay closing syntax");
+            var url = properties.stream().filter(p -> p.name().equals("note")).findFirst().orElseThrow();
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(url,
+                    "\"https://example.invalid/path\"").contains("https://"), "comment-like text inside strings retained");
+            var numericRoute = properties.stream().filter(p -> p.name().equals("pinctrl-0")).findFirst().orElseThrow();
+            boolean numericPhandleRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(numericRoute, "<0x10>"); }
+            catch (IllegalArgumentException expected) { numericPhandleRejected = true; }
+            ok(numericPhandleRejected, "generated phandle identity cannot be copied into portable source");
+            boolean mixedPhandleRejected = false;
+            try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(numericRoute, "<0x10 &adc_default>"); }
+            catch (IllegalArgumentException expected) { mixedPhandleRejected = true; }
+            ok(mixedPhandleRejected, "one symbolic reference does not authorise other numeric pinctrl identities");
+            var invalidHandleProperties = new java.util.ArrayList<>(properties);
+            invalidHandleProperties.add(new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                    "/invalid", "phandle", "<999999999999999999999999999>", 1));
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.pinRoutes(invalidHandleProperties,
+                    "/soc/adc@4000").equals(routes), "malformed out-of-range phandle does not crash or invent routes");
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(numericRoute,
+                    "<&adc_default>").contains("<&adc_default>"), "symbolic pinctrl reference can be drafted");
+            var bytes = new io.github.niwantha33.zew.core.DevicetreeParameters.Property("/", "data", "[00 ff]", 1);
+            ok(io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(bytes, "[01 aF]").contains("[01 aF]"),
+                    "byte array syntax is retained");
+            boolean invalidBytes = false;
+            try { io.github.niwantha33.zew.core.DevicetreeParameters.overlayRequest(bytes, "[1 123]"); }
+            catch (IllegalArgumentException expected) { invalidBytes = true; }
+            ok(invalidBytes, "malformed byte array rejected");
             ok(io.github.niwantha33.zew.core.DevicetreeParameters.inspect("").isEmpty(),
                     "an unbuilt project has no fabricated ADC parameters");
             System.out.println("ConfigurationStudioTests PASS");

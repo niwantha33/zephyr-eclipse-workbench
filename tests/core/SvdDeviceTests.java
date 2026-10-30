@@ -38,6 +38,27 @@ public final class SvdDeviceTests {
         check(!fieldAction.registers().get(0).readable(), "field read action blocks parent");
         var wo = parse(device(peripheral(reg.replace("<fields>", "<access>write-only</access><fields>"))));
         check(!wo.registers().get(0).readable(), "write-only must be blocked");
+        var once = parse(device(peripheral(reg.replace("<fields>", "<access>writeOnce</access><fields>"))));
+        check(!once.registers().get(0).readable(), "writeOnce is not readable");
+        var unknownAccess = parse(device(peripheral(reg.replace("<fields>", "<access>vendor-mode</access><fields>"))));
+        check(!unknownAccess.registers().get(0).readable(), "unknown access must fail closed");
+        var fieldWrite = parse(device(peripheral(reg.replace("<name>MODE</name>",
+                "<name>MODE</name><access>write-only</access>"))));
+        check(!fieldWrite.registers().get(0).readable(), "write-only field blocks whole-register reads");
+        check(fieldWrite.registers().get(0).readBlockReason().contains("field MODE access"), "specific field diagnostic");
+        String inheritedAction = reg.replace("<name>EN</name>", "<name>EN</name><readAction>clear</readAction>")
+                .replace("<field><name>MODE</name><bitRange>[3:1]</bitRange></field>",
+                        "<field derivedFrom='EN'><name>COPY</name><bitRange>[3:1]</bitRange></field>");
+        var inherited = parse(device(peripheral(inheritedAction)));
+        check(inherited.registers().get(0).fields().get(1).readAction().equals("clear"),
+                "derived field retains side effect metadata");
+        String derivedOverride = inheritedAction.replace("<bitRange>[3:1]</bitRange>",
+                "<bitRange>[3:1]</bitRange><readAction></readAction>");
+        check(!parse(device(peripheral(derivedOverride))).registers().get(0).readable(),
+                "later field must not erase earlier field read side effect");
+        var inheritedAccess = parse(device(peripheral(reg.replace("<fields>", "<access>read-only</access><fields>"))));
+        check(inheritedAccess.registers().get(0).fields().get(0).access().equals("read-only"),
+                "field inherits register access");
         var derived = parse(device(peripheral(reg) + "<peripheral derivedFrom='GPIO'><name>GPIO2</name><baseAddress>0x50000000</baseAddress></peripheral>"));
         check(derived.registers().size() == 2 && derived.registers().get(1).address().toString(16).equals("50000004"), "peripheral inheritance");
         var rd = parse(device(peripheral(reg + "<register derivedFrom='CTRL'><name>ALT</name><addressOffset>8</addressOffset></register>")));

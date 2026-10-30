@@ -161,7 +161,7 @@ public final class SocRegistersView extends ViewPart {
                 });
                 var item = new TreeItem(peripheral, SWT.NONE); item.setData(r); item.setData("description", r.description());
                 BigInteger value = values.get(r.key());
-                String access = !r.readable() ? "Read blocked: " + (r.readAction().isEmpty() ? r.access() : r.readAction()) : r.access();
+                String access = !r.readable() ? "Read blocked: " + r.readBlockReason() : r.access();
                 if (errors.containsKey(r.key())) access = errors.get(r.key());
                 else if (value != null && r.reset() != null && value.xor(r.reset()).and(r.resetMask()).signum() != 0) access += " — differs from reset";
                 item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(), "0x" + r.address().toString(16),
@@ -171,7 +171,8 @@ public final class SocRegistersView extends ViewPart {
                     var mask = BigInteger.ONE.shiftLeft(f.width()).subtract(BigInteger.ONE);
                     field.setText(new String[] { f.name(), "[" + (f.offset() + f.width() - 1) + ":" + f.offset() + "]",
                             value == null ? "—" : hex(value.shiftRight(f.offset()).and(mask), f.width()),
-                            (r.reset() == null ? "—" : hex(r.reset().shiftRight(f.offset()).and(mask), f.width())), "" });
+                            (r.reset() == null ? "—" : hex(r.reset().shiftRight(f.offset()).and(mask), f.width())),
+                            f.access() + (f.readAction().isEmpty() ? "" : " / readAction: " + f.readAction()) });
                 }
                 item.setExpanded(expanded.contains(r.key()) || !query.isEmpty());
                 if (selected != null && selected.key().equals(r.key())) tree.setSelection(item);
@@ -233,7 +234,7 @@ public final class SocRegistersView extends ViewPart {
         var r = targets.get(index);
         if (!run.isSuspended(execution)) { finish(request, "Target resumed; refresh stopped."); return; }
         if (!r.readable()) {
-            deliver(request, r, null, "Read blocked by SVD access/readAction");
+            deliver(request, r, null, "Read blocked: " + r.readBlockReason());
             readNext(session, expressions, run, execution, context, targets, index + 1, request); return;
         }
         String type = r.size() == 8 ? "unsigned char" : r.size() == 16 ? "unsigned short" : "unsigned int";
