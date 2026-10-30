@@ -125,6 +125,7 @@ public final class EditorSmoke implements IApplication {
             }
             check(grouped.getItemCount() == 1
                     && grouped.getItem(0).getText().startsWith("ADC")
+                    && grouped.getItem(0).getItemCount() == 1
                     && adcControllerInGroup && adcChannelInGroup,
                     "ADC peripheral-first tree retains controller and channel: " + groupedDescription);
             var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
