@@ -28,7 +28,13 @@ def _output(row: dict, directory: Path) -> Path | None:
         path = Path(value)
         if not base.is_absolute():
             return None
-        resolved = (path if path.is_absolute() else base / path).resolve(strict=False)
+        unresolved = path if path.is_absolute() else base / path
+        # Do not silently classify an aliased output as a regular build object.
+        # Even when it resolves outside the build, it is not safe to assert a
+        # source-to-object identity through a symlink.
+        if unresolved.is_symlink():
+            raise InputError("Symlinked compiler output rejected")
+        resolved = unresolved.resolve(strict=False)
         if not resolved.is_relative_to(directory):
             return None
         if resolved.suffix not in (".o", ".obj"):
