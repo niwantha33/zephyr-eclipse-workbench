@@ -15,6 +15,21 @@ public class InvestigationBundleTests {
             check(original.entries().size() == 2, "allowlist excludes unrelated files");
             byte[] mutable = original.entries().get("source/prj.conf"); mutable[0] = 0;
             check(original.entries().get("source/prj.conf")[0] != 0, "immutable preview snapshot");
+            // Shareable snapshots must not silently include secrets,
+            // user comments, custom DTS strings or absolute workspace paths.
+            Files.writeString(app.resolve("prj.conf"),
+                    "# user note: private-marker-123\nCONFIG_GPIO=y\n"
+                    + "CONFIG_WIFI_PASSWORD=\"password-marker-456\"\n"
+                    + "CONFIG_AUTH_TOKEN=0x12345678\nCONFIG_DEVICE_LABEL=\"identity-marker-789\"\n");
+            var redacted = InvestigationBundle.collect(app, null);
+            String safeConfig = new String(redacted.entries().get("source/prj.conf"),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            check(safeConfig.contains("CONFIG_GPIO=y")
+                    && !safeConfig.contains("password-marker-456")
+                    && !safeConfig.contains("identity-marker-789")
+                    && !safeConfig.contains("private-marker-123")
+                    && !safeConfig.contains("0x12345678"), "private config strings and notes are removed from export");
+            Files.writeString(app.resolve("prj.conf"), "CONFIG_GPIO=y\n");
             Path output = root.resolve("snapshot.zip");
             InvestigationBundle.write(output, original);
             var reopened = InvestigationBundle.read(output);
@@ -43,6 +58,17 @@ public class InvestigationBundleTests {
                     && identity.contains("CONFIG_ARM=y"), "build identity and bounded ELF fingerprint exported");
             check(!withIdentity.entries().containsKey("zephyr/zephyr.elf")
                     && !identity.contains(root.toString()), "local paths and ELF content excluded");
+            Files.writeString(zephyr.resolve("zephyr.dts"),
+                    "/ {\n soc {\n  adc@4000 {\n   compatible = \"vnd,adc\";\n"
+                    + "   status = \"okay\";\n   password = \"dts-secret-123\";\n  };\n };\n};\n");
+            var withHardware = InvestigationBundle.collect(app, build);
+            check(withHardware.entries().containsKey("generated/devicetree-inventory.tsv")
+                    && !withHardware.entries().containsKey("generated/zephyr.dts"),
+                    "shareable export uses redacted hardware inventory instead of raw DTS");
+            String inventory = new String(withHardware.entries().get("generated/devicetree-inventory.tsv"),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            check(inventory.contains("adc@4000") && !inventory.contains("dts-secret-123"),
+                    "Devicetree inventory retains node structure but excludes custom secrets");
             Path withBuild = root.resolve("snapshot-build.zip");
             InvestigationBundle.write(withBuild, withIdentity);
             check(InvestigationBundle.read(withBuild).entries().containsKey("build/build-identity.txt"),

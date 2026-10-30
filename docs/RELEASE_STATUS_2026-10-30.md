@@ -25,9 +25,9 @@ They are automated tests, **not** proof of successful clean-install, flash, debu
 | Configuration diagnosis | ConfigurationDiagnosis and ConfigurationDiagnosisTests on this branch | PR CI, real-build fixtures, runtime init/driver evidence and UI smoke |
 | SoC registers | SocRegistersView, SvdDevice | Exact-device SVD matching, side-effect safety and debugger hardware tests |
 | RTOS tracing | ZephyrTraceHandler, tools/rtos_analysis | Validated thread/CPU/stack measurements, loss accounting, broader devices |
-| Logs/fault/core dump | Basic build/debug console capture | Crash import, ELF identity, architecture-specific decoding, export |
-| Safe peripheral tests | Existing examples and manual hardware workflows | Isolated GPIO/ADC/I²C test wizard, controlled execution and reports |
-| Share/compare investigations | No integrated portable evidence package verified | Redaction, offline import, configuration and build comparison |
+| Logs/fault/core dump | FaultLogAnalysis, ArmElfSymbols, FaultAnalysisView, offline export | Binary core-dump import, firmware identity proof, real target captures |
+| Safe peripheral tests | Bounded nRF52840 ADC example added to CI matrix | Seven-case firmware matrix outcome; physical ADC measurement; GPIO/I²C test UI |
+| Share/compare investigations | InvestigationBundle ZIP import/export, configuration diff, ELF checksum, sanitized default export | CI validation, credential audit, expanded hardware/runtime comparisons |
 | First-use demo | Existing examples/rtos_analysis_demo | Recorded, reproducible failure-to-source demo with labelled provenance |
 | Installation and updates | p2 site, GitHubUpdates, UpdateController, CI publisher | Complete clean-system install/update/rollback tests and licensing audit |
 | Platforms | Linux packaging/UI CI; Windows firmware CI | Physical Windows/Linux IDE acceptance; no macOS validation |
@@ -62,6 +62,10 @@ this change. A separate explicit licence grant or appropriately licensed
 reimplementation and review of SVD/data provenance is required before reuse.
 The independent existing Eclipse SvdDevice/SocRegistersView implementation
 remains the current baseline.
+
+## Complete acceptance contract
+
+The [commercial release acceptance matrix](COMMERCIAL_RELEASE_ACCEPTANCE.md) expands each of the sixteen specification workstreams into explicit engineering and verification gates. Do not treat an unchecked gate as implemented.
 
 ## Release decisions and acceptance
 

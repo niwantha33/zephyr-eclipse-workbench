@@ -13,15 +13,20 @@ public final class InvestigationBundle {
     private InvestigationBundle() {}
     private static final int LIMIT = 2_000_000;
     private static final Set<String> NAMES = Set.of("source/prj.conf", "generated/.config",
-            "generated/zephyr.dts", "build/build-identity.txt", "diagnosis.txt");
+            "generated/devicetree-inventory.tsv", "generated/zephyr.dts",
+            "build/build-identity.txt", "diagnosis.txt");
     public record Preview(Map<String, byte[]> entries) {
         public Preview { entries = copy(entries); }
         @Override public Map<String, byte[]> entries() { return copy(entries); }
         public String display() {
             StringBuilder text = new StringBuilder("Configuration evidence package\n");
             entries.forEach((name, bytes) -> text.append(name).append(" — ").append(bytes.length).append(" bytes\n"));
-            return text.append("\nIncludes configuration values and diagnostic paths. Review them for sensitive information.\n")
-                    .append("No source code, ELF, credentials, logs or directory trees are automatically collected.\n")
+            if (entries.containsKey("generated/zephyr.dts"))
+                text.append("\nWARNING: legacy raw Devicetree present; content is NOT sanitised. Do not share without reviewing it.\n");
+            return text.append("\nShareable default: Kconfig strings/comments and absolute diagnostic paths are redacted.\n")
+                    .append("Generated hardware is a lossy inventory, not the full Devicetree.\n")
+                    .append("Review the actual displayed content for unexpected sensitive metadata before sharing.\n")
+                    .append("No ELF, source code, logs or directory trees are automatically collected.\n")
                     .append("Configuration evidence does not prove runtime or electrical correctness.\n").toString();
         }
     }
@@ -35,11 +40,21 @@ public final class InvestigationBundle {
         add(entries, "source/prj.conf", app.resolve("prj.conf"));
         if (build != null) {
             add(entries, "generated/.config", build.resolve("zephyr/.config"));
-            add(entries, "generated/zephyr.dts", build.resolve("zephyr/zephyr.dts"));
+            Path tree = build.resolve("zephyr/zephyr.dts");
+            if (Files.isRegularFile(tree, LinkOption.NOFOLLOW_LINKS)) {
+                if (Files.size(tree) > LIMIT) throw new IOException("Resolved Devicetree exceeds 2 MB.");
+                entries.put("generated/devicetree-inventory.tsv",
+                        EvidenceSanitizer.devicetreeInventory(Files.readString(tree, StandardCharsets.UTF_8)));
+            }
             if (Files.isRegularFile(build.resolve("zephyr/.config"), LinkOption.NOFOLLOW_LINKS))
                 entries.put("build/build-identity.txt", buildIdentity(build).getBytes(StandardCharsets.UTF_8));
         }
-        entries.put("diagnosis.txt", ConfigurationDiagnosis.inspect(app, build, null).display().getBytes(StandardCharsets.UTF_8));
+        String diagnosis = ConfigurationDiagnosis.inspect(app, build, null).display();
+        String projectPath = app.toAbsolutePath().normalize().toString();
+        String buildPath = build == null ? null : build.toAbsolutePath().normalize().toString();
+        if (build != null && Files.exists(build)) diagnosis = diagnosis.replace(build.toRealPath().toString(), "<build>");
+        diagnosis = diagnosis.replace(app.toRealPath().toString(), "<application>");
+        entries.put("diagnosis.txt", EvidenceSanitizer.diagnosis(diagnosis, projectPath, buildPath));
         return new Preview(entries);
     }
     /**
@@ -50,8 +65,8 @@ public final class InvestigationBundle {
     private static String buildIdentity(Path build) throws IOException {
         var cfg = BuildArtifacts.configuration(build);
         StringBuilder out = new StringBuilder("Zephyr build evidence (not a hardware-verification certificate)\n");
-        String target = cfg.getOrDefault("CONFIG_BOARD_TARGET", "(not reported)").replace("\"", "");
-        String soc = cfg.getOrDefault("CONFIG_SOC", "(not reported)").replace("\"", "");
+        String target = safeIdentifier(cfg.getOrDefault("CONFIG_BOARD_TARGET", "(not reported)").replace("\"", ""));
+        String soc = safeIdentifier(cfg.getOrDefault("CONFIG_SOC", "(not reported)").replace("\"", ""));
         out.append("CONFIG_BOARD_TARGET: ").append(target).append('\n')
                 .append("CONFIG_SOC: ").append(soc).append('\n');
         for (String arch : List.of("ARM", "ARM64", "RISCV", "XTENSA", "X86", "ARC"))
@@ -108,13 +123,21 @@ public final class InvestigationBundle {
         return out.toString();
     }
 
+    private static String safeIdentifier(String value) {
+        if (value.length() > 160 || !value.matches("[A-Za-z0-9_./@+-]+")
+                || value.toLowerCase(java.util.Locale.ROOT).matches(".*(password|token|secret|private|credential|api_key).*"))
+            return "(not reported)";
+        return value;
+    }
+
     private static void add(Map<String, byte[]> entries, String name, Path file) throws IOException {
         if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return;
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Not a regular evidence file: " + file);
         try (var stream = Files.newInputStream(file)) {
             byte[] bytes = stream.readNBytes(LIMIT + 1);
             if (bytes.length > LIMIT) throw new IOException("Evidence file exceeds 2 MB: " + file);
-            entries.put(name, bytes);
+            entries.put(name, name.endsWith(".conf") || name.endsWith(".config")
+                    ? EvidenceSanitizer.kconfig(bytes) : bytes);
         }
     }
     public static void write(Path destination, Preview preview) throws IOException {
@@ -125,10 +148,12 @@ public final class InvestigationBundle {
             try (var zip = new ZipOutputStream(raw, StandardCharsets.UTF_8)) {
                 Properties manifest = new Properties();
                 manifest.setProperty("format", "zew-configuration-evidence-1");
+                manifest.setProperty("redaction", "kconfig-strings-and-devicetree-inventory-v1");
                 manifest.setProperty("captured", java.time.Instant.now().toString());
                 for (var entry : preview.entries().entrySet()) {
-                    if (!NAMES.contains(entry.getKey()) || entry.getValue().length > LIMIT)
-                        throw new IOException("Unsupported evidence entry: " + entry.getKey());
+                    if (!NAMES.contains(entry.getKey()) || entry.getValue().length > LIMIT
+                            || entry.getKey().equals("generated/zephyr.dts"))
+                        throw new IOException("Unsupported or unsanitised evidence entry: " + entry.getKey());
                     put(zip, entry.getKey(), entry.getValue());
                     manifest.setProperty("sha256." + entry.getKey(), hash(entry.getValue()));
                 }

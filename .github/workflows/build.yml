@@ -9,6 +9,7 @@ on:
       - 'releng/**'
       - 'scripts/**'
       - 'tests/**'
+      - 'examples/**'
       - 'pom.xml'
       - '.github/workflows/build.yml'
       - '.github/workflows/private-update.yml'
@@ -102,7 +103,7 @@ jobs:
         run: python scripts/test_core.py
       - name: Fresh pinned managed environment
         run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --setup-only
-      - name: Six real firmware builds
+      - name: Cross-vendor managed firmware matrix including ADC diagnostic
         run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --run-only
       - name: Retain verified target results
         if: always()
