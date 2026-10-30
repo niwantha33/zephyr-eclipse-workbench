@@ -1157,7 +1157,7 @@ public final class ConfigurationStudioView extends ViewPart {
                         : new org.eclipse.swt.widgets.TreeItem(group, SWT.NONE);
                 item.setText(name + (device.enabled() ? "" : "  [disabled]"));
                 item.setData(device);
-                item.setToolTipText(device.path() + "  |  " + device.compatible());
+                item.setData("path", device.path());
                 item.setExpanded(true);
                 accepted.put(device.path(), item);
             }
