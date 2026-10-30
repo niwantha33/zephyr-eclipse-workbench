@@ -21,9 +21,9 @@ class CliPackageTests(unittest.TestCase):
             root = Path(temporary)
             build = root / "build"
             (build / "zephyr").mkdir(parents=True)
-            (build / "zephyr/.config").write_text("CONFIG_GPIO=y\\n", encoding="utf-8")
+            (build / "zephyr/.config").write_text("CONFIG_GPIO=y\n", encoding="utf-8")
             request = root / "requested.conf"
-            request.write_text("CONFIG_GPIO=y\\nCONFIG_FAKE_UNDEFINED=y\\n", encoding="utf-8")
+            request.write_text("CONFIG_GPIO=y\nCONFIG_FAKE_UNDEFINED=y\n", encoding="utf-8")
             ninja = root / "ninja.exe"
             ninja.write_text("unused", encoding="utf-8")
             command = [sys.executable, "-I", str(repo / "zew.py"), "config-check",
