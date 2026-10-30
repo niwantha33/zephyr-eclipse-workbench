@@ -212,3 +212,18 @@ passing these prototype tests.
   A CI job itself cannot stop merging when repository rules permit bypass.
 - No new G0 approval, G1 promotion, production claim, hardware measurement,
   actual flashing or fully proven source-to-binary causality.
+
+## GNU ld map-context evidence (development PR, Phase 0)
+
+- New read-only `zew map-context` uses same-image Evidence Graph map/ELF
+  hashes and strict map output/input parent grammar to distinguish
+  allocated/nonallocated ELF metadata and unresolved contexts.
+- `inspect_sections(..., include_unallocated=True)` is opt-in and does
+  **not** hash nonallocated section bytes; existing SHF_ALLOC-only output
+  analysis remains unchanged.
+- Seven real Windows firmware build reports now capture diagnostic context
+  counts without relabelling baseline uncovered sections as valid or
+  attributing input objects to final ELF bytes.
+- GNU/LLVM host linker smoke now cross-checks ELF .text metadata against
+  independent GNU `readelf`. No physical hardware, embedded LLVM, source
+  causality or G0/G1 gate claim.
