@@ -114,12 +114,13 @@ public final class ZephyrProjectImport {
                 // stale generic CMake configurations.
                 var nativeConfigs = new java.util.LinkedHashSet<String>();
                 nativeConfigs.add("default");
-                for (String config : description.getBuildConfigs()) {
-                    if (config.startsWith(ZephyrCoreBuildProvider.ID + "/")) nativeConfigs.add(config);
+                for (var buildConfig : project.getBuildConfigs()) {
+                    String name = buildConfig.getName();
+                    if (name.startsWith(ZephyrCoreBuildProvider.ID + "/")) nativeConfigs.add(name);
                 }
+                String current = project.getActiveBuildConfig().getName();
                 description.setBuildConfigs(nativeConfigs.toArray(String[]::new));
-                description.setActiveBuildConfig(nativeConfigs.contains(description.getActiveBuildConfig())
-                        ? description.getActiveBuildConfig() : "default");
+                description.setActiveBuildConfig(nativeConfigs.contains(current) ? current : "default");
             }
             // Apply after open: Eclipse may reload the original .project during open.
             project.setDescription(description, monitor);
