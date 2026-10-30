@@ -77,14 +77,14 @@ public final class ConfigurationStudioView extends ViewPart {
     private TableEditor inlineToggleEditor;
     private Composite inlineToggle;
     private Table options;
-    private org.eclipse.swt.widgets.Tree hardwareDevices;
+    private org.eclipse.swt.widgets.Tree hardwareDevices, hardwarePeripheralTree;
     private Text hardwareSearch;
     private Combo hardwareState, hardwareKind;
     private Label hardwareSummary, navigationLocation;
     private Button backButton, forwardButton;
     private final java.util.List<String> navigationHistory = new java.util.ArrayList<>();
     private int navigationPosition = -1;
-    private Text hardwareDescription;
+    private Text hardwareDescription, hardwareInspector, hardwarePreview, hardwareValidation;
     private TabFolder hardwareDetails;
     private Table hardwareParameters;
     private Label parameterTitle;
@@ -360,26 +360,32 @@ public final class ConfigurationStudioView extends ViewPart {
 
         sash.setWeights(new int[] {58, 42});
 
+        // Native Visual Hardware Studio 2.0: three interactive panes, with a
+        // separate evidence/overlay dock. No generated or user files are edited
+        // by navigating this view.
         Composite hardware = tab(tabs, "Hardware");
         hardware.setLayout(new GridLayout(1, false));
         Label warning = new Label(hardware, SWT.WRAP);
-        warning.setText("Hardware configuration = the board's Devicetree plus your app.overlay. "
-                + "prj.conf selects software features; app.overlay selects actual devices, channels "
-                + "and pinctrl overrides. The generated Devicetree below is read-only. "
-                + "Do not assume an enabled driver means the board has an enabled controller.");
+        warning.setText("VISUAL HARDWARE STUDIO 2.0  /  Selected build snapshot  ·  "
+                + "The package diagram is unavailable until an exact verified part + package map is provided. "
+                + "Pinmux values are logical routes, NEVER physical package pads.");
         warning.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        var hardwareSplit = new SashForm(hardware, SWT.HORIZONTAL);
-        hardwareSplit.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        var devicePanel = new Composite(hardwareSplit, SWT.NONE);
+
+        var studioVertical = new SashForm(hardware, SWT.VERTICAL);
+        studioVertical.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        var studioColumns = new SashForm(studioVertical, SWT.HORIZONTAL);
+
+        // Left pane: peripheral-first navigation and lossless raw Devicetree.
+        var devicePanel = new Composite(studioColumns, SWT.NONE);
         devicePanel.setLayout(new GridLayout(1, false));
         var deviceTitle = new Label(devicePanel, SWT.NONE);
-        deviceTitle.setText("Peripheral Explorer / Last built Devicetree");
+        deviceTitle.setText("PERIPHERAL EXPLORER");
         deviceTitle.setFont(metricFont);
         var hardwareNavigation = new Composite(devicePanel, SWT.NONE);
         hardwareNavigation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         hardwareNavigation.setLayout(new GridLayout(2, false));
         hardwareSearch = new Text(hardwareNavigation, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL | SWT.BORDER);
-        hardwareSearch.setMessage("Find node, compatible, label or address…");
+        hardwareSearch.setMessage("Search peripherals, channels, addresses…");
         GridData searchLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
         searchLayout.horizontalSpan = 2;
         hardwareSearch.setLayoutData(searchLayout);
@@ -387,39 +393,65 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareKind.setItems(HardwarePeripheralIndex.FILTERS.toArray(String[]::new));
         hardwareKind.select(0);
         hardwareKind.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        hardwareKind.setToolTipText("Grouping from built nodes; not evidence of package pin availability");
+        hardwareKind.setToolTipText("Categories are derived from built node names and compatibles, not physical capabilities.");
         hardwareState = new Combo(hardwareNavigation, SWT.DROP_DOWN | SWT.READ_ONLY);
         hardwareState.setItems("All nodes", "Okay/default", "Disabled");
         hardwareState.select(0);
         hardwareState.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        hardwareState.setToolTipText("Filter the node's own status; ancestors remain visible as context");
-        var treeTools = new Composite(hardwareNavigation, SWT.NONE);
-        GridData treeToolsLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
-        treeToolsLayout.horizontalSpan = 2;
-        treeTools.setLayoutData(treeToolsLayout);
+        var navTabs = new TabFolder(devicePanel, SWT.NONE);
+        navTabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+
+        var peripheralNav = tab(navTabs, "Peripherals");
+        peripheralNav.setLayout(new GridLayout(1, false));
+        hardwarePeripheralTree = new org.eclipse.swt.widgets.Tree(peripheralNav,
+                SWT.BORDER | SWT.SINGLE | SWT.V_SCROLL | SWT.H_SCROLL);
+        hardwarePeripheralTree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        hardwarePeripheralTree.setToolTipText("Only controllers/channels detected from the built Devicetree. No unverified package pins.");
+        hardwarePeripheralTree.addListener(SWT.Selection, event -> {
+            if (hardwarePeripheralTree.getSelectionCount() == 0) return;
+            var device = hardwarePeripheralTree.getSelection()[0].getData();
+            if (!(device instanceof DevicetreeHardware.Device selected)) return;
+            for (var node : hardwareItems()) {
+                var candidate = (DevicetreeHardware.Device) node.getData();
+                if (candidate.path().equals(selected.path())) {
+                    hardwareDevices.setSelection(node);
+                    hardwareDevices.showSelection();
+                    break;
+                }
+            }
+            hardwareDescription.setText(DevicetreeHardware.explanation(selected));
+            showHardwareParameters(selected);
+        });
+        hardwarePeripheralTree.addListener(SWT.DefaultSelection, event -> revealHardwareSource());
+
+        var devicetreeNav = tab(navTabs, "Devicetree");
+        devicetreeNav.setLayout(new GridLayout(1, false));
+        var treeTools = new Composite(devicetreeNav, SWT.NONE);
+        treeTools.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         treeTools.setLayout(new GridLayout(2, false));
         action(treeTools, "Expand all", () -> expandHardware(true));
         action(treeTools, "Collapse all", () -> expandHardware(false));
-        hardwareSummary = new Label(devicePanel, SWT.WRAP);
-        hardwareSummary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        hardwareDevices = new org.eclipse.swt.widgets.Tree(devicePanel,
+        hardwareDevices = new org.eclipse.swt.widgets.Tree(devicetreeNav,
                 SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL | SWT.H_SCROLL);
         hardwareDevices.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         hardwareDevices.setHeaderVisible(true);
         hardwareDevices.setLinesVisible(true);
-        for (String title : new String[] {"Device / hierarchy", "Compatible", "Node status"}) {
+        for (String name : new String[] {"Device / hierarchy", "Compatible", "Node status"}) {
             var column = new org.eclipse.swt.widgets.TreeColumn(hardwareDevices, SWT.LEFT);
-            column.setText(title);
+            column.setText(name);
         }
-        hardwareDescription = new Text(devicePanel, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.BORDER);
-        GridData descriptionLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
-        descriptionLayout.heightHint = 112;
-        hardwareDescription.setLayoutData(descriptionLayout);
-        hardwareDescription.setText("Build the exact target to discover hardware from zephyr.dts.");
         hardwareDevices.addListener(SWT.Selection, event -> describeHardware());
         hardwareDevices.addListener(SWT.DefaultSelection, event -> revealHardwareSource());
+
+        hardwareSummary = new Label(devicePanel, SWT.WRAP);
+        hardwareSummary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        hardwareDescription = new Text(devicePanel, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL | SWT.BORDER);
+        GridData descriptionLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        descriptionLayout.heightHint = 70;
+        hardwareDescription.setLayoutData(descriptionLayout);
+        hardwareDescription.setText("Build the exact board to discover peripheral controllers and channels.");
         hardwareSearch.addModifyListener(event -> refreshHardware());
-        hardwareSearch.addListener(SWT.DefaultSelection, event -> hardwareDevices.setFocus());
+        hardwareSearch.addListener(SWT.DefaultSelection, event -> hardwarePeripheralTree.setFocus());
         hardwareSearch.addListener(SWT.Selection, event -> {
             if (event.detail == SWT.ICON_CANCEL) hardwareSearch.setText("");
         });
@@ -428,50 +460,112 @@ public final class ConfigurationStudioView extends ViewPart {
         });
         hardwareState.addListener(SWT.Selection, event -> refreshHardware());
         hardwareKind.addListener(SWT.Selection, event -> refreshHardware());
-        var detailsPanel = new Composite(hardwareSplit, SWT.NONE);
-        detailsPanel.setLayout(new GridLayout(1, false));
-        hardwareDetails = new TabFolder(detailsPanel, SWT.NONE);
-        hardwareDetails.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        var chipPage = tab(hardwareDetails, "Chip & parameters");
-        chipPage.setLayout(new GridLayout(1, false));
-        parameterTitle = new Label(chipPage, SWT.WRAP);
+
+        // Centre pane: package metadata state + selected logical route planner.
+        var plannerPanel = new Composite(studioColumns, SWT.NONE);
+        plannerPanel.setLayout(new GridLayout(1, false));
+        Label plannerTitle = new Label(plannerPanel, SWT.NONE);
+        plannerTitle.setText("MCU & PIN PLANNER");
+        plannerTitle.setFont(metricFont);
+        var modes = new Composite(plannerPanel, SWT.NONE);
+        modes.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        modes.setLayout(new GridLayout(3, false));
+        Button packageMode = new Button(modes, SWT.RADIO);
+        packageMode.setText("Package");
+        Button logicalMode = new Button(modes, SWT.RADIO);
+        logicalMode.setText("Logical signals");
+        Button connectionMode = new Button(modes, SWT.RADIO);
+        connectionMode.setText("Connections");
+        logicalMode.setSelection(true);
+        parameterTitle = new Label(plannerPanel, SWT.WRAP);
         parameterTitle.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        parameterTitle.setText("Select a controller or channel to inspect its built parameters.");
-        var parameterSplit = new SashForm(chipPage, SWT.HORIZONTAL);
-        parameterSplit.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        var chipScroll = new org.eclipse.swt.custom.ScrolledComposite(parameterSplit, SWT.H_SCROLL | SWT.V_SCROLL);
+        parameterTitle.setText("Select a peripheral to explore the exact built controller and logical routes.");
+        var chipScroll = new org.eclipse.swt.custom.ScrolledComposite(
+                plannerPanel, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
+        chipScroll.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         chipPins = new ChipPinCanvas(chipScroll);
         chipScroll.setContent(chipPins);
         chipScroll.setExpandHorizontal(true);
         chipScroll.setExpandVertical(true);
-        chipScroll.setMinSize(560, 295);
-        var parameterPanel = new Composite(parameterSplit, SWT.NONE);
+        chipScroll.setMinSize(620, 295);
+        packageMode.addListener(SWT.Selection, event -> {
+            if (packageMode.getSelection()) chipPins.setMode(ChipPinCanvas.Mode.PACKAGE);
+        });
+        logicalMode.addListener(SWT.Selection, event -> {
+            if (logicalMode.getSelection()) chipPins.setMode(ChipPinCanvas.Mode.SIGNALS);
+        });
+        connectionMode.addListener(SWT.Selection, event -> {
+            if (connectionMode.getSelection()) chipPins.setMode(ChipPinCanvas.Mode.CONNECTIONS);
+        });
+        Label legend = new Label(plannerPanel, SWT.WRAP);
+        legend.setText("Built logical route  ·  Unresolved physical pin  ·  "
+                + "No guessed pad numbers or alternate functions");
+        legend.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+        // Right pane: exact built parameters and explicit, reviewed source edits.
+        var parameterPanel = new Composite(studioColumns, SWT.NONE);
         parameterPanel.setLayout(new GridLayout(1, false));
-        hardwareParameters = new Table(parameterPanel, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.H_SCROLL | SWT.V_SCROLL);
+        Label inspectorTitle = new Label(parameterPanel, SWT.NONE);
+        inspectorTitle.setFont(metricFont);
+        inspectorTitle.setText("PERIPHERAL PARAMETERS");
+        hardwareInspector = new Text(parameterPanel, SWT.READ_ONLY | SWT.WRAP | SWT.MULTI | SWT.V_SCROLL | SWT.BORDER);
+        GridData inspectorSize = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        inspectorSize.heightHint = 110;
+        hardwareInspector.setLayoutData(inspectorSize);
+        hardwareInspector.setText("Select a controller or channel. Current values come only from the last build.");
+        hardwareParameters = new Table(parameterPanel,
+                SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.H_SCROLL | SWT.V_SCROLL);
         hardwareParameters.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         hardwareParameters.setHeaderVisible(true);
         hardwareParameters.setLinesVisible(true);
-        for (String caption : new String[] {"Parameter", "Last built value", "Node / channel"}) {
-            var column = new TableColumn(hardwareParameters, SWT.LEFT); column.setText(caption);
+        for (String caption : new String[] {"Property", "Built value", "Node / channel"}) {
+            var column = new TableColumn(hardwareParameters, SWT.LEFT);
+            column.setText(caption);
         }
         hardwareParameters.addListener(SWT.DefaultSelection, event -> prepareHardwareOverride());
         hardwareParameters.addListener(SWT.Selection, event -> {
             if (hardwareParameters.getSelectionCount() == 0) return;
             var selected = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
             chipPins.selectRoute(selected.path(), selected.name());
+            updateHardwareInspector(selected);
         });
         var parameterActions = new Composite(parameterPanel, SWT.NONE);
-        parameterActions.setLayout(new GridLayout(2, false));
-        action(parameterActions, "Configure property…", this::prepareHardwareOverride);
-        action(parameterActions, "Show declaration", this::revealParameterSource);
-        parameterSplit.setWeights(new int[] {50, 50});
-        var sourcePanel = tab(hardwareDetails, "Generated source");
-        sourcePanel.setLayout(new GridLayout(1, false));
-        var sourceCaption = new Label(sourcePanel, SWT.NONE);
-        sourceCaption.setText("Compiled Devicetree source (read-only)");
-        tree = new Text(sourcePanel, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
+        parameterActions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        parameterActions.setLayout(new GridLayout(2, true));
+        Button configure = action(parameterActions, "Configure property…", this::prepareHardwareOverride);
+        configure.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        Button source = action(parameterActions, "Show declaration", this::revealParameterSource);
+        source.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        studioColumns.setWeights(new int[] {22, 45, 33});
+
+        // Bottom evidence dock: propose changes in-memory; generated files
+        // remain read-only; existing overlay commit remains explicitly reviewed.
+        hardwareDetails = new TabFolder(studioVertical, SWT.NONE);
+        var changesPage = tab(hardwareDetails, "Changes / app.overlay");
+        changesPage.setLayout(new GridLayout(1, false));
+        var changeToolbar = new Composite(changesPage, SWT.NONE);
+        changeToolbar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        changeToolbar.setLayout(new GridLayout(2, false));
+        action(changeToolbar, "Edit application overlay…", this::openOverlay);
+        action(changeToolbar, "Copy proposed change", this::copyHardwarePreview);
+        hardwarePreview = new Text(changesPage,
+                SWT.BORDER | SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL | SWT.READ_ONLY);
+        hardwarePreview.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        hardwarePreview.setText("No proposed changes. Select a built property and choose Configure property…"
+                + "\nA reviewed draft appears here. No file is written automatically.");
+        var validationPage = tab(hardwareDetails, "Validation / evidence");
+        validationPage.setLayout(new GridLayout(1, false));
+        hardwareValidation = new Text(validationPage,
+                SWT.BORDER | SWT.MULTI | SWT.WRAP | SWT.READ_ONLY | SWT.V_SCROLL);
+        hardwareValidation.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        hardwareValidation.setText("No selected build. Build the exact target before checking configuration.");
+        var sourcePage = tab(hardwareDetails, "Generated DTS (read-only)");
+        sourcePage.setLayout(new GridLayout(1, false));
+        tree = new Text(sourcePage,
+                SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        hardwareSplit.setWeights(new int[] {32, 68});
+        studioVertical.setWeights(new int[] {73, 27});
+
         var hardwareActions = new Composite(hardware, SWT.NONE);
         hardwareActions.setLayout(new GridLayout(4, false));
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
@@ -1027,7 +1121,7 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private void revealHardwareLine(int number, String path) {
-        hardwareDetails.setSelection(1);
+        hardwareDetails.setSelection(2);
         String source = tree.getText();
         int start = 0;
         for (int line = 1; line < number; line++) {
