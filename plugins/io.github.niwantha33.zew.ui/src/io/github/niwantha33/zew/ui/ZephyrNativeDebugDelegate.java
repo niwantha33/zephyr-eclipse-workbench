@@ -87,9 +87,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             if (!Files.isRegularFile(Path.of(gdb)))
                 throw new IOException("Configured GDB executable is missing: " + gdb
                         + ". Install the matching Zephyr SDK debugger and rebuild.");
-            Path elf = io.github.niwantha33.zew.core.BuildArtifacts.required(plan.buildDirectory())
-                    .stream().filter(p -> p.toString().endsWith(".elf")).findFirst()
-                    .orElseThrow(() -> new IOException("Build has no ELF debug symbols."));
+            Path elf = io.github.niwantha33.zew.core.BuildArtifacts.debugElf(plan.buildDirectory());
             if (!Files.isRegularFile(elf))
                 throw new IOException("Matching ELF debug symbols are missing: " + elf);
             int port = configuration.getAttribute(PORT, 3333);

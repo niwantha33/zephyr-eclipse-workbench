@@ -223,3 +223,33 @@ as a newer preview rather than the old fixed October-25 smoke-test version. This
 does not publish or change the normal Workbench update channel. Use the artifact
 from the successful exact-head package job; install it through **Help > Install
 New Software > Add > Archive**, then restart Eclipse before retesting Debug.
+
+### Exact debug ELF and halted preflight
+
+Flash metadata validation and native Debug now resolve `config.elf_file` from
+this build's generated `zephyr/runners.yaml`. They no longer choose the first
+ELF from an unordered set of mandatory outputs, which can also contain signed
+ELF byproducts. A missing, ambiguous, external or invalid ELF declaration fails
+explicitly instead of guessing another image.
+
+Before the native Debug comparison, the owned Tcl connection waits up to five
+seconds for the runner's halt to complete (`wait_halt 5000`). Listening-port
+readiness alone is not a halted-target guarantee. This wait does not issue a
+new reset, halt, flash or memory write. Failure to confirm halt is reported as
+a startup/access failure, rather than a firmware metadata mismatch.
+
+On a valid read that differs from the ELF, the checker reads the bounded
+metadata regions once more and reports whether both snapshots agree. A later
+matching snapshot does not bypass the failure. All initially read tables and
+the first differing address remain in the diagnostic. For example,
+`0x4ea8 expected byte 4, target byte 15` remains an observed mismatch, not proof
+that a specific OpenOCD defect or old firmware caused it. Stable wrong reads
+can still be a probe problem. No metadata is patched to satisfy the decoder.
+
+Hardware acceptance: install the tested preview, terminate the old session,
+Flash the exact selected build and require its image/metadata verification to
+succeed, then Debug. Record the selected ELF, image and tool paths. If the
+mismatch persists, retain the full readback diagnostic and Flash/OpenOCD logs.
+The automated regressions cover multiple ELF outputs, the reported 4-versus-15
+case, stable/inconsistent reads, failed repeat reads and halt failure using an
+emulated Tcl peer; they do not establish MSPM0 hardware correctness.

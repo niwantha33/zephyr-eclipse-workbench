@@ -31,8 +31,7 @@ final class OpenOcdFlashPreparation {
         log.accept("OpenOCD Flash requires image readback verification (--verify).");
         var config = BuildArtifacts.configuration(plan.buildDirectory());
         if (!"y".equals(config.get("CONFIG_DEBUG_THREAD_INFO"))) return plan;
-        Path elf = BuildArtifacts.required(plan.buildDirectory()).stream().filter(p -> p.toString().endsWith(".elf"))
-                .findFirst().orElseThrow(() -> new IOException("No ELF for flash metadata validation"));
+        Path elf = BuildArtifacts.debugElf(plan.buildDirectory());
         var regions = OpenOcdThreadMetadata.read(elf);
         var arguments = new ArrayList<>(plan.westArguments());
         // Direct-mapped Cortex-M flash lets us compare HEX addresses with the ELF's static metadata VMAs.
