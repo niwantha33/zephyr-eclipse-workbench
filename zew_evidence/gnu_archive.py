@@ -13,7 +13,10 @@ MAX_MEMBERS = 100000
 
 
 def _name(field: bytes, table: bytes) -> str | None:
-    value = field.decode("ascii", "strict").strip()
+    try:
+        value = field.decode("ascii", "strict").strip()
+    except UnicodeError as exc:
+        raise InputError("GNU archive member header is not ASCII") from exc
     if value in ("/", "//") or value.startswith("__.SYMDEF") or value == "/SYM64/":
         return None
     if value.startswith("/") and value[1:].isdigit():
@@ -25,7 +28,10 @@ def _name(field: bytes, table: bytes) -> str | None:
             end = table.find(b"\n", index)
         if end < 0:
             raise InputError("GNU archive long-name terminator missing")
-        return table[index:end].decode("utf-8", "strict")
+        try:
+            return table[index:end].decode("utf-8", "strict")
+        except UnicodeError as exc:
+            raise InputError("Invalid GNU archive long-name encoding") from exc
     if value.endswith("/"):
         return value[:-1]
     return value
@@ -68,7 +74,10 @@ def observe_member(path: Path, wanted: str) -> dict:
             if size < 0 or payload + size > before.st_size:
                 raise InputError("GNU archive member exceeds archive")
             raw_name = header[:16]
-            plain = raw_name.decode("ascii", "strict").strip()
+            try:
+                plain = raw_name.decode("ascii", "strict").strip()
+            except UnicodeError as exc:
+                raise InputError("Invalid archive header name encoding") from exc
             actual = None
             data_offset = payload
             data_size = size
@@ -85,7 +94,10 @@ def observe_member(path: Path, wanted: str) -> dict:
                 if name_len > min(4096, size):
                     raise InputError("Invalid extended archive name length")
                 handle.seek(payload)
-                actual = handle.read(name_len).decode("utf-8", "strict")
+                try:
+                    actual = handle.read(name_len).decode("utf-8", "strict")
+                except UnicodeError as exc:
+                    raise InputError("Invalid archive extended name encoding") from exc
                 data_offset += name_len
                 data_size -= name_len
             else:
