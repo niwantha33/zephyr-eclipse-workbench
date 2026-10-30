@@ -4,7 +4,9 @@ package io.github.niwantha33.zew.core;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -56,6 +58,22 @@ public final class GpioBankEvidence {
             var numbers = numericGroups(p.value());
             if (numbers != null && numbers.size() == 1 && numbers.get(0) > 0) handle = numbers.get(0);
         }
+        // A combined gpios list may contain multiple controllers with
+        // different #gpio-cells. Accept it ONLY when the entire sequence can
+        // be partitioned using known controller phandles and exact cell widths.
+        Map<String, List<DevicetreeParameters.Property>> nodes = new HashMap<>();
+        for (var p : properties) nodes.computeIfAbsent(p.path(), key -> new ArrayList<>()).add(p);
+        Map<Long, Integer> widths = new HashMap<>();
+        for (var node : nodes.values()) {
+            if (node.stream().noneMatch(p -> p.name().equals("gpio-controller"))) continue;
+            int count = integer(node, "#gpio-cells");
+            if (count < 1 || count > 8) continue;
+            for (var prop : node) if (prop.name().equals("phandle")) {
+                var values = numericGroups(prop.value());
+                if (values != null && values.size() == 1 && values.get(0) > 0)
+                    widths.put(values.get(0), count);
+            }
+        }
         List<Usage> uses = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         if (handle != null && cellsPerSpecifier == 2) {
@@ -63,16 +81,32 @@ public final class GpioBankEvidence {
                 if (!(p.name().equals("gpios") || p.name().endsWith("-gpios"))) continue;
                 if (p.path().equals(device.path())) continue;
                 var numbers = numericGroups(p.value());
-                if (numbers == null || numbers.size() % 3 != 0) continue;
-                for (int i = 0; i < numbers.size(); i += 3) {
-                    if (!numbers.get(i).equals(handle)) continue;
-                    long bit = numbers.get(i + 1);
-                    if (bit < 0 || bit >= MAX_BIT_POSITIONS) continue;
-                    String key = p.path() + ":" + p.name() + ":" + bit;
-                    if (!seen.add(key)) continue;
-                    uses.add(new Usage((int) bit, p.path(), p.name(),
-                            "0x" + Long.toHexString(numbers.get(i + 2)), p.line()));
+                if (numbers == null) continue;
+                List<Usage> candidates = new ArrayList<>();
+                int cursor = 0;
+                boolean valid = true;
+                while (cursor < numbers.size()) {
+                    Long candidateHandle = numbers.get(cursor);
+                    Integer cellCount = widths.get(candidateHandle);
+                    if (cellCount == null || cursor + cellCount >= numbers.size()) {
+                        valid = false;
+                        break;
+                    }
+                    if (candidateHandle.equals(handle)) {
+                        long bit = numbers.get(cursor + 1);
+                        if (bit >= 0 && bit < MAX_BIT_POSITIONS
+                                && (!exactWidth || bit < explicitWidth))
+                            candidates.add(new Usage((int) bit, p.path(), p.name(),
+                                    "0x" + Long.toHexString(numbers.get(cursor + 2)), p.line()));
+                    }
+                    cursor += cellCount + 1;
                 }
+                if (!valid) continue; // Never publish a partially parsed property.
+                for (var usage : candidates) {
+                    String key = usage.consumerPath() + ":" + usage.property() + ":" + usage.bit();
+                    if (seen.add(key)) uses.add(usage);
+                }
+                if (uses.size() > 512) break; // Bounded inspector surface.
             }
         }
         uses.sort(Comparator.comparingInt(Usage::bit)
