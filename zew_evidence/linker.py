@@ -40,6 +40,8 @@ def _output(row: dict, directory: Path) -> Path | None:
         if resolved.suffix not in (".o", ".obj"):
             return None
         return resolved
+    except InputError:
+        raise
     except (OSError, ValueError):
         return None
 
