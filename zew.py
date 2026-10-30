@@ -14,6 +14,7 @@ from zew_evidence.bundle import preview, write, inspect
 from zew_evidence.freshness import verify
 from zew_evidence.spdx import inspect_build
 from zew_evidence.inclusion import explain
+from zew_evidence.compilation import inspect as inspect_compilation
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,9 +31,15 @@ def main(argv: list[str] | None = None) -> int:
             lookup = sub.add_mutually_exclusive_group()
             lookup.add_argument("--source", help="Exact SPDX source file name (no suffix guessing)")
             lookup.add_argument("--module", help="Exact SPDX package/module name")
+            sub.add_argument("--source-root", type=Path, help="Explicit local root for exact compile database source correlation")
         if command == "bundle":
             sub.add_argument("--output", type=Path, help="Target ZIP (required only with --write)")
             sub.add_argument("--write", action="store_true", help="Explicitly save a new ZIP; never overwrite")
+    compiler = subs.add_parser("compile", help="Read-only exact source entry in compile_commands.json")
+    compiler.add_argument("--build", required=True, type=Path)
+    compiler.add_argument("--source", required=True)
+    compiler.add_argument("--source-root", required=True, type=Path)
+    compiler.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
     diff = subs.add_parser("compare", help="Compare two builds or verified offline bundles")
     lg = diff.add_mutually_exclusive_group(required=True)
     lg.add_argument("--left", type=Path, help="Generated build root")
@@ -55,7 +62,9 @@ def main(argv: list[str] | None = None) -> int:
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "sbom":
+        if args.command == "compile":
+            output = inspect_compilation(args.build, args.source, args.source_root, args.image)
+        elif args.command == "sbom":
             output = inspect_build(args.build, args.image)
         elif args.command == "verify":
             output = verify(inspect(args.input, include_graph=True)["graph"], args.build)
@@ -70,9 +79,19 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "why" and (args.source is not None or args.module is not None):
             if args.symbol is not None:
                 raise InputError("Use a CONFIG_ symbol or --source/--module, not both")
+            if args.source_root is not None and args.source is None:
+                raise InputError("--source-root requires --source")
             output = explain(args.build, "source" if args.source is not None else "module",
                              args.source if args.source is not None else args.module, args.image)
+            if args.source_root is not None:
+                compilation = inspect_compilation(args.build, args.source, args.source_root, args.image)
+                matches = {x["image"]: x for x in compilation["images"]}
+                for item in output["images"]:
+                    item["compile_database"] = matches[item["image"]]
+                output["limitations"].extend(compilation["limitations"])
         else:
+            if args.command == "why" and args.source_root is not None:
+                raise InputError("--source-root only applies to --source")
             graph = collect(args.build, args.image)
             if args.command == "graph":
                 output = graph
