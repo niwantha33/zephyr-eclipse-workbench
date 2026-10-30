@@ -429,8 +429,8 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareParameters.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         hardwareParameters.setHeaderVisible(true);
         hardwareParameters.setLinesVisible(true);
-        for (String name : new String[] {"Parameter", "Last built value", "Node / channel"}) {
-            var column = new TableColumn(hardwareParameters, SWT.LEFT); column.setText(name);
+        for (String caption : new String[] {"Parameter", "Last built value", "Node / channel"}) {
+            var column = new TableColumn(hardwareParameters, SWT.LEFT); column.setText(caption);
         }
         hardwareParameters.addListener(SWT.DefaultSelection, event -> prepareHardwareOverride());
         var parameterActions = new Composite(parameterPanel, SWT.NONE);
