@@ -84,13 +84,28 @@ public final class DevicetreeOverlayChanges {
     private static Path checkedTarget(Path application, Path overlay) throws IOException {
         if (application == null || overlay == null) throw new IOException("Select an application and its active source overlay.");
         Path root = application.toRealPath();
-        Path file = overlay.toAbsolutePath().normalize();
-        if (!file.startsWith(root) || !file.getFileName().toString().endsWith(".overlay"))
+        Path original = overlay.toAbsolutePath().normalize();
+        // Windows temp paths can expose an 8.3 alias (RUNNER~1) while
+        // toRealPath() expands the application root to its long spelling.
+        // Resolve the overlay's existing parent to the same canonical form
+        // before comparing paths; lexical startsWith would reject a safe file.
+        if (!original.getFileName().toString().endsWith(".overlay"))
             throw new IOException("Select a source .overlay inside this application; generated Devicetree is read-only.");
-        for (Path part = file; part != null && !part.equals(root); part = part.getParent())
-            if (Files.isSymbolicLink(part)) throw new IOException("Refusing to update a symlinked overlay path.");
-        if (!Files.isDirectory(file.getParent(), LinkOption.NOFOLLOW_LINKS))
+        if (!Files.isDirectory(original.getParent(), LinkOption.NOFOLLOW_LINKS))
             throw new IOException("The selected overlay's parent directory does not exist.");
+        if (Files.exists(original, LinkOption.NOFOLLOW_LINKS) && Files.isSymbolicLink(original))
+            throw new IOException("Refusing to update a symlinked overlay path.");
+        Path canonicalParent = original.getParent().toRealPath();
+        Path file = canonicalParent.resolve(original.getFileName()).normalize();
+        if (!file.startsWith(root))
+            throw new IOException("Select a source .overlay inside this application; generated Devicetree is read-only.");
+        // A junction or symlink inside the project must not bypass the
+        // explicit, original-path source-ownership check.
+        Path sourceRoot = application.toAbsolutePath().normalize();
+        if (!original.startsWith(sourceRoot))
+            throw new IOException("Overlay does not belong to the selected application.");
+        for (Path part = original; part != null && !part.equals(sourceRoot); part = part.getParent())
+            if (Files.isSymbolicLink(part)) throw new IOException("Refusing to update a symlinked overlay path.");
         if (Files.exists(file, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("The selected overlay is not a regular source file.");
         return file;
