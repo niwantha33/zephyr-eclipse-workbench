@@ -468,6 +468,18 @@ public final class ConfigurationStudioTests {
                     "PWM LED consumer is not represented as a PWM controller");
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(pinctrlController).equals("Pinctrl"),
                     "vendor pin controller is navigable");
+            var nestedGpio = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/soc/pin-controller@400a0000/gpio@400a2000", "gpio@400a2000",
+                    "", "ti,mspm0-gpio", "okay", "<0x400a2000 0x2000>", 18);
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(nestedGpio)
+                    .equals("GPIO"), "real compatible-bearing MSPM0 GPIO under pinctrl remains GPIO");
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.matches(nestedGpio, "GPIO")
+                    && !io.github.niwantha33.zew.core.HardwarePeripheralIndex.matches(nestedGpio, "Pinctrl"),
+                    "nested GPIO passes the correct category filter");
+            var misleadingGpioState = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/soc/pin-controller@400a0000/gpio-default", "gpio-default", "", "", "okay", "", 19);
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(misleadingGpioState)
+                    .equals("Pinctrl"), "GPIO pinctrl state is not a physical GPIO controller");
             var misleadingPinctrlState = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
                     "/pinctrl/adc-default", "adc-default", "", "", "okay", "", 18);
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(misleadingPinctrlState)
