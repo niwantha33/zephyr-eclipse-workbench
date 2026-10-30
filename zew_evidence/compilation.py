@@ -65,7 +65,7 @@ def _candidate(row):
     if not isinstance(row, dict):
         raise InputError("Compiler-database row must be an object")
     directory, name = row.get("directory"), row.get("file")
-    if not all(isinstance(x, str) and 0 < len(x) <= 4096 and "\\x00" not in x
+    if not all(isinstance(x, str) and 0 < len(x) <= 4096 and "\x00" not in x
                for x in (directory, name)):
         raise InputError("Compiler-database row has invalid paths")
     if not (isinstance(row.get("command"), str)
