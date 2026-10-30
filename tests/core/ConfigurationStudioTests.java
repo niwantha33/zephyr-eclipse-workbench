@@ -462,6 +462,10 @@ public final class ConfigurationStudioTests {
                     "channel is a child of the controller and is not incorrectly counted as another ADC");
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(ledConsumer).equals("Other"),
                     "GPIO LED consumer is not represented as an extra GPIO controller");
+            var pwmConsumer = new io.github.niwantha33.zew.core.DevicetreeHardware.Device(
+                    "/pwmleds", "pwmleds", "", "pwm-leds", "okay", "", 15);
+            ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(pwmConsumer).equals("Other"),
+                    "PWM LED consumer is not represented as a PWM controller");
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(pinctrlController).equals("Pinctrl"),
                     "vendor pin controller is navigable");
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.category(uartController).equals("UART")
