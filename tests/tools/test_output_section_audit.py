@@ -140,6 +140,49 @@ class OutputSectionAuditTests(unittest.TestCase):
         self.assertEqual(result["comparison"]["zero-fill-vma"], 1)
         self.assertEqual(result["observed_elf_section_hashes"], [])
 
+    def test_nonallocated_elf_section_metadata_reconciles_without_bytes_or_pt_load(self):
+        for bits in (32, 64):
+            for order in ("<", ">"):
+                with self.subTest(bits=bits, order=order):
+                    blob = bytearray(fixture(bits, order))
+                    # Clear SHF_ALLOC (and all other flags) for section 1.
+                    # Same exact VMA and size, but it does not occupy memory.
+                    field_offset = 0x180 + (64 if bits == 64 else 40) + 8
+                    struct.pack_into(order + ("Q" if bits == 64 else "I"),
+                                     blob, field_offset, 0)
+                    self.elf_path.write_bytes(blob)
+                    allocated = inspect_sections(self.elf_path)
+                    expanded = inspect_sections(self.elf_path, include_unallocated=True)
+                    self.assertEqual(allocated, [])
+                    self.assertEqual(len(expanded), 1)
+                    self.assertIs(expanded[0]["allocated"], False)
+                    self.assertIsNone(expanded[0]["sha256"])
+                    report = self.result()
+                    self.assertEqual(report["status"], "map-elf-output-layout-observed")
+                    self.assertEqual(report["elf_allocated_sections"], 0)
+                    self.assertEqual(report["elf_nonallocated_sections"], 1)
+                    counts = report["comparison"]
+                    self.assertEqual(counts["missing-or-unallocated"], 1)
+                    self.assertEqual(counts["nonallocated-exact-metadata"], 1)
+                    self.assertEqual(counts["unexplained-map-outputs"], 0)
+                    self.assertEqual(counts["elf-section-byte-hashes"], 0)
+                    self.assertEqual(counts["exact-layout"], 0)
+                    self.assertEqual(report["observed_elf_section_hashes"], [])
+
+    def test_nonallocated_elf_layout_mismatch_is_never_reconciled(self):
+        blob = bytearray(fixture())
+        struct.pack_into("<I", blob, 0x180 + 40 + 8, 0)
+        self.elf_path.write_bytes(blob)
+        self.save_map(".text 0x4100 0x20\\n")
+        report = self.result()
+        self.assertEqual(report["status"], "map-elf-section-disagreement-or-unknown")
+        self.assertEqual(report["comparison"]["address-mismatch"], 1)
+        self.assertEqual(report["comparison"]["nonallocated-exact-metadata"], 0)
+        self.save_map(".text 0x4000 0x21\\n")
+        report = self.result()
+        self.assertEqual(report["comparison"]["size-mismatch"], 1)
+        self.assertEqual(report["comparison"]["unexplained-map-outputs"], 0)
+
     def test_unrecognised_output_header_and_bad_elf_stay_unknown(self):
         self.save_map("section: text at 0x4000 size 0x20\n")
         self.assertEqual(self.result()["status"], "no-supported-map-output-section")
