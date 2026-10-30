@@ -15,6 +15,7 @@ from zew_evidence.freshness import verify
 from zew_evidence.spdx import inspect_build
 from zew_evidence.inclusion import explain
 from zew_evidence.compilation import inspect as inspect_compilation
+from zew_evidence.linker import inspect as inspect_linker
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -31,7 +32,9 @@ def main(argv: list[str] | None = None) -> int:
             lookup = sub.add_mutually_exclusive_group()
             lookup.add_argument("--source", help="Exact SPDX source file name (no suffix guessing)")
             lookup.add_argument("--module", help="Exact SPDX package/module name")
-            sub.add_argument("--source-root", type=Path, help="Explicit local root for exact compile database source correlation")
+            sub.add_argument("--source-root", type=Path, help="Explicit local source root for compiler evidence")
+            sub.add_argument("--link-evidence", action="store_true",
+                             help="Inspect object and GNU linker-map observations; requires --source and --source-root")
         if command == "bundle":
             sub.add_argument("--output", type=Path, help="Target ZIP (required only with --write)")
             sub.add_argument("--write", action="store_true", help="Explicitly save a new ZIP; never overwrite")
@@ -40,6 +43,11 @@ def main(argv: list[str] | None = None) -> int:
     compiler.add_argument("--source", required=True)
     compiler.add_argument("--source-root", required=True, type=Path)
     compiler.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
+    linked = subs.add_parser("link", help="Read-only source to object to GNU linker-map observations")
+    linked.add_argument("--build", type=Path, required=True)
+    linked.add_argument("--source", required=True)
+    linked.add_argument("--source-root", type=Path, required=True)
+    linked.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
     diff = subs.add_parser("compare", help="Compare two builds or verified offline bundles")
     lg = diff.add_mutually_exclusive_group(required=True)
     lg.add_argument("--left", type=Path, help="Generated build root")
@@ -62,7 +70,9 @@ def main(argv: list[str] | None = None) -> int:
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "compile":
+        if args.command == "link":
+            output = inspect_linker(args.build, args.source, args.source_root, args.image)
+        elif args.command == "compile":
             output = inspect_compilation(args.build, args.source, args.source_root, args.image)
         elif args.command == "sbom":
             output = inspect_build(args.build, args.image)
@@ -81,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise InputError("Use a CONFIG_ symbol or --source/--module, not both")
             if args.source_root is not None and args.source is None:
                 raise InputError("--source-root requires --source")
+            if args.link_evidence and (args.source is None or args.source_root is None):
+                raise InputError("--link-evidence requires --source and --source-root")
             output = explain(args.build, "source" if args.source is not None else "module",
                              args.source if args.source is not None else args.module, args.image)
             if args.source_root is not None:
@@ -89,7 +101,15 @@ def main(argv: list[str] | None = None) -> int:
                 for item in output["images"]:
                     item["compile_database"] = matches[item["image"]]
                 output["limitations"].extend(compilation["limitations"])
+            if args.link_evidence:
+                linked_evidence = inspect_linker(args.build, args.source, args.source_root, args.image)
+                mapped = {x["image"]: x for x in linked_evidence["images"]}
+                for item in output["images"]:
+                    item["linker_map"] = mapped[item["image"]]
+                output["limitations"].extend(linked_evidence["limitations"])
         else:
+            if args.command == "why" and args.link_evidence:
+                raise InputError("--link-evidence requires --source and --source-root")
             if args.command == "why" and args.source_root is not None:
                 raise InputError("--source-root only applies to --source")
             graph = collect(args.build, args.image)
