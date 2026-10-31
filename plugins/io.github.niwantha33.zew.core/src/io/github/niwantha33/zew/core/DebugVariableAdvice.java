@@ -43,8 +43,11 @@ public final class DebugVariableAdvice {
                 .append(profile).append(". ").append(optimization)
                 .append("\nGDB <optimized out> means this suspended frame has no usable variable value. ")
                 .append("The C type can still be shown without a valid pointer; expanded members are not proven values. ")
-                .append("Stop before the variable's last use and inspect in that stack frame. ")
-                .append("Even -Og can omit a dead local.");
+                .append("For a local, stop before its last use; even -Og can omit a dead local. ")
+                .append("For a file-scope/global symbol such as gpio_dev, do not assume a local-lifetime cause. ")
+                .append("Use Zephyr > Inspect GDB Symbol (Read-only) with the correct suspended frame ")
+                .append("to check both its value and &symbol; then inspect ELF symbols, DWARF, ")
+                .append("actual compile flags and flashed-image identity if unavailable.");
         if (selected.size() != 1
                 || !selected.get(0).getKey().equals("CONFIG_DEBUG_OPTIMIZATIONS")) {
             advice.append("\nFor source-level variable inspection: Project > Properties > Zephyr > ")
