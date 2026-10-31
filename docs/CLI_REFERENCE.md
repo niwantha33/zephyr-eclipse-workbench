@@ -310,3 +310,24 @@ Exit 0 means the selected node/property was interpreted by a binding; 1
 means insufficient or rejected evidence; 2 means invalid input. No
 hypothetical overlay can be called a real successful build by this check.
 See [full limitations](DEVICETREE_TRUTH_CHECK.md).
+
+
+## Real West/CMake Devicetree configuration — opt-in
+
+```sh
+python zew.py dt-configure --build ./app/.zew-build/ci --application ./app \
+  --zephyr ./workspace/zephyr --python ./workspace/.venv/bin/python \
+  --board lp_mspm0g3507/mspm0g3507 --ninja /usr/bin/ninja \
+  --overlay ./app/candidate.overlay
+```
+
+This is an **explicit command that runs trusted CMake code**, unlike the
+read-only `dt-check` preview. It copies bounded application inputs to
+scratch, runs real Zephyr `west build --cmake-only` with the exact selected
+board/checkout, and reads generated scratch build artifacts. The candidate
+overlay is appended via `EXTRA_DTC_OVERLAY_FILE`, not silently substituted
+for the project's existing overlay selection. Exit 0: `configured-in-scratch`
+only. Exit 1: unavailable, failed or identity mismatch. Exit 2: invalid
+input. This does not compile, link, flash, validate package pins or guarantee
+equivalence to the existing build. See
+[full validation semantics](REAL_DEVICETREE_VALIDATION.md).
