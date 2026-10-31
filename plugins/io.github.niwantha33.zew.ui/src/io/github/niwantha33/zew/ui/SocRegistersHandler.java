@@ -25,9 +25,16 @@ public final class SocRegistersHandler extends AbstractHandler {
     public static void showDebugData() { showDebugData(true); }
 
     /** Startup favours CPU registers, which remain useful when a frame has no locals. */
-    public static void showDebugDataOnLaunch() { showDebugData(false); }
+    public static void showDebugDataOnLaunch() { showDebugData(false, null); }
 
-    private static void showDebugData(boolean peripherals) {
+    /** Native GDB launch supplies its exact imported Zephyr project. */
+    public static void showDebugDataOnLaunch(org.eclipse.core.resources.IProject project) {
+        showDebugData(false, project);
+    }
+
+    private static void showDebugData(boolean peripherals) { showDebugData(peripherals, null); }
+
+    private static void showDebugData(boolean peripherals, org.eclipse.core.resources.IProject project) {
         if (!PlatformUI.isWorkbenchRunning()) return;
         var workbench = PlatformUI.getWorkbench();
         var display = workbench.getDisplay();
@@ -41,7 +48,10 @@ public final class SocRegistersHandler extends AbstractHandler {
                 catch (org.eclipse.ui.PartInitException error) { log(id, error); }
             }
             try {
-                page.showView(VIEW_ID, null, peripherals ? IWorkbenchPage.VIEW_ACTIVATE : IWorkbenchPage.VIEW_VISIBLE);
+                var registers = page.showView(VIEW_ID, null,
+                        peripherals ? IWorkbenchPage.VIEW_ACTIVATE : IWorkbenchPage.VIEW_VISIBLE);
+                if (project != null && registers instanceof SocRegistersView view)
+                    view.useLaunchProject(project);
                 if (!peripherals) page.showView(DATA_VIEWS[2], null, IWorkbenchPage.VIEW_ACTIVATE);
             }
             catch (org.eclipse.ui.PartInitException error) { log(VIEW_ID, error); }

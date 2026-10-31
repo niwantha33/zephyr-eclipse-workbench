@@ -35,6 +35,13 @@ public final class SocRegistersSmoke {
             if (!register.getText(1).equals("0x40000004") || register.getItemCount() != 1
                     || !register.getItem(0).getText().equals("EN") || !register.getText(3).equals("—"))
                 throw new AssertionError("Register address/field/undefined reset rendering");
+            var boardField = type.getDeclaredField("selectedBoard");
+            boardField.setAccessible(true);
+            boardField.set(view, "lp_mspm0g3507/mspm0g3507");
+            load.invoke(view, fixture.toString());
+            if (!((Label) statusField.get(view)).getText().contains("Rejected SVD model"))
+                throw new AssertionError("Wrong SoC SVD must be rejected for exact selected project");
+            boardField.set(view, null);
             tree.setSelection(register);
             refresh.invoke(view);
             if (!((Label) statusField.get(view)).getText().contains("suspended"))
