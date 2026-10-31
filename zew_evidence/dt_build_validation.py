@@ -130,13 +130,13 @@ def _reason(log: Path, overlay: bool) -> dict:
 def _observed_generated(zephyr: Path, generated: Path, node: str,
                         prop: str | None) -> bool | None:
     """Use exact selected upstream dtlib; no generated pickle, no raw values."""
+    location = str(zephyr / "scripts/dts/python-devicetree/src")
+    if not Path(location, "devicetree/dtlib.py").is_file():
+        return None
     imported = {name: module for name, module in sys.modules.items()
                 if name == "devicetree" or name.startswith("devicetree.")}
     for name in imported:
         sys.modules.pop(name, None)
-    location = str(zephyr / "scripts/dts/python-devicetree/src")
-    if not Path(location, "devicetree/dtlib.py").is_file():
-        return None
     sys.path.insert(0, location)
     try:
         dtlib = importlib.import_module("devicetree.dtlib")
