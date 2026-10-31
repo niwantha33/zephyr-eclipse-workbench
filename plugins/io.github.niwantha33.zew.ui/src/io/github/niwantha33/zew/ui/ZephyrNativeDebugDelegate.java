@@ -42,6 +42,7 @@ import org.eclipse.ui.console.MessageConsoleStream;
  * GDB connect with symbols from this exact independent build.
  */
 public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
+    public static final String FLASH_BUILD = Activator.ID + ".launch.flashedBuild";
     public static final String RUNNER = Activator.ID + ".launch.debugRunner";
     public static final String PORT = Activator.ID + ".launch.gdbPort";
     private static final String RESOLVED_RUNNER = RUNNER + ".resolved";
@@ -248,6 +249,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 info.println("Zephyr thread tracking: refresh the native CDT thread list after every suspend. "
                         + "Routine OpenOCD INFO register-polling is hidden after one explanation; warnings and errors are preserved.");
             }
+            verifyFlashedBuild(configuration, params);
+            if (monitor.isCanceled()) throw new CoreException(Status.CANCEL_STATUS);
             Process server = builder.start();
             session = new ManagedServer(server, console.newMessageStream(), lease, launch, params.port(),
                     params.plan().westArguments().get(params.plan().westArguments().indexOf("--runner") + 1));
@@ -290,6 +293,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             }
             // Superclass initializes a true GdbLaunch with Eclipse breakpoints,
             // registers, variables, call stacks, memory and source stepping.
+            verifyFlashedBuild(configuration, params);
+            if (monitor.isCanceled()) throw new CoreException(Status.CANCEL_STATUS);
             super.launch(configuration, mode, launch, monitor);
             if (!monitor.isCanceled() && !launch.isTerminated()) {
                 // CDT can reconstruct/reinitialise source containers while DSF
@@ -319,6 +324,14 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                     : failure("Native Debug launch failed: " + error.getMessage(), error);
         } finally {
             if (lease != null) lease.close();
+        }
+    }
+
+    private static void verifyFlashedBuild(ILaunchConfiguration configuration, Parameters params) throws Exception {
+        var expected = configuration.getAttribute(FLASH_BUILD, java.util.Map.<String, String>of());
+        if (!expected.isEmpty()) {
+            io.github.niwantha33.zew.core.FlashDebugBuild.verifyAttributes(expected, params.plan().buildDirectory(),
+                    params.settings().getProperty("board"), params.settings().getProperty("zew.buildConfiguration", "default"));
         }
     }
 

@@ -37,6 +37,12 @@ public final class GpioBankEvidence {
     private static final int MAX_BIT_POSITIONS = 64;
 
     public static Bank inspect(DevicetreeHardware.Device device, List<DevicetreeParameters.Property> properties) {
+        return inspect(device, properties, Map.of());
+    }
+
+    /** Symbolic references are resolved only through exact generated-DTS node labels. */
+    public static Bank inspect(DevicetreeHardware.Device device, List<DevicetreeParameters.Property> properties,
+                               Map<String, String> nodeLabels) {
         if (device == null || properties == null
                 || !HardwarePeripheralIndex.category(device).equals("GPIO")) return null;
         var own = properties.stream().filter(p -> p.path().equals(device.path())).toList();
@@ -53,51 +59,67 @@ public final class GpioBankEvidence {
         String bank = "";
         if (ti && device.name().equalsIgnoreCase("gpio@400a0000")) bank = "PA";
         else if (ti && device.name().equalsIgnoreCase("gpio@400a2000")) bank = "PB";
-        Long handle = null;
-        for (var p : own) if (p.name().equals("phandle")) {
-            var numbers = numericGroups(p.value());
-            if (numbers != null && numbers.size() == 1 && numbers.get(0) > 0) handle = numbers.get(0);
-        }
         // A combined gpios list may contain multiple controllers with
         // different #gpio-cells. Accept it ONLY when the entire sequence can
         // be partitioned using known controller phandles and exact cell widths.
         Map<String, List<DevicetreeParameters.Property>> nodes = new HashMap<>();
         for (var p : properties) nodes.computeIfAbsent(p.path(), key -> new ArrayList<>()).add(p);
-        Map<Long, Integer> widths = new HashMap<>();
+        Map<String, Integer> widths = new HashMap<>();
+        Map<String, String> controllers = new HashMap<>();
         for (var node : nodes.values()) {
             if (node.stream().noneMatch(p -> p.name().equals("gpio-controller"))) continue;
             int count = integer(node, "#gpio-cells");
             if (count < 1 || count > 8) continue;
             for (var prop : node) if (prop.name().equals("phandle")) {
                 var values = numericGroups(prop.value());
-                if (values != null && values.size() == 1 && values.get(0) > 0)
-                    widths.put(values.get(0), count);
+                if (values != null && values.size() == 1 && values.get(0) > 0) {
+                    String key = Long.toString(values.get(0));
+                    if (controllers.containsKey(key) && !controllers.get(key).equals(prop.path())) {
+                        widths.remove(key); controllers.put(key, "");
+                    } else if (!controllers.containsKey(key)) {
+                        widths.put(key, count); controllers.put(key, prop.path());
+                    }
+                }
             }
+        }
+        for (var label : nodeLabels.entrySet()) {
+            var node = nodes.get(label.getValue());
+            if (node == null || node.stream().noneMatch(p -> p.name().equals("gpio-controller"))) continue;
+            int count = integer(node, "#gpio-cells");
+            if (count < 1 || count > 8) continue;
+            widths.put("&" + label.getKey(), count);
+            controllers.put("&" + label.getKey(), label.getValue());
         }
         List<Usage> uses = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        if (handle != null && cellsPerSpecifier == 2) {
+        if (controllers.containsValue(device.path()) && cellsPerSpecifier == 2) {
             for (var p : properties) {
                 if (!(p.name().equals("gpios") || p.name().endsWith("-gpios"))) continue;
                 if (p.path().equals(device.path())) continue;
-                var numbers = numericGroups(p.value());
+                var numbers = specifierGroups(p.value());
                 if (numbers == null) continue;
                 List<Usage> candidates = new ArrayList<>();
                 int cursor = 0;
                 boolean valid = true;
                 while (cursor < numbers.size()) {
-                    Long candidateHandle = numbers.get(cursor);
+                    String candidateHandle = numbers.get(cursor);
                     Integer cellCount = widths.get(candidateHandle);
                     if (cellCount == null || cursor + cellCount >= numbers.size()) {
                         valid = false;
                         break;
                     }
-                    if (candidateHandle.equals(handle)) {
-                        long bit = numbers.get(cursor + 1);
+                    for (int i = 1; i <= cellCount; i++)
+                        if (!numbers.get(cursor + i).matches("[0-9]+")) valid = false;
+                    if (!valid) break;
+                    if (device.path().equals(controllers.get(candidateHandle))) {
+                        long bit;
+                        long flags;
+                        try { bit = Long.parseLong(numbers.get(cursor + 1)); flags = Long.parseLong(numbers.get(cursor + 2)); }
+                        catch (NumberFormatException invalid) { valid = false; break; }
                         if (bit >= 0 && bit < MAX_BIT_POSITIONS
-                                && (!exactWidth || bit < explicitWidth))
+                                && (width == 0 || bit < width))
                             candidates.add(new Usage((int) bit, p.path(), p.name(),
-                                    "0x" + Long.toHexString(numbers.get(cursor + 2)), p.line()));
+                                    "0x" + Long.toHexString(flags), p.line()));
                     }
                     cursor += cellCount + 1;
                 }
@@ -115,8 +137,8 @@ public final class GpioBankEvidence {
                 : ti ? "TI MSPM0 register index capacity (up to 32); not package availability"
                 : "line count not recorded in compiled DTS";
         if (cellsPerSpecifier != 2) provenance += "; unsupported or missing #gpio-cells";
-        if (handle == null) provenance += "; numeric controller phandle missing";
-        return new Bank(device.path(), bank, width, exactWidth, handle != null,
+        if (!controllers.containsValue(device.path())) provenance += "; controller phandle/node label missing";
+        return new Bank(device.path(), bank, width, exactWidth, controllers.containsValue(device.path()),
                 uses, provenance);
     }
 
@@ -127,6 +149,30 @@ public final class GpioBankEvidence {
                 return values.get(0).intValue();
         }
         return -1;
+    }
+
+    private static List<String> specifierGroups(String value) {
+        var matcher = GROUP.matcher(value);
+        var result = new ArrayList<String>();
+        int end = 0;
+        boolean any = false;
+        while (matcher.find()) {
+            if (!value.substring(end, matcher.start()).matches("[,\\s]*")) return null;
+            for (String word : matcher.group(1).trim().split("\\s+")) {
+                if (word.matches("&[A-Za-z_][A-Za-z_0-9,-]*")) result.add(word);
+                else {
+                    if (!CELL.matcher(word).matches()) return null;
+                    try {
+                        long number = word.startsWith("0x") || word.startsWith("0X")
+                                ? Long.parseUnsignedLong(word.substring(2), 16) : Long.parseLong(word);
+                        if (number < 0 || number > 0xffff_ffffL) return null;
+                        result.add(Long.toString(number));
+                    } catch (NumberFormatException invalid) { return null; }
+                }
+            }
+            end = matcher.end(); any = true;
+        }
+        return any && value.substring(end).matches("[,\\s]*") ? result : null;
     }
 
     private static List<Long> numericGroups(String value) {

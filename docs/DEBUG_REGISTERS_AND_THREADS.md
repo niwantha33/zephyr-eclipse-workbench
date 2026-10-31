@@ -253,3 +253,25 @@ mismatch persists, retain the full readback diagnostic and Flash/OpenOCD logs.
 The automated regressions cover multiple ELF outputs, the reported 4-versus-15
 case, stable/inconsistent reads, failed repeat reads and halt failure using an
 emulated Tcl peer; they do not establish MSPM0 hardware correctness.
+
+### Flash and Debug
+
+Use **Zephyr > Flash and Debug Application…** when source changes need to be
+programmed before debugging. It reuses Flash's existing board/profile
+confirmation, builds once, programs through the board runner, waits for success
+and owned-process cleanup, then starts native Debug without rebuilding a second
+time. A failed or cancelled Flash never starts Debug. Before the handoff, hashes
+of the selected ELF, runner metadata and generated configuration must still match,
+and the selected board/profile/build directory must be unchanged.
+
+Plain **Debug Application** continues to build and attach without programming;
+plain **Flash Application** does not start Debug. The combined action uses a
+separate saved Run configuration so a later plain Flash click cannot silently
+inherit its Debug step. OpenOCD's metadata check remains active during native
+Debug. Success of a different runner is limited to that runner's own verification
+contract; this workflow does not invent universal probe or firmware attestation.
+
+The MSPM0 report showing the offset table shifted by four bytes was followed by
+the user's report that flashing restored Debug. This is user-reported hardware
+acceptance for that attempt, not a container measurement or proof of every
+possible mismatch's cause.

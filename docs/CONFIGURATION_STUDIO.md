@@ -212,3 +212,37 @@ but final support depends on the selected target and backend.
 - Automated cross-vendor GUI and hardware tests.
 
 These are not claimed as completed features of this first integration.
+
+## GPIO references and usable examples
+
+The GPIO bank view accepts the actual generated DTS forms with either numeric
+controller phandles or symbolic references such as `&gpioa`. Exact node labels
+are distinct from the optional `label` property. A symbolic reference must
+resolve to a known controller with a supported `#gpio-cells`; unknown or malformed
+mixed lists are not partially attributed to another bank. Logical register bit
+ranges do not establish package bonding, pin ownership or electrical availability.
+
+The **GPIO Usage** dock lists built consumers across all banks. Thus an LED
+consumer on GPIO B remains visible while GPIO A is selected. Selecting the row
+opens the matching bank. An empty inventory shows an explicit explanation
+instead of an unexplained blank table.
+
+Saved-source candidates include `device_get_binding()` plus literal-index
+`gpio_pin_configure()` (also in conditionals), exact
+`DEVICE_DT_GET(DT_NODELABEL(...))`, and common `gpio_dt_spec` initializers using
+`GPIO_DT_SPEC_GET(DT_ALIAS(...), gpios)` or `DT_NODELABEL(...)`, including a simple
+selector macro such as `LED0_NODE`. The scanner is intentionally not a C compiler,
+AST or preprocessor: inactive branches and uncompiled files may appear. Arbitrary
+macro expansion, cross-file aliases and dynamic pointers are not inferred.
+`GPIO_0` is not guessed to mean GPIO A; unresolved candidates remain separate.
+
+Select a GPIO index and open **GPIO Example C** to inspect and copy an
+exact-controller template. It includes readiness and API error checks. Templates
+are read-only and nothing rewrites the project. Check the circuit before using
+an output template. The complete importable application is
+[`examples/gpio_usage_demo`](../examples/gpio_usage_demo/README.md): it blinks the
+board's `led0` alias and leaves its extra PA15 output off by default.
+
+The central planner receives more of the initial vertical space; the evidence
+dock remains resizable. GPIO indices also support arrow-key selection. No
+physical package-pin diagram or live register configuration is claimed.

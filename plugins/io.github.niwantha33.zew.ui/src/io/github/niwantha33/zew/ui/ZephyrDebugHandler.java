@@ -79,7 +79,11 @@ public final class ZephyrDebugHandler extends AbstractHandler {
         job.schedule();
     }
 
-    private static void openDebugConfiguration(IProject project, Shell shell) throws Exception {
+    static void openDebugConfiguration(IProject project, Shell shell) throws Exception {
+        openDebugConfiguration(project, shell, Map.of());
+    }
+
+    static void openDebugConfiguration(IProject project, Shell shell, Map<String, String> flashed) throws Exception {
         ILaunchManager manager = DebugPlugin.getDefault().getLaunchManager();
         var type = manager.getLaunchConfigurationType(ZephyrLaunchDelegate.TYPE);
         if (type == null) throw new java.io.IOException("Zephyr launch extension is not installed.");
@@ -87,13 +91,14 @@ public final class ZephyrDebugHandler extends AbstractHandler {
         for (ILaunchConfiguration candidate : manager.getLaunchConfigurations(type)) {
             if (Objects.equals(project.getName(),
                     candidate.getAttribute(ZephyrLaunchDelegate.PROJECT, ""))
-                    && "debug".equals(candidate.getAttribute(ZephyrLaunchDelegate.ACTION, ""))) {
+                    && "debug".equals(candidate.getAttribute(ZephyrLaunchDelegate.ACTION, ""))
+                    && flashed.isEmpty() == candidate.getAttribute(ZephyrNativeDebugDelegate.FLASH_BUILD, Map.<String, String>of()).isEmpty()) {
                 config = candidate;
                 break;
             }
         }
         if (config == null) {
-            String label = manager.generateLaunchConfigurationName("Zephyr Debug — " + project.getName());
+            String label = manager.generateLaunchConfigurationName((flashed.isEmpty() ? "Zephyr Debug — " : "Zephyr Verified Flash Debug — ") + project.getName());
             var copy = type.newInstance(null, label);
             copy.setAttribute(ZephyrLaunchDelegate.PROJECT, project.getName());
             copy.setAttribute(ZephyrLaunchDelegate.ACTION, "debug");
@@ -101,6 +106,9 @@ public final class ZephyrDebugHandler extends AbstractHandler {
             config = copy.doSave();
         }
         var mapped = config.getWorkingCopy();
+        mapped.setAttribute(ZephyrNativeDebugDelegate.FLASH_BUILD, flashed);
+        mapped.setAttribute(org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.ATTR_BUILD_BEFORE_LAUNCH,
+                org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.BUILD_BEFORE_LAUNCH_DISABLED);
         mapped.setMappedResources(new org.eclipse.core.resources.IResource[] {project});
         config = mapped.doSave();
         // One Debug click performs the build and starts the managed source-level

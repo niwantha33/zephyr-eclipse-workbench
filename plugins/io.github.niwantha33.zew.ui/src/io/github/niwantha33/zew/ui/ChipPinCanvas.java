@@ -72,6 +72,15 @@ public final class ChipPinCanvas extends Canvas {
             }
         });
         addListener(SWT.KeyDown, event -> {
+            if (bank != null && mode != Mode.PACKAGE && bank.bitPositions() > 0) {
+                int step = event.keyCode == SWT.ARROW_DOWN ? 8 : event.keyCode == SWT.ARROW_UP ? -8
+                        : event.keyCode == SWT.ARROW_RIGHT ? 1 : event.keyCode == SWT.ARROW_LEFT ? -1 : 0;
+                if (step != 0) {
+                    selectedBit = Math.max(0, Math.min(bank.bitPositions() - 1, selectedBit < 0 ? 0 : selectedBit + step));
+                    redraw(); bankSelection.accept(selectedBit);
+                }
+                return;
+            }
             if (event.keyCode == SWT.ARROW_DOWN || event.keyCode == SWT.ARROW_RIGHT)
                 setSelected(Math.min(visibleCount() - 1, selected + 1));
             else if (event.keyCode == SWT.ARROW_UP || event.keyCode == SWT.ARROW_LEFT)
@@ -228,7 +237,7 @@ public final class ChipPinCanvas extends Canvas {
         if (bank.uses().isEmpty()) {
             gc.drawText("No resolvable GPIO consumers for this controller in the build.", 16, 72, true);
             gc.drawText(bank.resolvedPhandle() ? "This does not mean the GPIO bank is unused at runtime."
-                    : "A numeric controller phandle is missing; usages cannot be resolved.", 16, 98, true);
+                    : "Controller phandle/node label is missing; usages cannot be resolved.", 16, 98, true);
         }
         int row = 0;
         for (var usage : bank.uses()) {

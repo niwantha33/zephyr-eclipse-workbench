@@ -17,7 +17,7 @@ public final class DevicetreeHardware {
         public boolean enabled() { return status.isBlank() || "okay".equals(status) || "ok".equals(status); }
     }
     private static final Pattern NODE = Pattern.compile(
-            "^\\s*(?:(?:[A-Za-z_][\\w,-]*):\\s*)?([A-Za-z_][\\w,.-]*(?:@[0-9a-fA-F,]+)?|/)\\s*\\{\\s*(?://.*)?$");
+            "^\\s*(?:(?:[A-Za-z_][\\w,-]*):\\s*)*([A-Za-z_][\\w,.-]*(?:@[0-9a-fA-F,]+)?|/)\\s*\\{\\s*(?://.*)?$");
     private static final Pattern PROP = Pattern.compile(
             "^\\s*(compatible|status|label|reg)\\s*=\\s*(.*?);\\s*$");
     private static final int LIMIT = 10_000;
@@ -69,6 +69,30 @@ public final class DevicetreeHardware {
         }
         return List.copyOf(result);
     }
+    /** Exact node-label identities from generated DTS, distinct from the label property. */
+    public static java.util.Map<String, String> nodeLabels(String generatedDts) {
+        var nodes = inspect(generatedDts);
+        var lines = withoutCommentLines(generatedDts);
+        var result = new java.util.LinkedHashMap<String, String>();
+        var ambiguous = new java.util.HashSet<String>();
+        var label = Pattern.compile("([A-Za-z_][\\w,-]*):\\s*");
+        for (var node : nodes) {
+            var header = lines[node.line() - 1];
+            int brace = header.indexOf('{');
+            var matcher = label.matcher(brace < 0 ? "" : header.substring(0, brace));
+            while (matcher.find()) {
+                String name = matcher.group(1);
+                if (result.containsKey(name) && !result.get(name).equals(node.path())) ambiguous.add(name);
+                else result.put(name, node.path());
+            }
+        }
+        ambiguous.forEach(result::remove);
+        return java.util.Map.copyOf(result);
+    }
+    private static String[] withoutCommentLines(String source) {
+        return DevicetreeParameters.withoutComments(source == null ? "" : source).split("\\R", -1);
+    }
+
     /** Search actual node metadata; keep hierarchy context separately in the view. */
     public static boolean matches(Device device, String query, String state) {
         if ("Okay/default".equals(state) && !device.enabled()) return false;

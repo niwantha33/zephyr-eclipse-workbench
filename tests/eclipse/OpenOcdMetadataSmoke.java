@@ -36,6 +36,8 @@ public final class OpenOcdMetadataSmoke {
         if (!text.contains("extended-remote") || !text.contains("127.0.0.1:3333")) throw new AssertionError(text);
         System.out.println("PASS thread metadata: native DSF OpenOCD connection uses extended-remote");
         verifyFlashCompletion(ui);
+        verifyFlashDebugConfigurations(ui);
+        verifyFlashLeaseHandoff(ui);
         for (int cycle = 0; cycle < 3; cycle++) verifyDebugServerCleanup(ui);
     }
     private static void verifyDebugServerCleanup(org.osgi.framework.Bundle ui) throws Exception {
@@ -96,6 +98,48 @@ public final class OpenOcdMetadataSmoke {
             if (descendant != null && descendant.isAlive()) descendant.destroyForcibly();
             if (process.isAlive()) process.destroyForcibly();
             console.destroy();
+        }
+    }
+    private static void verifyFlashDebugConfigurations(org.osgi.framework.Bundle ui) throws Exception {
+        var project = org.eclipse.core.resources.ResourcesPlugin.getWorkspace().getRoot()
+                .getProject("FlashDebugConfigurationSmoke");
+        project.create(null); project.open(null);
+        var method = ui.loadClass("io.github.niwantha33.zew.ui.ZephyrFlashShortcut")
+                .getDeclaredMethod("configuration", org.eclipse.core.resources.IProject.class, boolean.class);
+        method.setAccessible(true);
+        org.eclipse.debug.core.ILaunchConfiguration combined = null, plain = null;
+        try {
+            combined = (org.eclipse.debug.core.ILaunchConfiguration) method.invoke(null, project, true);
+            plain = (org.eclipse.debug.core.ILaunchConfiguration) method.invoke(null, project, false);
+            String attribute = "io.github.niwantha33.zew.ui.launch.debugAfterFlash";
+            if (combined.equals(plain) || !combined.getAttribute(attribute, false) || plain.getAttribute(attribute, false))
+                throw new AssertionError("Flash-only and Flash+Debug configurations were mixed");
+            if (!plain.equals(method.invoke(null, project, false)) || !combined.equals(method.invoke(null, project, true)))
+                throw new AssertionError("Flash launch history did not preserve explicit workflow selection");
+            System.out.println("PASS flash/debug: plain Flash remains separate from explicit Flash and Debug");
+        } finally {
+            if (combined != null) combined.delete();
+            if (plain != null) plain.delete();
+            project.delete(true, true, null);
+        }
+    }
+    private static void verifyFlashLeaseHandoff(org.osgi.framework.Bundle ui) throws Exception {
+        var guard = ui.loadClass("io.github.niwantha33.zew.ui.TargetOperationGuard");
+        var acquire = guard.getDeclaredMethod("acquire", String.class); acquire.setAccessible(true);
+        var lease = (AutoCloseable) acquire.invoke(null, "flash");
+        var watch = ui.loadClass("io.github.niwantha33.zew.ui.ZephyrLaunchDelegate").getDeclaredMethod(
+                "watchOwnedProcess", Process.class, lease.getClass(), boolean.class);
+        watch.setAccessible(true);
+        Process process = new ProcessBuilder(System.getenv("ZEW_TEST_PYTHON"), "-c", "pass").start();
+        try {
+            var completed = (java.util.concurrent.CompletableFuture<?>) watch.invoke(null, process, lease, true);
+            completed.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            try (var next = (AutoCloseable) acquire.invoke(null, "debugserver")) {
+                System.out.println("PASS flash/debug: completion follows programmer cleanup and physical lease release");
+            }
+        } finally {
+            if (process.isAlive()) process.destroyForcibly();
+            lease.close();
         }
     }
     private static void verifyFlashCompletion(org.osgi.framework.Bundle ui) throws Exception {
