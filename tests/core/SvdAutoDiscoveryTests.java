@@ -23,7 +23,8 @@ public final class SvdAutoDiscoveryTests {
                 "parse selected variant, not board name");
         check(SvdAutoDiscovery.partFromBoard("esp32s3_devkitc/esp32s3/appcpu").equals("esp32s3"),
                 "architecture variant not confused with core");
-        check(SvdAutoDiscovery.partFromBoard("qemu_x86/atom").equals("atom"), "CPU is not a device");
+        check(SvdAutoDiscovery.partFromBoard("qemu_x86/atom").isEmpty(),
+                "short virtual CPU qualifier must not be treated as exact device");
         Path root = Files.createTempDirectory("zew-exact-svd-");
         try {
             Path vendor = Files.createDirectories(root.resolve("modules/hal/vendor"));
