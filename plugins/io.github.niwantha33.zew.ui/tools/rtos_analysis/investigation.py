@@ -97,6 +97,22 @@ def review_receipt(receipt, *, trace=None, metadata=None, build_elf=None,
     elif cpu.get("cpu_busy_percent") is None:
         finding("CPU_BUSY_UNKNOWN", "warning", "CPU busy percentage is not established",
                 "Identify the idle thread explicitly before claiming utilisation.")
+    timing = analysis.get("timing", {})
+    if not isinstance(timing, dict):
+        timing = {}
+    timing_state = timing.get("status", "unavailable")
+    if timing_state != "observed":
+        finding("TIMING_UNAVAILABLE", "warning",
+                "Thread scheduling durations unavailable: " + str(timing.get("reason", "not decoded")),
+                "Enable and validate thread switch CTF events; verify clock ordering and loss evidence.")
+    else:
+        exceed = sum(int(row.get("observed_bursts_exceeding_deadline") or 0)
+                     for row in timing.get("threads", {}).values()
+                     if isinstance(row, dict))
+        if exceed:
+            finding("OBSERVED_DEADLINE_EXCEEDANCE", "warning",
+                    str(exceed) + " observed scheduling bursts exceeded user-defined thresholds",
+                    "Inspect source/trace and declared thresholds; this is not a proof of WCET.")
     if receipt.get("firmware_matches_elf") != "verified":
         finding("FLASH_IDENTITY_UNKNOWN", "warning", "Capture does not authenticate flashed firmware",
                 "Use a separately verified flashed-image readback; ELF path/hash alone is not enough.")
@@ -142,6 +158,8 @@ def review_receipt(receipt, *, trace=None, metadata=None, build_elf=None,
                     "selected_build_elf": selected_build,
                     "flashed_firmware": "not independently authenticated"},
         "fault": fault,
+        "timing": timing,
+        "events": analysis.get("observed_events", {}),
         "findings": findings,
         "limits": [
             "Capture identity, target timestamp accuracy and unreported loss are not independently established.",
@@ -196,6 +214,22 @@ def render_html(report):
         + cell(item.get("evidence", "")) + '<p>Next: '
         + cell(item.get("action", "")) + '</p></li>'
         for item in findings[:128] if isinstance(item, dict))
+    timing = report.get("timing", {})
+    timing_rows = []
+    if isinstance(timing, dict) and timing.get("status") == "observed":
+        for tid, sample in list(timing.get("threads", {}).items())[:64]:
+            if not isinstance(sample, dict): continue
+            timing_rows.append('<tr><td>' + cell(tid) + '</td><td>'
+                + cell(sample.get("name", "")) + '</td><td>'
+                + cell(sample.get("max_observed_burst_ns")) + '</td><td>'
+                + cell(sample.get("period_range_jitter_ns")) + '</td><td>'
+                + cell(sample.get("max_observed_ready_latency_ns")) + '</td><td>'
+                + cell(sample.get("observed_bursts_exceeding_deadline")) + '</td></tr>')
+    timing_table = ('<table><tr><th>Thread</th><th>Name</th><th>Max observed burst (ns)</th>'
+                    '<th>Period range jitter (ns)</th><th>Max ready latency (ns)</th>'
+                    '<th>Observed threshold exceedances</th></tr>'
+                    + ''.join(timing_rows) + '</table>') if timing_rows else (
+                    '<p>No qualified observed timing table; inspect CTF timing quality.</p>')
     busy = data.get("cpu_busy_percent")
     busy_text = "unknown (requires explicit idle identity and full interval coverage)" \
         if busy is None else cell(str(busy) + "% (conditional scheduler occupancy)")
@@ -217,6 +251,9 @@ small{color:#64748b}
 <section><h2>Observed execution composition</h2><p>CPU busy: ''' + busy_text + '''</p>''' + chart + '''
 <small>Single-stream CTF, observed nanoseconds only. Unknown is not idle.
 ISR time is separated from interrupted threads. Do not infer complete trace capture or WCET.</small></section>
+<section><h2>Thread timing and deadline observations</h2>''' + timing_table + '''
+<small>Observed scheduling bursts include interrupts; their maximum is NOT WCET.
+Ready latency requires a matched explicit ready event. No inferred blocked state.</small></section>
 <section><h2>Guided findings</h2><ol>''' + entries + '''</ol></section>
 <section><h2>Provenance and limits</h2><p>CTF decoder: ''' + cell(data.get("ctf_decode")) + '''.
 Selected ELF: ''' + cell(data.get("selected_build_elf")) + '''.
