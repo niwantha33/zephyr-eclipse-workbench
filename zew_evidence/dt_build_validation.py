@@ -200,16 +200,19 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
             raise InputError("Build checkout does not match --zephyr")
     except (OSError, ValueError) as exc:
         raise InputError("Build checkout cannot be verified") from exc
-    target = source_cache.get("BOARD_TARGET")
+    # Zephyr 4.4's zephyr_check_cache(BOARD) records CACHED_BOARD before
+    # boards.cmake splits BOARD into revision/qualifiers. Check the genuine
+    # full target first; BOARD_TARGET is a compatibility fallback.
+    target = source_cache.get("CACHED_BOARD") or source_cache.get("BOARD_TARGET")
     selected = source_cache.get("BOARD")
     if target and target != board:
         raise InputError("Selected board differs from existing build target")
-    if not target and "/" in board:
-        raise InputError("Qualified SoC/core target cannot be verified without BOARD_TARGET")
+    if not target and "/" in board and selected != board:
+        raise InputError("Qualified SoC/core target cannot be independently verified")
     if not target and selected and selected not in (board, board.split("/")[0]):
         raise InputError("Selected board differs from existing build board")
     if not target and not selected:
-        raise InputError("Existing build has no verifiable BOARD/BOARD_TARGET")
+        raise InputError("Existing build has no verifiable board identity")
     original = build / "zephyr" / "zephyr.dts"
     if not original.is_file():
         raise InputError("Configure the original selected build before validation")
@@ -272,9 +275,10 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
                 same_zephyr = Path(actual.get("ZEPHYR_BASE", "")).resolve(strict=True) == zephyr
             except (OSError, ValueError):
                 same_zephyr = False
-            same_board = (actual.get("BOARD_TARGET", board if "/" not in board else "") == board
-                          and actual.get("BOARD", "")
-                          in (board, board.split("/")[0]))
+            scratch_target = (actual.get("CACHED_BOARD") or actual.get("BOARD_TARGET")
+                              or actual.get("BOARD", ""))
+            same_board = (scratch_target == board
+                          and actual.get("BOARD", "") in (board, board.split("/")[0]))
             overlay_in_cache = (candidate_rel is None or
                                 (source / candidate_rel).as_posix()
                                 in actual.get("EXTRA_DTC_OVERLAY_FILE", "").replace("\\", "/"))
