@@ -76,7 +76,8 @@ public final class VendorSvdProvisioner {
                         // Only the official Keil download endpoints are permitted.
                         String host = next.getHost().toLowerCase(java.util.Locale.ROOT);
                         if (!host.equals("www.keil.com") && !host.equals("keil.com")
-                                && !host.equals("www.keil.arm.com") && !host.equals("keil.arm.com"))
+                                && !host.equals("www.keil.arm.com") && !host.equals("keil.arm.com")
+                                && !host.equals("keilpack.azureedge.net"))
                             throw new IOException("Unexpected vendor redirect host: " + host);
                         uri = next;
                     }
