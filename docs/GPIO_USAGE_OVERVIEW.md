@@ -1,50 +1,44 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-# GPIO Usage — cross-bank visibility
+# GPIO Evidence — not a runtime-use map
 
-The GPIO bank screen previously showed only **references to the selected
-controller**, so selecting PA made the board's PB22 LED disappear. C calls
-using `device_get_binding("GPIO_0")` were also hidden unless the name matched
-an exact enabled Devicetree device.
+**Default:** The GPIO logical-index planner displays neutral cells. It does not
+colour a pin as "used", "occupied", "available" or "free" based on a
+board-provided DTS consumer or a text match in C source. GPIO names such as
+`led0` are **hidden by default**. A DTS reference only proves that the last
+generated `zephyr.dts` contains a declaration, not that the application
+requests, configures or drives that line.
 
-Hardware → **GPIO** now automatically opens the bottom **GPIO Usage** tab
-containing a read-only table with four columns:
-- **GPIO / bit:** PA15/PB22 only when an exact controller is known; otherwise
-  `Unresolved bit 15`, never a fabricated PA label.
-- **Evidence:** `DTS consumer`, `C source candidate`, or
-  `C unresolved device`.
-- **Reference:** compiled consumer node and property, or literal C call.
-- **Location:** generated zephyr.dts line or saved application source line
-  and literal device-binding string.
+Two independent, unchecked opt-in layers are available:
+- **Board DTS declarations**: shows a `D` and the declared consumer's name
+  for inspection, still on a neutral cell; no use/availability inference.
+- **Unverified C patterns**: shows a `C?` for exact-controller saved source
+  matches, still on a neutral cell. These patterns are **not proven compiled,
+  linked, reachable or executed**, and can be inside disabled preprocessor
+  branches.
 
-The summary counts **all GPIO controllers in the selected build** rather than
-only the currently selected bank. Selecting a grounded row navigates to its
-controller and highlights its logical bit. Selecting an unresolved row
-explains why the source call cannot be mapped and does not highlight any bank.
+The **GPIO Evidence** dock separates `Board DTS only`, `Saved C pattern`
+and `Unresolved source`; when generated config is outdated its DTS rows say
+`STALE board DTS`. The heading always says **GPIO RUNTIME USE: UNKNOWN**
+because there is no live probe/driver-register measurement. It must never
+display a count of "used" pins based on DTS or text alone.
 
-## Example
+**Example: MSPM0G3507.** The board's `led0`/PB22 DTS consumer is expected
+to exist even when the application never uses `DT_ALIAS(led0)`. PB22 stays
+neutral and shows only `PB22` by default. Its declaration remains inspectable
+in the GPIO Evidence dock, Generated DTS, Connections view, and optional DTS
+layer. A saved `gpio_pin_configure(gpio_dev, 15, ...)` may identify PA15
+only when the device name resolves exactly; it is still a non-executed hint.
 
-Given the board's compiled Blue LED GPIO specifier at PB22 and source
+This change neither edits project files nor reads target registers. A future
+"Application GPIO usage" or "Live GPIO state" feature must first establish
+the exact build image, compiler inclusion and reachability, or a verified
+debug/readback session, respectively, and visibly distinguish evidence levels.
 
-```c
-const struct device *gpio_dev = device_get_binding("GPIO_0");
-gpio_pin_configure(gpio_dev, 15, GPIO_OUTPUT_ACTIVE);
-```
+## Regression coverage
 
-the table lists **PB22 (DTS consumer)** and an **unresolved bit 15 C
-candidate** if `GPIO_0` is not a unique device name in built DTS. It never
-claims that the unresolved C call sets PA15. When the built DTS explicitly
-names the target GPIO controller `GPIO_0`, it instead shows **PA15 (C source
-candidate)**. A source call is not proof of execution or GPIO state.
-
-The previously existing Changes, Validation, and Generated DTS tabs are
-preserved. No source file, overlay, firmware or device is changed by this view.
-Kconfig GPIO options are not live pin measurements.
-
-## Verification gates
-
-- Headless GPIO evidence tests.
-- Native Eclipse UI integration with fixture containing PB22 DTS use,
-  PA15 exact-labelled C source, and an unresolved device-name call.
-- Native screenshot `gpio-used-overview.png`.
-- Windows firmware matrix and manual review of actual target build before
-  release approval.
+The native Eclipse smoke checks that the `led0` cell is neutral by default,
+both evidence layers are unchecked, the opt-in DTS label appears only after the
+user selects it, and the original label disappears when it is switched off.
+It also checks the evidence table's explicit categories. Linux/Windows CI
+and hardware UI screenshots are separate release gates; this change has not
+been verified on a physical board.
