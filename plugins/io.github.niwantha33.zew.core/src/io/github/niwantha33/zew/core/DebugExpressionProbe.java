@@ -29,14 +29,15 @@ public final class DebugExpressionProbe {
         if (addressError != null && !addressError.isBlank())
             result.append("\nAddress evaluation: ").append(addressError.strip());
         boolean optimized = v.contains("<optimized out>") || v.contains("<unavailable>");
-        boolean addressKnown = a.matches("0[xX][0-9a-fA-F]+");
+        boolean addressKnown = a.matches("0[xX][0-9a-fA-F]+") && !a.matches("0[xX]0+");
         if (optimized && addressKnown) {
             result.append("\nGDB can locate storage for this symbol but cannot provide its current value. ")
                     .append("Check ELF DWARF, exact compiler command, ELF/target identity and target read permissions.");
         } else if (optimized) {
             result.append("\nGDB could not supply the value; the address was not confirmed either. ")
                     .append("Check whether the symbol is global, emitted in this ELF and available in this frame.");
-        } else if (!v.isBlank() && valueError == null && addressError == null) {
+        } else if (!v.isBlank() && (valueError == null || valueError.isBlank())
+                && (addressError == null || addressError.isBlank())) {
             result.append("\nGDB returned a value. It is a halted-session snapshot, not proof of physical GPIO state.");
         } else {
             result.append("\nInconclusive. This view cannot infer an absent variable's value from its C type.");
