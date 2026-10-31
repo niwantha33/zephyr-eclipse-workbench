@@ -142,6 +142,33 @@ public final class SocRegistersView extends ViewPart {
         DebugUITools.getDebugContextManager().getContextService(getSite().getWorkbenchWindow())
                 .addDebugContextListener(contextListener);
         contextChanged();
+        autoFindExistingDebugProject();
+    }
+
+    private void autoFindExistingDebugProject() {
+        // A view may be opened after native Debug has already attached.
+        // Bind only a unique live Zephyr launch; never pick the first project.
+        var projects = new HashSet<IProject>();
+        for (var launch : org.eclipse.debug.core.DebugPlugin.getDefault()
+                .getLaunchManager().getLaunches()) {
+            if (launch.isTerminated() || launch.getLaunchConfiguration() == null) continue;
+            try {
+                var config = launch.getLaunchConfiguration();
+                String name = config.getAttribute(ZephyrLaunchDelegate.PROJECT, "");
+                if (name.isBlank()) continue;
+                var p = ResourcesPlugin.getWorkspace().getRoot().getProject(name);
+                if (SelectedProject.importedProject(p) != null) projects.add(p);
+            } catch (org.eclipse.core.runtime.CoreException ignored) { /* Other debug adapter. */ }
+        }
+        if (projects.size() == 1) useLaunchProject(projects.iterator().next());
+        else if (projects.isEmpty()) {
+            var imported = java.util.Arrays.stream(ResourcesPlugin.getWorkspace().getRoot().getProjects())
+                    .filter(p -> SelectedProject.importedProject(p) != null).toList();
+            if (imported.size() == 1) useLaunchProject(imported.get(0));
+        } else {
+            discoveryExplanation = "Multiple live Zephyr debug projects found. Use Find vendor SVD to choose an exact project.";
+            status.setText(discoveryExplanation);
+        }
     }
 
     /**
