@@ -28,7 +28,9 @@ public final class DebugExpressionProbe {
             result.append("\nValue evaluation: ").append(valueError.strip());
         if (addressError != null && !addressError.isBlank())
             result.append("\nAddress evaluation: ").append(addressError.strip());
-        boolean optimized = v.contains("<optimized out>") || v.contains("<unavailable>");
+        String failure = valueError == null ? "" : valueError.toLowerCase(java.util.Locale.ROOT);
+        boolean optimized = v.contains("<optimized out>") || v.contains("<unavailable>")
+                || failure.contains("optimized out") || failure.contains("unavailable");
         boolean addressKnown = a.matches("0[xX][0-9a-fA-F]+") && !a.matches("0[xX]0+");
         if (optimized && addressKnown) {
             result.append("\nGDB can locate storage for this symbol but cannot provide its current value. ")
