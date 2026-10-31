@@ -55,6 +55,13 @@ class CliPackageTests(unittest.TestCase):
             version = subprocess.run([sys.executable, str(first), "--version"], cwd=root,
                                      env=env, text=True, capture_output=True, timeout=15, check=True)
             self.assertIn("0.1.1", version.stdout)
+            # The deterministic zipapp must also ship dt-check, even though
+            # parsing actual DTS needs the selected checkout's edtlib + PyYAML.
+            dt_help = subprocess.run([sys.executable, str(first), "dt-check", "--help"],
+                                     cwd=root, env=env, text=True,
+                                     capture_output=True, timeout=15, check=True)
+            self.assertIn("--zephyr", dt_help.stdout)
+            self.assertIn("--overlay", dt_help.stdout)
             workspace = root / "build"
             workspace.mkdir()
             output = subprocess.run([sys.executable, str(first), "graph", "--build", str(workspace)],
