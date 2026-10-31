@@ -882,6 +882,14 @@ public final class ConfigurationStudioView extends ViewPart {
                             || hardwareDevices.getSelectionCount() != 1) return;
                     var current = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
                     if (current == null || !node.equals(current.path())) return;
+                    String currentProperty = null;
+                    if (hardwareParameters.getSelectionCount() == 1) {
+                        var selected = (DevicetreeParameters.Property)
+                                hardwareParameters.getSelection()[0].getData();
+                        if (selected != null && node.equals(selected.path()))
+                            currentProperty = selected.name();
+                    }
+                    if (!java.util.Objects.equals(propertyName, currentProperty)) return;
                     hardwareValidation.setText(report);
                     analysis.setText(report);
                     if (tabs.getSelectionIndex() == 1) hardwareDetails.setSelection(1);
