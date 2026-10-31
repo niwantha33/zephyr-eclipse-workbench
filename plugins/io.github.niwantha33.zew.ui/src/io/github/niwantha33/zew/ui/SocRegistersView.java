@@ -9,6 +9,8 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 import org.eclipse.cdt.dsf.concurrent.DataRequestMonitor;
 import org.eclipse.cdt.dsf.datamodel.DMContexts;
@@ -40,7 +42,15 @@ import org.eclipse.ui.IMemento;
 import org.eclipse.ui.IViewSite;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.part.ViewPart;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.jface.viewers.LabelProvider;
+import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 import io.github.niwantha33.zew.core.SvdDevice;
+import io.github.niwantha33.zew.core.SvdAutoDiscovery;
 import io.github.niwantha33.zew.core.RegisterHistory;
 import io.github.niwantha33.zew.core.SvdDevice.Register;
 
@@ -55,6 +65,10 @@ public final class SocRegistersView extends ViewPart {
     private Text search;
     private SvdDevice device;
     private String svdPath;
+    private String selectedProjectName;
+    private String selectedBoard;
+    private String discoveryExplanation = "No exact project / SVD selected.";
+    private volatile long discoveryGeneration;
     private final Map<String, BigInteger> values = new HashMap<>();
     private final RegisterHistory history = new RegisterHistory();
     private String svdIdentity;
@@ -73,8 +87,9 @@ public final class SocRegistersView extends ViewPart {
         ui = parent.getDisplay();
         parent.setLayout(new GridLayout(1, false));
         var bar = new Composite(parent, SWT.NONE);
-        bar.setLayout(new GridLayout(7, false));
+        bar.setLayout(new GridLayout(8, false));
         bar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        button(bar, "Find vendor SVD", this::chooseProjectForDiscovery);
         button(bar, "Load SVD…", () -> {
             var dialog = new FileDialog(parent.getShell(), SWT.OPEN);
             dialog.setFilterExtensions(new String[] { "*.svd;*.xml", "*.*" });
@@ -97,13 +112,13 @@ public final class SocRegistersView extends ViewPart {
         search.addModifyListener(e -> render());
         status = new Label(parent, SWT.WRAP);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        status.setText("Load the exact chip's vendor SVD to show named peripherals. This view works with the native Zephyr DSF debugger; an unrelated Peripherals view may remain empty.");
+        status.setText("Automatically detecting exact vendor SVD from the selected Zephyr build. No generic MCU model is substituted.");
         contextInfo = new Label(parent, SWT.WRAP);
         contextInfo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         contextInfo.setText("No selected debug frame. CPU registers, Variables and Expressions are separate native Debug views.");
         summary = new Label(parent, SWT.NONE);
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        summary.setText("No SVD model loaded. Use Load SVD…; chip/package models are never guessed or downloaded.");
+        summary.setText("No SVD model loaded yet. Find vendor SVD searches installed SDKs and packs; register values require a halted manual read.");
         tree = new Tree(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         tree.setHeaderVisible(true); tree.setLinesVisible(true);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -123,8 +138,104 @@ public final class SocRegistersView extends ViewPart {
         };
         DebugUITools.getDebugContextManager().getContextService(getSite().getWorkbenchWindow())
                 .addDebugContextListener(contextListener);
-        if (svdPath != null) load(svdPath);
         contextChanged();
+    }
+
+    /**
+     * Called by the successful native GDB launch with its exact imported project.
+     * Searches installed local SDKs asynchronously, never the network or the MCU.
+     */
+    public void useLaunchProject(IProject project) {
+        if (project == null || !project.isAccessible()) return;
+        selectedProjectName = project.getName();
+        selectedBoard = null;
+        discoveryExplanation = "Finding vendor register descriptions for project " + selectedProjectName + "…";
+        device = null; svdPath = null; svdIdentity = null;
+        values.clear(); errors.clear(); watches.clear(); history.clear();
+        if (tree != null && !tree.isDisposed()) {
+            tree.removeAll();
+            summary.setText("Looking up exact SoC for " + selectedProjectName + "…");
+            status.setText(discoveryExplanation);
+        }
+        final long request = ++discoveryGeneration;
+        Job job = new Job("Find vendor SVD — " + project.getName()) {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                final SvdAutoDiscovery.Result result;
+                final String board;
+                try {
+                    var settings = ProjectContext.settings(project);
+                    board = settings.getProperty("board", "");
+                    var roots = new ArrayList<Path>();
+                    Path workspace = Path.of(settings.getProperty("workspace"));
+                    roots.add(project.getLocation().toFile().toPath().resolve(".zew/svd"));
+                    roots.add(workspace.resolve("modules/hal"));
+                    roots.add(workspace.resolve("modules"));
+                    roots.add(workspace.resolve("zephyr"));
+                    Path root = Path.of(settings.getProperty("zew.setupRoot"));
+                    roots.add(root.resolve("vendor-svd"));
+                    roots.add(root.resolve("svd"));
+                    roots.add(Path.of(settings.getProperty("tools.sdk")));
+                    Path userHome = Path.of(System.getProperty("user.home"));
+                    roots.add(userHome.resolve(".cmsis/packs"));
+                    roots.add(userHome.resolve(".cmsis-packs"));
+                    roots.add(userHome.resolve("AppData/Local/Arm/Packs"));
+                    if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win"))
+                        roots.add(Path.of("C:/ti"));
+                    String extra = System.getenv("ZEW_VENDOR_SVD_DIRS");
+                    if (extra != null && !extra.isBlank()) {
+                        for (String item : extra.split(java.util.regex.Pattern.quote(java.io.File.pathSeparator)))
+                            if (!item.isBlank()) roots.add(Path.of(item));
+                    }
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    result = SvdAutoDiscovery.resolve(board, roots, userHome.resolve(".zew/svd-cache"));
+                } catch (Exception error) {
+                    if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
+                        if (request != discoveryGeneration || tree.isDisposed()) return;
+                        discoveryExplanation = "SVD discovery failed for " + project.getName()
+                                + ": " + error.getMessage() + ". Use Load SVD… for an exact device.";
+                        status.setText(discoveryExplanation);
+                    });
+                    return new Status(IStatus.WARNING, Activator.ID, "SVD search failed", error);
+                }
+                if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
+                    if (tree.isDisposed() || request != discoveryGeneration) return;
+                    selectedBoard = board;
+                    if (result.state() == SvdAutoDiscovery.State.MATCHED) {
+                        load(result.path().toString());
+                    } else {
+                        discoveryExplanation = result.explanation();
+                        status.setText(discoveryExplanation + " Looked in: "
+                                + String.join("; ", result.inspected().stream().limit(8).toList()));
+                        summary.setText("SoC " + result.part() + ": no verified SVD available. "
+                                + "Install the vendor's CMSIS pack under the managed workspace, or Load SVD…");
+                    }
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        job.setSystem(true);
+        job.schedule();
+    }
+
+    private void chooseProjectForDiscovery() {
+        IProject[] projects = java.util.Arrays.stream(ResourcesPlugin.getWorkspace().getRoot().getProjects())
+                .filter(p -> p.isAccessible() && SelectedProject.importedProject(p) != null)
+                .toArray(IProject[]::new);
+        if (projects.length == 0) {
+            status.setText("No imported Zephyr project available. Import a board project before discovering SVD.");
+            return;
+        }
+        if (projects.length == 1) { useLaunchProject(projects[0]); return; }
+        var picker = new ElementListSelectionDialog(getSite().getShell(), new LabelProvider() {
+            @Override public String getText(Object item) {
+                return item instanceof IProject p ? p.getName() : super.getText(item);
+            }
+        });
+        picker.setTitle("Choose exact Zephyr project / SoC");
+        picker.setMessage("Select the project whose built device you want to inspect.");
+        picker.setElements(projects);
+        if (picker.open() == org.eclipse.jface.window.Window.OK
+                && picker.getFirstResult() instanceof IProject selected) useLaunchProject(selected);
     }
 
     /** No implicit peripheral read: selection/resume/step only invalidates snapshots. */
@@ -138,9 +249,10 @@ public final class SocRegistersView extends ViewPart {
                 : "Native debug session " + selectedSession.getId() + "; selected context: "
                     + context.getClass().getSimpleName() + ". Reads require a halted execution context.");
         contextInfo.getParent().layout(true, true);
-        status.setText(device == null
-                ? "Load the exact chip's vendor SVD. No peripheral model is automatically matched to this debug target."
-                : "Debug context changed. Confirm model " + device.name() + " matches this target, then select a register and Refresh.");
+        status.setText(device == null ? discoveryExplanation
+                : "Exact SVD model " + device.name()
+                    + " loaded for " + (selectedProjectName == null ? "manual selection" : selectedProjectName)
+                    + "; select a safe register and Refresh while halted.");
     }
 
     private final RunListener runListener = new RunListener();
@@ -196,6 +308,14 @@ public final class SocRegistersView extends ViewPart {
             if (Files.size(Path.of(path)) > 32 * 1024 * 1024) throw new IllegalArgumentException("SVD exceeds 32 MiB");
             SvdDevice loaded;
             try (var input = Files.newInputStream(Path.of(path))) { loaded = SvdDevice.read(input); }
+            if (selectedBoard != null && !selectedBoard.isBlank()
+                    && !loaded.name().replaceAll("[^A-Za-z0-9]", "").equalsIgnoreCase(
+                            SvdAutoDiscovery.partFromBoard(selectedBoard).replaceAll("[^A-Za-z0-9]", ""))) {
+                status.setText("Rejected SVD model " + loaded.name() + ": expected exact SoC "
+                        + SvdAutoDiscovery.partFromBoard(selectedBoard)
+                        + ". A family-level or other-chip register map cannot be substituted.");
+                return;
+            }
             generation++; busy = false; device = loaded; svdPath = path;
             values.clear(); errors.clear(); watches.clear(); history.clear();
             var digest = java.security.MessageDigest.getInstance("SHA-256");
@@ -206,8 +326,10 @@ public final class SocRegistersView extends ViewPart {
             }
             svdIdentity = java.util.HexFormat.of().formatHex(digest.digest());
             render();
+            discoveryExplanation = "Verified SVD device name: " + device.name()
+                    + "; exact part from project: " + selectedBoard + ".";
             status.setText(device.name() + " — " + device.registers().size() + " registers — " + path
-                    + ". Confirm this SVD matches the physical chip. Select a register and Refresh.");
+                    + ". SVD is not proof of connected silicon identity. Select a safe register and Refresh while halted.");
         } catch (Exception ex) {
             status.setText("SVD not loaded (previous device retained): " + ex.getMessage());
         }
