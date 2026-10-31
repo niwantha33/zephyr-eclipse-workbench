@@ -99,7 +99,10 @@ class GuidedInvestigationTests(unittest.TestCase):
         (self.capture / "ctf/channel0_0").unlink()
         with self.assertRaisesRegex(ValueError, "Missing"):
             reviewer.review(self.capture)
-        (self.capture / "ctf/channel0_0").symlink_to(self.build / "zephyr/zephyr.elf")
+        try:
+            (self.capture / "ctf/channel0_0").symlink_to(self.build / "zephyr/zephyr.elf")
+        except (OSError, NotImplementedError):
+            self.skipTest("Windows runner does not permit creation of test symlinks")
         with self.assertRaisesRegex(ValueError, "symlinked"):
             reviewer.review(self.capture)
 
