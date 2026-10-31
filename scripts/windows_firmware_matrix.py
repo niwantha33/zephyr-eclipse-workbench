@@ -291,7 +291,8 @@ def main():
                         '--zephyr', str(Path(workspace_arg) / 'zephyr'),
                         '--python', str(python), '--board', str(target),
                         '--overlay', str(real_overlay), '--ninja', str(ninja),
-                        '--scratch-parent', str(scratch_parent), '--timeout', '300'
+                        '--scratch-parent', str(scratch_parent), '--timeout', '300',
+                        '--expect-node', '/', '--expect-property', 'zew-ci-scratch-overlay-marker'
                     ], cwd=REPO, env=env, text=True, encoding='utf-8',
                        errors='replace', capture_output=True, timeout=390)
                     try:
@@ -303,7 +304,8 @@ def main():
                             or real_report.get('status') != 'configured-in-scratch'
                             or real_report.get('evidence_level') != 'configured'
                             or real_report['overlay']['additional'] is not True
-                            or real_report['scratch_generated_dts_sha256'] is None):
+                            or real_report['scratch_generated_dts_sha256'] is None
+                            or real_report['generated_observation']['state'] != 'present'):
                         raise ValueError('Real MSPM0 CMake overlay configuration failed: '
                                          + str(real_report.get('diagnostic', {}))[:400])
                     if hashlib.sha256(generated_dts.read_bytes()).hexdigest() != dts_hash:
