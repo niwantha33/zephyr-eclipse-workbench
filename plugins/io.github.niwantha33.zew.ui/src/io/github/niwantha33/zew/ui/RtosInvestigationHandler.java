@@ -61,6 +61,17 @@ public final class RtosInvestigationHandler extends AbstractHandler {
             if (fatal == null) return null;
         }
         final String fatalLog = fatal;
+        String uart = null;
+        if (MessageDialog.openQuestion(shell, "Optional UART evidence",
+                "Include a saved UART application-console session? "
+                + "Host receive timestamps cannot be synchronized with CTF target timestamps without external evidence.")) {
+            var serialFolder = new DirectoryDialog(shell, SWT.OPEN);
+            serialFolder.setText("Select one .zew-uart/serial-* session containing receipt.json");
+            serialFolder.setFilterPath(project.getLocation().append(".zew-uart").toOSString());
+            uart = serialFolder.open();
+            if (uart == null) return null;
+        }
+        final String uartSession = uart;
         if (!Files.isRegularFile(capture.resolve("capture.json"))) {
             MessageDialog.openError(shell, "RTOS Investigation",
                     "Select one capture directory containing capture.json and ctf/channel0_0.");
@@ -91,6 +102,10 @@ public final class RtosInvestigationHandler extends AbstractHandler {
                     if (fatalLog != null) {
                         args.add("--fault-log");
                         args.add(fatalLog);
+                    }
+                    if (uartSession != null) {
+                        args.add("--uart-session");
+                        args.add(uartSession);
                     }
                     stream.println("OFFLINE RTOS INVESTIGATION — no reset, flash, memory read or probe access.");
                     new ProcessRunner().run(args, project.getLocation().toFile().toPath(),
