@@ -221,7 +221,8 @@ public final class ChipPinCanvas extends Canvas {
         for (int bit = 0; bit < bank.bitPositions(); bit++) {
             int x = startX + (bit % columns) * (width + gap);
             int y = startY + (bit / columns) * 49;
-            boolean boardDeclaration = bank.uses().stream().anyMatch(usage -> usage.bit() == bit);
+            boolean boardDeclaration = false;
+            for (var usage : bank.uses()) if (usage.bit() == bit) boardDeclaration = true;
             boolean selectedSlot = selectedBit == bit;
             boolean fromCode = false;
             for (var call : resolvedSourceCalls) {
