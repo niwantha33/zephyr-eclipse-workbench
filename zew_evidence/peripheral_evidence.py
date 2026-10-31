@@ -119,7 +119,7 @@ def inspect(build: Path, zephyr: Path, node: str, prop: str | None = None,
         # No implication that symbol enables this node, no inferred pin.
         state = ("selected-observations-present"
                  if path_status == "node-found" and binding == "matched"
-                 and device_status != "unknown"
+                 and device_status in ("okay", "disabled", "reserved", "fail", "fail-sss")
                  and (prop is None or property_status == "interpreted-by-binding")
                  and (symbol is None or effective in ("enabled", "disabled", "module"))
                  and item["state"] in ("built-tree-evaluated", "built-tree-incomplete")
