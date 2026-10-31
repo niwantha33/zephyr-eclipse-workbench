@@ -52,6 +52,7 @@ import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 import io.github.niwantha33.zew.core.SvdDevice;
 import io.github.niwantha33.zew.core.SvdAutoDiscovery;
 import io.github.niwantha33.zew.core.VendorSvdProvisioner;
+import io.github.niwantha33.zew.core.GitHubSvdProvisioner;
 import io.github.niwantha33.zew.core.RegisterHistory;
 import io.github.niwantha33.zew.core.SvdDevice.Register;
 
@@ -292,6 +293,44 @@ public final class SocRegistersView extends ViewPart {
             vendorDir = Path.of(settings.getProperty("zew.setupRoot")).resolve("vendor-svd");
         } catch (Exception error) {
             status.setText("Cannot determine exact board or vendor-pack directory: " + error.getMessage());
+            return;
+        }
+        if (GitHubSvdProvisioner.supports(board)) {
+            boolean approved = org.eclipse.jface.dialogs.MessageDialog.openQuestion(
+                    getSite().getShell(), "Download official Espressif SVD?",
+                    "Download the exact " + board + " register description from the"
+                    + " official espressif/svd GitHub release into this workspace?\\n\\n"
+                    + "The description may be incomplete. No target registers are accessed.");
+            if (!approved) return;
+            final long request = ++discoveryGeneration;
+            status.setText("Downloading official Espressif SVD for " + board + "…");
+            Job job = new Job("Download Espressif register description") {
+                @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                    try {
+                        var downloaded = GitHubSvdProvisioner.download(board, vendorDir);
+                        if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                        if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
+                            if (tree.isDisposed() || request != discoveryGeneration) return;
+                            selectedBoard = board;
+                            selectedProjectName = target.getName();
+                            load(downloaded.file().toString(), false);
+                            status.setText("Official Espressif SVD loaded (may be incomplete). SHA-256 "
+                                    + downloaded.sha256() + ". Live values require suspended Debug.");
+                        });
+                        return Status.OK_STATUS;
+                    } catch (Exception error) {
+                        if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
+                            if (tree.isDisposed() || request != discoveryGeneration) return;
+                            status.setText("Espressif SVD download/validation failed: "
+                                    + error.getMessage() + ". No unrelated chip map was loaded.");
+                        });
+                        return new Status(IStatus.WARNING, Activator.ID,
+                                "Espressif SVD provisioning failed", error);
+                    }
+                }
+            };
+            job.setUser(true);
+            job.schedule();
             return;
         }
         if (!VendorSvdProvisioner.supports(board)) {
