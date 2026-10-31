@@ -274,3 +274,50 @@ level, package pad or free-pin claim is guessed. A missing controller label,
 used index, name collision, disabled controller, stale build or unsupported
 cell shape blocks the flow. Rebuild after saving and verify the selected overlay,
 controller binding, driver configuration and actual circuit before using it.
+
+
+## Hardware / Insights — selected-build edtlib binding evidence (development PR)
+
+The native Configuration Studio **Hardware** toolbar now offers two explicitly
+read-only actions:
+
+- **Validate selected binding** — evaluates the selected built Devicetree
+  node and, when the selected property belongs to that exact node, its
+  interpreted property type. The generated tree is never treated as proof
+  of a physical pin or live device.
+- **Preview saved overlay binding** — evaluates the last generated DTS
+  combined with the **saved** selected application overlay in an isolated
+  temporary file using Zephyr's real edtlib. The unsaved in-memory draft
+  shown under `Changes / app.overlay` is deliberately not sent to edtlib:
+  select the saved overlay first or build the reviewed source changes.
+
+The results are shown in the existing **Hardware → Validation / evidence**
+dock and **Insights** report surface, without a new window or a second
+hardware editor. Matching results include the generated DTS SHA-256,
+node/binding/property interpretation, status and preview state. Source
+changes to `app.overlay` or a different selected build require a new
+validation. The action is non-blocking and discards old replies after a
+project change, selection change, refresh or view disposal.
+
+The installed plug-in packages `scripts/dt_binding_inspect.py` and uses
+managed Python from the selected project's existing environment. It checks
+the build cache's `ZEPHYR_BASE` against that workspace's selected Zephyr
+checkout, then imports upstream edtlib and the built-in Zephyr binding
+directory (plus the application's own `dts/bindings`, if any). Module
+binding roots not explicitly included in this native prototype can make
+an otherwise valid node **unmatched**: this means unavailable evidence,
+not invalid hardware. The headless `zew dt-check` can be used with
+explicit `--bindings` roots for deeper investigation.
+
+Preprocessor directives needing the true build pipeline, missing PyYAML,
+missing bindings, stale snapshots, invalid overlays and unmatched nodes
+are reported as incomplete/unavailable, with no user-controlled Python
+error or arbitrary source text echoed. The generated `edt.pickle` is
+never unpickled by this feature. No project data, build output, firmware
+or hardware is modified.
+
+**Still required:** binding-root discovery from actual multi-image CMake
+configuration, validation of proposed overlays through full Zephyr build,
+electrical/package pin checking, physical probe acceptance and learning
+effectiveness measurement. This is a Phase-0 feasibility UI for review
+against the headless checker; **not** a production completeness claim.
