@@ -208,17 +208,37 @@ public final class SocRegistersView extends ViewPart {
                     Path userHome = Path.of(System.getProperty("user.home"));
                     roots.add(userHome.resolve(".cmsis/packs"));
                     roots.add(userHome.resolve(".cmsis-packs"));
+                    // Standard Arm CMSIS-Pack managers and vendor IDE installations.
+                    // Vendor model data remains subject to exact-SoC verification.
+                    for (String variable : new String[] {
+                            "CMSIS_PACK_ROOT", "CMSIS_PACK_PATH", "KEIL_PACK_ROOT",
+                            "PACK_ROOT", "ZEW_VENDOR_SVD_DIRS" }) {
+                        String configured = System.getenv(variable);
+                        if (configured == null || configured.isBlank()) continue;
+                        for (String item : configured.split(java.util.regex.Pattern.quote(java.io.File.pathSeparator))) {
+                            if (!item.isBlank()) {
+                                try { roots.add(Path.of(item)); }
+                                catch (java.nio.file.InvalidPathException ignored) { /* Ignore malformed root. */ }
+                            }
+                        }
+                    }
+                    roots.add(userHome.resolve("AppData/Local/Arm/Packs"));
+                    roots.add(userHome.resolve("AppData/Local/Keil/Packs"));
+                    roots.add(userHome.resolve("AppData/Local/CMSIS/Packs"));
+                    roots.add(userHome.resolve(".cache/arm/packs"));
+                    roots.add(userHome.resolve("AppData/Local/Espressif"));
+                    roots.add(userHome.resolve("esp/esp-idf"));
+                    roots.add(workspace.resolve("modules/hal/espressif"));
+                    roots.add(workspace.resolve("modules/hal/stm32"));
+                    roots.add(workspace.resolve("modules/hal/nordic"));
+                    roots.add(workspace.resolve("modules/hal/ti"));
+
                     roots.add(userHome.resolve("AppData/Local/Arm/Packs"));
                     roots.add(workspace.resolve("modules/hal"));
                     roots.add(workspace.resolve("zephyr"));
                     roots.add(Path.of(settings.getProperty("tools.sdk")));
                     if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win"))
                         roots.add(Path.of("C:/ti"));
-                    String extra = System.getenv("ZEW_VENDOR_SVD_DIRS");
-                    if (extra != null && !extra.isBlank()) {
-                        for (String item : extra.split(java.util.regex.Pattern.quote(java.io.File.pathSeparator)))
-                            if (!item.isBlank()) roots.add(Path.of(item));
-                    }
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     result = SvdAutoDiscovery.resolve(board, roots, userHome.resolve(".zew/svd-cache"));
                 } catch (Exception error) {
