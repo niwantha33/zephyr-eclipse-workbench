@@ -29,6 +29,7 @@ from zew_evidence.map_context import audit as audit_gnu_context
 from zew_evidence.config_request_check import check as check_config_requests
 from zew_evidence.config_semantics import enrich as evaluate_config_semantics
 from zew_evidence.dt_binding_preview import inspect as inspect_dt_binding
+from zew_evidence.dt_build_validation import validate as validate_dt_build
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -96,6 +97,25 @@ def main(argv: list[str] | None = None) -> int:
     dts.add_argument("--bindings", type=Path, action="append", default=[],
                      help="Additional explicit binding root, repeat for modules/projects")
     dts.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
+    real_dts = subs.add_parser("dt-configure",
+                               help="Opt-in real west/CMake Devicetree configuration in disposable scratch")
+    real_dts.add_argument("--build", type=Path, required=True,
+                          help="Previously configured selected build; unchanged")
+    real_dts.add_argument("--application", type=Path, required=True,
+                          help="Trusted Zephyr application; copied into scratch")
+    real_dts.add_argument("--zephyr", type=Path, required=True,
+                          help="Selected checkout, must match original CMakeCache ZEPHYR_BASE")
+    real_dts.add_argument("--python", type=Path, required=True,
+                          help="Managed Python containing the selected west installation")
+    real_dts.add_argument("--board", required=True,
+                          help="Exact board/SoC/core target matching the selected build")
+    real_dts.add_argument("--overlay", type=Path,
+                          help="Optional additional overlay from the application; applied last")
+    real_dts.add_argument("--ninja", type=Path, help="Explicit selected Ninja executable")
+    real_dts.add_argument("--timeout", type=int, default=300,
+                          help="Bounded configure timeout (30..900 s)")
+    real_dts.add_argument("--scratch-parent", type=Path,
+                          help="Existing folder outside application/build for temporary work")
     diff = subs.add_parser("compare", help="Compare two builds or verified offline bundles")
     lg = diff.add_mutually_exclusive_group(required=True)
     lg.add_argument("--left", type=Path, help="Generated build root")
@@ -118,7 +138,11 @@ def main(argv: list[str] | None = None) -> int:
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "dt-check":
+        if args.command == "dt-configure":
+            output = validate_dt_build(args.build, args.application, args.zephyr,
+                                       args.python, args.board, args.overlay, args.ninja,
+                                       args.timeout, args.scratch_parent)
+        elif args.command == "dt-check":
             output = inspect_dt_binding(args.build, args.zephyr, args.node, args.property,
                                         args.overlay, args.image, args.bindings)
         elif args.command == "config-check":
@@ -219,6 +243,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(output, sort_keys=True, indent=2, ensure_ascii=False))
     if args.command == "verify":
         return 0 if output["status"] == "recorded-artifacts-match" else 1
+    if args.command == "dt-configure":
+        return 0 if output["status"] == "configured-in-scratch" else 1
     if args.command == "dt-check":
         return 0 if output["status"] == "interpreted-preview" else 1
     if args.command == "config-check":
