@@ -50,6 +50,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'DebugConsoleOutputTests'], check
 
 subprocess.run([tool('java'), '-cp', str(out), 'SvdDeviceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdAutoDiscoveryTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'GitHubSvdProvisionerTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'VendorSvdProvisionerTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationDiagnosisTests'], check=True, cwd=root, timeout=90)
 
