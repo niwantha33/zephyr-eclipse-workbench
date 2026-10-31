@@ -246,6 +246,11 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 info.println("Symbols: " + params.elf() + " | target: " + params.plan().board()
                         + " | profile: " + params.settings().getProperty("zew.buildConfiguration", "default")
                         + ". Debug attaches without flashing; use Flash when the device firmware differs from this build.");
+                if (configuration.getAttribute(FLASH_BUILD, java.util.Map.<String, String>of()).isEmpty())
+                    info.println("TARGET IMAGE NOT VERIFIED: switching Build configuration to Debug (-Og) "
+                            + "produces a different ELF but does NOT program the board. "
+                            + "Use Zephyr > Flash and Debug Application to program the selected profile. "
+                            + "Thread enumeration does not establish ELF/target identity.");
                 info.println(params.variableAdvice());
                 info.println("CPU registers: select a suspended frame, then Window > Show View > Other > Debug > Registers. "
                         + "SoC peripheral registers: Window > Show View > Other > Debug > SoC Registers; "
