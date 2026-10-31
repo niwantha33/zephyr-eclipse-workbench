@@ -46,7 +46,8 @@ class RealDtConfigureTests(unittest.TestCase):
 
     def invoke(self, configure_ok=True, cache_accurate=True, text="configured"):
         def pretend_run(cmd, **kwargs):
-            self.assertEqual(cmd[:4], [str(self.python), "-m", "west", "build"])
+            self.assertEqual(Path(cmd[0]).resolve(), self.python.resolve())
+            self.assertEqual(cmd[1:4], ["-m", "west", "build"])
             self.assertIn("--cmake-only", cmd)
             self.assertIn("--pristine=always", cmd)
             self.assertNotIn("flash", cmd)
