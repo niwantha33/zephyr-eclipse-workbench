@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 from analyze_trace import analyze
-from investigation import review_receipt
+from investigation import review_receipt, render_html
 from collections import deque
 import hashlib
 import json
@@ -207,6 +207,7 @@ def capture(gdb: Path, elf: Path, metadata: Path, destination: Path, port: int,
                                 build_config=(elf.parent / '.config').read_bytes())
         (stage / 'diagnostics.json').write_text(
             json.dumps(guided, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+        (stage / 'report.html').write_text(render_html(guided), encoding='utf-8')
         # A fresh directory for each snapshot prevents silently reusing an old trace.
         stamp = time.strftime('%Y%m%d-%H%M%S')
         for suffix in range(1000):
@@ -229,7 +230,7 @@ def main() -> int:
     try:
         elf, metadata = validate(args.build, args.zephyr, args.gdb)
         path = capture(args.gdb.resolve(), elf, metadata, args.output, args.port, args.seconds)
-        print(f'Trace saved to {path}; target halted. See diagnostics.json and capture.json for guided evidence, CTF/CPU validation and limitations. Firmware/ELF match is not verified.')
+        print(f'Trace saved to {path}; target halted. Open report.html for the guided CPU/evidence overview, or diagnostics.json and capture.json for machine-readable findings. Firmware/ELF match is not verified.')
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
         print(f'Capture failed: {exc}', file=__import__('sys').stderr)
