@@ -275,3 +275,40 @@ The MSPM0 report showing the offset table shifted by four bytes was followed by
 the user's report that flashing restored Debug. This is user-reported hardware
 acceptance for that attempt, not a container measurement or proof of every
 possible mismatch's cause.
+
+
+## Expressions view: `<optimized out>` does not mean debug attach failed
+
+Example: on `lp_mspm0g3507`, a local pointer initialized by
+`DEVICE_DT_GET(DT_NODELABEL(gpioa))` and passed into
+`gpio_pin_configure()` can show `<optimized out>` when execution stops
+**after its final use**. GDB may still know the variable's declared type and
+let CDT expand a nominal structure, but it cannot honestly provide the pointer
+value or member contents in that frame. This is not an SVD/register issue.
+
+Each managed native debug launch now prints **Debug variable availability**
+using the **effective generated `zephyr/.config` optimization choice**, rather
+than assuming that a Debug action means a Debug-optimized ELF. It reports
+`CONFIG_DEBUG_OPTIMIZATIONS=y` as *normally* `-Og`, not as verified compiler
+flags, because toolchain/custom CMake flags may override them. For other
+profiles it explains how to select **Project > Properties > Zephyr > Build
+configuration > Debug (-Og)**; build, flash the matching firmware, then Debug.
+This does **not** change a project configuration or flash the target
+automatically.
+
+In CDT's Debug perspective:
+1. Select the correct **suspended thread and stack frame**.
+2. Break **before the local's final use**, e.g. just before
+   `gpio_pin_configure(gpio_dev, 15, ...)`, then evaluate `gpio_dev`.
+3. If it remains unavailable, inspect the effective Kconfig and the actual
+   compilation command for this translation unit. With suitable target
+   memory/stack headroom, Zephyr also provides `CONFIG_NO_OPTIMIZATIONS=y`
+   (normally `-O0`), but this is a deliberate project setting, not an IDE
+   debugging toggle. `-O0` may increase flash/RAM/stack use and is not a
+   guarantee that every expression exists at every PC.
+4. Keep CPU registers (R0-Rn, SP, PC) and SVD peripheral registers separate
+   from source locals. Hardware readback must be supported by the target.
+   A successful GDB thread list does not prove local variable availability.
+
+Never synthesise a value, dereference a GDB-unavailable variable, or infer
+that a displayed struct child has a valid runtime value from its type alone.
