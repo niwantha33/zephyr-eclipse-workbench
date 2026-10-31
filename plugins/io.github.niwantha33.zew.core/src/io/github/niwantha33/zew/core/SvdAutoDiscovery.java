@@ -21,6 +21,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 /**
  * Discover ONLY an exact SoC's vendor SVD from already installed Zephyr,
@@ -36,12 +40,13 @@ public final class SvdAutoDiscovery {
 
     public enum State { MATCHED, MISSING, AMBIGUOUS, INVALID_TARGET, INCOMPLETE_SCAN }
     public record Result(State state, String part, Path path, int registers,
-            String explanation, List<String> inspected) {
+            boolean mappedByPack, String explanation, List<String> inspected) {
         public Result {
             inspected = List.copyOf(inspected);
         }
     }
-    private record Candidate(Path path, String name, int registers, String fingerprint) {}
+    private record Candidate(Path path, String name, int registers, String fingerprint,
+            boolean mappedByPack) {}
 
     public static String partFromBoard(String board) {
         if (board == null || board.isBlank()) return "";
@@ -60,12 +65,13 @@ public final class SvdAutoDiscovery {
     private static byte[] bounded(InputStream input) throws IOException {
         return input.readNBytes((int) MAX_SVD_BYTES + 1);
     }
-    private static Candidate validate(byte[] bytes, String part, Path source, Path cache) throws Exception {
+    private static Candidate validate(byte[] bytes, String part, Path source, Path cache,
+            boolean vendorPackMapped) throws Exception {
         if (bytes.length == 0 || bytes.length > MAX_SVD_BYTES) return null;
         SvdDevice device = SvdDevice.read(new ByteArrayInputStream(bytes));
-        // Exact chip name is mandatory. A family-level SVD cannot be silently
-        // used as a physical chip-specific register map.
-        if (!normal(device.name()).equals(normal(part))) return null;
+        // Either exact SVD model identity OR an installed vendor pack's explicit
+        // PDSC Dname/Dvariant -> debug svd mapping for this exact target.
+        if (!vendorPackMapped && !normal(device.name()).equals(normal(part))) return null;
         String sha = fingerprint(bytes);
         Path chosen = source;
         if (cache != null) {
@@ -83,7 +89,8 @@ public final class SvdAutoDiscovery {
                 } finally { Files.deleteIfExists(temp); }
             }
         }
-        return new Candidate(chosen, device.name(), device.registers().size(), sha);
+        return new Candidate(chosen, device.name(), device.registers().size(), sha,
+                vendorPackMapped);
     }
     private static Candidate fileCandidate(Path file, String part) {
         try {
@@ -91,15 +98,76 @@ public final class SvdAutoDiscovery {
                     || Files.size(file) > MAX_SVD_BYTES) return null;
             byte[] bytes;
             try (InputStream input = Files.newInputStream(file)) { bytes = bounded(input); }
-            return validate(bytes, part, file, null);
+            return validate(bytes, part, file, null, false);
         } catch (Exception ignored) {
             return null; // invalid/unreadable SDK copy is never trusted
         }
     }
+    /** Only a PDSC exact device/variant declaration can authorize a family SVD. */
+    private static Set<String> mappedSvdEntries(ZipFile zip, String part) {
+        var paths = new HashSet<String>();
+        var entries = zip.entries();
+        int seen = 0;
+        while (entries.hasMoreElements() && ++seen <= MAX_PACK_ENTRIES) {
+            var pdsc = entries.nextElement();
+            if (!pdsc.getName().toLowerCase(Locale.ROOT).endsWith(".pdsc")
+                    || pdsc.getSize() < 1 || pdsc.getSize() > 2_000_000) continue;
+            try (var input = zip.getInputStream(pdsc)) {
+                var factory = DocumentBuilderFactory.newInstance();
+                factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+                factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+                factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+                factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+                factory.setXIncludeAware(false);
+                factory.setExpandEntityReferences(false);
+                var doc = factory.newDocumentBuilder()
+                        .parse(new ByteArrayInputStream(input.readNBytes(2_000_001)));
+                var devices = doc.getElementsByTagName("*");
+                for (int i = 0; i < devices.getLength(); i++) {
+                    if (!(devices.item(i) instanceof Element element)) continue;
+                    String name = element.getAttribute("Dname");
+                    String variant = element.getAttribute("Dvariant");
+                    if (!normal(name).equals(normal(part)) && !normal(variant).equals(normal(part)))
+                        continue;
+                    // Device-specific debug wins; inherited family debug is
+                    // accepted only when a named device/variant selects it.
+                    for (Node node = element; node instanceof Element; node = node.getParentNode()) {
+                        var parent = (Element) node;
+                        var children = parent.getChildNodes();
+                        boolean assigned = false;
+                        for (int j = 0; j < children.getLength(); j++) {
+                            if (!(children.item(j) instanceof Element child)
+                                    || !child.getTagName().equals("debug")) continue;
+                            String reference = child.getAttribute("svd").replace('\\', '/');
+                            if (reference.isBlank() || reference.startsWith("/")
+                                    || reference.contains("..") || reference.contains(":")
+                                    || !reference.toLowerCase(Locale.ROOT).endsWith(".svd")) continue;
+                            paths.add(reference);
+                            assigned = true;
+                        }
+                        if (assigned) break;
+                    }
+                }
+            } catch (Exception ignored) {
+                // Malformed PDSC is never a source of trusted device mapping.
+            }
+        }
+        return paths;
+    }
+
     private static void packCandidates(Path pack, String part, Path cache, List<Candidate> candidates) {
         try {
             if (Files.isSymbolicLink(pack) || Files.size(pack) > MAX_PACK_BYTES) return;
             try (var zip = new ZipFile(pack.toFile())) {
+                for (String mapped : mappedSvdEntries(zip, part)) {
+                    ZipEntry svd = zip.getEntry(mapped);
+                    if (svd == null || svd.getSize() > MAX_SVD_BYTES) continue;
+                    try (InputStream input = zip.getInputStream(svd)) {
+                        Candidate candidate = validate(bounded(input), part, pack, cache, true);
+                        if (candidate != null) candidates.add(candidate);
+                    } catch (Exception ignored) { /* Invalid mapped SVD cannot authorize reads. */ }
+                }
                 var entries = zip.entries();
                 int count = 0;
                 while (entries.hasMoreElements() && ++count <= MAX_PACK_ENTRIES) {
@@ -110,7 +178,7 @@ public final class SvdAutoDiscovery {
                             || entry.getSize() > MAX_SVD_BYTES) continue;
                     byte[] bytes;
                     try (InputStream input = zip.getInputStream(entry)) { bytes = bounded(input); }
-                    Candidate candidate = validate(bytes, part, pack, cache);
+                    Candidate candidate = validate(bytes, part, pack, cache, false);
                     if (candidate != null) candidates.add(candidate);
                 }
             }
@@ -122,7 +190,7 @@ public final class SvdAutoDiscovery {
     public static Result resolve(String board, List<Path> roots, Path cache) {
         String part = partFromBoard(board);
         if (part.isEmpty() || Set.of("appcpu", "netcore", "cpu0", "atom", "soc").contains(part)) {
-            return new Result(State.INVALID_TARGET, part, null, 0,
+            return new Result(State.INVALID_TARGET, part, null, 0, false,
                     "Board target lacks an exact SoC identifier; no SVD was guessed.", List.of());
         }
         var inspected = new ArrayList<String>();
@@ -171,15 +239,19 @@ public final class SvdAutoDiscovery {
         if (unique.size() == 1) {
             var candidate = unique.values().iterator().next();
             return new Result(State.MATCHED, part, candidate.path(), candidate.registers(),
-                    "Exact SVD device name matched " + part + "; register values require a halted manual read.",
+                    candidate.mappedByPack(),
+                    (candidate.mappedByPack() ? "Installed CMSIS pack explicitly maps "
+                            + part + " to vendor SVD model " + candidate.name()
+                            : "Exact SVD model matched " + part)
+                            + "; register values require a halted manual read.",
                     inspected);
         }
         if (unique.size() > 1)
-            return new Result(State.AMBIGUOUS, part, null, 0,
+            return new Result(State.AMBIGUOUS, part, null, 0, false,
                     "Multiple different vendor SVD revisions match " + part
                     + "; choose the correct installed pack manually.", inspected);
         return new Result(truncated[0] ? State.INCOMPLETE_SCAN : State.MISSING,
-                part, null, 0,
+                part, null, 0, false,
                 truncated[0] ? "Search budget reached; search an explicit vendor SVD directory."
                         : "No exact vendor SVD installed for " + part + ". Install its official CMSIS Device Family Pack "
                         + "or choose an exact device .svd via Load SVD; no register map was invented.",
