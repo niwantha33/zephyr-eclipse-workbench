@@ -225,6 +225,30 @@ def main():
                 if hashlib.sha256(kconfig_source.read_bytes()).digest() != before_inspection:
                     raise ValueError('Kconfig semantic inspector modified generated .config')
                 print('PASS: real MSPM0 Kconfiglib defined/undefined symbol check')
+                # Read-only edtlib smoke on a REAL generated Zephyr board tree.
+                # Root '/' may have no binding; that is incomplete evidence,
+                # NOT a failed parser and not proof of a peripheral's presence.
+                generated_dts = Path(build_arg) / 'zephyr/zephyr.dts'
+                dts_hash = hashlib.sha256(generated_dts.read_bytes()).hexdigest()
+                dts_probe = subprocess.run([
+                    str(python), str(REPO / 'zew.py'), 'dt-check',
+                    '--build', str(build_arg), '--zephyr',
+                    str(Path(workspace_arg) / 'zephyr'), '--node', '/'
+                ], cwd=REPO, env=env, text=True, encoding='utf-8',
+                   errors='replace', capture_output=True, timeout=180)
+                try:
+                    dts_result = json.loads(dts_probe.stdout)
+                except (ValueError, TypeError) as error:
+                    raise ValueError('Real Zephyr edtlib did not return JSON') from error
+                if dts_probe.returncode not in (0, 1) or dts_result.get('status') not in (
+                        'interpreted-preview', 'partial-or-unavailable'):
+                    raise ValueError('Real Zephyr edtlib returned invalid status')
+                image_state = dts_result['images'][0]['state']
+                if image_state not in ('built-tree-evaluated', 'built-tree-incomplete'):
+                    raise ValueError('Real generated DTS was not parsed by edtlib: ' + image_state)
+                if dts_hash != hashlib.sha256(generated_dts.read_bytes()).hexdigest():
+                    raise ValueError('Read-only edtlib inspection changed generated DTS')
+                print('PASS: real MSPM0 edtlib generated-tree interpretation')
             finally:
                 semantic_snippet.unlink(missing_ok=True)
         # Shared Java verifier is compiled by scripts/test_core.py in this job.

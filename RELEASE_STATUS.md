@@ -330,3 +330,21 @@ passing these prototype tests.
 - User reported that Flash followed by Debug resolved the observed MSPM0
   four-byte-shift mismatch. Additional combined-flow and GPIO hardware
   acceptance remain outstanding. No G0/G1 promotion or release publication.
+
+
+## Devicetree Truth Check — read-only binding preview (draft PR)
+
+- Added an opt-in `zew dt-check` CLI that interprets **actual generated DTS**
+  through the selected Zephyr checkout's `edtlib` and explicit binding roots,
+  with an optional temporary plain-overlay preview.
+- Refuses mismatched checkout/build identities and reports unmatched bindings,
+  missing nodes/properties and edtlib failures as incomplete; no invented
+  pin assignments or readiness claims.
+- Uses snapshot hashes, bounded inputs and explicit multi-image selection;
+  intentionally does not load Python pickle artifacts or export raw DTS,
+  values, paths or arbitrary parser errors.
+- Unit fixtures and a native Windows MSPM0 real-generated-DTS smoke are
+  included. Exact-head Linux/Windows CI and review remain prerequisites.
+- No claim of complete overlay validation, required electrical checks,
+  physical evidence, IDE feature release or learning-percentage results.
+  **G0 remains OPEN**.

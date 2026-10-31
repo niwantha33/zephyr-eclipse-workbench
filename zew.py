@@ -28,6 +28,7 @@ from zew_evidence.section_audit import audit as audit_elf_sections
 from zew_evidence.map_context import audit as audit_gnu_context
 from zew_evidence.config_request_check import check as check_config_requests
 from zew_evidence.config_semantics import enrich as evaluate_config_semantics
+from zew_evidence.dt_binding_preview import inspect as inspect_dt_binding
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -84,6 +85,17 @@ def main(argv: list[str] | None = None) -> int:
                                help="Opt-in evaluation using exact selected Zephyr Kconfiglib and Ninja build")
     request_check.add_argument("--ninja", type=Path,
                                help="Explicit Ninja executable; --semantic only (else use PATH)")
+    dts = subs.add_parser("dt-check", help="Read-only selected-build edtlib binding/overlay preview")
+    dts.add_argument("--build", required=True, type=Path)
+    dts.add_argument("--zephyr", required=True, type=Path,
+                     help="Explicit Zephyr checkout; must match build CMakeCache ZEPHYR_BASE")
+    dts.add_argument("--node", required=True, help="Absolute Devicetree path")
+    dts.add_argument("--property", help="Optional property to check against matched binding")
+    dts.add_argument("--overlay", type=Path,
+                     help="Optional local plain DTS overlay for a temporary preview (no preprocessing)")
+    dts.add_argument("--bindings", type=Path, action="append", default=[],
+                     help="Additional explicit binding root, repeat for modules/projects")
+    dts.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
     diff = subs.add_parser("compare", help="Compare two builds or verified offline bundles")
     lg = diff.add_mutually_exclusive_group(required=True)
     lg.add_argument("--left", type=Path, help="Generated build root")
@@ -106,7 +118,10 @@ def main(argv: list[str] | None = None) -> int:
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "config-check":
+        if args.command == "dt-check":
+            output = inspect_dt_binding(args.build, args.zephyr, args.node, args.property,
+                                        args.overlay, args.image, args.bindings)
+        elif args.command == "config-check":
             if args.ninja is not None and not args.semantic:
                 raise InputError("--ninja requires --semantic")
             output = check_config_requests(collect(args.build, args.image), args.snippet)
@@ -204,6 +219,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(output, sort_keys=True, indent=2, ensure_ascii=False))
     if args.command == "verify":
         return 0 if output["status"] == "recorded-artifacts-match" else 1
+    if args.command == "dt-check":
+        return 0 if output["status"] == "interpreted-preview" else 1
     if args.command == "config-check":
         if args.semantic and output["semantic_validation"]["state"] != "evaluated-without-blockers":
             return 1
