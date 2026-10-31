@@ -331,3 +331,40 @@ only. Exit 1: unavailable, failed or identity mismatch. Exit 2: invalid
 input. This does not compile, link, flash, validate package pins or guarantee
 equivalence to the existing build. See
 [full validation semantics](REAL_DEVICETREE_VALIDATION.md).
+
+
+## Selected peripheral evidence (read-only, Phase 0)
+
+```sh
+python zew.py peripheral --build ./app/.zew-build/ci \
+  --zephyr ./workspace/zephyr --node /soc/gpio@40000000 \
+  --property ngpios --symbol CONFIG_GPIO
+```
+
+The node and property paths must refer to the actual **generated**
+`zephyr/zephyr.dts`. Use `--bindings /exact/module/dts/bindings`
+(repeat as required) for binding directories supplied by active Zephyr
+modules; nothing is inferred from a vendor name. Use `--image
+NAME=relative/image/build` for each explicitly identified sysbuild image.
+
+This command reuses the selected checkout's real upstream **edtlib** for
+node/binding/property interpretation and reads the existing generated
+`zephyr/.config` for an **independently selected** Kconfig symbol.
+It does **not** infer that `CONFIG_GPIO` (or any selected symbol) enables
+the selected node, that a driver was compiled, or that a physical pad is free.
+A node with status `disabled` is reported as a confirmed observed disabled
+node, not as a working device. Missing module bindings are **unknown**,
+never an invalid-pin assertion.
+
+The report includes SHA-256 hashes for the specific generated DTS and
+config artifacts, per-image evidence states with explicit source-relative
+artifact names, fixed next-action codes and confidence labels. Host paths,
+property values and arbitrary CMake/parser errors are excluded. The node
+and optional symbol identity are SHA-256 hashed instead of echoed.
+
+Exit **0**: all explicitly selected observations were present in the
+selected build (including disabled values), NOT hardware-readiness.
+Exit **1**: incomplete or unavailable. Exit **2**: invalid input.
+No tool execution, writes, network, flashing or hardware probes.
+`zew dt-configure` is the separate opt-in real CMake check for changed
+source and candidate overlays.

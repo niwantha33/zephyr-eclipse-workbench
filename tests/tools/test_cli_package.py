@@ -62,6 +62,11 @@ class CliPackageTests(unittest.TestCase):
                                      capture_output=True, timeout=15, check=True)
             self.assertIn("--zephyr", dt_help.stdout)
             self.assertIn("--overlay", dt_help.stdout)
+            peripheral_help = subprocess.run([sys.executable, str(first), "peripheral", "--help"],
+                                             cwd=root, env=env, text=True,
+                                             capture_output=True, timeout=15, check=True)
+            self.assertIn("--symbol", peripheral_help.stdout)
+            self.assertIn("--bindings", peripheral_help.stdout)
             configure_help = subprocess.run(
                 [sys.executable, str(first), "dt-configure", "--help"],
                 cwd=root, env=env, text=True, capture_output=True, timeout=15, check=True)

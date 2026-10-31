@@ -370,3 +370,25 @@ passing these prototype tests.
 - Original build equivalence, complete compilation, all module/board
   variations, pin/electrical correctness, and physical board validation remain
   **unverified**. No claim of release readiness. **G0 remains OPEN.**
+
+
+## Selected peripheral evidence — headless Phase-0 increment
+
+- Added deterministic `zew peripheral` to correlate the *independent*
+  generated selected-image EDT node/binding/property observation and a
+  caller-supplied exact generated Kconfig symbol. There is deliberately
+  **no** driver/DT causal or physical pin inferred relationship.
+- Reuses actual selected Zephyr checkout edtlib and the existing
+  read-only generated DTS/Kconfig collectors. The observations are
+  independently SHA-256 scoped per selected build/sysbuild image.
+  Redacted/missing properties, unavailable binding roots, missing nodes
+  and undefined/unobserved Kconfig symbols produce explicit UNKNOWN
+  or incomplete outcomes, not fabricated compatible pins.
+- Includes fixed next-action codes, CLI 0/1/2 contract, multi-image and
+  privacy regression fixtures, portable CLI smoke and real **seven-target**
+  Windows managed firmware evidence checks.
+- These are *configured-build snapshots*, not live hardware, pinmux/electrical
+  validation, linked driver proof, or Kconfig-to-Devicetree causality.
+  No new native Studio/editor or automatic overlay change.
+- Manual competitor/hardware acceptance and complete licensing audit
+  remain outstanding. **G0 is OPEN; no release authorised.**

@@ -29,6 +29,7 @@ from zew_evidence.map_context import audit as audit_gnu_context
 from zew_evidence.config_request_check import check as check_config_requests
 from zew_evidence.config_semantics import enrich as evaluate_config_semantics
 from zew_evidence.dt_binding_preview import inspect as inspect_dt_binding
+from zew_evidence.peripheral_evidence import inspect as inspect_peripheral_evidence
 from zew_evidence.dt_build_validation import validate as validate_dt_build
 
 
@@ -97,6 +98,17 @@ def main(argv: list[str] | None = None) -> int:
     dts.add_argument("--bindings", type=Path, action="append", default=[],
                      help="Additional explicit binding root, repeat for modules/projects")
     dts.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
+    peripheral = subs.add_parser("peripheral",
+                                 help="Exact EDT node and independent generated Kconfig evidence (read-only)")
+    peripheral.add_argument("--build", required=True, type=Path)
+    peripheral.add_argument("--zephyr", required=True, type=Path,
+                            help="Exact Zephyr checkout from the selected build CMake cache")
+    peripheral.add_argument("--node", required=True, help="Exact generated Devicetree node path")
+    peripheral.add_argument("--property", help="Optional exact Devicetree binding property")
+    peripheral.add_argument("--symbol", help="Optional CONFIG_ symbol; no driver causality is inferred")
+    peripheral.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
+    peripheral.add_argument("--bindings", type=Path, action="append", default=[],
+                            help="Additional explicit Zephyr module binding roots")
     real_dts = subs.add_parser("dt-configure",
                                help="Opt-in real west/CMake Devicetree configuration in disposable scratch")
     real_dts.add_argument("--build", type=Path, required=True,
@@ -141,7 +153,11 @@ def main(argv: list[str] | None = None) -> int:
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "dt-configure":
+        if args.command == "peripheral":
+            output = inspect_peripheral_evidence(args.build, args.zephyr, args.node,
+                                                 args.property, args.symbol, args.image,
+                                                 args.bindings)
+        elif args.command == "dt-configure":
             output = validate_dt_build(args.build, args.application, args.zephyr,
                                        args.python, args.board, args.overlay, args.ninja,
                                        args.timeout, args.scratch_parent,
@@ -247,6 +263,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(output, sort_keys=True, indent=2, ensure_ascii=False))
     if args.command == "verify":
         return 0 if output["status"] == "recorded-artifacts-match" else 1
+    if args.command == "peripheral":
+        return 0 if output["status"] == "selected-observations-present" else 1
     if args.command == "dt-configure":
         return 0 if output["status"] == "configured-in-scratch" else 1
     if args.command == "dt-check":
