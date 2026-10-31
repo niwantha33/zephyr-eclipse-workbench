@@ -389,6 +389,36 @@ def main():
             run(['java', '-cp', REPO / 'build-core-tests', 'FirmwareVerify', '--base64', verify_argument], workspace, env)
         if hashlib.sha256((app / 'src/main.c').read_bytes()).hexdigest() != source_hash:
             raise ValueError('Application source changed')
+        # Independent, read-only selected-peripheral evidence from REAL Zephyr
+        # EDT and .config, across every explicit board/SoC/core scenario.
+        # Selecting '/' tests provenance without pretending an arbitrary
+        # GPIO/ADC controller exists or guessing its compatible binding.
+        observed = subprocess.run([
+            str(python), str(REPO / 'zew.py'), 'peripheral',
+            '--build', str(build_arg), '--zephyr',
+            str(Path(workspace_arg) / 'zephyr'), '--node', '/'
+        ], cwd=REPO, env=env, capture_output=True, text=True,
+           encoding='utf-8', errors='replace', timeout=180)
+        try:
+            peripheral = json.loads(observed.stdout)
+        except (ValueError, TypeError) as error:
+            raise ValueError('Cross-vendor peripheral evidence emitted invalid JSON') from error
+        if (observed.returncode not in (0, 1)
+                or peripheral['status'] not in
+                    ('selected-observations-present', 'incomplete-or-unavailable')
+                or len(peripheral['images']) != 1
+                or peripheral['images'][0]['generated_config_sha256'] !=
+                    hashlib.sha256((Path(build_arg) / 'zephyr/.config').read_bytes()).hexdigest()
+                or peripheral['images'][0]['generated_dts_sha256'] !=
+                    hashlib.sha256((Path(build_arg) / 'zephyr/zephyr.dts').read_bytes()).hexdigest()
+                or peripheral['images'][0]['kconfig']['causal_link_to_node'] != 'unverified'
+                or 'pin is free' not in ' '.join(peripheral['limitations'])):
+            raise ValueError('Cross-vendor peripheral evidence provenance or truth contract failed')
+        if observed.returncode == 0 and any(
+                item['state'] != 'confirmed'
+                for item in peripheral['images'][0]['checks'][:4]):
+            raise ValueError('Successful peripheral selected observations were not supported by EDT')
+        print('PASS: real generated EDT and Kconfig independent peripheral evidence, ' + label)
         # Every real vendor build is now independently inspected by the
         # Evidence Engine. This is build-artifact evidence, NEVER a flash or
         # physical-board assertion. Run after deliberate failure recovery.
