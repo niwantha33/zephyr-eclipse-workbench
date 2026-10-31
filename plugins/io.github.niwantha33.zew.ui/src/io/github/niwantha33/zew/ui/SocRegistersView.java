@@ -51,6 +51,7 @@ import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 import io.github.niwantha33.zew.core.SvdDevice;
 import io.github.niwantha33.zew.core.SvdAutoDiscovery;
+import io.github.niwantha33.zew.core.VendorSvdProvisioner;
 import io.github.niwantha33.zew.core.RegisterHistory;
 import io.github.niwantha33.zew.core.SvdDevice.Register;
 
@@ -87,9 +88,10 @@ public final class SocRegistersView extends ViewPart {
         ui = parent.getDisplay();
         parent.setLayout(new GridLayout(1, false));
         var bar = new Composite(parent, SWT.NONE);
-        bar.setLayout(new GridLayout(3, false));
+        bar.setLayout(new GridLayout(4, false));
         bar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(bar, "Find vendor SVD", this::chooseProjectForDiscovery);
+        button(bar, "Download vendor SVD…", this::downloadVendorSvd);
         button(bar, "Load SVD…", () -> {
             var dialog = new FileDialog(parent.getShell(), SWT.OPEN);
             dialog.setFilterExtensions(new String[] { "*.svd;*.xml", "*.*" });
@@ -245,6 +247,72 @@ public final class SocRegistersView extends ViewPart {
             }
         };
         job.setSystem(true);
+        job.schedule();
+    }
+
+    private void downloadVendorSvd() {
+        IProject project = selectedProjectName == null ? null
+                : ResourcesPlugin.getWorkspace().getRoot().getProject(selectedProjectName);
+        if (project == null || !project.isAccessible()) {
+            var available = java.util.Arrays.stream(ResourcesPlugin.getWorkspace().getRoot().getProjects())
+                    .filter(p -> p.isAccessible() && SelectedProject.importedProject(p) != null).toList();
+            if (available.size() == 1) project = available.get(0);
+        }
+        if (project == null || !project.isAccessible()) {
+            status.setText("Select an imported Zephyr project with an exact board before downloading.");
+            chooseProjectForDiscovery();
+            return;
+        }
+        final IProject target = project;
+        final String board;
+        final Path vendorDir;
+        try {
+            var settings = ProjectContext.settings(target);
+            board = settings.getProperty("board", "");
+            vendorDir = Path.of(settings.getProperty("zew.setupRoot")).resolve("vendor-svd");
+        } catch (Exception error) {
+            status.setText("Cannot determine exact board or vendor-pack directory: " + error.getMessage());
+            return;
+        }
+        if (!VendorSvdProvisioner.supports(board)) {
+            status.setText("Automatic download is not yet verified for " + board
+                    + ". Use an official installed vendor CMSIS pack or Load SVD…");
+            return;
+        }
+        boolean approved = org.eclipse.jface.dialogs.MessageDialog.openQuestion(
+                getSite().getShell(), "Download official TI register definitions?",
+                "Download TexasInstruments MSPM0G1X0X_G3X0X Device Family Pack 1.3.1"
+                + " from keil.com into the managed workspace?\\n\\n"
+                + "The pack will be checked for an exact MSPM0G3507 device mapping. "
+                + "No MCU registers are read or written by this action.");
+        if (!approved) return;
+        final long request = ++discoveryGeneration;
+        status.setText("Downloading and verifying official TI CMSIS pack for " + board + "…");
+        Job job = new Job("Download TI MSPM0 register description") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                try {
+                    var installed = VendorSvdProvisioner.download(board, vendorDir);
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
+                        if (tree.isDisposed() || request != discoveryGeneration) return;
+                        selectedBoard = board;
+                        selectedProjectName = target.getName();
+                        load(installed.device().path().toString(), installed.device().mappedByPack());
+                        status.setText("Verified TI pack installed: SHA-256 "
+                                + installed.sha256() + ". Live values require suspended Debug.");
+                    });
+                    return Status.OK_STATUS;
+                } catch (Exception error) {
+                    if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
+                        if (tree.isDisposed() || request != discoveryGeneration) return;
+                        status.setText("Official TI SVD download or verification failed: "
+                                + error.getMessage() + ". No guessed register map was loaded.");
+                    });
+                    return new Status(IStatus.WARNING, Activator.ID, "Vendor SVD provisioning failed", error);
+                }
+            }
+        };
+        job.setUser(true);
         job.schedule();
     }
 
