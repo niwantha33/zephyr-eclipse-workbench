@@ -87,7 +87,7 @@ public final class SocRegistersView extends ViewPart {
         ui = parent.getDisplay();
         parent.setLayout(new GridLayout(1, false));
         var bar = new Composite(parent, SWT.NONE);
-        bar.setLayout(new GridLayout(8, false));
+        bar.setLayout(new GridLayout(3, false));
         bar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(bar, "Find vendor SVD", this::chooseProjectForDiscovery);
         button(bar, "Load SVD…", () -> {
@@ -97,16 +97,19 @@ public final class SocRegistersView extends ViewPart {
             if (path != null) load(path);
         });
         button(bar, "Refresh selected + watches", this::refresh);
-        button(bar, "Pin baseline", this::pinBaseline);
-        button(bar, "Export history CSV…", this::exportHistory);
-        button(bar, "Watch / unwatch", () -> {
+        var options = new Composite(parent, SWT.NONE);
+        options.setLayout(new GridLayout(4, false));
+        options.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        button(options, "Pin baseline", this::pinBaseline);
+        button(options, "Export history CSV…", this::exportHistory);
+        button(options, "Watch / unwatch", () -> {
             var selected = selected();
             if (selected != null) {
                 if (!watches.remove(selected.key())) watches.add(selected.key());
                 render();
             }
         });
-        search = new Text(bar, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
+        search = new Text(options, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
         search.setMessage("Find peripheral, register or field");
         search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         search.addModifyListener(e -> render());
@@ -116,7 +119,7 @@ public final class SocRegistersView extends ViewPart {
         contextInfo = new Label(parent, SWT.WRAP);
         contextInfo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         contextInfo.setText("No selected debug frame. CPU registers, Variables and Expressions are separate native Debug views.");
-        summary = new Label(parent, SWT.NONE);
+        summary = new Label(parent, SWT.WRAP);
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         summary.setText("No SVD model loaded yet. Find vendor SVD searches installed SDKs and packs; register values require a halted manual read.");
         tree = new Tree(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
