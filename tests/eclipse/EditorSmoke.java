@@ -177,9 +177,9 @@ public final class EditorSmoke implements IApplication {
                     && dock.getItem(0).getText().startsWith("Changes")
                     && dock.getItem(1).getText().startsWith("Validation")
                     && dock.getItem(2).getText().startsWith("Generated DTS")
-                    && dock.getItem(3).getText().equals("GPIO Usage")
+                    && dock.getItem(3).getText().equals("GPIO Evidence")
                     && dock.getItem(4).getText().equals("GPIO Example C"),
-                    "native Studio includes GPIO Usage while retaining all existing evidence tabs");
+                    "native Studio distinguishes GPIO evidence from runtime usage");
             var validation = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareValidation");
             check(validation.getText().contains("PHYSICAL PINOUT: NOT VERIFIED"),
                     "physical package map is never invented from pinmux cells");
@@ -228,6 +228,11 @@ public final class EditorSmoke implements IApplication {
                     && java.util.Arrays.stream(parameterTable.getItems())
                     .anyMatch(item -> item.getText(0).contains("#gpio-cells")),
                     "selecting GPIO exposes compiled controller parameters rather than an empty inspector");
+            check(!((org.eclipse.swt.widgets.Button) studioField(view, type, "showDtsGpioDeclarations")).getSelection()
+                    && !((org.eclipse.swt.widgets.Button) studioField(view, type, "showUnverifiedSourcePatterns")).getSelection()
+                    && !(Boolean) chip.getClass().getMethod("showingGpioDeclarations").invoke(chip)
+                    && !(Boolean) chip.getClass().getMethod("showingSourcePatterns").invoke(chip),
+                    "no board DTS name or uncompiled C pattern is shown as GPIO use by default");
             check(validation.getText().contains("gpio@400a0000"),
                     "GPIO selection updates the evidence dock to the actual built controller");
             check(((Integer) chip.getClass().getMethod("gpioBitPositions").invoke(chip)) == 32
@@ -242,16 +247,17 @@ public final class EditorSmoke implements IApplication {
             var gpioUsageSummary = (org.eclipse.swt.widgets.Label) studioField(view, type, "gpioUsageSummary");
             check(dock.getSelectionIndex() == 3
                     && gpioUsage.getItemCount() == 3
-                    && gpioUsageSummary.getText().contains("Built DTS references: 1")
-                    && gpioUsageSummary.getText().contains("Unresolved C device names: 1"),
+                    && gpioUsageSummary.getText().contains("GPIO RUNTIME USE: UNKNOWN")
+                    && gpioUsageSummary.getText().contains("Board DTS declarations: 1")
+                    && gpioUsageSummary.getText().contains("Unresolved source bindings: 1"),
                     "GPIO usage overview immediately lists all banks and unresolved source code");
             check(java.util.Arrays.stream(gpioUsage.getItems()).anyMatch(row ->
-                        row.getText(0).equals("PB22") && row.getText(1).equals("DTS consumer"))
+                        row.getText(0).equals("PB22") && row.getText(1).equals("Board DTS only"))
                     && java.util.Arrays.stream(gpioUsage.getItems()).anyMatch(row ->
-                        row.getText(0).equals("PA15") && row.getText(1).equals("C source candidate"))
+                        row.getText(0).equals("PA15") && row.getText(1).equals("Saved C pattern"))
                     && java.util.Arrays.stream(gpioUsage.getItems()).anyMatch(row ->
                         row.getText(0).equals("Unresolved bit 12")
-                            && row.getText(1).equals("C unresolved device")),
+                            && row.getText(1).equals("Unresolved source")),
                     "cross-bank inventory separates PB22 DTS, PA15 C candidate, and unassigned C bit 12");
             captureNativeStudioScreenshot("gpio-used-overview.png");
             var unassigned = java.util.Arrays.stream(gpioUsage.getItems())
@@ -267,8 +273,19 @@ public final class EditorSmoke implements IApplication {
                     .filter(row -> row.getText(0).equals("PB22")).findFirst().orElseThrow();
             gpioUsage.setSelection(blueLedUsage);
             gpioUsage.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
-            check(chip.getClass().getMethod("gpioDisplayLabel", int.class).invoke(chip, 22).toString().startsWith("PB22 / "),
-                    "used GPIO tile includes exact consumer label/name rather than a bare index");
+            check(chip.getClass().getMethod("gpioDisplayLabel", int.class).invoke(chip, 22).equals("PB22"),
+                    "board default led0 must NOT appear on logical GPIO cell by default");
+            var showBoardDts = (org.eclipse.swt.widgets.Button) studioField(view, type, "showDtsGpioDeclarations");
+            showBoardDts.setSelection(true);
+            showBoardDts.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(chip.getClass().getMethod("gpioDisplayLabel", int.class).invoke(chip, 22)
+                    .toString().startsWith("PB22 / ")
+                    && (Boolean) chip.getClass().getMethod("showingGpioDeclarations").invoke(chip),
+                    "board declarations may be inspected explicitly but are never marked occupied");
+            showBoardDts.setSelection(false);
+            showBoardDts.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(chip.getClass().getMethod("gpioDisplayLabel", int.class).invoke(chip, 22).equals("PB22"),
+                    "turning board DTS layer off removes led0 without changing source or hardware");
             check(((Integer) chip.getClass().getMethod("gpioConsumerCount").invoke(chip)) == 1
                     && dock.getSelectionIndex() == 3,
                     "selecting PB22 evidence navigates to GPIO B without losing the Usage tab");
@@ -278,7 +295,7 @@ public final class EditorSmoke implements IApplication {
             check(((Integer) chip.getClass().getMethod("gpioBitPositions").invoke(chip)) == 32
                     && ((Integer) chip.getClass().getMethod("sourceCandidateCount").invoke(chip)) == 0
                     && ((Integer) chip.getClass().getMethod("gpioConsumerCount").invoke(chip)) == 1
-                    && validation.getText().contains("Observed consumer references: 1")
+                    && validation.getText().contains("Board DTS-only declarations (NOT used pins): 1")
                     && java.util.Arrays.stream(parameterTable.getItems()).anyMatch(
                             item -> item.getText(0).contains("gpios") && item.getText(2).contains("/leds/led_0")),
                     "GPIO B visual bank resolves the compiled Blue LED GPIO reference");
