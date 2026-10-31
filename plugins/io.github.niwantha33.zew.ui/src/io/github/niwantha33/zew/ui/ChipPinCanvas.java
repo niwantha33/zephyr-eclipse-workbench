@@ -31,6 +31,10 @@ public final class ChipPinCanvas extends Canvas {
     private GpioBankEvidence.Bank bank;
     private java.util.Map<Integer, String> gpioConsumerNames = java.util.Map.of();
     private List<GpioSourceEvidence.Call> resolvedSourceCalls = List.of();
+    // Board DTS declarations are discoverable but must not look like application use.
+    private boolean showDtsDeclarations;
+    private boolean showSourcePatterns;
+    private boolean generatedDtsStale;
     private final List<Rectangle> bankHitAreas = new ArrayList<>();
     private final List<Integer> bankHitBits = new ArrayList<>();
     private Consumer<Integer> bankSelection = bit -> {};
@@ -48,7 +52,7 @@ public final class ChipPinCanvas extends Canvas {
                                 + " routes. Package pads unverified."
                         : "GPIO bank for " + controller + ". " + bank.bitPositions()
                                 + " register bit positions, " + bank.uses().size()
-                                + " observed build references. Not physical pads.";
+                                + " board DTS declarations. Application/runtime use unverified.";
             }
         });
         addPaintListener(event -> paintRoutes(event.gc));
@@ -57,7 +61,10 @@ public final class ChipPinCanvas extends Canvas {
             if (bank != null && mode != Mode.PACKAGE) for (int i = 0; i < bankHitAreas.size(); i++) {
                 if (bankHitAreas.get(i).contains(event.x, event.y)) {
                     int bit = bankHitBits.get(i);
-                    tip = gpioDisplayLabel(bit) + (gpioConsumerNames.containsKey(bit) ? " · built DTS consumer" : " · no built DTS reference");
+                    tip = gpioDisplayLabel(bit) + (gpioConsumerNames.containsKey(bit)
+                            ? " · board DTS declaration only (not proof of application use)"
+                            : " · runtime usage unknown")
+                            + (generatedDtsStale ? " · generated DTS may be stale" : "");
                     break;
                 }
             }
@@ -200,7 +207,7 @@ public final class ChipPinCanvas extends Canvas {
         var display = getDisplay();
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
         gc.drawText("GPIO REGISTER BANK  /  LOGICAL INDEXES", 16, 12, true);
-        gc.drawText("DTS references: tinted. C-call candidates: marked C. Grey: unknown.", 16, 36, true);
+        gc.drawText("No runtime GPIO use verified. D = optional board DTS; C? = unverified source.", 16, 36, true);
         if (bank.bitPositions() < 1) {
             gc.drawText("GPIO width not recorded in the selected build.", 16, 79, true);
             gc.drawText("Inspect consumers in Connections; no pin range is invented.", 16, 105, true);
@@ -214,8 +221,8 @@ public final class ChipPinCanvas extends Canvas {
         for (int bit = 0; bit < bank.bitPositions(); bit++) {
             int x = startX + (bit % columns) * (width + gap);
             int y = startY + (bit / columns) * 49;
-            int count = 0;
-            for (var usage : bank.uses()) if (usage.bit() == bit) count++;
+            boolean boardDeclaration = false;
+            for (var usage : bank.uses()) if (usage.bit() == bit) boardDeclaration = true;
             boolean selectedSlot = selectedBit == bit;
             boolean fromCode = false;
             for (var call : resolvedSourceCalls) {
@@ -224,29 +231,32 @@ public final class ChipPinCanvas extends Canvas {
                     break;
                 }
             }
+            // Neither a saved source match nor a DTS property proves executable use.
             gc.setBackground(display.getSystemColor(selectedSlot ? SWT.COLOR_LIST_SELECTION
-                    : count > 0 ? SWT.COLOR_INFO_BACKGROUND : SWT.COLOR_WIDGET_BACKGROUND));
+                    : SWT.COLOR_WIDGET_BACKGROUND));
             gc.setForeground(display.getSystemColor(selectedSlot ? SWT.COLOR_LIST_SELECTION_TEXT
                     : SWT.COLOR_WIDGET_FOREGROUND));
             gc.fillRoundRectangle(x, y, width, 42, 5, 5);
             gc.drawRoundRectangle(x, y, width, 42, 5, 5);
-            gc.drawText(bank.bitLabel(bit) + (fromCode ? " C" : ""), x + 6, y + 4, true);
-            String consumer = gpioConsumerNames.getOrDefault(bit, "");
+            gc.drawText(bank.bitLabel(bit) + (showSourcePatterns && fromCode ? " C?"
+                    : showDtsDeclarations && boardDeclaration ? " D" : ""), x + 6, y + 4, true);
+            String consumer = showDtsDeclarations ? gpioConsumerNames.getOrDefault(bit, "") : "";
             if (!consumer.isBlank()) gc.drawText(shorten(gc, consumer, width - 12), x + 6, y + 23, true);
             bankHitAreas.add(new Rectangle(x, y, width, 42));
             bankHitBits.add(bit);
         }
         int bottom = startY + ((bank.bitPositions() + columns - 1) / columns) * 49 + 6;
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
-        gc.drawText(bank.uses().size() + " built DTS references · "
-                + resolvedSourceCalls.size() + " C source candidates (not executed).", 16, bottom, true);
-        gc.drawText("Neither source calls nor DTS prove live direction or bonded pins.", 16, bottom + 24, true);
+        gc.drawText(bank.uses().size() + " board DTS declarations (not application use) · "
+                + resolvedSourceCalls.size() + " saved C patterns (not compiled/executed).", 16, bottom, true);
+        gc.drawText(generatedDtsStale ? "BUILD REQUIRED: board DTS may be stale. Runtime use UNKNOWN."
+                : "Runtime use UNKNOWN. No live direction, pin availability or bonding verified.", 16, bottom + 24, true);
     }
 
     private void paintBankConnections(org.eclipse.swt.graphics.GC gc, Rectangle area) {
         var display = getDisplay();
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
-        gc.drawText("GPIO REFERENCES  /  DTS + C SOURCE", 16, 12, true);
+        gc.drawText("GPIO DECLARATIONS  /  UNVERIFIED SOURCE", 16, 12, true);
         gc.drawText("Select a reference to inspect the exact consumer and its source line.", 16, 34, true);
         if (bank.uses().isEmpty()) {
             gc.drawText("No resolvable GPIO consumers for this controller in the build.", 16, 72, true);
@@ -263,7 +273,7 @@ public final class ChipPinCanvas extends Canvas {
             gc.setForeground(display.getSystemColor(isSelected ? SWT.COLOR_LIST_SELECTION_TEXT
                     : SWT.COLOR_WIDGET_FOREGROUND));
             gc.fillRectangle(16, y, Math.max(150, area.width - 32), 26);
-            String description = bank.bitLabel(usage.bit()) + "  ←  " + usage.consumerPath()
+            String description = "DTS only (not used proof): " + bank.bitLabel(usage.bit()) + "  ←  " + usage.consumerPath()
                     + "  [" + usage.property() + "]";
             gc.drawText(shorten(gc, description, Math.max(90, area.width - 50)), 22, y + 5, true);
             bankHitAreas.add(new Rectangle(16, y, Math.max(150, area.width - 32), 26));
@@ -280,7 +290,7 @@ public final class ChipPinCanvas extends Canvas {
             gc.setForeground(display.getSystemColor(selectedBit == call.bit()
                     ? SWT.COLOR_LIST_SELECTION_TEXT : SWT.COLOR_WIDGET_FOREGROUND));
             gc.fillRectangle(16, y, Math.max(150, area.width - 32), 26);
-            String summary = bank.bitLabel(call.bit()) + "  C candidate:  "
+            String summary = bank.bitLabel(call.bit()) + "  C? not compiled/verified:  "
                     + call.sourceFile() + ":" + call.line() + "  [" + call.flags() + "]";
             gc.drawText(shorten(gc, summary, Math.max(90, area.width - 50)), 22, y + 5, true);
             bankHitAreas.add(new Rectangle(16, y, Math.max(150, area.width - 32), 26));
@@ -344,13 +354,30 @@ public final class ChipPinCanvas extends Canvas {
         }
     }
 
+    /** Opt-in board declarations, kept visually neutral; default is no usage markings. */
+    public void showGpioDeclarations(boolean visible) {
+        showDtsDeclarations = visible;
+        redraw();
+    }
+
+    /** Uncompiled, possibly unreachable code is never shown as use by default. */
+    public void showSourcePatterns(boolean visible) {
+        showSourcePatterns = visible;
+        redraw();
+    }
+
+    public void setGeneratedDtsStale(boolean stale) {
+        generatedDtsStale = stale;
+        redraw();
+    }
+
     public void showGpioConsumerNames(java.util.Map<Integer, String> names) {
         gpioConsumerNames = java.util.Map.copyOf(names);
         redraw();
     }
     public String gpioDisplayLabel(int bit) {
         if (bank == null) return "";
-        String name = gpioConsumerNames.getOrDefault(bit, "");
+        String name = showDtsDeclarations ? gpioConsumerNames.getOrDefault(bit, "") : "";
         return bank.bitLabel(bit) + (name.isBlank() ? "" : " / " + name);
     }
 
@@ -443,6 +470,8 @@ public final class ChipPinCanvas extends Canvas {
         redraw();
     }
     public int sourceCandidateCount() { return resolvedSourceCalls.size(); }
+    public boolean showingGpioDeclarations() { return showDtsDeclarations; }
+    public boolean showingSourcePatterns() { return showSourcePatterns; }
 
     public int routeCount() { return routes.size(); }
     /** Read-only evidence counts used by installed SWT integration tests. */

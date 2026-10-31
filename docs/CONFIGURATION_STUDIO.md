@@ -222,10 +222,13 @@ resolve to a known controller with a supported `#gpio-cells`; unknown or malform
 mixed lists are not partially attributed to another bank. Logical register bit
 ranges do not establish package bonding, pin ownership or electrical availability.
 
-The **GPIO Usage** dock lists built consumers across all banks. Thus an LED
-consumer on GPIO B remains visible while GPIO A is selected. Selecting the row
-opens the matching bank. An empty inventory shows an explicit explanation
-instead of an unexplained blank table.
+The **GPIO Evidence** dock lists **board DTS declarations** and **unverified
+saved-source patterns**, not proven application usage. A board-provided LED
+declaration on GPIO B is still inspectable when GPIO A is selected, but is
+labelled `Board DTS only`; selecting the row navigates to the bank. Default
+planner cells remain neutral, and `led0` is hidden unless the user explicitly
+enables the board-DTS layer. An empty inventory shows an explanation rather
+than an unexplained blank table.
 
 Saved-source candidates include `device_get_binding()` plus literal-index
 `gpio_pin_configure()` (also in conditionals), exact
