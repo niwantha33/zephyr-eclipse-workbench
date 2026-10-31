@@ -311,7 +311,9 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                             && !source.getSubstitutionsPaths().isEmpty())
                         info.println("Verified debug source substitutions: " + source.getSubstitutionsPaths());
                 }
-                SocRegistersHandler.showDebugDataOnLaunch();
+                SocRegistersHandler.showDebugDataOnLaunch(
+                        ResourcesPlugin.getWorkspace().getRoot().getProject(
+                                configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, "")));
             }
             if (monitor.isCanceled() || launch.isTerminated()) session.close();
         } catch (InterruptedException interrupted) {
