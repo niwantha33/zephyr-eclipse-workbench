@@ -12,20 +12,44 @@ import hashlib
 from pathlib import Path
 import re
 
-from .collector import (InputError, SCHEMA_VERSION, MAX_CONFIG_BYTES, PRIVATE,
+from .collector import (InputError, SCHEMA_VERSION, MAX_CONFIG_BYTES,
                         _images, _kconfig, _regular)
 from .dt_binding_preview import _checked_file, inspect as inspect_dt
 
 _SYMBOL = re.compile(r"CONFIG_[A-Z0-9_]{1,160}")
+_SENSITIVE_SYMBOL = re.compile(
+    r"(?i)(?:PASSWORD|TOKEN|SECRET|AUTH|PRIVATE|CREDENTIAL|SSID|PSK|PASSCODE|"
+    r"(?:^|_)(?:PIN|KEY|CERT)(?:_|$))")
 _CONFIDENCE = "confirmed"
 _UNKNOWN = "unknown"
+
+
+def _bool_observation(snapshot: bytes, symbol: str, observed: dict[str, str]) -> str:
+    """A selected boolean/tristate is safe even when generic secret redaction
+    conservatively hides a hardware symbol containing 'PIN' (e.g. PINCTRL).
+    Never expose string/numeric values or duplicate/contradictory assignments.
+    """
+    raw = observed.get(symbol)
+    if raw in ("y", "n", "m"):
+        return {"y": "enabled", "n": "disabled", "m": "module"}[raw]
+    text = snapshot.decode("utf-8", errors="strict")
+    assignments = []
+    for line in text.splitlines():
+        if line == f"# {symbol} is not set":
+            assignments.append("n")
+        elif line.startswith(symbol + "="):
+            value = line[len(symbol) + 1:]
+            assignments.append(value if value in ("y", "m", "n") else "unsupported")
+    if len(assignments) == 1 and assignments[0] in ("y", "m", "n"):
+        return {"y": "enabled", "n": "disabled", "m": "module"}[assignments[0]]
+    return "not-observed-or-redacted"
 
 
 def inspect(build: Path, zephyr: Path, node: str, prop: str | None = None,
             symbol: str | None = None, images: list[str] | None = None,
             bindings: list[Path] | None = None) -> dict:
     """Deterministic build-snapshot evidence, without values/paths/causal guesses."""
-    if symbol is not None and (not _SYMBOL.fullmatch(symbol) or PRIVATE.search(symbol)):
+    if symbol is not None and (not _SYMBOL.fullmatch(symbol) or _SENSITIVE_SYMBOL.search(symbol)):
         raise InputError("--symbol must be a non-sensitive CONFIG_ symbol")
     # Reuse upstream EDT interpretation and selected-checkout/hash validation.
     dt = inspect_dt(build, zephyr, node, prop, images=images, bindings=bindings)
@@ -42,10 +66,7 @@ def inspect(build: Path, zephyr: Path, node: str, prop: str | None = None,
             snapshot, config_sha = _checked_file(configured, MAX_CONFIG_BYTES)
             observed = _kconfig(snapshot)
             effective = ("not-requested" if symbol is None else
-                         "enabled" if observed.get(symbol) == "y" else
-                         "disabled" if observed.get(symbol) == "n" else
-                         "module" if observed.get(symbol) == "m" else
-                         "not-observed-or-redacted")
+                         _bool_observation(snapshot, symbol, observed))
         built = item.get("built_node", {})
         path_status = built.get("state", "unknown")
         binding = built.get("binding", "unknown")
