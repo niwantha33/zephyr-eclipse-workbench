@@ -59,3 +59,27 @@ Run the Eclipse/Tycho build, verify that the official pack URL responds on
 Windows, inspect its exact MSPM0G3507 device mapping, and perform a
 hardware-in-loop halted-register read using XDS110. No build or hardware
 success is claimed by this source change alone.
+
+## Cross-vendor register-source discovery extension
+
+The SoC Registers view now also searches `CMSIS_PACK_ROOT`,
+`CMSIS_PACK_PATH`, `KEIL_PACK_ROOT`, `PACK_ROOT`, vendor
+install locations, `modules/hal/{espressif,stm32,nordic,ti}`, and
+Espressif IDF directories. These are **discovery sources**, not proof
+that a usable exact-chip SVD exists. A CMSIS pack must name the exact
+device/variant in its PDSC and map it to a supported SVD, or the SVD
+itself must identify the exact SoC. No unrelated Cortex-M family model
+may be substituted.
+
+For Espressif ESP32/ESP32-S2/S3/C2/C3/C5/C6/H2/P4 and other non-CMSIS
+parts, ESP-IDF register headers are a **different source format** from
+SVD. Merely locating those files cannot populate the SVD viewer.
+A future importer must translate the device's actual `soc/*_reg.h`,
+`soc/reg_base.h` and matching field descriptions deterministically,
+record the file revisions and source paths, verify addresses/overlaps,
+and mark incomplete/unsafe descriptions. Never invent bitfields,
+reset values or MMIO read safety from an unmapped header.
+
+Status of this change: extra local source discovery is implemented.
+Automatic trusted vendor downloads for arbitrary parts, header-to-SVD
+conversion for ESP-IDF, and physical target acceptance remain pending.
