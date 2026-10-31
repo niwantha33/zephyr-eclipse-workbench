@@ -120,6 +120,9 @@
   <extension point="org.eclipse.ui.views">
     <view id="io.github.niwantha33.zew.ui.faultAnalysis" name="Zephyr Fault Investigation"
           category="org.eclipse.debug.ui" class="io.github.niwantha33.zew.ui.FaultAnalysisView" restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.debugExpressionProbe" name="Zephyr GDB Expression Probe"
+          category="org.eclipse.debug.ui"
+          class="io.github.niwantha33.zew.ui.DebugExpressionProbeView" restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.socRegisters" name="SoC Peripherals / Registers"
           category="org.eclipse.debug.ui"
           class="io.github.niwantha33.zew.ui.SocRegistersView" restorable="true"/>
@@ -138,6 +141,7 @@
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="io.github.niwantha33.zew.debugExpressionProbe" name="Inspect GDB Symbol (Read-only)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.socRegisters" name="Show Debug Data and SoC Peripherals" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.faultAnalysis" name="Investigate Fatal Log" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
@@ -166,6 +170,7 @@
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
   </extension>
   <extension point="org.eclipse.ui.handlers">
+    <handler commandId="io.github.niwantha33.zew.debugExpressionProbe" class="io.github.niwantha33.zew.ui.DebugExpressionProbeHandler"/>
     <handler commandId="io.github.niwantha33.zew.socRegisters" class="io.github.niwantha33.zew.ui.SocRegistersHandler"/>
     <handler commandId="io.github.niwantha33.zew.faultAnalysis" class="io.github.niwantha33.zew.ui.FaultAnalysisHandler"/>
     <handler commandId="io.github.niwantha33.zew.configurationStudio" class="io.github.niwantha33.zew.ui.ConfigurationStudioHandler"/>
@@ -224,6 +229,7 @@
         <command commandId="io.github.niwantha33.zew.debug" label="Debug Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
         <command commandId="io.github.niwantha33.zew.socRegisters" label="Show Debug Data / SoC Peripherals" style="push"/>
+        <command commandId="io.github.niwantha33.zew.debugExpressionProbe" label="Inspect GDB Symbol (Read-only)..." style="push"/>
         <command commandId="io.github.niwantha33.zew.faultAnalysis" label="Investigate Fatal Log…" style="push"/>
         <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace (Preview)..." style="push"/>
         <command commandId="io.github.niwantha33.zew.rtosInvestigation" label="Review Saved RTOS Capture (Offline)..." style="push"/>

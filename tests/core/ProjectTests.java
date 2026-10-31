@@ -3,6 +3,7 @@ import java.nio.file.*;
 import io.github.niwantha33.zew.core.ProjectProfile;
 import io.github.niwantha33.zew.core.BuildConfiguration;
 import io.github.niwantha33.zew.core.DebugVariableAdvice;
+import io.github.niwantha33.zew.core.DebugExpressionProbe;
 import io.github.niwantha33.zew.core.WestCommands;
 import io.github.niwantha33.zew.core.WorkbenchConfig;
 public final class ProjectTests {
@@ -61,9 +62,9 @@ public final class ProjectTests {
             String fast = DebugVariableAdvice.describe("default", java.util.Map.of("CONFIG_SPEED_OPTIMIZATIONS", "y"));
             check(fast.contains("normally -O2") && fast.contains("selected build profile: default")
                     && fast.contains("Debug (-Og)") && fast.contains("not silently")
-                    && fast.contains("Stop before the variable's last use"));
+                    && fast.contains("For a local, stop before its last use"));
             String debug = DebugVariableAdvice.describe("debug", java.util.Map.of("CONFIG_DEBUG_OPTIMIZATIONS", "y"));
-            check(debug.contains("normally -Og") && debug.contains("Even -Og")
+            check(debug.contains("normally -Og") && debug.contains("even -Og")
                     && !debug.contains("Project > Properties"));
             String none = DebugVariableAdvice.describe("debug", java.util.Map.of("CONFIG_NO_OPTIMIZATIONS", "y"));
             check(none.contains("normally -O0") && none.contains("Debug (-Og)"));
@@ -77,6 +78,27 @@ public final class ProjectTests {
             String conflicting = DebugVariableAdvice.describe("debug", java.util.Map.of(
                     "CONFIG_DEBUG_OPTIMIZATIONS", "y", "CONFIG_SPEED_OPTIMIZATIONS", "y"));
             check(conflicting.contains("conflicting") && !conflicting.contains("normally -Og"));
+            // A global variable can be unavailable independently of local lifetime.
+            // The probe never guesses a missing pointer or calls arbitrary C code.
+            check(DebugExpressionProbe.validateSymbol(" gpio_dev ").equals("gpio_dev"));
+            rejects(() -> DebugExpressionProbe.validateSymbol("gpio_dev->ops"));
+            rejects(() -> DebugExpressionProbe.validateSymbol("gpio_dev = 0"));
+            rejects(() -> DebugExpressionProbe.validateSymbol("gpio_dev()"));
+            rejects(() -> DebugExpressionProbe.validateSymbol(""));
+            String storageOnly = DebugExpressionProbe.describe("gpio_dev",
+                    "<optimized out>", "0x20000100", "", "");
+            check(storageOnly.contains("GDB can locate storage")
+                    && storageOnly.contains("cannot provide its current value")
+                    && !storageOnly.contains("GDB returned a value"));
+            String missing = DebugExpressionProbe.describe("gpio_dev",
+                    "<optimized out>", "", "value has been optimized out", "No symbol");
+            check(missing.contains("address was not confirmed")
+                    && missing.contains("No symbol"));
+            String actual = DebugExpressionProbe.describe("gpio_dev", "0x00001a00", "0x20000100", "", "");
+            check(actual.contains("GDB returned a value")
+                    && actual.contains("not proof of physical GPIO state"));
+            String zeroAddress = DebugExpressionProbe.describe("gpio_dev", "<optimized out>", "0x0", "", "");
+            check(zeroAddress.contains("address was not confirmed"));
             System.out.println("Passed " + checks + " portable project checks.");
         } finally { try (var paths = Files.walk(root)) { for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) Files.delete(path); } }
     }
