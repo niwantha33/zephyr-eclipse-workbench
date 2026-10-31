@@ -43,18 +43,18 @@ public final class ConfigurationStudioTests {
             ok(real.configured() && real.describe("/soc/uart@1000", "status", false)
                     .contains("not a security sandbox"),
                     "real configure is marked a trust-requiring operation, not hardware verification");
-            var wrong = realFields.clone();
-            wrong[4] = "not-observed";
+            final String[] wrongNode = realFields.clone();
+            wrongNode[4] = "not-observed";
             rejects(() -> io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
-                    encodeReal.apply(wrong)));
-            wrong = realFields.clone();
-            wrong[3] = "0".repeat(64);
+                    encodeReal.apply(wrongNode)));
+            final String[] wrongSha = realFields.clone();
+            wrongSha[3] = "0".repeat(64);
             rejects(() -> io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
-                    encodeReal.apply(wrong)));
-            wrong = realFields.clone();
-            wrong[1] = "private-path:/secrets";
+                    encodeReal.apply(wrongSha)));
+            final String[] privateReason = realFields.clone();
+            privateReason[1] = "private-path:/secrets";
             rejects(() -> io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
-                    encodeReal.apply(wrong)));
+                    encodeReal.apply(privateReason)));
             rejects(() -> io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
                     "ZEW-REAL-DT-1\nmalformed"));
             var parsed = io.github.niwantha33.zew.core.KconfigInspector.parse(message.toString());
