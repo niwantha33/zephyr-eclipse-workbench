@@ -92,10 +92,12 @@ class RealDtConfigureTests(unittest.TestCase):
         self.assertFalse(any(x.name.startswith("zew-real-dt-") for x in self.root.iterdir()))
 
     def test_failed_cmake_does_not_claim_overlay_validity(self):
-        result = self.invoke(configure_ok=False, text="devicetree error: undefined node label 'BAD_SECRET'")
+        result = self.invoke(configure_ok=False, text="candidate.overlay:17:3: devicetree error: undefined node label 'BAD_SECRET'")
         self.assertEqual(result["status"], "configure-failed")
         self.assertEqual(result["diagnostic"]["code"], "undefined-devicetree-node-or-label")
         self.assertNotIn("BAD_SECRET", json.dumps(result))
+        self.assertEqual(result["diagnostic"]["candidate_overlay_line_hint"], 17)
+        self.assertEqual(result["diagnostic"]["line_confidence"], "heuristic-log-reference")
         self.assertEqual(result["evidence_level"], "unknown")
 
     def test_returncode_zero_with_wrong_checkout_is_unknown(self):
