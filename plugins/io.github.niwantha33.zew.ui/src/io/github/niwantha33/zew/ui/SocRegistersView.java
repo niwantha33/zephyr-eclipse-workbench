@@ -201,7 +201,7 @@ public final class SocRegistersView extends ViewPart {
                     if (tree.isDisposed() || request != discoveryGeneration) return;
                     selectedBoard = board;
                     if (result.state() == SvdAutoDiscovery.State.MATCHED) {
-                        load(result.path().toString());
+                        load(result.path().toString(), result.mappedByPack());
                     } else {
                         discoveryExplanation = result.explanation();
                         status.setText(discoveryExplanation + " Looked in: "
@@ -302,13 +302,15 @@ public final class SocRegistersView extends ViewPart {
         var button = new Button(parent, SWT.PUSH); button.setText(label);
         button.addListener(SWT.Selection, e -> action.run());
     }
-    private void load(String path) {
+    private void load(String path) { load(path, false); }
+
+    private void load(String path, boolean exactPackDeviceMapping) {
         // Bound document size before the DOM allocation; vendor files are loaded offline.
         try {
             if (Files.size(Path.of(path)) > 32 * 1024 * 1024) throw new IllegalArgumentException("SVD exceeds 32 MiB");
             SvdDevice loaded;
             try (var input = Files.newInputStream(Path.of(path))) { loaded = SvdDevice.read(input); }
-            if (selectedBoard != null && !selectedBoard.isBlank()
+            if (!exactPackDeviceMapping && selectedBoard != null && !selectedBoard.isBlank()
                     && !loaded.name().replaceAll("[^A-Za-z0-9]", "").equalsIgnoreCase(
                             SvdAutoDiscovery.partFromBoard(selectedBoard).replaceAll("[^A-Za-z0-9]", ""))) {
                 status.setText("Rejected SVD model " + loaded.name() + ": expected exact SoC "
@@ -326,8 +328,10 @@ public final class SocRegistersView extends ViewPart {
             }
             svdIdentity = java.util.HexFormat.of().formatHex(digest.digest());
             render();
-            discoveryExplanation = "Verified SVD device name: " + device.name()
-                    + "; exact part from project: " + selectedBoard + ".";
+            discoveryExplanation = (exactPackDeviceMapping
+                    ? "Installed CMSIS pack maps " + selectedBoard + " to SVD model " + device.name()
+                    : "SVD device name: " + device.name() + "; exact project part: " + selectedBoard)
+                    + ". Register values are read only on explicit halted refresh.";
             status.setText(device.name() + " — " + device.registers().size() + " registers — " + path
                     + ". SVD is not proof of connected silicon identity. Select a safe register and Refresh while halted.");
         } catch (Exception ex) {
