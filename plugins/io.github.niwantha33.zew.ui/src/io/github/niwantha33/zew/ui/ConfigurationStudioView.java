@@ -92,6 +92,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private Table hardwareParameters, gpioUsageTable;
     private Label gpioUsageSummary;
     private Button addGpioButton;
+    private Button showDtsGpioDeclarations, showUnverifiedSourcePatterns;
     private GpioBankEvidence.Bank selectedGpioBank;
     private int selectedGpioBit = -1;
     private List<GpioSourceEvidence.Call> selectedGpioSourceCalls = List.of();
@@ -485,6 +486,15 @@ public final class ConfigurationStudioView extends ViewPart {
         Button connectionMode = new Button(modes, SWT.RADIO);
         connectionMode.setText("Connections");
         logicalMode.setSelection(true);
+        var evidenceLayers = new Composite(plannerPanel, SWT.NONE);
+        evidenceLayers.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        evidenceLayers.setLayout(new GridLayout(2, false));
+        showDtsGpioDeclarations = new Button(evidenceLayers, SWT.CHECK);
+        showDtsGpioDeclarations.setText("Board DTS declarations");
+        showDtsGpioDeclarations.setToolTipText("Optional reference layer; board-provided nodes do not establish application use.");
+        showUnverifiedSourcePatterns = new Button(evidenceLayers, SWT.CHECK);
+        showUnverifiedSourcePatterns.setText("Unverified C patterns");
+        showUnverifiedSourcePatterns.setToolTipText("Saved C source patterns may be excluded by Kconfig or the compiler.");
         parameterTitle = new Label(plannerPanel, SWT.WRAP);
         parameterTitle.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         parameterTitle.setText("Select a peripheral to explore the exact built controller and logical routes.");
@@ -492,6 +502,10 @@ public final class ConfigurationStudioView extends ViewPart {
                 plannerPanel, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
         chipScroll.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         chipPins = new ChipPinCanvas(chipScroll);
+        showDtsGpioDeclarations.addListener(SWT.Selection,
+                event -> chipPins.showGpioDeclarations(showDtsGpioDeclarations.getSelection()));
+        showUnverifiedSourcePatterns.addListener(SWT.Selection,
+                event -> chipPins.showSourcePatterns(showUnverifiedSourcePatterns.getSelection()));
         chipScroll.setContent(chipPins);
         chipScroll.setExpandHorizontal(true);
         chipScroll.setExpandVertical(true);
@@ -506,8 +520,8 @@ public final class ConfigurationStudioView extends ViewPart {
             if (connectionMode.getSelection()) chipPins.setMode(ChipPinCanvas.Mode.CONNECTIONS);
         });
         Label legend = new Label(plannerPanel, SWT.WRAP);
-        legend.setText("Built logical route  ·  Unresolved physical pin  ·  "
-                + "No guessed pad numbers or alternate functions");
+        legend.setText("GPIO usage UNKNOWN until separately verified. All cells neutral by default."
+                + " DTS and saved C patterns are optional reference layers, not live readings.");
         legend.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         // Right pane: exact built parameters and explicit, reviewed source edits.
@@ -575,11 +589,11 @@ public final class ConfigurationStudioView extends ViewPart {
 
         // Evidence across ALL GPIO controllers, not only the selected bank.
         // Unresolved C calls remain separate: no inferred physical/logical bank.
-        var gpioUsagePage = tab(hardwareDetails, "GPIO Usage");
+        var gpioUsagePage = tab(hardwareDetails, "GPIO Evidence");
         gpioUsagePage.setLayout(new GridLayout(1, false));
         gpioUsageSummary = new Label(gpioUsagePage, SWT.WRAP);
         gpioUsageSummary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        gpioUsageSummary.setText("Select GPIO to inspect compiled DTS references and C-source candidates.");
+        gpioUsageSummary.setText("GPIO usage UNKNOWN. Inspect board declarations and unverified source patterns.");
         gpioUsageTable = new Table(gpioUsagePage,
                 SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.H_SCROLL | SWT.V_SCROLL);
         gpioUsageTable.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -1072,9 +1086,11 @@ public final class ConfigurationStudioView extends ViewPart {
                 banks.put(device.path(), bank);
                 for (var usage : bank.uses()) {
                     var item = new TableItem(gpioUsageTable, SWT.NONE);
-                    String detail = "Compiled GPIO specifier: " + usage.consumerPath() + " / "
-                            + usage.property() + " (flags " + usage.flags() + ")";
-                    item.setText(new String[] {bank.bitLabel(usage.bit()), "DTS consumer",
+                    String detail = "Board DTS declaration only (NOT proof of application use): "
+                            + usage.consumerPath() + " / " + usage.property()
+                            + " (flags " + usage.flags() + ")";
+                    item.setText(new String[] {bank.bitLabel(usage.bit()),
+                            buildOutdated ? "STALE board DTS" : "Board DTS only",
                             usage.consumerPath() + " / " + usage.property(),
                             "generated zephyr.dts:" + usage.line()});
                     item.setData(new GpioUsageSelection(bank.controllerPath(), usage.bit(), detail));
@@ -1085,11 +1101,11 @@ public final class ConfigurationStudioView extends ViewPart {
                 boolean resolved = call.resolved() && banks.containsKey(call.controllerPath());
                 var bank = banks.get(call.controllerPath());
                 String bitLabel = resolved ? bank.bitLabel(call.bit()) : (call.bit() < 0 ? "Unresolved GPIO" : "Unresolved bit " + call.bit());
-                String detail = "C source configuration candidate (NOT runtime proof): "
+                String detail = "Saved C-source pattern (not verified as compiled, reachable or executed): "
                         + call.description();
                 var item = new TableItem(gpioUsageTable, SWT.NONE);
                 item.setText(new String[] {bitLabel,
-                        resolved ? "C source candidate" : "C unresolved device",
+                        resolved ? "Saved C pattern" : "Unresolved source",
                         call.expression(),
                         call.sourceFile() + ":" + call.line() + "  [" + call.bindingName() + "]"});
                 item.setData(new GpioUsageSelection(resolved ? call.controllerPath() : "", call.bit(), detail));
@@ -1098,14 +1114,15 @@ public final class ConfigurationStudioView extends ViewPart {
             }
             if (dtsCount + codeCount + unresolvedCount == 0) {
                 var item = new TableItem(gpioUsageTable, SWT.NONE);
-                item.setText(new String[] {"No references found", "No usage evidence",
-                        "Check saved source, select the LED bank, and rebuild the exact target.",
+                item.setText(new String[] {"No static references found", "Not measured",
+                        "No GPIO runtime evidence. Rebuild and inspect the application.",
                         "Supported: generated DTS numeric/symbolic GPIOs; direct and _dt configure calls."});
             }
-            gpioUsageSummary.setText("Built DTS references: " + dtsCount
-                    + "    C candidates with exact controller: " + codeCount
-                    + "    Unresolved C device names: " + unresolvedCount
-                    + ". References do NOT prove configured live direction, level, or package bonding."
+            gpioUsageSummary.setText("GPIO RUNTIME USE: UNKNOWN (not measured). Board DTS declarations: " + dtsCount
+                    + "    Saved C patterns (not compile-verified): " + codeCount
+                    + "    Unresolved source bindings: " + unresolvedCount
+                    + (buildOutdated ? "    BUILD REQUIRED: generated DTS may be stale." : "")
+                    + " None of these prove application use, live state or package bonding."
                     + (scanNote.isBlank() ? "" : "  " + scanNote.strip()));
         } finally {
             gpioUsageTable.setRedraw(true);
@@ -1145,7 +1162,7 @@ public final class ConfigurationStudioView extends ViewPart {
         if (device == null || snapshot == null) {
             if (gpioUsageTable != null && !gpioUsageTable.isDisposed()) {
                 gpioUsageTable.removeAll();
-                gpioUsageSummary.setText("No selected GPIO controller. Select GPIO to inspect source and DTS usage.");
+                gpioUsageSummary.setText("GPIO runtime usage unknown. Select a controller to inspect DTS declarations and saved C-source patterns.");
             }
             boolean hasDts = snapshot != null && !snapshot.devicetree().isBlank();
             String guidance = hasDts
@@ -1207,7 +1224,7 @@ public final class ConfigurationStudioView extends ViewPart {
         parameterTitle.setText(device.path() + " · " + shown.size() + " built parameters · "
                 + (gpio == null ? routes.size() + " logical routes"
                     : gpio.bitPositions() + " GPIO register bit indexes · "
-                            + gpio.uses().size() + " observed DTS references")
+                            + gpio.uses().size() + " DTS-only declarations")
                 + " · physical package pads unverified");
         chipPins.showRoutes(owner, routes, route -> {
             for (var row : hardwareParameters.getItems()) {
@@ -1218,6 +1235,7 @@ public final class ConfigurationStudioView extends ViewPart {
             }
         });
         if (gpio != null) {
+            chipPins.setGeneratedDtsStale(buildOutdated);
             List<GpioSourceEvidence.Call> sourceCalls = List.of();
             String sourceScanNote = "Saved source candidates (up to 80 files / 1 MiB), not compiler/AST or execution evidence.";
             if (project != null && project.isAccessible() && project.getLocation() != null) {
@@ -1238,11 +1256,11 @@ public final class ConfigurationStudioView extends ViewPart {
             var unresolvedCalls = appCalls.stream().filter(call -> !call.resolved()).toList();
             parameterTitle.setText(device.name() + " · "
                     + gpio.bitPositions() + " logical GPIO indexes"
-                    + " · DTS " + gpio.uses().size()
-                    + " · C matched " + resolvedForBank.size()
+                    + " · board DTS only " + gpio.uses().size()
+                    + " · saved C patterns " + resolvedForBank.size()
                     + " · unresolved C " + unresolvedCalls.size()
-                    + " (see GPIO Usage)");
-            StringBuilder sourceNotes = new StringBuilder("\nC SOURCE CALLS (static candidates, NOT runtime proof):")
+                    + " (see GPIO Evidence)");
+            StringBuilder sourceNotes = new StringBuilder("\nSAVED C PATTERNS (may not compile or execute; NOT proof of GPIO use):")
                     .append("\nExact device-name matches for this bank: ").append(resolvedForBank.size())
                     .append("\nUnresolved bindings in app: ").append(unresolvedCalls.size());
             for (var call : appCalls) {
@@ -1253,8 +1271,9 @@ public final class ConfigurationStudioView extends ViewPart {
             sourceNotes.append(sourceScanNote);
             hardwareValidation.setText("GPIO CONTROLLER FROM COMPILED DTS  |  " + device.path()
                     + "\nState: " + (device.enabled() ? "okay or inherited okay" : device.status())
-                    + "\nObserved consumer references: " + gpio.uses().size()
+                    + "\nBoard DTS-only declarations (NOT used pins): " + gpio.uses().size()
                     + "\n" + gpio.provenance()
+                    + "\nAPPLICATION/RUNTIME GPIO USAGE: UNKNOWN; no compiled-code or target proof."
                     + "\nLogical register indexes are NOT package pads, electrical capability,"
                     + " runtime direction, or proof that the pin is bonded."
                     + (buildOutdated ? "\nBUILD REQUIRED: compiled values may be stale." : "")
@@ -1278,10 +1297,10 @@ public final class ConfigurationStudioView extends ViewPart {
                 StringBuilder info = new StringBuilder("GPIO LOGICAL INDEX  " + gpio.bitLabel(bit)
                         + (names.isBlank() ? "" : " / " + names))
                         .append("\nController: ").append(gpio.controllerPath())
-                        .append("\nCompiled consumer references: ").append(matches.size())
+                        .append("\nBoard DTS declarations (not application use): ").append(matches.size())
                         .append("\nThis is not a package pad, runtime register reading or available-pin claim.");
                 for (var call : resolvedForBank) if (call.bit() == bit)
-                    info.append("\nC SOURCE CANDIDATE (not executed): ").append(call.description());
+                    info.append("\nSAVED C PATTERN (compile/execution unverified): ").append(call.description());
                 for (var call : unresolvedCalls) if (call.bit() == bit)
                     info.append("\nUNRESOLVED C REFERENCE: ").append(call.description())
                             .append("\nNot assigned to this bank without a matching DTS device name.");
@@ -1298,7 +1317,7 @@ public final class ConfigurationStudioView extends ViewPart {
                         }
                     }
                 }
-                if (!knownUse) info.append("\nNo built reference or exact source candidate for this index.\n")
+                if (!knownUse) info.append("\nNo board DTS declaration or exact saved-source candidate for this index.\n")
                         .append(buildOutdated ? "Rebuild before requesting a GPIO addition."
                                 : !knownLabel ? "No verified controller node label: additions are unavailable."
                                 : "Add DTS GPIO… offers an input/output and polarity request with a source diff preview.");
@@ -1310,7 +1329,7 @@ public final class ConfigurationStudioView extends ViewPart {
         } else if (gpioUsageTable != null && !gpioUsageTable.isDisposed()) {
             gpioExample.setText(io.github.niwantha33.zew.core.GpioExampleCode.selectedIndex(null, -1, java.util.Map.of()));
             gpioUsageTable.removeAll();
-            gpioUsageSummary.setText("Select a GPIO controller to inspect built DTS references and saved C-source candidates.");
+            gpioUsageSummary.setText("GPIO runtime usage unknown. Select a controller to inspect board DTS declarations and saved C-source patterns.");
         }
         chipPins.setMode(chipPins.mode());
         parameterTitle.getParent().layout(true, true);
