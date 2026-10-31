@@ -37,8 +37,8 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(item["observed_bursts_exceeding_deadline"], 1)
         self.assertEqual(item["ready_latency_samples"], 2)
         self.assertEqual(item["max_observed_ready_latency_ns"], 5)
-        self.assertEqual(item["period_min_ns"], 30)
-        self.assertEqual(item["period_max_ns"], 25)
+        self.assertEqual(item["period_min_ns"], 25)
+        self.assertEqual(item["period_max_ns"], 30)
         self.assertEqual(item["period_range_jitter_ns"], 5)
         self.assertIn("never proven WCET", report["maxima"])
 
