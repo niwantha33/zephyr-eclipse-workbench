@@ -316,6 +316,39 @@ def main():
                     if list(scratch_parent.iterdir()):
                         raise ValueError('Real isolated configuration leaked scratch files')
                     print('PASS: real MSPM0 Zephyr isolated CMake accepted extra overlay')
+                    # The native Eclipse packaged adapter must independently
+                    # pass against the real MSPM0 CMake tree and observe the
+                    # candidate marker; no success from a mocked parser.
+                    resource_probe = subprocess.run([
+                        str(python), str(REPO /
+                            'plugins/io.github.niwantha33.zew.ui/scripts/dt_real_configure_inspect.py'),
+                        '--build', str(build_arg), '--application', str(app),
+                        '--zephyr', str(Path(workspace_arg) / 'zephyr'),
+                        '--board', str(target), '--node', '/',
+                        '--property', 'zew-ci-scratch-overlay-marker',
+                        '--overlay', str(real_overlay), '--ninja', str(ninja)
+                    ], cwd=REPO, env=env, text=True, encoding='utf-8',
+                       errors='replace', capture_output=True, timeout=390)
+                    lines = resource_probe.stdout.strip().splitlines()
+                    if len(lines) != 2 or lines[0] != 'ZEW-REAL-DT-1':
+                        raise ValueError('Native real Zephyr configure resource emitted invalid protocol')
+                    try:
+                        fields = [base64.b64decode(word, validate=True).decode('ascii')
+                                  for word in lines[1].split('\t')]
+                    except (ValueError, UnicodeError) as error:
+                        raise ValueError('Native real Zephyr configure protocol was invalid') from error
+                    if (resource_probe.returncode != 0 or len(fields) != 11
+                            or fields[0] != 'configured'
+                            or fields[1] != 'real-cmake-configured'
+                            or fields[2] != dts_hash
+                            or fields[3] == '0' * 64
+                            or fields[4:6] != ['observed', 'observed']
+                            or fields[6] != 'additional'
+                            or fields[7] != hashlib.sha256(real_overlay.read_bytes()).hexdigest()):
+                        raise ValueError('Native SWT real configure did not verify MSPM0 overlay evidence')
+                    if hashlib.sha256(generated_dts.read_bytes()).hexdigest() != dts_hash:
+                        raise ValueError('Native real configure modified the selected build DTS')
+                    print('PASS: native SWT real Zephyr configure resource verified built MSPM0 DTS')
                 finally:
                     real_overlay.unlink(missing_ok=True)
             finally:

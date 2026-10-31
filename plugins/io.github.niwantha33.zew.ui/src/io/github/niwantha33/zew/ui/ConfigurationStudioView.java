@@ -50,6 +50,7 @@ import io.github.niwantha33.zew.core.ConfigurationDiagnosis;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeBindingInspector;
+import io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector;
 import io.github.niwantha33.zew.core.GpioBankEvidence;
 import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
@@ -115,6 +116,9 @@ public final class ConfigurationStudioView extends ViewPart {
     private Job helpJob;
     private Job diagnosisJob;
     private Job bindingJob;
+    private Job realConfigureJob;
+    private final java.util.concurrent.atomic.AtomicInteger realConfigureGeneration =
+            new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger bindingGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger diagnosisGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger helpGeneration = new java.util.concurrent.atomic.AtomicInteger();
@@ -632,6 +636,10 @@ public final class ConfigurationStudioView extends ViewPart {
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
         action(hardwareActions, "Validate selected binding", () -> inspectSelectedBinding(false));
         action(hardwareActions, "Preview saved overlay binding", () -> inspectSelectedBinding(true));
+        action(hardwareActions, "Real configure (scratch)", () -> validateRealDevicetree(false))
+                .setToolTipText("Run actual Zephyr CMake with copied source and a disposable build; explicit confirmation required");
+        action(hardwareActions, "Real configure + saved overlay", () -> validateRealDevicetree(true))
+                .setToolTipText("Apply saved overlay additionally in disposable Zephyr configure; no firmware is flashed");
         action(hardwareActions, "Edit application overlay…", this::openOverlay);
         action(hardwareActions, "GPIO example C", () -> hardwareDetails.setSelection(4));
         addGpioButton = action(hardwareActions, "Add DTS GPIO…", this::prepareNewGpio);
@@ -647,6 +655,8 @@ public final class ConfigurationStudioView extends ViewPart {
         action(evidenceActions, "Compare evidence…", () -> openEvidence(true));
         action(evidenceActions, "Validate selected binding", () -> inspectSelectedBinding(false));
         action(evidenceActions, "Preview saved overlay binding", () -> inspectSelectedBinding(true));
+        action(evidenceActions, "Real configure (scratch)", () -> validateRealDevicetree(false));
+        action(evidenceActions, "Real configure + saved overlay", () -> validateRealDevicetree(true));
         analysis = new Text(reports, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
         analysis.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
@@ -903,6 +913,116 @@ public final class ConfigurationStudioView extends ViewPart {
         bindingJob.schedule();
     }
 
+    /**
+     * Runs real trusted Zephyr/CMake only after an explicit warning and opt-in.
+     * Unlike the metadata lookup this process executes project CMake code.
+     */
+    private void validateRealDevicetree(boolean addSavedOverlay) {
+        if (project == null || !project.isAccessible() || project.getLocation() == null
+                || inspectionBuild == null || inspectionSettings == null
+                || hardwareDevices.getSelectionCount() != 1) {
+            MessageDialog.openInformation(getSite().getShell(), "Real Devicetree configuration",
+                    "Select a hardware node and complete the exact board build first.");
+            return;
+        }
+        var device = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+        if (device == null) return;
+        final IProject chosenProject = project;
+        final Path app = chosenProject.getLocation().toFile().toPath();
+        final Path build = inspectionBuild;
+        final java.util.Properties settings = (java.util.Properties) inspectionSettings.clone();
+        final String overlaySelection = selectedOverlay;
+        final String node = device.path();
+        String property = null;
+        if (hardwareParameters.getSelectionCount() == 1) {
+            var selectedProperty = (DevicetreeParameters.Property)
+                    hardwareParameters.getSelection()[0].getData();
+            if (selectedProperty != null && selectedProperty.path().equals(node))
+                property = selectedProperty.name();
+        }
+        final String expectedProperty = property;
+        final Path overlay = addSavedOverlay ? app.resolve(overlaySelection).normalize() : null;
+        if (addSavedOverlay && (overlay == null || !overlay.startsWith(app.normalize())
+                || !Files.isRegularFile(overlay))) {
+            MessageDialog.openInformation(getSite().getShell(), "Saved overlay unavailable",
+                    "The selected overlay must be saved inside this application first. "
+                    + "Unsaved proposals cannot be tested as real build inputs.");
+            return;
+        }
+        String board = settings.getProperty("board", "");
+        if (board.isBlank()) {
+            MessageDialog.openInformation(getSite().getShell(), "Select board",
+                    "Choose the exact board, SoC and core in Project settings first.");
+            return;
+        }
+        String question = "This runs the selected project's real Zephyr west/CMake "
+                + "configuration on a copied application and disposable build.\\n\\n"
+                + "CMake and module hooks can execute code outside that directory. "
+                + "Only continue if you trust the selected project and workspace.\\n\\n"
+                + "Board: " + board + "\\n"
+                + "Selected Devicetree node: " + node + "\\n"
+                + (expectedProperty == null ? "" : "Selected property: " + expectedProperty + "\\n")
+                + (addSavedOverlay ? "The saved overlay is passed as an ADDITIONAL "
+                        + "EXTRA_DTC_OVERLAY_FILE after normal overlays, not a replacement.\\n"
+                        + "Overlay: " + overlaySelection + "\\n" : "Normal overlay discovery only.\\n")
+                + "\\nNo original source or build output is intentionally overwritten; "
+                + "nothing is flashed. A configured result is not proof of compiled firmware "
+                + "or physical pin safety. Run this validation?";
+        if (!MessageDialog.openQuestion(getSite().getShell(),
+                "Run real Zephyr configuration in scratch?", question.replace("\\n", "\n"))) return;
+        final int generation = realConfigureGeneration.incrementAndGet();
+        if (realConfigureJob != null) realConfigureJob.cancel();
+        final var display = analysis.getDisplay();
+        final boolean stale = buildOutdated;
+        status.setText("Running real Zephyr CMake in disposable scratch; results will be verified…");
+        realConfigureJob = new Job("Real Zephyr Devicetree configuration — " + chosenProject.getName()) {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                DevicetreeRealConfigureInspector.Result result;
+                try {
+                    final Path python = Path.of(settings.getProperty("python"));
+                    final Path zephyr = Path.of(settings.getProperty("workspace"), "zephyr");
+                    final Path ninja = settings.getProperty("tools.ninja", "").isBlank()
+                            ? null : Path.of(settings.getProperty("tools.ninja"));
+                    result = DevicetreeRealConfigureInspector.inspect(
+                            python, zephyr, app, build, ninja, settings.getProperty("board"),
+                            node, expectedProperty, overlay, ProjectContext.environment(settings),
+                            ConfigurationStudioView.class.getResourceAsStream(
+                                    "/scripts/dt_real_configure_inspect.py"), monitor::isCanceled);
+                } catch (Exception error) {
+                    result = DevicetreeRealConfigureInspector.Result.unavailable("invalid-or-missing-input");
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                final String report = result.describe(node, expectedProperty, stale);
+                display.asyncExec(() -> {
+                    if (analysis.isDisposed() || hardwareValidation.isDisposed()
+                            || generation != realConfigureGeneration.get()
+                            || project != chosenProject || !java.util.Objects.equals(build, inspectionBuild)
+                            || !java.util.Objects.equals(overlaySelection, selectedOverlay)
+                            || hardwareDevices.getSelectionCount() != 1) return;
+                    var current = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+                    if (current == null || !node.equals(current.path())) return;
+                    String currentProperty = null;
+                    if (hardwareParameters.getSelectionCount() == 1) {
+                        var chosen = (DevicetreeParameters.Property)
+                                hardwareParameters.getSelection()[0].getData();
+                        if (chosen != null && node.equals(chosen.path()))
+                            currentProperty = chosen.name();
+                    }
+                    if (!java.util.Objects.equals(expectedProperty, currentProperty)) return;
+                    hardwareValidation.setText(report);
+                    analysis.setText(report);
+                    if (tabs.getSelectionIndex() == 1) hardwareDetails.setSelection(1);
+                    status.setText("Real CMake configuration evidence available in Hardware / Validation "
+                            + "and Insights; firmware and physical pins remain unverified.");
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        realConfigureJob.setUser(true);
+        realConfigureJob.schedule();
+    }
+
     private void showEvidence(String text) {
         analysis.setText(text);
         tabs.setSelection(2);
@@ -986,6 +1106,8 @@ public final class ConfigurationStudioView extends ViewPart {
         if (diagnosisJob != null) diagnosisJob.cancel();
         bindingGeneration.incrementAndGet();
         if (bindingJob != null) bindingJob.cancel();
+        realConfigureGeneration.incrementAndGet();
+        if (realConfigureJob != null) realConfigureJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         definitionCache.clear();
@@ -2247,6 +2369,8 @@ public final class ConfigurationStudioView extends ViewPart {
         if (diagnosisJob != null) diagnosisJob.cancel();
         bindingGeneration.incrementAndGet();
         if (bindingJob != null) bindingJob.cancel();
+        realConfigureGeneration.incrementAndGet();
+        if (realConfigureJob != null) realConfigureJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();

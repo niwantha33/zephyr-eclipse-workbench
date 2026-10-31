@@ -26,6 +26,37 @@ public final class ConfigurationStudioTests {
                 message.append(encode.encodeToString(
                         kfields[i].getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             }
+            String[] realFields = {"configured", "real-cmake-configured",
+                    "a".repeat(64), "b".repeat(64), "observed", "observed",
+                    "additional", "c".repeat(64), "4", "0", "observed"};
+            java.util.function.Function<String[], String> encodeReal = fields -> {
+                var output = new StringBuilder("ZEW-REAL-DT-1\n");
+                for (int i = 0; i < fields.length; i++) {
+                    if (i > 0) output.append('\t');
+                    output.append(java.util.Base64.getEncoder().encodeToString(
+                            fields[i].getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+                }
+                return output.toString();
+            };
+            var real = io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
+                    encodeReal.apply(realFields));
+            ok(real.configured() && real.describe("/soc/uart@1000", "status", false)
+                    .contains("not a security sandbox"),
+                    "real configure is marked a trust-requiring operation, not hardware verification");
+            final String[] wrongNode = realFields.clone();
+            wrongNode[4] = "not-observed";
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
+                    encodeReal.apply(wrongNode)));
+            final String[] wrongSha = realFields.clone();
+            wrongSha[3] = "0".repeat(64);
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
+                    encodeReal.apply(wrongSha)));
+            final String[] privateReason = realFields.clone();
+            privateReason[1] = "private-path:/secrets";
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
+                    encodeReal.apply(privateReason)));
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
+                    "ZEW-REAL-DT-1\nmalformed"));
             var parsed = io.github.niwantha33.zew.core.KconfigInspector.parse(message.toString());
             // Native EDT bridge accepts only the bounded structured protocol,
             // never raw paths/values or an invented "interpreted" status.

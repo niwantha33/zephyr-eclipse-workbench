@@ -321,3 +321,51 @@ configuration, validation of proposed overlays through full Zephyr build,
 electrical/package pin checking, physical probe acceptance and learning
 effectiveness measurement. This is a Phase-0 feasibility UI for review
 against the headless checker; **not** a production completeness claim.
+
+## Hardware / Insights — real selected-board Zephyr configuration (opt-in draft)
+
+The **Hardware** and **Insights** toolbars now provide **Real configure (scratch)**
+and **Real configure + saved overlay** actions. These supplement the existing
+read-only **Validate selected binding** and **Preview saved overlay binding**
+actions; no second hardware editor or browser is installed.
+
+Select an actual generated Devicetree node in Hardware, optionally a built
+property that belongs to that node, and choose an action. A confirmation
+dialog shows the exact selected board, node, property and optional saved
+overlay before any build code runs. **Project CMake and Zephyr module hooks
+are executable code.** Only run this with a trusted application and workspace;
+temporary source copying is **not a security sandbox**.
+
+The installed Eclipse plug-in packages the native Python real-configure
+probe. The background job uses the managed Python, selected CMake/Ninja
+environment, exact Zephyr checkout and board. The probe checks the original
+CMake cache's selected checkout and board identity and hashes the original
+generated DTS. It copies bounded application source to OS scratch and invokes
+the actual **west build --cmake-only --pristine=always** on that copy.
+No firmware is compiled or flashed. The original build is not the output.
+
+The **+ saved overlay** action adds the selected saved application overlay
+via EXTRA_DTC_OVERLAY_FILE *after* Zephyr's ordinary board/application
+overlays. It does not evaluate an unsaved proposed change, nor replace any
+overlay included in normal discovery. If the file was already auto-discovered,
+it may be applied again; the UI identifies that precedence.
+
+Success requires actual West/CMake exit 0, a scratch-generated zephyr.dts,
+matching selected checkout/board in its CMake cache and the exact selected
+node/property present in the generated tree according to upstream dtlib.
+A CMake success with missing expected node/property remains **incomplete**,
+never a hardware validity claim. The results appear in existing
+**Hardware → Validation / evidence** and **Insights**, scoped to the
+current project/build/node/property. Background work can be cancelled and
+stale responses are discarded.
+
+Reports contain hashes, enumerated outcome codes and a heuristic candidate
+overlay line hint if supported by the bounded build log, without exposing
+raw logs, arbitrary exception messages or private DTS values. The temporary
+application and build copies are deleted.
+
+This stage does **not** prove successful C/C++ compilation/link, exact
+equivalence for complex sysbuild/module configurations, electrical/package
+pins, driver execution, flashed target or measured learning improvement.
+G0 remains **OPEN**. The headless real configuration CLI remains available
+for investigation and independent testing.
