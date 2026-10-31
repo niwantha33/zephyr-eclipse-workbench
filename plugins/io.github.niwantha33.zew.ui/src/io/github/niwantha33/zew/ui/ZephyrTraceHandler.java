@@ -144,8 +144,9 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                         if (!shell.isDisposed()) {
                             MessageDialog.openInformation(shell, "RTOS trace captured",
                                     "Snapshot saved in:\n" + out + "\n\nImport the ctf folder inside the newest capture in Trace Compass. "
-                                    + "The supplied XML analysis must be imported once. Open diagnostics.json for guided checks "
-                                    + "and capture.json for CPU/ISR and buffer evidence. Firmware identity is not verified.");
+                                    + "The supplied XML analysis must be imported once. Open report.html for CPU/ISR "
+                                    + "composition and guided findings, or diagnostics.json for machine-readable evidence. "
+                                    + "Firmware identity is not verified.");
                             Program.launch(out.toString());
                         }
                     });
