@@ -33,6 +33,7 @@ public final class ChipPinCanvas extends Canvas {
     private List<GpioSourceEvidence.Call> resolvedSourceCalls = List.of();
     // Board DTS declarations are discoverable but must not look like application use.
     private boolean showDtsDeclarations;
+    private boolean showSourcePatterns;
     private boolean generatedDtsStale;
     private final List<Rectangle> bankHitAreas = new ArrayList<>();
     private final List<Integer> bankHitBits = new ArrayList<>();
@@ -236,7 +237,7 @@ public final class ChipPinCanvas extends Canvas {
                     : SWT.COLOR_WIDGET_FOREGROUND));
             gc.fillRoundRectangle(x, y, width, 42, 5, 5);
             gc.drawRoundRectangle(x, y, width, 42, 5, 5);
-            gc.drawText(bank.bitLabel(bit) + (fromCode ? " C?"
+            gc.drawText(bank.bitLabel(bit) + (showSourcePatterns && fromCode ? " C?"
                     : showDtsDeclarations && boardDeclaration ? " D" : ""), x + 6, y + 4, true);
             String consumer = showDtsDeclarations ? gpioConsumerNames.getOrDefault(bit, "") : "";
             if (!consumer.isBlank()) gc.drawText(shorten(gc, consumer, width - 12), x + 6, y + 23, true);
@@ -358,6 +359,12 @@ public final class ChipPinCanvas extends Canvas {
         redraw();
     }
 
+    /** Uncompiled, possibly unreachable code is never shown as use by default. */
+    public void showSourcePatterns(boolean visible) {
+        showSourcePatterns = visible;
+        redraw();
+    }
+
     public void setGeneratedDtsStale(boolean stale) {
         generatedDtsStale = stale;
         redraw();
@@ -463,6 +470,7 @@ public final class ChipPinCanvas extends Canvas {
     }
     public int sourceCandidateCount() { return resolvedSourceCalls.size(); }
     public boolean showingGpioDeclarations() { return showDtsDeclarations; }
+    public boolean showingSourcePatterns() { return showSourcePatterns; }
 
     public int routeCount() { return routes.size(); }
     /** Read-only evidence counts used by installed SWT integration tests. */
