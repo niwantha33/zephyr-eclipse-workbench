@@ -62,7 +62,7 @@ public final class ProjectTests {
             String fast = DebugVariableAdvice.describe("default", java.util.Map.of("CONFIG_SPEED_OPTIMIZATIONS", "y"));
             check(fast.contains("normally -O2") && fast.contains("selected build profile: default")
                     && fast.contains("Debug (-Og)") && fast.contains("not silently")
-                    && fast.contains("Stop before the variable's last use"));
+                    && fast.contains("For a local, stop before its last use"));
             String debug = DebugVariableAdvice.describe("debug", java.util.Map.of("CONFIG_DEBUG_OPTIMIZATIONS", "y"));
             check(debug.contains("normally -Og") && debug.contains("even -Og")
                     && !debug.contains("Project > Properties"));
