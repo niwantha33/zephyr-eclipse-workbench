@@ -27,6 +27,31 @@ public final class ConfigurationStudioTests {
                         kfields[i].getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             }
             var parsed = io.github.niwantha33.zew.core.KconfigInspector.parse(message.toString());
+            // Native EDT bridge accepts only the bounded structured protocol,
+            // never raw paths/values or an invented "interpreted" status.
+            String[] dtFields = {"interpreted", "a".repeat(64), "present", "matched",
+                    "interpreted", "boolean", "okay", "none", "matching-binding"};
+            var dtWire = new StringBuilder("ZEW-DTBIND-1\n");
+            for (int i = 0; i < dtFields.length; i++) {
+                if (i > 0) dtWire.append('\t');
+                dtWire.append(encode.encodeToString(dtFields[i].getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            }
+            var dtResult = io.github.niwantha33.zew.core.DevicetreeBindingInspector.parse(dtWire.toString());
+            ok(dtResult.interpreted() && dtResult.describe("/soc/gpio@4000", "gpio-controller",
+                    false, false).contains("physical pins"),
+                    "selected EDT bridge provides scoped binding evidence, not hardware proof");
+            String[] badDtFields = dtFields.clone();
+            badDtFields[2] = "missing";
+            var contradicted = new StringBuilder("ZEW-DTBIND-1\n");
+            for (int i = 0; i < badDtFields.length; i++) {
+                if (i > 0) contradicted.append('\t');
+                contradicted.append(encode.encodeToString(
+                        badDtFields[i].getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            }
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeBindingInspector.parse(
+                    contradicted.toString()));
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeBindingInspector.parse(
+                    "ZEW-DTBIND-1\nunsafe-file-path"));
             ok(parsed.available() && !parsed.details().canRequest("y")
                     && parsed.details().canRequest("n"),
                     "Kconfiglib assignment restrictions block unavailable Enable requests");
