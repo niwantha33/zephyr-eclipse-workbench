@@ -49,6 +49,7 @@ import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationDiagnosis;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
+import io.github.niwantha33.zew.core.DevicetreeBindingInspector;
 import io.github.niwantha33.zew.core.GpioBankEvidence;
 import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
@@ -113,6 +114,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private String selectedOverlay = "app.overlay";
     private Job helpJob;
     private Job diagnosisJob;
+    private Job bindingJob;
+    private final java.util.concurrent.atomic.AtomicInteger bindingGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger diagnosisGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger helpGeneration = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ConcurrentMap<String, String> definitionCache =
@@ -623,10 +626,12 @@ public final class ConfigurationStudioView extends ViewPart {
         studioVertical.setWeights(new int[] {78, 22});
 
         var hardwareActions = new Composite(hardware, SWT.NONE);
-        hardwareActions.setLayout(new GridLayout(6, false));
+        hardwareActions.setLayout(new GridLayout(4, false));
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
+        action(hardwareActions, "Validate selected binding", () -> inspectSelectedBinding(false));
+        action(hardwareActions, "Preview saved overlay binding", () -> inspectSelectedBinding(true));
         action(hardwareActions, "Edit application overlay…", this::openOverlay);
         action(hardwareActions, "GPIO example C", () -> hardwareDetails.setSelection(4));
         addGpioButton = action(hardwareActions, "Add DTS GPIO…", this::prepareNewGpio);
@@ -640,6 +645,8 @@ public final class ConfigurationStudioView extends ViewPart {
         action(evidenceActions, "Export evidence…", this::exportEvidence);
         action(evidenceActions, "Open evidence…", () -> openEvidence(false));
         action(evidenceActions, "Compare evidence…", () -> openEvidence(true));
+        action(evidenceActions, "Validate selected binding", () -> inspectSelectedBinding(false));
+        action(evidenceActions, "Preview saved overlay binding", () -> inspectSelectedBinding(true));
         analysis = new Text(reports, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
         analysis.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
@@ -818,6 +825,76 @@ public final class ConfigurationStudioView extends ViewPart {
         diagnosisJob.schedule();
     }
 
+    /** Evaluate the selected built node with upstream edtlib in a background job. */
+    private void inspectSelectedBinding(boolean preview) {
+        if (project == null || !project.isAccessible() || project.getLocation() == null
+                || inspectionBuild == null || inspectionSettings == null
+                || hardwareDevices.getSelectionCount() != 1) {
+            MessageDialog.openInformation(getSite().getShell(), "Devicetree binding evidence",
+                    "Select a hardware node and build the exact board before inspecting.");
+            return;
+        }
+        var device = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+        if (device == null) return;
+        IProject chosenProject = project;
+        Path build = inspectionBuild;
+        Path app = chosenProject.getLocation().toFile().toPath();
+        Path overlay = preview ? app.resolve(selectedOverlay).normalize() : null;
+        if (preview && (overlay == null || !overlay.startsWith(app.normalize())
+                || !Files.isRegularFile(overlay))) {
+            MessageDialog.openInformation(getSite().getShell(), "Saved overlay unavailable",
+                    "Save an overlay inside the selected project first. The unsaved draft is not inspected.");
+            return;
+        }
+        String prop = null;
+        if (hardwareParameters.getSelectionCount() == 1) {
+            var row = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
+            if (row != null && row.path().equals(device.path())) prop = row.name();
+        }
+        final String node = device.path();
+        final String propertyName = prop;
+        final int generation = bindingGeneration.incrementAndGet();
+        if (bindingJob != null) bindingJob.cancel();
+        final var display = analysis.getDisplay();
+        final boolean stale = buildOutdated;
+        final var settings = inspectionSettings;
+        status.setText("Inspecting selected generated DTS and Zephyr bindings…");
+        bindingJob = new Job("Inspect selected Devicetree binding") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                DevicetreeBindingInspector.Result result;
+                try {
+                    result = DevicetreeBindingInspector.inspect(
+                            Path.of(settings.getProperty("python")),
+                            Path.of(settings.getProperty("workspace"), "zephyr"),
+                            app, build, node, propertyName, overlay,
+                            ConfigurationStudioView.class.getResourceAsStream(
+                                    "/scripts/dt_binding_inspect.py"));
+                } catch (Exception error) {
+                    result = DevicetreeBindingInspector.Result.unknown("edtlib-unavailable");
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                final String report = result.describe(node, propertyName, preview, stale);
+                display.asyncExec(() -> {
+                    if (analysis.isDisposed() || hardwareValidation.isDisposed()
+                            || generation != bindingGeneration.get() || project != chosenProject
+                            || !java.util.Objects.equals(inspectionBuild, build)
+                            || hardwareDevices.getSelectionCount() != 1) return;
+                    var current = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+                    if (current == null || !node.equals(current.path())) return;
+                    hardwareValidation.setText(report);
+                    analysis.setText(report);
+                    if (tabs.getSelectionIndex() == 1) hardwareDetails.setSelection(1);
+                    status.setText("Binding evidence shown in Hardware / Validation and Insights; "
+                            + "physical signals and runtime remain unverified.");
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        bindingJob.setSystem(true);
+        bindingJob.schedule();
+    }
+
     private void showEvidence(String text) {
         analysis.setText(text);
         tabs.setSelection(2);
@@ -899,6 +976,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private void reload() {
         diagnosisGeneration.incrementAndGet();
         if (diagnosisJob != null) diagnosisJob.cancel();
+        bindingGeneration.incrementAndGet();
+        if (bindingJob != null) bindingJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         definitionCache.clear();
@@ -2158,6 +2237,8 @@ public final class ConfigurationStudioView extends ViewPart {
     @Override public void dispose() {
         diagnosisGeneration.incrementAndGet();
         if (diagnosisJob != null) diagnosisJob.cancel();
+        bindingGeneration.incrementAndGet();
+        if (bindingJob != null) bindingJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();
