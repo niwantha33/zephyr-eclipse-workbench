@@ -26,6 +26,7 @@ class FakeEDT:
         return SimpleNamespace(binding_path=None if "unmatched" in self.source
                                else "/private/vendor/gpio.yaml",
                                status="disabled" if "disabled-device" in self.source
+                               else "suspended" if "unsupported-status" in self.source
                                else "okay", props=props)
 
 
@@ -100,6 +101,13 @@ class PeripheralEvidenceTests(unittest.TestCase):
         report = self.run_check()
         self.assertEqual(report["images"][0]["kconfig"]["effective"], "not-observed-or-redacted")
         self.assertEqual(report["status"], "incomplete-or-unavailable")
+
+    def test_unknown_generated_node_status_not_presented_as_verified(self):
+        self.dts.write_text("unsupported-status\n", encoding="utf-8")
+        report = self.run_check()
+        self.assertEqual(report["status"], "incomplete-or-unavailable")
+        self.assertEqual(report["images"][0]["node"]["configured_status"], "other")
+        self.assertEqual(report["images"][0]["checks"][3]["state"], "unknown")
 
     def test_missing_node_cannot_appear_as_configured(self):
         report = self.run_check(node="/not-present")
