@@ -246,3 +246,28 @@ board's `led0` alias and leaves its extra PA15 output off by default.
 The central planner receives more of the initial vertical space; the evidence
 dock remains resizable. GPIO indices also support arrow-key selection. No
 physical package-pin diagram or live register configuration is claimed.
+
+## Named GPIO tiles and reviewed additions
+
+Used logical GPIO tiles now show their bank/index and exact built consumer
+identity on two lines, for example `PB22 / led0`. The bank/index comes from the
+selected controller, so a GPIO B consumer is never relabelled as GPIO A. Names
+prefer compiled aliases, then a `label` property, node label, or node name. A
+short hover and the inspector retain the full name if the tile is too narrow.
+
+Select an index with no built reference or exact saved-source candidate to
+activate **Add DTS GPIO…**. Choose a lowercase DTS name, input/output and
+active-high/active-low polarity, then select `app.overlay` or another active
+source overlay. The Changes dock and final confirmation show the source
+addition before anything is saved. Existing content is retained, backed up and
+protected against edits since preview. The new alias maps underscores in the
+node label to hyphens, following DTS alias conventions.
+
+Output requests use the standard `gpio-leds` consumer binding; input requests
+use `gpio-keys`. These are semantic LED/key consumers, not arbitrary live GPIO
+register writes. Optional input event codes and any enabled driver's ownership
+remain an explicit application choice. No pull configuration, output initial
+level, package pad or free-pin claim is guessed. A missing controller label,
+used index, name collision, disabled controller, stale build or unsupported
+cell shape blocks the flow. Rebuild after saving and verify the selected overlay,
+controller binding, driver configuration and actual circuit before using it.

@@ -142,6 +142,37 @@ public final class GpioBankEvidence {
                 uses, provenance);
     }
 
+    /** Display names from exact built consumers: aliases, label property, node label, then node name. */
+    public static Map<Integer, String> consumerNames(Bank bank, List<DevicetreeParameters.Property> properties,
+                                                    Map<String, String> nodeLabels) {
+        if (bank == null) return Map.of();
+        var result = new java.util.TreeMap<Integer, String>();
+        for (var usage : bank.uses()) {
+            var names = new java.util.TreeSet<String>();
+            for (var property : properties) if (property.path().equals("/aliases")) {
+                String reference = property.value().strip();
+                String path = reference.startsWith("&") ? nodeLabels.get(reference.substring(1))
+                        : reference.startsWith("\"/") && reference.endsWith("\"")
+                            ? reference.substring(1, reference.length() - 1) : "";
+                if (usage.consumerPath().equals(path)) names.add(property.name());
+            }
+            if (names.isEmpty()) for (var property : properties)
+                if (property.path().equals(usage.consumerPath()) && property.name().equals("label")) {
+                    String value = property.value();
+                    if (value.length() >= 2 && value.length() <= 82 && value.startsWith("\"") && value.endsWith("\"")) {
+                        String text = value.substring(1, value.length() - 1);
+                        if (!text.isBlank() && text.chars().noneMatch(c -> Character.isISOControl(c) || c == '\\' || c == '"')) names.add(text);
+                    }
+                }
+            if (names.isEmpty()) for (var label : nodeLabels.entrySet())
+                if (label.getValue().equals(usage.consumerPath())) names.add(label.getKey());
+            if (names.isEmpty()) names.add(usage.consumerPath().substring(usage.consumerPath().lastIndexOf('/') + 1));
+            String name = String.join(", ", names);
+            result.merge(usage.bit(), name, (old, additional) -> old.equals(additional) ? old : old + ", " + additional);
+        }
+        return Map.copyOf(result);
+    }
+
     private static int integer(List<DevicetreeParameters.Property> own, String key) {
         for (var p : own) if (p.name().equals(key)) {
             var values = numericGroups(p.value());

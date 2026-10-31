@@ -23,11 +23,27 @@ public final class DevicetreeOverlayChanges {
     /** Preview an appended override. Existing text is retained exactly; Zephyr resolves override order. */
     public static Preview preview(Path application, Path selectedOverlay,
             DevicetreeParameters.Property property, String value) throws IOException {
+        return previewAddition(application, selectedOverlay, DevicetreeParameters.overlayRequest(property, value));
+    }
+
+    /** Append a caller-generated, reviewed source block through the same ownership/backup contract. */
+    public static Preview previewAddition(Path application, Path selectedOverlay, String sourceAddition) throws IOException {
+        return previewGenerated(application, selectedOverlay, original -> sourceAddition);
+    }
+
+    /** Generate against the exact bounded original snapshot that commit() will protect. */
+    public static Preview previewGenerated(Path application, Path selectedOverlay,
+            java.util.function.Function<String, String> generator) throws IOException {
         Path file = checkedTarget(application, selectedOverlay);
         boolean exists = Files.exists(file, LinkOption.NOFOLLOW_LINKS);
         String original = exists ? read(file) : "";
+        String sourceAddition = generator.apply(original);
+        if (sourceAddition == null || sourceAddition.isBlank()
+                || sourceAddition.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES
+                || sourceAddition.indexOf('\0') >= 0)
+            throw new IOException("Missing, invalid or oversized overlay source addition.");
         String newline = original.contains("\r\n") ? "\r\n" : "\n";
-        String addition = DevicetreeParameters.overlayRequest(property, value).replace("\n", newline);
+        String addition = sourceAddition.replace("\r\n", "\n").replace("\n", newline);
         String updated = original.endsWith(addition) ? original
                 : original + (original.isEmpty() || original.endsWith("\n") ? "" : newline) + addition;
         if (updated.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES)

@@ -261,10 +261,14 @@ public final class EditorSmoke implements IApplication {
             check(((org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareInspector"))
                     .getText().contains("Not allocated to any bank"),
                     "clicking unresolved C source cannot invent a GPIO bank");
+            check(chip.getClass().getMethod("gpioDisplayLabel", int.class) != null,
+                    "GPIO planner exposes actual bit plus compiled consumer display labels");
             var blueLedUsage = java.util.Arrays.stream(gpioUsage.getItems())
                     .filter(row -> row.getText(0).equals("PB22")).findFirst().orElseThrow();
             gpioUsage.setSelection(blueLedUsage);
             gpioUsage.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(chip.getClass().getMethod("gpioDisplayLabel", int.class).invoke(chip, 22).toString().startsWith("PB22 / "),
+                    "used GPIO tile includes exact consumer label/name rather than a bare index");
             check(((Integer) chip.getClass().getMethod("gpioConsumerCount").invoke(chip)) == 1
                     && dock.getSelectionIndex() == 3,
                     "selecting PB22 evidence navigates to GPIO B without losing the Usage tab");

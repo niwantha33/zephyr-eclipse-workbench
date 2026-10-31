@@ -91,6 +91,10 @@ public final class ConfigurationStudioView extends ViewPart {
     private TabFolder hardwareDetails;
     private Table hardwareParameters, gpioUsageTable;
     private Label gpioUsageSummary;
+    private Button addGpioButton;
+    private GpioBankEvidence.Bank selectedGpioBank;
+    private int selectedGpioBit = -1;
+    private List<GpioSourceEvidence.Call> selectedGpioSourceCalls = List.of();
     private record GpioUsageSelection(String controllerPath, int bit, String detail) {}
     private Label parameterTitle;
     private ChipPinCanvas chipPins;
@@ -605,12 +609,15 @@ public final class ConfigurationStudioView extends ViewPart {
         studioVertical.setWeights(new int[] {78, 22});
 
         var hardwareActions = new Composite(hardware, SWT.NONE);
-        hardwareActions.setLayout(new GridLayout(5, false));
+        hardwareActions.setLayout(new GridLayout(6, false));
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
         action(hardwareActions, "Edit application overlay…", this::openOverlay);
         action(hardwareActions, "GPIO example C", () -> hardwareDetails.setSelection(4));
+        addGpioButton = action(hardwareActions, "Add DTS GPIO…", this::prepareNewGpio);
+        addGpioButton.setEnabled(false);
+        addGpioButton.setToolTipText("Select an unreferenced logical index. Creates a reviewed source request, not an availability or live-state claim.");
 
         Composite reports = tab(tabs, "Insights");
         reports.setLayout(new GridLayout(1, false));
@@ -1133,6 +1140,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private void showHardwareParameters(DevicetreeHardware.Device device) {
         if (hardwareParameters == null || hardwareParameters.isDisposed()) return;
         hardwareParameters.removeAll();
+        selectedGpioBank = null; selectedGpioBit = -1; selectedGpioSourceCalls = List.of();
+        if (addGpioButton != null && !addGpioButton.isDisposed()) addGpioButton.setEnabled(false);
         if (device == null || snapshot == null) {
             if (gpioUsageTable != null && !gpioUsageTable.isDisposed()) {
                 gpioUsageTable.removeAll();
@@ -1252,12 +1261,22 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "\nSelect an index to inspect observed consumers; edit through a source overlay."
                     + "\nRebuild the exact target to validate changes."
                     + sourceNotes);
+            selectedGpioBank = gpio;
+            selectedGpioSourceCalls = appCalls;
             gpioExample.setText(io.github.niwantha33.zew.core.GpioExampleCode.selectedIndex(null, -1, java.util.Map.of()));
             chipPins.showGpioBank(gpio, bit -> {
                 gpioExample.setText(io.github.niwantha33.zew.core.GpioExampleCode.selectedIndex(
                         gpio, bit, DevicetreeHardware.nodeLabels(snapshot.devicetree())));
+                selectedGpioBit = bit;
                 var matches = gpio.uses().stream().filter(usage -> usage.bit() == bit).toList();
-                StringBuilder info = new StringBuilder("GPIO LOGICAL INDEX  " + gpio.bitLabel(bit))
+                boolean knownUse = !matches.isEmpty() || resolvedForBank.stream().anyMatch(call -> call.bit() == bit);
+                boolean knownLabel = DevicetreeHardware.nodeLabels(snapshot.devicetree()).entrySet().stream()
+                        .anyMatch(entry -> entry.getValue().equals(gpio.controllerPath()) && entry.getKey().matches("[A-Za-z_][A-Za-z_0-9]*"));
+                addGpioButton.setEnabled(!knownUse && knownLabel && !buildOutdated);
+                String names = GpioBankEvidence.consumerNames(gpio, properties,
+                        DevicetreeHardware.nodeLabels(snapshot.devicetree())).getOrDefault(bit, "");
+                StringBuilder info = new StringBuilder("GPIO LOGICAL INDEX  " + gpio.bitLabel(bit)
+                        + (names.isBlank() ? "" : " / " + names))
                         .append("\nController: ").append(gpio.controllerPath())
                         .append("\nCompiled consumer references: ").append(matches.size())
                         .append("\nThis is not a package pad, runtime register reading or available-pin claim.");
@@ -1279,8 +1298,14 @@ public final class ConfigurationStudioView extends ViewPart {
                         }
                     }
                 }
+                if (!knownUse) info.append("\nNo built reference or exact source candidate for this index.\n")
+                        .append(buildOutdated ? "Rebuild before requesting a GPIO addition."
+                                : !knownLabel ? "No verified controller node label: additions are unavailable."
+                                : "Add DTS GPIO… offers an input/output and polarity request with a source diff preview.");
                 hardwareInspector.setText(info.toString());
             });
+            chipPins.showGpioConsumerNames(GpioBankEvidence.consumerNames(gpio, properties,
+                    DevicetreeHardware.nodeLabels(snapshot.devicetree())));
             chipPins.showSourceCandidates(resolvedForBank);
         } else if (gpioUsageTable != null && !gpioUsageTable.isDisposed()) {
             gpioExample.setText(io.github.niwantha33.zew.core.GpioExampleCode.selectedIndex(null, -1, java.util.Map.of()));
@@ -1395,6 +1420,67 @@ public final class ConfigurationStudioView extends ViewPart {
             if (currentPath != null) selectPeripheralNavigation(currentPath);
         } finally {
             hardwarePeripheralTree.setRedraw(true);
+        }
+    }
+
+    /** An unused-in-evidence index is not a free physical pin; all edits remain reviewed source requests. */
+    private void prepareNewGpio() {
+        if (selectedGpioBank == null || selectedGpioBit < 0 || snapshot == null || buildOutdated
+                || project == null || project.getLocation() == null) return;
+        final var bank = selectedGpioBank;
+        final int bit = selectedGpioBit;
+        final String builtDts = snapshot.devicetree();
+        final var calls = selectedGpioSourceCalls;
+        var name = new InputDialog(getSite().getShell(), "Add DTS GPIO — " + bank.bitLabel(bit),
+                "Choose a DTS node label/name. This index has no known reference; verify the schematic and pin ownership."
+                        + "\nLowercase letters, digits and underscores; no source is changed until the final diff is confirmed.",
+                "user_gpio", io.github.niwantha33.zew.core.GpioOverlayDraft::validateName);
+        if (name.open() != Window.OK) return;
+        int direction = new MessageDialog(getSite().getShell(), "GPIO direction", null,
+                "Choose the consumer request. Output uses Zephyr gpio-leds; input uses gpio-keys."
+                        + "\nThis creates a semantic LED/key consumer, not a live direction setting. Configure any input event code and driver ownership separately.",
+                MessageDialog.QUESTION, new String[] {"Input", "Output", "Cancel"}, 2).open();
+        if (direction < 0 || direction > 1) return;
+        int polarity = new MessageDialog(getSite().getShell(), "GPIO polarity", null,
+                "Choose logical active-high or active-low from the actual circuit. No pull, drive strength or package pad is inferred.",
+                MessageDialog.QUESTION, new String[] {"Active-high", "Active-low", "Cancel"}, 2).open();
+        if (polarity < 0 || polarity > 1) return;
+        try {
+            Path app = project.getLocation().toFile().toPath();
+            var select = new org.eclipse.swt.widgets.FileDialog(getSite().getShell(), SWT.SAVE);
+            select.setText("Choose app.overlay or another active source overlay");
+            select.setFilterPath(app.toString()); select.setFileName(selectedOverlay);
+            select.setFilterExtensions(new String[] {"*.overlay"});
+            String chosen = select.open();
+            if (chosen == null) return;
+            var preview = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.previewGenerated(app, Path.of(chosen), original ->
+                    io.github.niwantha33.zew.core.GpioOverlayDraft.generate(builtDts, bank.controllerPath(), bit, name.getValue(),
+                            direction == 0 ? io.github.niwantha33.zew.core.GpioOverlayDraft.Direction.INPUT
+                                    : io.github.niwantha33.zew.core.GpioOverlayDraft.Direction.OUTPUT,
+                            polarity == 0 ? io.github.niwantha33.zew.core.GpioOverlayDraft.Polarity.ACTIVE_HIGH
+                                    : io.github.niwantha33.zew.core.GpioOverlayDraft.Polarity.ACTIVE_LOW,
+                            original, calls));
+            proposedOverlayDraft = preview.addition();
+            String diff = "--- " + preview.file() + " (existing)\n+++ " + preview.file() + " (proposed)\n"
+                    + "@@ append after " + preview.original().lines().count() + " existing lines @@\n"
+                    + preview.updated().substring(preview.original().length()).lines().map(line -> "+" + line).collect(java.util.stream.Collectors.joining("\n")) + "\n";
+            hardwarePreview.setText("PROPOSED SOURCE DIFF — NOT APPLIED\n\n" + diff);
+            hardwareDetails.setSelection(0);
+            hardwareValidation.setText("NEW GPIO REQUEST — NOT BUILT\n" + bank.bitLabel(bit) + " / " + name.getValue()
+                    + "\nBinding, controller, package and runtime behaviour require a Zephyr build and hardware verification.");
+            if (!MessageDialog.openConfirm(getSite().getShell(), "Save reviewed overlay change",
+                    diff + "\nExisting content is preserved and backed up. This does not activate a new overlay."
+                            + "\nConfirm the exact source addition, verify overlay selection, then Build & validate.")) return;
+            Path backup = io.github.niwantha33.zew.core.DevicetreeOverlayChanges.commit(app, preview);
+            project.refreshLocal(IResource.DEPTH_INFINITE, null);
+            selectedOverlay = app.toRealPath().relativize(preview.file()).toString().replace('\\', '/');
+            openResource(selectedOverlay);
+            buildOutdated = true;
+            addGpioButton.setEnabled(false);
+            status.setText("Saved GPIO source request to " + selectedOverlay
+                    + (backup == null ? "" : "; backup: " + backup.getFileName()) + ". Rebuild before relying on it.");
+        } catch (Exception error) {
+            MessageDialog.openError(getSite().getShell(), "GPIO addition not saved", error.getMessage());
         }
     }
 
