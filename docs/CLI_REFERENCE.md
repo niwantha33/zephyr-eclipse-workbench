@@ -290,3 +290,23 @@ is reported as unavailable and does not produce false confirmations. A
 match and the semantic checks have no blockers; 1 otherwise; input errors
 return 2. Neither source freshness nor a hypothetical batch reconfiguration
 is proved. See [the full scope and limitations](CONFIG_REQUEST_CHECK.md).
+
+
+## Devicetree binding and plain-overlay preview (Phase-0 feasibility)
+
+```sh
+python zew.py dt-check --build ./build --zephyr ./zephyr --node /soc --property status
+python zew.py dt-check --build ./build --zephyr ./zephyr --node /soc \
+  --overlay ./app.overlay --bindings ./my_module/dts/bindings
+```
+
+The command imports **actual edtlib** from the explicit Zephyr checkout, only
+after matching that checkout to the selected build's CMake cache. It checks the
+generated DTS and optionally previews a small plain overlay appended in an
+OS temporary directory. The output has explicit unknown/missing-binding
+states and SHA-256 provenance. It never loads untrusted edt.pickle, calls
+the build/flash tools, writes user source or exposes raw DTS/property values.
+Exit 0 means the selected node/property was interpreted by a binding; 1
+means insufficient or rejected evidence; 2 means invalid input. No
+hypothetical overlay can be called a real successful build by this check.
+See [full limitations](DEVICETREE_TRUTH_CHECK.md).
