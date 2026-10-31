@@ -204,6 +204,8 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
     selected = source_cache.get("BOARD")
     if target and target != board:
         raise InputError("Selected board differs from existing build target")
+    if not target and "/" in board:
+        raise InputError("Qualified SoC/core target cannot be verified without BOARD_TARGET")
     if not target and selected and selected not in (board, board.split("/")[0]):
         raise InputError("Selected board differs from existing build board")
     if not target and not selected:
@@ -270,8 +272,8 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
                 same_zephyr = Path(actual.get("ZEPHYR_BASE", "")).resolve(strict=True) == zephyr
             except (OSError, ValueError):
                 same_zephyr = False
-            same_board = (actual.get("BOARD_TARGET", board) == board
-                          and actual.get("BOARD", board.split("/")[0])
+            same_board = (actual.get("BOARD_TARGET", board if "/" not in board else "") == board
+                          and actual.get("BOARD", "")
                           in (board, board.split("/")[0]))
             overlay_in_cache = (candidate_rel is None or
                                 (source / candidate_rel).as_posix()
