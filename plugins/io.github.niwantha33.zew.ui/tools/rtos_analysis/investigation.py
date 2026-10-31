@@ -8,6 +8,7 @@ integrity proves that a specific firmware image was flashed onto the MCU.
 from __future__ import annotations
 import argparse
 import hashlib
+from html import escape
 import json
 from pathlib import Path
 
@@ -136,6 +137,8 @@ def review_receipt(receipt, *, trace=None, metadata=None, build_elf=None,
                     "cpu_busy_percent": cpu.get("cpu_busy_percent"),
                     "thread_exclusive_ns": cpu.get("thread_exclusive_ns"),
                     "isr_ns": cpu.get("isr_ns"), "unknown_ns": cpu.get("unknown_ns"),
+                    "observed_window_ns": cpu.get("observed_window_ns"),
+                    "idle_ns": cpu.get("idle_ns"),
                     "selected_build_elf": selected_build,
                     "flashed_firmware": "not independently authenticated"},
         "fault": fault,
@@ -146,6 +149,80 @@ def review_receipt(receipt, *, trace=None, metadata=None, build_elf=None,
             "No MCU, probe, debug state, application source or build file was changed.",
         ],
     }
+
+
+def render_html(report):
+    """Portable no-JavaScript diagnostics; bars show observed composition only."""
+    if not isinstance(report, dict) or report.get("schema_version") != "zew-investigation-1":
+        raise ValueError("Invalid report for HTML rendering")
+    data = report["capture"]
+    findings = report.get("findings", [])
+    def cell(value):
+        return escape(str(value), quote=True)
+    window = data.get("observed_window_ns")
+    durations = data.get("thread_exclusive_ns")
+    segments = []
+    if isinstance(window, int) and window > 0 and isinstance(durations, dict):
+        # Do not graph inconsistent or partial clocks as valid 100% occupancy.
+        try:
+            values = [(str(name), amount) for name, amount in durations.items()
+                      if isinstance(amount, int) and amount >= 0]
+            values.extend([("ISR (exclusive)", data.get("isr_ns")),
+                           ("Unknown / unobserved", data.get("unknown_ns"))])
+            if not all(isinstance(amount, int) and amount >= 0 for _, amount in values):
+                values = []
+            if sum(amount for _, amount in values) != window:
+                values = []
+            segments = values[:64]
+        except (ValueError, TypeError):
+            segments = []
+    rows = []
+    bars = []
+    used = 0
+    for label, amount in segments:
+        percentage = 100 * amount / window
+        if amount == 0:
+            continue
+        color = "#2563eb" if label not in ("ISR (exclusive)", "Unknown / unobserved") else (
+            "#d97706" if label == "ISR (exclusive)" else "#64748b")
+        bars.append('<span title="' + cell(label + ': ' + str(amount) + ' ns')
+                    + '" style="width:' + f'{percentage:.5f}' + '%;background:' + color + '"></span>')
+        rows.append('<tr><td>' + cell(label) + '</td><td>' + str(amount)
+                    + ' ns</td><td>' + f'{percentage:.3f}' + '%</td></tr>')
+        used += amount
+    entries = ''.join(
+        '<li><strong>' + cell(item.get("severity", "unknown")).upper() + ' · '
+        + cell(item.get("code", "UNKNOWN")) + '</strong>: '
+        + cell(item.get("evidence", "")) + '<p>Next: '
+        + cell(item.get("action", "")) + '</p></li>'
+        for item in findings[:128] if isinstance(item, dict))
+    busy = data.get("cpu_busy_percent")
+    busy_text = "unknown (requires explicit idle identity and full interval coverage)" \
+        if busy is None else cell(str(busy) + "% (conditional scheduler occupancy)")
+    chart = ('<div class="bar">' + ''.join(bars) + '</div><table>'
+             + ''.join(rows) + '</table>') if bars and used == window else (
+             '<p>No defensible time-composition chart: decoder/clock/coverage evidence unavailable.</p>')
+    return '''<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Zephyr RTOS offline investigation</title><style>
+body{max-width:980px;margin:3em auto;padding:0 20px;font:16px/1.5 system-ui,sans-serif;color:#1e293b}
+h1,h2{line-height:1.2}section{border-top:1px solid #cbd5e1;padding:16px 0}
+.bar{display:flex;width:100%;height:36px;border-radius:7px;overflow:hidden;background:#e2e8f0}
+.bar span{height:100%;min-width:0}
+table{border-collapse:collapse;width:100%;margin-top:14px}
+td{border-bottom:1px solid #e2e8f0;padding:7px}
+li{margin:12px 0}li p{margin:4px 0 0 14px;color:#475569}
+small{color:#64748b}
+</style></head><body><h1>Zephyr RTOS — offline investigation</h1>
+<p>Result: ''' + cell(report.get("status", "unknown")) + '''. No target was touched.</p>
+<section><h2>Observed execution composition</h2><p>CPU busy: ''' + busy_text + '''</p>''' + chart + '''
+<small>Single-stream CTF, observed nanoseconds only. Unknown is not idle.
+ISR time is separated from interrupted threads. Do not infer complete trace capture or WCET.</small></section>
+<section><h2>Guided findings</h2><ol>''' + entries + '''</ol></section>
+<section><h2>Provenance and limits</h2><p>CTF decoder: ''' + cell(data.get("ctf_decode")) + '''.
+Selected ELF: ''' + cell(data.get("selected_build_elf")) + '''.
+Flashed firmware: NOT independently authenticated.</p>
+<ul>''' + ''.join('<li>' + cell(line) + '</li>' for line in report.get("limits", [])) + '''
+</ul></section></body></html>'''
 
 
 def review(path, *, build=None, fault_log=None):
