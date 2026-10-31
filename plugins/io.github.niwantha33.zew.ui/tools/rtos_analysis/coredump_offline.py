@@ -46,11 +46,7 @@ def command(*, gdb, python, elf, dump, zephyr, platform=None):
     server = Path(zephyr) / "scripts" / "coredump" / "coredump_gdbserver.py"
     if not server.is_file():
         raise ValueError("Selected Zephyr checkout lacks scripts/coredump/coredump_gdbserver.py")
-    pipe = " ".join(quote_pipe(Path(arg).resolve(), platform) for arg in
-                    (python, server, elf, dump))
-    # --pipe option must precede the positional ELF/dump per upstream script.
-    pipe_tokens = pipe.split(" ", 2)
-    # Rebuild without splitting paths containing whitespace.
+    # --pipe keeps the upstream GDB stub off TCP; quote each operand separately.
     operands = [quote_pipe(Path(p).resolve(), platform) for p in (python, server)]
     operands += ["--pipe"]
     operands += [quote_pipe(Path(p).resolve(), platform) for p in (elf, dump)]
@@ -95,12 +91,16 @@ def investigate(*, gdb, python, elf, dump, zephyr, confirmed=False, timeout=40,
             raise RuntimeError("GDB response exceeds the bounded report size")
         output.seek(0)
         log = output.read().decode("utf-8", "replace")
+    with elf.open("rb") as image:
+        elf_hash = hashlib.file_digest(image, "sha256").hexdigest()
+    with dump.open("rb") as snapshot:
+        dump_hash = hashlib.file_digest(snapshot, "sha256").hexdigest()
     return {
         "schema": "zew-coredump-1",
         "status": "inspected" if process.returncode == 0 else "unavailable",
         "exit_code": process.returncode,
-        "elf_sha256": hashlib.file_digest(elf.open("rb"), "sha256").hexdigest(),
-        "coredump_sha256": hashlib.file_digest(dump.open("rb"), "sha256").hexdigest(),
+        "elf_sha256": elf_hash,
+        "coredump_sha256": dump_hash,
         "elf_match": "USER CONFIRMED — NOT independently proven by dump bytes",
         "execution": "local GDB pipe to selected Zephyr checkout; no listening socket or physical target",
         "gdb_output": log,
