@@ -170,18 +170,19 @@ public final class SocRegistersView extends ViewPart {
                     board = settings.getProperty("board", "");
                     var roots = new ArrayList<Path>();
                     Path workspace = Path.of(settings.getProperty("workspace"));
+                    // Probe focused exact-chip/vendor-pack directories first;
+                    // avoid double-scanning all West modules before local packs.
                     roots.add(project.getLocation().toFile().toPath().resolve(".zew/svd"));
-                    roots.add(workspace.resolve("modules/hal"));
-                    roots.add(workspace.resolve("modules"));
-                    roots.add(workspace.resolve("zephyr"));
                     Path root = Path.of(settings.getProperty("zew.setupRoot"));
                     roots.add(root.resolve("vendor-svd"));
                     roots.add(root.resolve("svd"));
-                    roots.add(Path.of(settings.getProperty("tools.sdk")));
                     Path userHome = Path.of(System.getProperty("user.home"));
                     roots.add(userHome.resolve(".cmsis/packs"));
                     roots.add(userHome.resolve(".cmsis-packs"));
                     roots.add(userHome.resolve("AppData/Local/Arm/Packs"));
+                    roots.add(workspace.resolve("modules/hal"));
+                    roots.add(workspace.resolve("zephyr"));
+                    roots.add(Path.of(settings.getProperty("tools.sdk")));
                     if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win"))
                         roots.add(Path.of("C:/ti"));
                     String extra = System.getenv("ZEW_VENDOR_SVD_DIRS");
