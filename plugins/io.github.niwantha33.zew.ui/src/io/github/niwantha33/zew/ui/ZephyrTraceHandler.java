@@ -125,29 +125,37 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                         throw new IOException(diagnostics.describe(plan.board(), ports.gdb(), owned.isAlive() ? null : owned.exitValue()));
                     staging = Files.createTempDirectory("zew-trace-tool-");
                     for (String name : List.of("capture_snapshot.py", "analyze_trace.py", "cpu_analysis.py",
-                            "investigation.py", "Zephyr_RTOS_Timeline.xml")) {
+                            "timing_analysis.py", "investigation.py", "Zephyr_RTOS_Timeline.xml")) {
                         var resource = Activator.getDefault().getBundle().getEntry("tools/rtos_analysis/" + name);
                         if (resource == null) throw new IOException("Trace component missing: " + name + ". Reinstall Workbench.");
                         try (var input = resource.openStream()) { Files.copy(input, staging.resolve(name)); }
                     }
                     Path out = project.getLocation().toFile().toPath().resolve(".zew-traces");
+                    Path resultFile = staging.resolve("capture-location.txt");
                     var command = List.of(settings.getProperty("python"), staging.resolve("capture_snapshot.py").toString(),
                             "--gdb", gdb, "--build", build.toString(),
                             "--zephyr", Path.of(settings.getProperty("workspace"), "zephyr").toString(),
-                            "--output", out.toString(), "--port", Integer.toString(ports.gdb()));
+                            "--output", out.toString(), "--port", Integer.toString(ports.gdb()),
+                            "--result-file", resultFile.toString());
                     new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofSeconds(45),
                             monitor::isCanceled, stream::println, ProjectContext.environment(settings)).requireSuccess();
+                    if (!Files.isRegularFile(resultFile))
+                        throw new IOException("Capture did not report its saved directory.");
+                    Path captureDir = Path.of(Files.readString(resultFile).trim()).toAbsolutePath().normalize();
+                    if (!captureDir.startsWith(out.toAbsolutePath().normalize())
+                            || !Files.isRegularFile(captureDir.resolve("report.html")))
+                        throw new IOException("Capture report missing or outside selected project output.");
                     stream.println("Snapshot includes capture.json and diagnostics.json with "
                             + "offline provenance checks, CPU/ISR accounting and guided corrective actions.");
                     stream.println("Import the ctf folder in Trace Compass; the supplied XML timeline may need to be imported once.");
                     if (!shell.isDisposed()) shell.getDisplay().asyncExec(() -> {
                         if (!shell.isDisposed()) {
                             MessageDialog.openInformation(shell, "RTOS trace captured",
-                                    "Snapshot saved in:\n" + out + "\n\nImport the ctf folder inside the newest capture in Trace Compass. "
+                                    "Snapshot saved in:\n" + captureDir + "\n\nImport the ctf folder in Trace Compass. "
                                     + "The supplied XML analysis must be imported once. Open report.html for CPU/ISR "
                                     + "composition and guided findings, or diagnostics.json for machine-readable evidence. "
                                     + "Firmware identity is not verified.");
-                            Program.launch(out.toString());
+                            Program.launch(captureDir.resolve("report.html").toString());
                         }
                     });
                     return Status.OK_STATUS;
