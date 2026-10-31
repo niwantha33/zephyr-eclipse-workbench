@@ -29,6 +29,7 @@ public final class ChipPinCanvas extends Canvas {
     private Consumer<PinRoute> selection = route -> {};
     private int selected = -1;
     private GpioBankEvidence.Bank bank;
+    private java.util.Map<Integer, String> gpioConsumerNames = java.util.Map.of();
     private List<GpioSourceEvidence.Call> resolvedSourceCalls = List.of();
     private final List<Rectangle> bankHitAreas = new ArrayList<>();
     private final List<Integer> bankHitBits = new ArrayList<>();
@@ -51,6 +52,17 @@ public final class ChipPinCanvas extends Canvas {
             }
         });
         addPaintListener(event -> paintRoutes(event.gc));
+        addListener(SWT.MouseMove, event -> {
+            String tip = null;
+            if (bank != null && mode != Mode.PACKAGE) for (int i = 0; i < bankHitAreas.size(); i++) {
+                if (bankHitAreas.get(i).contains(event.x, event.y)) {
+                    int bit = bankHitBits.get(i);
+                    tip = gpioDisplayLabel(bit) + (gpioConsumerNames.containsKey(bit) ? " · built DTS consumer" : " · no built DTS reference");
+                    break;
+                }
+            }
+            if (!java.util.Objects.equals(getToolTipText(), tip)) setToolTipText(tip);
+        });
         addListener(SWT.MouseDown, event -> {
             if (bank != null && mode != Mode.PACKAGE) {
                 for (int i = 0; i < bankHitAreas.size(); i++) {
@@ -196,12 +208,12 @@ public final class ChipPinCanvas extends Canvas {
         }
         int columns = 8;
         int gap = 6;
-        int width = Math.max(43, Math.min(75, (area.width - 34 - gap * (columns - 1)) / columns));
+        int width = Math.max(43, Math.min(95, (area.width - 34 - gap * (columns - 1)) / columns));
         int startX = 16;
         int startY = 67;
         for (int bit = 0; bit < bank.bitPositions(); bit++) {
             int x = startX + (bit % columns) * (width + gap);
-            int y = startY + (bit / columns) * 34;
+            int y = startY + (bit / columns) * 49;
             int count = 0;
             for (var usage : bank.uses()) if (usage.bit() == bit) count++;
             boolean selectedSlot = selectedBit == bit;
@@ -216,13 +228,15 @@ public final class ChipPinCanvas extends Canvas {
                     : count > 0 ? SWT.COLOR_INFO_BACKGROUND : SWT.COLOR_WIDGET_BACKGROUND));
             gc.setForeground(display.getSystemColor(selectedSlot ? SWT.COLOR_LIST_SELECTION_TEXT
                     : SWT.COLOR_WIDGET_FOREGROUND));
-            gc.fillRoundRectangle(x, y, width, 27, 5, 5);
-            gc.drawRoundRectangle(x, y, width, 27, 5, 5);
-            gc.drawText(bank.bitLabel(bit) + (fromCode ? " C" : ""), x + 6, y + 5, true);
-            bankHitAreas.add(new Rectangle(x, y, width, 27));
+            gc.fillRoundRectangle(x, y, width, 42, 5, 5);
+            gc.drawRoundRectangle(x, y, width, 42, 5, 5);
+            gc.drawText(bank.bitLabel(bit) + (fromCode ? " C" : ""), x + 6, y + 4, true);
+            String consumer = gpioConsumerNames.getOrDefault(bit, "");
+            if (!consumer.isBlank()) gc.drawText(shorten(gc, consumer, width - 12), x + 6, y + 23, true);
+            bankHitAreas.add(new Rectangle(x, y, width, 42));
             bankHitBits.add(bit);
         }
-        int bottom = startY + ((bank.bitPositions() + columns - 1) / columns) * 34 + 6;
+        int bottom = startY + ((bank.bitPositions() + columns - 1) / columns) * 49 + 6;
         gc.setForeground(display.getSystemColor(SWT.COLOR_LIST_FOREGROUND));
         gc.drawText(bank.uses().size() + " built DTS references · "
                 + resolvedSourceCalls.size() + " C source candidates (not executed).", 16, bottom, true);
@@ -330,6 +344,16 @@ public final class ChipPinCanvas extends Canvas {
         }
     }
 
+    public void showGpioConsumerNames(java.util.Map<Integer, String> names) {
+        gpioConsumerNames = java.util.Map.copyOf(names);
+        redraw();
+    }
+    public String gpioDisplayLabel(int bit) {
+        if (bank == null) return "";
+        String name = gpioConsumerNames.getOrDefault(bit, "");
+        return bank.bitLabel(bit) + (name.isBlank() ? "" : " / " + name);
+    }
+
     public void setMode(Mode requested) {
         if (requested == null || isDisposed()) return;
         mode = requested;
@@ -340,7 +364,7 @@ public final class ChipPinCanvas extends Canvas {
         int h = mode == Mode.PACKAGE ? 480
                 : bank != null ? mode == Mode.CONNECTIONS
                     ? Math.max(190, Math.min(40, bank.uses().size() + resolvedSourceCalls.size()) * 30 + 112)
-                    : Math.max(220, 67 + ((bank.bitPositions() + 7) / 8) * 34 + 67)
+                    : Math.max(220, 67 + ((bank.bitPositions() + 7) / 8) * 49 + 67)
                 : mode == Mode.CONNECTIONS ? Math.max(190, count * 28 + 105)
                 : "Select a peripheral".equals(controller) ? 185 : Math.max(238, signalHeight);
         // Expanding into a larger pane must not lock in a stale wide/tall canvas.
@@ -377,6 +401,7 @@ public final class ChipPinCanvas extends Canvas {
     public void showGpioBank(GpioBankEvidence.Bank evidence, Consumer<Integer> onSelection) {
         if (evidence == null) return;
         bank = evidence;
+        gpioConsumerNames = java.util.Map.of();
         resolvedSourceCalls = List.of();
         bankSelection = onSelection == null ? bit -> {} : onSelection;
         controller = evidence.controllerPath();
