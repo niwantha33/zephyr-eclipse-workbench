@@ -37,7 +37,8 @@ class RealDtConfigureTests(unittest.TestCase):
         (self.build / "CMakeCache.txt").write_text(
             "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\n"
             "BOARD:STRING=nucleo_f446re\n"
-            "BOARD_TARGET:STRING=nucleo_f446re/stm32f446xx\n", encoding="utf-8")
+            "BOARD_TARGET:STRING=nucleo_f446re/stm32f446xx\n"
+            "CACHED_BOARD:STRING=nucleo_f446re/stm32f446xx\n", encoding="utf-8")
         self.python = self.root / "managed-python"
         self.python.write_text("executable\n", encoding="utf-8")
         self.ninja = self.root / "ninja"
@@ -69,6 +70,7 @@ class RealDtConfigureTests(unittest.TestCase):
                     "ZEPHYR_BASE:PATH=" +
                     (str(self.zephyr) if cache_accurate else "/wrong/zephyr") + "\n"
                     "BOARD_TARGET:STRING=" + self.board + "\n"
+                    "CACHED_BOARD:STRING=" + self.board + "\n"
                     "BOARD:STRING=nucleo_f446re\n"
                     "EXTRA_DTC_OVERLAY_FILE:STRING=" + cmd[-1].split("=", 1)[1] + "\n",
                     encoding="utf-8")
@@ -117,7 +119,7 @@ class RealDtConfigureTests(unittest.TestCase):
             "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\n"
             "BOARD:STRING=nucleo_f446re\n", encoding="utf-8")
         with mock.patch.object(verify.subprocess, "run") as process:
-            with self.assertRaisesRegex(InputError, "BOARD_TARGET"):
+            with self.assertRaisesRegex(InputError, "independently verified"):
                 verify.validate(self.build, self.app, self.zephyr,
                                 self.python, self.board)
             process.assert_not_called()
@@ -191,6 +193,7 @@ class RealDtConfigureTests(unittest.TestCase):
         (isolated / "CMakeCache.txt").write_text(
             "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\n"
             "BOARD_TARGET:STRING=" + self.board + "\n"
+            "CACHED_BOARD:STRING=" + self.board + "\n"
             "BOARD:STRING=nucleo_f446re\n"
             "EXTRA_DTC_OVERLAY_FILE:STRING=" + cmd[-1].split("=", 1)[1] + "\n",
             encoding="utf-8")
