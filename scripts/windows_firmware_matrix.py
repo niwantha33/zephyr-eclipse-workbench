@@ -334,7 +334,7 @@ def main():
                         raise ValueError('Native real Zephyr configure resource emitted invalid protocol')
                     try:
                         fields = [base64.b64decode(word, validate=True).decode('ascii')
-                                  for word in lines[1].split('\\t')]
+                                  for word in lines[1].split('\t')]
                     except (ValueError, UnicodeError) as error:
                         raise ValueError('Native real Zephyr configure protocol was invalid') from error
                     if (resource_probe.returncode != 0 or len(fields) != 11
