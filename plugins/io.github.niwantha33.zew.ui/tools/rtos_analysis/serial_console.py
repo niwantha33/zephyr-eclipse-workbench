@@ -41,8 +41,11 @@ def capture(port, baud, directory, seconds, *, serial_factory=None, max_bytes=8 
     digest = hashlib.sha256()
     port_handle = None
     stop = "duration"
+    index_limit = False
+    max_json_bytes = 8 * 1024 * 1024
+    max_lines = 32000
     def emit(blob, *, truncated=False, records=None):
-        nonlocal lines, truncated_lines
+        nonlocal lines, truncated_lines, index_limit
         if not blob:
             return
         lines += 1
@@ -54,6 +57,8 @@ def capture(port, baud, directory, seconds, *, serial_factory=None, max_bytes=8 
                 "line": text, "contains_replacement": "\ufffd" in text,
                 "truncated": bool(truncated)}
         records.write(json.dumps(item, ensure_ascii=True) + "\n")
+        if lines >= max_lines or records.tell() >= max_json_bytes:
+            index_limit = True
         if show is not None:
             show(f"[Host receive {timestamp}] {text}")
     try:
@@ -64,7 +69,7 @@ def capture(port, baud, directory, seconds, *, serial_factory=None, max_bytes=8 
         deadline = read_clock() + seconds
         with (session_dir / "raw.bin").open("wb") as raw, \
              (session_dir / "messages.jsonl").open("w", encoding="utf-8") as records:
-            while read_clock() < deadline and raw_length < max_bytes:
+            while read_clock() < deadline and raw_length < max_bytes and not index_limit:
                 chunk = port_handle.read(min(512, max_bytes - raw_length))
                 if not chunk:
                     continue
@@ -74,22 +79,25 @@ def capture(port, baud, directory, seconds, *, serial_factory=None, max_bytes=8 
                 raw.write(chunk)
                 raw_length += len(chunk)
                 pending.extend(chunk)
-                while b"\n" in pending:
+                while b"\n" in pending and not index_limit:
                     before, _, after = pending.partition(b"\n")
                     pending = bytearray(after)
                     emit(before.rstrip(b"\r"), records=records)
-                if len(pending) > 4096:
+                if len(pending) > 4096 and not index_limit:
                     emit(bytes(pending[:4096]), truncated=True, records=records)
                     del pending[:4096]
-            if pending:
+            if pending and not index_limit:
                 emit(bytes(pending), truncated=True, records=records)
-        if raw_length >= max_bytes:
+        if index_limit:
+            stop = "message_index_limit"
+        elif raw_length >= max_bytes:
             stop = "byte_limit"
         receipt = {
             "schema": "zew-uart-1", "port": port, "baud": baud,
             "started_host_utc": started, "ended_host_utc": datetime.now(timezone.utc).isoformat(),
             "bytes": raw_length, "sha256": digest.hexdigest(), "lines": lines,
             "truncated_lines": truncated_lines, "stop_reason": stop,
+            "message_index_complete": not index_limit,
             "time_basis": "host receive UTC only; not target event time",
             "quality": "UTF-8 replacement and truncation flags preserved per line",
             "safety": "Only the named port was opened; no reset, flash, GDB or OpenOCD operations."
