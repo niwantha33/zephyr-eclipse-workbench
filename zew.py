@@ -116,6 +116,9 @@ def main(argv: list[str] | None = None) -> int:
                           help="Bounded configure timeout (30..900 s)")
     real_dts.add_argument("--scratch-parent", type=Path,
                           help="Existing folder outside application/build for temporary work")
+    real_dts.add_argument("--expect-node", help="Optional exact generated DTS path to prove present")
+    real_dts.add_argument("--expect-property",
+                          help="Optional generated property; requires --expect-node")
     diff = subs.add_parser("compare", help="Compare two builds or verified offline bundles")
     lg = diff.add_mutually_exclusive_group(required=True)
     lg.add_argument("--left", type=Path, help="Generated build root")
@@ -141,7 +144,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "dt-configure":
             output = validate_dt_build(args.build, args.application, args.zephyr,
                                        args.python, args.board, args.overlay, args.ninja,
-                                       args.timeout, args.scratch_parent)
+                                       args.timeout, args.scratch_parent,
+                                       args.expect_node, args.expect_property)
         elif args.command == "dt-check":
             output = inspect_dt_binding(args.build, args.zephyr, args.node, args.property,
                                         args.overlay, args.image, args.bindings)
