@@ -165,7 +165,7 @@ for p in bundles:
                         'ZephyrDebugShortcut', 'ZephyrFlashShortcut', 'ZephyrProjectTester',
                         'SelectedProject', 'ZephyrBuildHandler', 'ZephyrArtifactsHandler',
                         'DebugToolsHandler', 'SharedDebugTools',
-                        'ZephyrChipMismatchRecovery',
+                        'ZephyrChipMismatchRecovery', 'DebugExpressionProbeView', 'DebugExpressionProbeHandler',
                         'ZephyrQuickStartHandler'):
                 if 'io/github/niwantha33/zew/ui/' + cls + '.class' not in z.namelist():
                     raise SystemExit('Missing native Debug class: ' + cls)
