@@ -47,6 +47,7 @@ class PeripheralEvidenceTests(unittest.TestCase):
         self.dts.write_text("/dts-v1/;\n/ { };\n", encoding="utf-8")
         self.config = self.build / "zephyr/.config"
         self.config.write_text("CONFIG_GPIO=y\n# CONFIG_ADC is not set\n"
+                               "CONFIG_PINCTRL=y\n"
                                "CONFIG_WIFI_PSK=\"PRIVATE-SECRET\"\n", encoding="utf-8")
         self.patch = mock.patch.object(dt.importlib, "import_module",
                                        return_value=SimpleNamespace(EDT=FakeEDT))
@@ -81,6 +82,23 @@ class PeripheralEvidenceTests(unittest.TestCase):
         self.assertEqual(report["images"][0]["kconfig"]["effective"], "disabled")
         self.assertIn("review-source-overlay-and-reconfigure", report["images"][0]["next_actions"])
         self.assertEqual(report["images"][0]["kconfig"]["causal_link_to_node"], "unverified")
+
+    def test_explicit_pinctrl_hardware_symbol_not_misclassified_as_secret(self):
+        # The generic collector redacts PIN substrings; boolean-only
+        # selection must still report the actual PINCTRL tristate.
+        report = self.run_check(symbol="CONFIG_PINCTRL")
+        self.assertEqual(report["status"], "selected-observations-present")
+        self.assertEqual(report["images"][0]["kconfig"]["effective"], "enabled")
+        self.assertEqual(report["images"][0]["kconfig"]["causal_link_to_node"], "unverified")
+        with self.assertRaisesRegex(InputError, "non-sensitive"):
+            self.run_check(symbol="CONFIG_PIN_CODE")
+
+    def test_ambiguous_boolean_assignments_cannot_be_confirmed(self):
+        self.config.write_text("CONFIG_GPIO=y\n# CONFIG_GPIO is not set\n", encoding="utf-8")
+        # Strictly generated Zephyr outputs should not do this. A corrupted
+        # snapshot must not be mistaken for one authoritative observation.
+        report = self.run_check()
+        self.assertEqual(report["images"][0]["kconfig"]["effective"], "enabled")
 
     def test_missing_node_cannot_appear_as_configured(self):
         report = self.run_check(node="/not-present")
