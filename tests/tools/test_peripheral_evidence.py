@@ -98,7 +98,8 @@ class PeripheralEvidenceTests(unittest.TestCase):
         # Strictly generated Zephyr outputs should not do this. A corrupted
         # snapshot must not be mistaken for one authoritative observation.
         report = self.run_check()
-        self.assertEqual(report["images"][0]["kconfig"]["effective"], "enabled")
+        self.assertEqual(report["images"][0]["kconfig"]["effective"], "not-observed-or-redacted")
+        self.assertEqual(report["status"], "incomplete-or-unavailable")
 
     def test_missing_node_cannot_appear_as_configured(self):
         report = self.run_check(node="/not-present")
