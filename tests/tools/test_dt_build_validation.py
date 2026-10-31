@@ -112,6 +112,16 @@ class RealDtConfigureTests(unittest.TestCase):
                 verify.validate(self.build, self.app, self.zephyr, self.python, "wrong_board")
             process.assert_not_called()
 
+    def test_qualified_soc_core_cannot_be_guessed_from_board_only(self):
+        (self.build / "CMakeCache.txt").write_text(
+            "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\n"
+            "BOARD:STRING=nucleo_f446re\n", encoding="utf-8")
+        with mock.patch.object(verify.subprocess, "run") as process:
+            with self.assertRaisesRegex(InputError, "BOARD_TARGET"):
+                verify.validate(self.build, self.app, self.zephyr,
+                                self.python, self.board)
+            process.assert_not_called()
+
     def test_exact_zephyr_required_before_process(self):
         second = self.root / "second"
         second.mkdir()
