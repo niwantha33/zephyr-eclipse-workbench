@@ -75,9 +75,7 @@ public final class VendorSvdProvisioner {
                             throw new IOException("Insecure redirect from vendor pack host.");
                         // Only the official Keil download endpoints are permitted.
                         String host = next.getHost().toLowerCase(java.util.Locale.ROOT);
-                        if (!host.equals("www.keil.com") && !host.equals("keil.com")
-                                && !host.equals("www.keil.arm.com") && !host.equals("keil.arm.com")
-                                && !host.equals("keilpack.azureedge.net"))
+                        if (!isApprovedRedirectHost(host))
                             throw new IOException("Unexpected vendor redirect host: " + host);
                         uri = next;
                     }
@@ -134,6 +132,16 @@ public final class VendorSvdProvisioner {
         } finally {
             Files.deleteIfExists(temp);
         }
+    }
+
+    /** Restrict pack redirects to documented Keil endpoints, never arbitrary CDNs. */
+    public static boolean isApprovedRedirectHost(String host) {
+        if (host == null) return false;
+        return switch (host.toLowerCase(java.util.Locale.ROOT)) {
+            case "www.keil.com", "keil.com", "www.keil.arm.com",
+                    "keil.arm.com", "keilpack.azureedge.net" -> true;
+            default -> false;
+        };
     }
 
     private static String sha256(Path file) throws Exception {
