@@ -264,7 +264,7 @@ def main():
                     raise ValueError('Native EDT UI bridge returned no valid protocol')
                 try:
                     native_fields = [base64.b64decode(word, validate=True).decode('utf-8')
-                                     for word in lines[1].split('\\t')]
+                                     for word in lines[1].split('\t')]
                 except (ValueError, UnicodeError) as error:
                     raise ValueError('Native EDT UI protocol invalid') from error
                 if (len(native_fields) != 9 or native_fields[0] not in ('interpreted', 'incomplete')
