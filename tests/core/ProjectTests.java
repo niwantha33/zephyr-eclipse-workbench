@@ -2,6 +2,7 @@
 import java.nio.file.*;
 import io.github.niwantha33.zew.core.ProjectProfile;
 import io.github.niwantha33.zew.core.BuildConfiguration;
+import io.github.niwantha33.zew.core.DebugVariableAdvice;
 import io.github.niwantha33.zew.core.WestCommands;
 import io.github.niwantha33.zew.core.WorkbenchConfig;
 public final class ProjectTests {
@@ -56,6 +57,26 @@ public final class ProjectTests {
             rejects(() -> BuildConfiguration.RELEASE.verify(build));
             Files.writeString(build.resolve("zephyr/.config"), "CONFIG_SPEED_OPTIMIZATIONS=y\n");
             BuildConfiguration.RELEASE.verify(build);
+            // Profile alone is not evidence of optimization; inspect effective .config.
+            String fast = DebugVariableAdvice.describe("default", java.util.Map.of("CONFIG_SPEED_OPTIMIZATIONS", "y"));
+            check(fast.contains("normally -O2") && fast.contains("selected build profile: default")
+                    && fast.contains("Debug (-Og)") && fast.contains("not silently")
+                    && fast.contains("Stop before the variable's last use"));
+            String debug = DebugVariableAdvice.describe("debug", java.util.Map.of("CONFIG_DEBUG_OPTIMIZATIONS", "y"));
+            check(debug.contains("normally -Og") && debug.contains("Even -Og")
+                    && !debug.contains("Project > Properties"));
+            String none = DebugVariableAdvice.describe("debug", java.util.Map.of("CONFIG_NO_OPTIMIZATIONS", "y"));
+            check(none.contains("normally -O0") && none.contains("Debug (-Og)"));
+            String size = DebugVariableAdvice.describe("release", java.util.Map.of("CONFIG_SIZE_OPTIMIZATIONS", "y"));
+            check(size.contains("normally -Os") && size.contains("Debug (-Og)"));
+            String aggressive = DebugVariableAdvice.describe("default",
+                    java.util.Map.of("CONFIG_SIZE_OPTIMIZATIONS_AGGRESSIVE", "y"));
+            check(aggressive.contains("normally -Oz"));
+            String unknown = DebugVariableAdvice.describe(null, java.util.Map.of());
+            check(unknown.contains("UNKNOWN") && !unknown.contains("normally -O"));
+            String conflicting = DebugVariableAdvice.describe("debug", java.util.Map.of(
+                    "CONFIG_DEBUG_OPTIMIZATIONS", "y", "CONFIG_SPEED_OPTIMIZATIONS", "y"));
+            check(conflicting.contains("conflicting") && !conflicting.contains("normally -Og"));
             System.out.println("Passed " + checks + " portable project checks.");
         } finally { try (var paths = Files.walk(root)) { for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) Files.delete(path); } }
     }
