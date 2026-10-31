@@ -940,9 +940,18 @@ public final class ConfigurationStudioView extends ViewPart {
             snapshot = ConfigurationStudioFiles.inspect(app, build, profile);
             Path effectiveFile = build == null ? null : build.resolve("zephyr/.config");
             hasGeneratedConfiguration = effectiveFile != null && Files.isRegularFile(effectiveFile);
-            buildOutdated = hasGeneratedConfiguration && Files.isRegularFile(app.resolve("prj.conf"))
+            Path effectiveDts = build == null ? null : build.resolve("zephyr/zephyr.dts");
+            Path overlay = app.resolve("app.overlay");
+            boolean staleKconfig = hasGeneratedConfiguration && Files.isRegularFile(app.resolve("prj.conf"))
                     && Files.getLastModifiedTime(app.resolve("prj.conf"))
                             .compareTo(Files.getLastModifiedTime(effectiveFile)) > 0;
+            // A newer application overlay invalidates the last generated GPIO/DTS
+            // evidence even if prj.conf has not been touched.
+            boolean staleDts = Files.isRegularFile(overlay)
+                    && (effectiveDts == null || !Files.isRegularFile(effectiveDts)
+                        || Files.getLastModifiedTime(overlay)
+                                .compareTo(Files.getLastModifiedTime(effectiveDts)) > 0);
+            buildOutdated = staleKconfig || staleDts;
             context.setText(project.getName() + "   •   " + board + "   •   " + snapshot.profile());
             updateMetrics();
             refreshPeripheralInfo();
@@ -967,7 +976,7 @@ public final class ConfigurationStudioView extends ViewPart {
             } else {
                 refreshAnalysis(build);
                 status.setText(buildOutdated
-                        ? "Build required: prj.conf is newer than the last generated .config."
+                        ? "Build required: prj.conf or app.overlay changed since the generated build."
                         : "Values reflect the last generated output; build to verify any changes.");
             }
         } catch (Exception error) {
@@ -1840,7 +1849,7 @@ public final class ConfigurationStudioView extends ViewPart {
         detailNotice.setText(o.unresolved()
                 ? "Needs review: no effective value in the last generated .config."
                 : buildOutdated
-                    ? "Build required: prj.conf changed since the last generated .config."
+                    ? "Build required: prj.conf or app.overlay changed since the generated build."
                     : ConfigurationStudioPresentation.review(o).isBlank()
                         ? "The last generated build agrees with this request."
                         : "Requested value differs from the last build; rebuild to verify.");
