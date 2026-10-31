@@ -73,7 +73,7 @@ def account(records, *, idle_thread_id=None):
             irq_depth += 1
             irq_entries += 1
             nested_max = max(nested_max, irq_depth)
-        elif name in ("isr_exit", "isr_exit_user"):
+        elif name in ("isr_exit", "isr_exit_user", "isr_exit_to_scheduler"):
             if not irq_depth:
                 return unknown("unmatched ISR exit")
             irq_depth -= 1
