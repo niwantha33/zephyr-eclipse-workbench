@@ -106,6 +106,25 @@ class GuidedInvestigationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "symlinked"):
             reviewer.review(self.capture)
 
+    def test_safe_html_chart_and_unverified_limit(self):
+        self.receipt["ctf_analysis"]["cpu"] = {
+            "status": "measured", "cpu_busy_percent": 40.0,
+            "observed_window_ns": 100, "thread_exclusive_ns": {"worker": 60, "idle": 20},
+            "isr_ns": 10, "unknown_ns": 10,
+        }
+        report = reviewer.review_receipt(self.receipt, trace=self.trace, metadata=self.metadata)
+        report["findings"].append({"severity": "warning", "code": "INJECTED",
+                                   "evidence": "<script>alert(1)</script>",
+                                   "action": "Do not execute"})
+        html = reviewer.render_html(report)
+        self.assertIn("worker", html)
+        self.assertIn("ISR (exclusive)", html)
+        self.assertIn("Unknown / unobserved", html)
+        self.assertIn("NOT independently authenticated", html)
+        self.assertIn("&lt;script&gt;", html)
+        self.assertNotIn("<script>", html)
+        self.assertIn("max-width:980px", html)
+
     def test_multiple_fatal_markers_are_ambiguous(self):
         result = reviewer.review_receipt(self.receipt, trace=self.trace, metadata=self.metadata,
                             fault_log=b"ZEPHYR FATAL ERROR\nZEPHYR FATAL ERROR\n")
