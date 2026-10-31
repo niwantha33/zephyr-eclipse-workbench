@@ -128,7 +128,7 @@ class GuidedInvestigationTests(unittest.TestCase):
     def test_uart_host_log_integrity_and_timing_provenance(self):
         uart = self.root / "serial-test"
         uart.mkdir()
-        raw = b"hello\\ninvalid:\\xff\\n"
+        raw = b"hello\ninvalid:\xff\n"
         (uart / "raw.bin").write_bytes(raw)
         records = [
             {"host_received_utc": "2026-10-31T10:00:00Z",
@@ -139,7 +139,7 @@ class GuidedInvestigationTests(unittest.TestCase):
              "contains_replacement": True, "truncated": False},
         ]
         (uart / "messages.jsonl").write_text(
-            "".join(json.dumps(record) + "\\n" for record in records))
+            "".join(json.dumps(record) + "\n" for record in records))
         (uart / "receipt.json").write_text(json.dumps({
             "schema": "zew-uart-1", "sha256": hashlib.sha256(raw).hexdigest(),
             "bytes": len(raw), "lines": 2, "message_index_complete": True}))
