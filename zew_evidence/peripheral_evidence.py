@@ -30,8 +30,6 @@ def _bool_observation(snapshot: bytes, symbol: str, observed: dict[str, str]) ->
     Never expose string/numeric values or duplicate/contradictory assignments.
     """
     raw = observed.get(symbol)
-    if raw in ("y", "n", "m"):
-        return {"y": "enabled", "n": "disabled", "m": "module"}[raw]
     text = snapshot.decode("utf-8", errors="strict")
     assignments = []
     for line in text.splitlines():
@@ -40,7 +38,8 @@ def _bool_observation(snapshot: bytes, symbol: str, observed: dict[str, str]) ->
         elif line.startswith(symbol + "="):
             value = line[len(symbol) + 1:]
             assignments.append(value if value in ("y", "m", "n") else "unsupported")
-    if len(assignments) == 1 and assignments[0] in ("y", "m", "n"):
+    if (len(assignments) == 1 and assignments[0] in ("y", "m", "n")
+            and raw in (None, "<redacted>", assignments[0])):
         return {"y": "enabled", "n": "disabled", "m": "module"}[assignments[0]]
     return "not-observed-or-redacted"
 
