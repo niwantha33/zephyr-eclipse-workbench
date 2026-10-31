@@ -275,6 +275,49 @@ def main():
                 if hashlib.sha256(generated_dts.read_bytes()).hexdigest() != dts_hash:
                     raise ValueError('Native EDT UI bridge changed generated DTS')
                 print('PASS: native SWT resource EDT probe against real MSPM0')
+                # Exercise a REAL isolated west/CMake overlay configuration.
+                # Candidate is an extra overlay intentionally applied after
+                # normal board/application overlays; it never flashes target.
+                real_overlay = app / 'zew-ci-extra.overlay'
+                real_overlay.write_text(
+                    '&{/} { zew-ci-scratch-overlay-marker = "checked"; };\n',
+                    encoding='utf-8')
+                scratch_parent = root / 'dt-scratch-parent'
+                scratch_parent.mkdir(exist_ok=True)
+                try:
+                    run_check = subprocess.run([
+                        str(python), str(REPO / 'zew.py'), 'dt-configure',
+                        '--build', str(build_arg), '--application', str(app),
+                        '--zephyr', str(Path(workspace_arg) / 'zephyr'),
+                        '--python', str(python), '--board', str(target),
+                        '--overlay', str(real_overlay), '--ninja', str(ninja),
+                        '--scratch-parent', str(scratch_parent), '--timeout', '300',
+                        '--expect-node', '/', '--expect-property', 'zew-ci-scratch-overlay-marker'
+                    ], cwd=REPO, env=env, text=True, encoding='utf-8',
+                       errors='replace', capture_output=True, timeout=390)
+                    try:
+                        real_report = json.loads(run_check.stdout)
+                    except (ValueError, TypeError) as error:
+                        raise ValueError('Real isolated west/CMake validation returned no JSON: '
+                                         + run_check.stderr[-800:]) from error
+                    if (run_check.returncode != 0
+                            or real_report.get('status') != 'configured-in-scratch'
+                            or real_report.get('evidence_level') != 'configured'
+                            or real_report['overlay']['additional'] is not True
+                            or real_report['scratch_generated_dts_sha256'] is None
+                            or real_report['generated_observation']['state'] != 'present'):
+                        raise ValueError('Real MSPM0 CMake overlay configuration failed: '
+                                         + str(real_report.get('diagnostic', {}))[:400])
+                    if hashlib.sha256(generated_dts.read_bytes()).hexdigest() != dts_hash:
+                        raise ValueError('Scratch overlay configuration mutated the selected build')
+                    if (real_report['overlay']['sha256'] !=
+                            hashlib.sha256(real_overlay.read_bytes()).hexdigest()):
+                        raise ValueError('Scratch overlay source hash not preserved')
+                    if list(scratch_parent.iterdir()):
+                        raise ValueError('Real isolated configuration leaked scratch files')
+                    print('PASS: real MSPM0 Zephyr isolated CMake accepted extra overlay')
+                finally:
+                    real_overlay.unlink(missing_ok=True)
             finally:
                 semantic_snippet.unlink(missing_ok=True)
         # Shared Java verifier is compiled by scripts/test_core.py in this job.

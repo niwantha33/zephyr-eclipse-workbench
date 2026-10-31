@@ -348,3 +348,25 @@ passing these prototype tests.
 - No claim of complete overlay validation, required electrical checks,
   physical evidence, IDE feature release or learning-percentage results.
   **G0 remains OPEN**.
+
+
+## Real Zephyr Devicetree configure validator (next Phase-0 feasibility job)
+
+- `zew dt-configure` runs the trusted selected Zephyr `west build
+  --cmake-only` in a disposable, bounded application snapshot and scratch
+  build. Explicit board identity, original CMake cache and selected Zephyr
+  checkout must match before a process can start.
+- Optional in-project candidate overlay is passed through actual Zephyr
+  `EXTRA_DTC_OVERLAY_FILE` with the ordinary overlays preserved. Preprocessor,
+  module and binding resolution are exercised by real CMake, not simulated
+  DTS text concatenation.
+- Output requires the scratch CMake cache and real generated DTS to match the
+  selected source identity before reporting `configured-in-scratch`. No
+  copied source, selected build or physical target is overwritten, and no
+  raw logs or secrets are emitted. CMake custom hooks may run external code;
+  never describe this command as a security sandbox.
+- Negative unit tests and actual MSPM0 Windows firmware CI probe were added;
+  verify the exact PR head and review before merge.
+- Original build equivalence, complete compilation, all module/board
+  variations, pin/electrical correctness, and physical board validation remain
+  **unverified**. No claim of release readiness. **G0 remains OPEN.**
