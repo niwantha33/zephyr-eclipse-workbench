@@ -249,6 +249,32 @@ def main():
                 if dts_hash != hashlib.sha256(generated_dts.read_bytes()).hexdigest():
                     raise ValueError('Read-only edtlib inspection changed generated DTS')
                 print('PASS: real MSPM0 edtlib generated-tree interpretation')
+                # Exercise the SAME Python bridge packaged in the native
+                # Configuration Studio, not only the headless evidence CLI.
+                ui_probe = subprocess.run([
+                    str(python), str(REPO /
+                        'plugins/io.github.niwantha33.zew.ui/scripts/dt_binding_inspect.py'),
+                    '--build', str(build_arg),
+                    '--zephyr', str(Path(workspace_arg) / 'zephyr'),
+                    '--application', str(app), '--node', '/'
+                ], cwd=REPO, env=env, text=True, encoding='utf-8',
+                   errors='replace', capture_output=True, timeout=180)
+                lines = ui_probe.stdout.strip().splitlines()
+                if len(lines) != 2 or lines[0] != 'ZEW-DTBIND-1':
+                    raise ValueError('Native EDT UI bridge returned no valid protocol')
+                try:
+                    native_fields = [base64.b64decode(word, validate=True).decode('utf-8')
+                                     for word in lines[1].split('\\t')]
+                except (ValueError, UnicodeError) as error:
+                    raise ValueError('Native EDT UI protocol invalid') from error
+                if (len(native_fields) != 9 or native_fields[0] not in ('interpreted', 'incomplete')
+                        or native_fields[1] != dts_hash
+                        or native_fields[2] != 'present'
+                        or ui_probe.returncode != (0 if native_fields[0] == 'interpreted' else 1)):
+                    raise ValueError('Native EDT UI bridge did not inspect real MSPM0 generated tree')
+                if hashlib.sha256(generated_dts.read_bytes()).hexdigest() != dts_hash:
+                    raise ValueError('Native EDT UI bridge changed generated DTS')
+                print('PASS: native SWT resource EDT probe against real MSPM0')
             finally:
                 semantic_snippet.unlink(missing_ok=True)
         # Shared Java verifier is compiled by scripts/test_core.py in this job.
