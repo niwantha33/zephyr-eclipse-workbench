@@ -57,6 +57,52 @@ public final class ConfigurationStudioTests {
                     encodeReal.apply(privateReason)));
             rejects(() -> io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector.parse(
                     "ZEW-REAL-DT-1\nmalformed"));
+            String selectedNode = "/soc/gpio@1234";
+            String selectedSymbol = "CONFIG_GPIO";
+            var sha256 = java.security.MessageDigest.getInstance("SHA-256");
+            String nodeDigest = java.util.HexFormat.of().formatHex(sha256.digest(
+                    selectedNode.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            String symbolDigest = java.util.HexFormat.of().formatHex(sha256.digest(
+                    selectedSymbol.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            String[] peripheralFields = {"selected-observations-present", "a".repeat(64),
+                    "b".repeat(64), nodeDigest, symbolDigest, "node-found", "matched",
+                    "disabled", "interpreted-by-binding", "int", "enabled", "yes", "yes", "none"};
+            java.util.function.Function<String[], String> encodePeripheral = fields -> {
+                var wire = new StringBuilder("ZEW-PERIPHERAL-1\n");
+                for (int i = 0; i < fields.length; i++) {
+                    if (i > 0) wire.append('\t');
+                    wire.append(encode.encodeToString(
+                            fields[i].getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+                }
+                return wire.toString();
+            };
+            var peripheral = io.github.niwantha33.zew.core.PeripheralEvidenceInspector.parse(
+                    encodePeripheral.apply(peripheralFields), selectedNode, "ngpios", selectedSymbol);
+            ok(peripheral.observationsPresent() && peripheral.describe(
+                    selectedNode, "ngpios", selectedSymbol, false).contains("UNVERIFIED")
+                    && peripheral.describe(selectedNode, "ngpios", selectedSymbol, false).contains("free GPIO"),
+                    "native peripheral evidence does not claim driver/pad readiness");
+            ok(io.github.niwantha33.zew.core.PeripheralEvidenceInspector.allowedSymbol("CONFIG_PINCTRL")
+                    && !io.github.niwantha33.zew.core.PeripheralEvidenceInspector.allowedSymbol("CONFIG_SECRET_TOKEN"),
+                    "explicit hardware symbol allowed but sensitive symbol rejected");
+            final String[] wrongPeripheralNode = peripheralFields.clone();
+            wrongPeripheralNode[5] = "node-not-present";
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralEvidenceInspector.parse(
+                    encodePeripheral.apply(wrongPeripheralNode), selectedNode, "ngpios", selectedSymbol));
+            final String[] wrongPeripheralDigest = peripheralFields.clone();
+            wrongPeripheralDigest[3] = "c".repeat(64);
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralEvidenceInspector.parse(
+                    encodePeripheral.apply(wrongPeripheralDigest), selectedNode, "ngpios", selectedSymbol));
+            final String[] wrongPeripheralAction = peripheralFields.clone();
+            wrongPeripheralAction[13] = "mark-pin-free";
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralEvidenceInspector.parse(
+                    encodePeripheral.apply(wrongPeripheralAction), selectedNode, "ngpios", selectedSymbol));
+            final String[] wrongPeripheralConfig = peripheralFields.clone();
+            wrongPeripheralConfig[10] = "not-observed-or-redacted";
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralEvidenceInspector.parse(
+                    encodePeripheral.apply(wrongPeripheralConfig), selectedNode, "ngpios", selectedSymbol));
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralEvidenceInspector.parse(
+                    "ZEW-PERIPHERAL-1\nnot-base64", selectedNode, "ngpios", selectedSymbol));
             var parsed = io.github.niwantha33.zew.core.KconfigInspector.parse(message.toString());
             // Native EDT bridge accepts only the bounded structured protocol,
             // never raw paths/values or an invented "interpreted" status.
