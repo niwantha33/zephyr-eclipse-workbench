@@ -64,7 +64,7 @@ public final class ProjectTests {
                     && fast.contains("Debug (-Og)") && fast.contains("not silently")
                     && fast.contains("Stop before the variable's last use"));
             String debug = DebugVariableAdvice.describe("debug", java.util.Map.of("CONFIG_DEBUG_OPTIMIZATIONS", "y"));
-            check(debug.contains("normally -Og") && debug.contains("Even -Og")
+            check(debug.contains("normally -Og") && debug.contains("even -Og")
                     && !debug.contains("Project > Properties"));
             String none = DebugVariableAdvice.describe("debug", java.util.Map.of("CONFIG_NO_OPTIMIZATIONS", "y"));
             check(none.contains("normally -O0") && none.contains("Debug (-Og)"));
