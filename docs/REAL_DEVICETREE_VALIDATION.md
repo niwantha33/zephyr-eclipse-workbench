@@ -29,8 +29,17 @@ python zew.py dt-configure `
   --python "C:\Zephyr_Workspace\.venv\Scripts\python.exe" `
   --board "lp_mspm0g3507/mspm0g3507" `
   --overlay "C:\Zephyr_Project\candidate.overlay" `
-  --ninja "C:\Tools\ninja.exe"
+  --ninja "C:\Tools\ninja.exe" `
+  --expect-node "/" `
+  --expect-property "my-marker-property"
 ```
+
+Add `--expect-node` and optionally `--expect-property` to require the named
+node/property to appear in **the actual scratch-generated DTS**, inspected
+using the selected checkout's upstream `dtlib` (never pickle). This is only
+generated-property **presence**; the names are hashed in the JSON evidence,
+not exposed with their values. If the requested observation cannot be
+confirmed, a successful CMake exit is still reported as incomplete.
 
 The examples are illustrative; substitute the **actual** build location,
 Zephyr checkout, managed Python and board target from Project settings.
@@ -61,7 +70,10 @@ removed afterwards. Timeout is 300 seconds by default (30–900 supported).
    independently hashed before/after validation. JSON exports provenance,
    fixed outcome codes, and sanitized bounded diagnostic categories.
    Raw CMake logs, absolute source paths, private property values and
-   arbitrary exception messages are never exported.
+   arbitrary exception messages are never exported. For some candidate
+   overlay errors, the report includes a **heuristic** line-number hint
+   derived from a filename match in the bounded log; this is not a verified
+   source map.
 
 Status `configured-in-scratch` (exit 0) establishes **only** that a
 temporary copied application configured successfully using the selected
