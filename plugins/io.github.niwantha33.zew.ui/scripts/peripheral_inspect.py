@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 from pathlib import Path
 import re
 import sys
@@ -37,8 +38,9 @@ def protocol(report, requested_node, property_name, symbol):
     if len(rows) != 1 or rows[0]["image"] != "default":
         raise InputError("Expected exactly one explicitly selected build image")
     row = rows[0]
-    assert report["node_path_sha256"] == __import__("hashlib").sha256(
-        requested_node.encode("utf-8")).hexdigest()
+    if report["node_path_sha256"] != hashlib.sha256(
+            requested_node.encode("utf-8")).hexdigest():
+        raise InputError("The requested node does not match the observed evidence")
     actions = row["next_actions"]
     if not isinstance(actions, list) or not set(actions) <= _ALLOWED_ACTIONS:
         raise InputError("Invalid native peripheral diagnostic actions")
