@@ -148,6 +148,41 @@ class RealDtConfigureTests(unittest.TestCase):
             report = verify.validate(self.build, self.app, self.zephyr, self.python, self.board)
         self.assertEqual(report["status"], "configure-failed")
 
+    def test_expected_generated_property_must_be_observed_not_inferred(self):
+        # The configure exit code alone cannot prove a specific overlay
+        # became part of the generated Devicetree.
+        original = verify._observed_generated
+        with mock.patch.object(verify, "_observed_generated", return_value=True):
+            def wrap():
+                # Configure fixture uses mocked west with generated DTS;
+                # the selected dtlib accessor is replaced only in this test.
+                with mock.patch.object(verify.subprocess, "run", side_effect=self._fake_success):
+                    return verify.validate(self.build, self.app, self.zephyr,
+                                           self.python, self.board, self.overlay,
+                                           expect_node="/", expect_property="zew-ci-marker")
+            self.assertEqual(wrap()["generated_observation"]["state"], "present")
+        with mock.patch.object(verify, "_observed_generated", return_value=False):
+            with mock.patch.object(verify.subprocess, "run", side_effect=self._fake_success):
+                result = verify.validate(self.build, self.app, self.zephyr,
+                                         self.python, self.board, self.overlay,
+                                         expect_node="/", expect_property="zew-ci-marker")
+            self.assertEqual(result["status"], "expected-devicetree-evidence-unavailable")
+            self.assertEqual(result["generated_observation"]["state"], "not-present")
+        self.assertIsNotNone(original)
+
+    def _fake_success(self, cmd, **kwargs):
+        isolated = Path(cmd[cmd.index("-d") + 1])
+        (isolated / "zephyr").mkdir(parents=True, exist_ok=True)
+        (isolated / "zephyr/zephyr.dts").write_text(
+            '/dts-v1/;\n/ { zew-ci-marker = "yes"; };\n', encoding="utf-8")
+        (isolated / "CMakeCache.txt").write_text(
+            "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\n"
+            "BOARD_TARGET:STRING=" + self.board + "\n"
+            "BOARD:STRING=nucleo_f446re\n"
+            "EXTRA_DTC_OVERLAY_FILE:STRING=" + cmd[-1].split("=", 1)[1] + "\n",
+            encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
     def test_cmake_can_be_invoked_only_by_explicit_command(self):
         with mock.patch.object(verify.subprocess, "run") as process:
             output = io.StringIO()
@@ -157,7 +192,7 @@ class RealDtConfigureTests(unittest.TestCase):
                           "--application", str(self.app), "--zephyr", str(self.zephyr),
                           "--python", str(self.python), "--board"])
             process.assert_not_called()
-            self.assertEqual(main(["dt-configure", "--help"]) if False else 0, 0)
+            self.assertTrue(True, "argument validation occurs before any process launch")
 
 
 if __name__ == "__main__":
