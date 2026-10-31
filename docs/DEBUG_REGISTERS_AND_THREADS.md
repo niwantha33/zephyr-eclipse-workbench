@@ -312,3 +312,40 @@ In CDT's Debug perspective:
 
 Never synthesise a value, dereference a GDB-unavailable variable, or infer
 that a displayed struct child has a valid runtime value from its type alone.
+
+## GDB global symbol inspection: `gpio_dev` shows optimized out
+
+A file-scope `const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpioa));`
+is a **global pointer**, not a local whose debugger lifetime necessarily ends
+after the GPIO call. A working thread list, PC/SP and C struct type do not
+establish that the pointer's *value* is available in the selected frame.
+
+From the Debug perspective select the suspended `main()` **stack frame**,
+then choose **Zephyr > Inspect GDB Symbol (Read-only)...** (also available
+in **Window > Show View > Other > Debug > Zephyr GDB Expression Probe**).
+Enter `gpio_dev` and click **Check value + address**. Two separately
+reported GDB/DSF evaluations are made, of `gpio_dev` and `&gpio_dev`.
+Both are evaluated only on an explicitly halted thread and are labelled
+as snapshots. No inferred values, automatic refresh, arbitrary function calls,
+pointer dereferences or writes are permitted.
+
+- **Value available, address available:** GDB can evaluate the pointer in the
+  selected frame. Compare CDT Expressions; this is not evidence of GPIO level.
+- **Value optimized out, address available:** global storage is locatable in
+  GDB but the value is unavailable. Inspect DWARF, compilation flags, source
+  linkage and target/ELF match, not local-variable lifetime alone.
+- **Both unavailable:** check symbol emission (`nm`/`readelf`), debug sections,
+  the exact `zephyr.elf`, selected frame and whether a rebuild/reflash occurred.
+- **Target resumed:** previous snapshot must be disregarded; halt and retry.
+
+The **effective** `zephyr/.config` choice `CONFIG_DEBUG_OPTIMIZATIONS=y`
+normally enables `-Og`. It is not proof of the exact `main.c` compiler
+command: inspect `compile_commands.json` for that file. Compiler overrides,
+`CONFIG_LTO`, linker garbage collection, DWARF availability and firmware
+identity still matter. `CONFIG_NO_OPTIMIZATIONS=y` can improve debugging
+at the cost of code size and stacks; it must be explicitly selected and tested.
+
+For an independent GDB check, select GDB's interactive debugger console and
+run `info address gpio_dev`, `p/x gpio_dev`, and `p/x &gpio_dev`. These
+are diagnostic reads only. Do not dereference a value until the symbol and
+target identity are independently confirmed.
