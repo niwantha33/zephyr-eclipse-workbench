@@ -61,3 +61,4 @@ subprocess.run([tool('java'), '-cp', str(out), 'DebugSourcePathsTests'], check=T
 subprocess.run([tool('java'), '-cp', str(out), 'FlashDebugBuildTests'], check=True, cwd=root, timeout=90)
 
 subprocess.run([tool('java'), '-cp', str(out), 'GpioUsageRegressionTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'RegisterHistoryTests'], check=True, cwd=root, timeout=90)

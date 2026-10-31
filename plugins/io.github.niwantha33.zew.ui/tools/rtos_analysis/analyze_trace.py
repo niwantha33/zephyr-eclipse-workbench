@@ -6,9 +6,10 @@ import argparse
 import json
 from pathlib import Path
 from cpu_analysis import account
+from timing_analysis import analyze_timing
 
 
-def summarize(records, *, idle_thread_id=None):
+def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
     records = list(records)
     """Consume normalized Babeltrace records. Pair single-stream scheduled intervals only."""
     result = {'ctf_decode': 'validated', 'events': 0, 'streams': 0,
@@ -64,6 +65,13 @@ def summarize(records, *, idle_thread_id=None):
             active = None
     result['streams'] = len(streams)
     result['cpu'] = account(records, idle_thread_id=idle_thread_id)
+    result['timing'] = analyze_timing(records, deadlines_ns=deadlines_ns)
+    result['observed_events'] = {}
+    for record in records:
+        if record.get('kind') == 'event':
+            name = str(record.get('name', '')).rsplit(':', 1)[-1]
+            if len(result['observed_events']) < 256 or name in result['observed_events']:
+                result['observed_events'][name] = result['observed_events'].get(name, 0) + 1
     result['first_timestamp_ns'] = first
     result['last_timestamp_ns'] = last
     if active is not None:
@@ -102,12 +110,15 @@ def decode(ctf):
             except (AttributeError, ValueError):
                 timestamp = None
             yield {'kind': 'event', 'stream': streams[stream], 'name': event.name,
-                   'timestamp_ns': timestamp, 'thread_id': field('thread_id'), 'thread_name': field('name')}
+                   'timestamp_ns': timestamp, 'thread_id': field('thread_id'),
+                   'thread_name': field('name'), 'core_id': field('cpu'),
+                   'object_id': field('id'), 'priority': field('prio'),
+                   'arg0': field('arg0'), 'arg1': field('arg1')}
 
 
-def analyze(ctf, *, idle_thread_id=None):
+def analyze(ctf, *, idle_thread_id=None, deadlines_ns=None):
     try:
-        return summarize(decode(ctf), idle_thread_id=idle_thread_id)
+        return summarize(decode(ctf), idle_thread_id=idle_thread_id, deadlines_ns=deadlines_ns)
     except ImportError:
         return {'ctf_decode': 'not checked', 'reason': 'Babeltrace 2 Python module bt2 is unavailable. '
                 'Install it for this Python interpreter or validate the CTF in Trace Compass.',
@@ -120,8 +131,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('ctf', type=Path)
     parser.add_argument('--idle-thread-id', help='Explicit observed idle thread ID; never guessed')
+    parser.add_argument('--deadline', action='append', default=[], metavar='THREAD_ID:NS',
+                        help='Optional observed per-thread scheduling-burst deadline in nanoseconds')
     args = parser.parse_args()
-    result = analyze(args.ctf, idle_thread_id=args.idle_thread_id)
+    deadlines = {}
+    for item in args.deadline:
+        try:
+            key, value = item.rsplit(':', 1)
+            if not key or int(value) <= 0: raise ValueError()
+            deadlines[key] = int(value)
+        except ValueError:
+            parser.error('Each --deadline must be THREAD_ID:POSITIVE_NS')
+    result = analyze(args.ctf, idle_thread_id=args.idle_thread_id, deadlines_ns=deadlines)
     print(json.dumps(result, indent=2))
     return 1 if result['ctf_decode'] == 'invalid' else 0
 

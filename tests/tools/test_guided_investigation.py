@@ -125,6 +125,51 @@ class GuidedInvestigationTests(unittest.TestCase):
         self.assertNotIn("<script>", html)
         self.assertIn("max-width:980px", html)
 
+    def test_uart_host_log_integrity_and_timing_provenance(self):
+        uart = self.root / "serial-test"
+        uart.mkdir()
+        raw = b"hello\ninvalid:\xff\n"
+        (uart / "raw.bin").write_bytes(raw)
+        records = [
+            {"host_received_utc": "2026-10-31T10:00:00Z",
+             "target_timestamp": None, "line": "hello",
+             "contains_replacement": False, "truncated": False},
+            {"host_received_utc": "2026-10-31T10:00:01Z",
+             "target_timestamp": None, "line": "invalid:?",
+             "contains_replacement": True, "truncated": False},
+        ]
+        (uart / "messages.jsonl").write_text(
+            "".join(json.dumps(record) + "\n" for record in records))
+        (uart / "receipt.json").write_text(json.dumps({
+            "schema": "zew-uart-1", "sha256": hashlib.sha256(raw).hexdigest(),
+            "bytes": len(raw), "lines": 2, "message_index_complete": True}))
+        result = reviewer.review(self.capture, uart_session=uart)
+        self.assertEqual(result["uart"]["lines"], 2)
+        self.assertEqual(result["uart"]["matched_to_trace"], "not verified")
+        self.assertIn("UART_CLOCK_UNCORRELATED", self.codes(result))
+        self.assertIn("UART_ENCODING_REPLACEMENTS", self.codes(result))
+        self.assertIn("UART application messages", reviewer.render_html(result))
+        (uart / "raw.bin").write_bytes(b"tampered")
+        broken = reviewer.review(self.capture, uart_session=uart)
+        self.assertEqual(broken["status"], "blocked")
+        self.assertIn("UART_ARTIFACT_MISMATCH", self.codes(broken))
+
+    def test_html_timing_table_is_observed_not_wcet(self):
+        self.receipt["ctf_analysis"]["timing"] = {
+            "status": "observed", "threads": {"a": {
+                "name": "worker", "max_observed_burst_ns": 120,
+                "period_range_jitter_ns": 10,
+                "max_observed_ready_latency_ns": 5,
+                "observed_bursts_exceeding_deadline": 1}},
+        }
+        (self.capture / "capture.json").write_text(json.dumps(self.receipt))
+        report = reviewer.review(self.capture)
+        self.assertIn("OBSERVED_DEADLINE_EXCEEDANCE", self.codes(report))
+        html = reviewer.render_html(report)
+        self.assertIn("worker", html)
+        self.assertIn("120", html)
+        self.assertIn("NOT WCET", html)
+
     def test_multiple_fatal_markers_are_ambiguous(self):
         result = reviewer.review_receipt(self.receipt, trace=self.trace, metadata=self.metadata,
                             fault_log=b"ZEPHYR FATAL ERROR\nZEPHYR FATAL ERROR\n")

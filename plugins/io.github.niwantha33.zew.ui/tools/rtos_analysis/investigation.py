@@ -97,6 +97,22 @@ def review_receipt(receipt, *, trace=None, metadata=None, build_elf=None,
     elif cpu.get("cpu_busy_percent") is None:
         finding("CPU_BUSY_UNKNOWN", "warning", "CPU busy percentage is not established",
                 "Identify the idle thread explicitly before claiming utilisation.")
+    timing = analysis.get("timing", {})
+    if not isinstance(timing, dict):
+        timing = {}
+    timing_state = timing.get("status", "unavailable")
+    if timing_state != "observed":
+        finding("TIMING_UNAVAILABLE", "warning",
+                "Thread scheduling durations unavailable: " + str(timing.get("reason", "not decoded")),
+                "Enable and validate thread switch CTF events; verify clock ordering and loss evidence.")
+    else:
+        exceed = sum(int(row.get("observed_bursts_exceeding_deadline") or 0)
+                     for row in timing.get("threads", {}).values()
+                     if isinstance(row, dict))
+        if exceed:
+            finding("OBSERVED_DEADLINE_EXCEEDANCE", "warning",
+                    str(exceed) + " observed scheduling bursts exceeded user-defined thresholds",
+                    "Inspect source/trace and declared thresholds; this is not a proof of WCET.")
     if receipt.get("firmware_matches_elf") != "verified":
         finding("FLASH_IDENTITY_UNKNOWN", "warning", "Capture does not authenticate flashed firmware",
                 "Use a separately verified flashed-image readback; ELF path/hash alone is not enough.")
@@ -142,6 +158,8 @@ def review_receipt(receipt, *, trace=None, metadata=None, build_elf=None,
                     "selected_build_elf": selected_build,
                     "flashed_firmware": "not independently authenticated"},
         "fault": fault,
+        "timing": timing,
+        "events": analysis.get("observed_events", {}),
         "findings": findings,
         "limits": [
             "Capture identity, target timestamp accuracy and unreported loss are not independently established.",
@@ -190,12 +208,34 @@ def render_html(report):
         rows.append('<tr><td>' + cell(label) + '</td><td>' + str(amount)
                     + ' ns</td><td>' + f'{percentage:.3f}' + '%</td></tr>')
         used += amount
+    uart = report.get("uart") or {}
+    uart_summary = ('<p>Saved UART lines: ' + cell(uart.get("lines"))
+                    + ', raw bytes: ' + cell(uart.get("raw_bytes"))
+                    + ', truncated: ' + cell(uart.get("truncated_lines"))
+                    + '. Host receive time only; NOT synchronized with MCU trace time.</p>'
+                    if uart else '<p>No saved UART application console supplied.</p>')
     entries = ''.join(
         '<li><strong>' + cell(item.get("severity", "unknown")).upper() + ' · '
         + cell(item.get("code", "UNKNOWN")) + '</strong>: '
         + cell(item.get("evidence", "")) + '<p>Next: '
         + cell(item.get("action", "")) + '</p></li>'
         for item in findings[:128] if isinstance(item, dict))
+    timing = report.get("timing", {})
+    timing_rows = []
+    if isinstance(timing, dict) and timing.get("status") == "observed":
+        for tid, sample in list(timing.get("threads", {}).items())[:64]:
+            if not isinstance(sample, dict): continue
+            timing_rows.append('<tr><td>' + cell(tid) + '</td><td>'
+                + cell(sample.get("name", "")) + '</td><td>'
+                + cell(sample.get("max_observed_burst_ns")) + '</td><td>'
+                + cell(sample.get("period_range_jitter_ns")) + '</td><td>'
+                + cell(sample.get("max_observed_ready_latency_ns")) + '</td><td>'
+                + cell(sample.get("observed_bursts_exceeding_deadline")) + '</td></tr>')
+    timing_table = ('<table><tr><th>Thread</th><th>Name</th><th>Max observed burst (ns)</th>'
+                    '<th>Period range jitter (ns)</th><th>Max ready latency (ns)</th>'
+                    '<th>Observed threshold exceedances</th></tr>'
+                    + ''.join(timing_rows) + '</table>') if timing_rows else (
+                    '<p>No qualified observed timing table; inspect CTF timing quality.</p>')
     busy = data.get("cpu_busy_percent")
     busy_text = "unknown (requires explicit idle identity and full interval coverage)" \
         if busy is None else cell(str(busy) + "% (conditional scheduler occupancy)")
@@ -217,6 +257,10 @@ small{color:#64748b}
 <section><h2>Observed execution composition</h2><p>CPU busy: ''' + busy_text + '''</p>''' + chart + '''
 <small>Single-stream CTF, observed nanoseconds only. Unknown is not idle.
 ISR time is separated from interrupted threads. Do not infer complete trace capture or WCET.</small></section>
+<section><h2>UART application messages</h2>''' + uart_summary + '''</section>
+<section><h2>Thread timing and deadline observations</h2>''' + timing_table + '''
+<small>Observed scheduling bursts include interrupts; their maximum is NOT WCET.
+Ready latency requires a matched explicit ready event. No inferred blocked state.</small></section>
 <section><h2>Guided findings</h2><ol>''' + entries + '''</ol></section>
 <section><h2>Provenance and limits</h2><p>CTF decoder: ''' + cell(data.get("ctf_decode")) + '''.
 Selected ELF: ''' + cell(data.get("selected_build_elf")) + '''.
@@ -225,7 +269,66 @@ Flashed firmware: NOT independently authenticated.</p>
 </ul></section></body></html>'''
 
 
-def review(path, *, build=None, fault_log=None):
+def review_uart(folder):
+    """Validate independently saved UART bytes; never infer target time/session."""
+    folder = Path(folder)
+    if folder.is_symlink() or not folder.is_dir():
+        raise ValueError("Select a real saved UART session directory")
+    receipt = json.loads(_file(folder / "receipt.json", MAX_RECEIPT).decode("utf-8"))
+    raw = _file(folder / "raw.bin", MAX_TRACE)
+    lines = _file(folder / "messages.jsonl", 16 * 1024 * 1024)
+    if receipt.get("schema") != "zew-uart-1":
+        raise ValueError("Unsupported UART capture receipt format")
+    findings = []
+    if receipt.get("sha256") != _sha(raw) or receipt.get("bytes") != len(raw):
+        findings.append({"code": "UART_ARTIFACT_MISMATCH", "severity": "blocking",
+                         "evidence": "UART bytes or checksum differ from saved receipt",
+                         "action": "Do not trust this recording; recapture the application console."})
+    count = 0
+    invalid = 0
+    truncated = 0
+    for entry in lines.splitlines():
+        if len(entry) > 32 * 1024:
+            raise ValueError("UART message record exceeds bounded size")
+        message = json.loads(entry)
+        if message.get("target_timestamp") is not None:
+            findings.append({"code": "UART_TARGET_TIME_UNVERIFIED", "severity": "blocking",
+                             "evidence": "Unexpected target timestamp in host-only recording",
+                             "action": "Use the original raw data; host receive time is not MCU time."})
+            break
+        if not message.get("host_received_utc") or not isinstance(message.get("line"), str):
+            raise ValueError("Malformed UART message evidence")
+        count += 1
+        invalid += bool(message.get("contains_replacement"))
+        truncated += bool(message.get("truncated"))
+    if receipt.get("lines") != count:
+        findings.append({"code": "UART_LINES_MISMATCH", "severity": "blocking",
+                         "evidence": "Saved UART message count differs from receipt",
+                         "action": "Check the original capture for partial/truncated output."})
+    if receipt.get("message_index_complete") is False:
+        findings.append({"code": "UART_MESSAGE_INDEX_PARTIAL", "severity": "warning",
+                         "evidence": "Serial recorder stopped indexing messages at its size/line limit",
+                         "action": "Preserve raw.bin; shorten capture or reduce console volume."})
+    if truncated:
+        findings.append({"code": "UART_TRUNCATED_LINES", "severity": "warning",
+                         "evidence": str(truncated) + " UART messages were truncated",
+                         "action": "Adjust application output rate and buffer/line limits before correlating logs."})
+    if invalid:
+        findings.append({"code": "UART_ENCODING_REPLACEMENTS", "severity": "warning",
+                         "evidence": str(invalid) + " lines contained invalid UTF-8",
+                         "action": "Verify console framing, baud and selected encoding; preserve the raw bytes."})
+    findings.append({"code": "UART_CLOCK_UNCORRELATED", "severity": "information",
+                     "evidence": "UART host-reception timestamps have no proven common target clock with CTF",
+                     "action": "Provide explicit target-side timestamps and a tested synchronization mapping."})
+    return {
+        "schema": "zew-uart-1", "lines": count, "raw_bytes": len(raw),
+        "raw_sha256": _sha(raw), "encoding_replacements": invalid,
+        "truncated_lines": truncated, "host_time_only": True,
+        "matched_to_trace": "not verified", "findings": findings,
+    }
+
+
+def review(path, *, build=None, fault_log=None, uart_session=None):
     folder = Path(path)
     if folder.is_symlink() or not folder.is_dir():
         raise ValueError("Select a real capture directory, not a symlink")
@@ -238,8 +341,15 @@ def review(path, *, build=None, fault_log=None):
         elf = _file(build / "zephyr" / "zephyr.elf", MAX_TRACE)
         config = _file(build / "zephyr" / ".config", MAX_METADATA)
     fatal = _file(fault_log, MAX_FAULT) if fault_log is not None else None
-    return review_receipt(receipt, trace=trace, metadata=metadata,
-                          build_elf=elf, build_config=config, fault_log=fatal)
+    report = review_receipt(receipt, trace=trace, metadata=metadata,
+                            build_elf=elf, build_config=config, fault_log=fatal)
+    if uart_session is not None:
+        uart = review_uart(uart_session)
+        report["uart"] = {key: value for key, value in uart.items() if key != "findings"}
+        report["findings"].extend(uart["findings"])
+        if any(item["severity"] == "blocking" for item in uart["findings"]):
+            report["status"] = "blocked"
+    return report
 
 
 def main():
@@ -247,9 +357,11 @@ def main():
     parser.add_argument("--capture", type=Path, required=True)
     parser.add_argument("--build", type=Path)
     parser.add_argument("--fault-log", type=Path)
+    parser.add_argument("--uart-session", type=Path, help="Optional saved serial-* directory with receipt.json")
     args = parser.parse_args()
     try:
-        result = review(args.capture, build=args.build, fault_log=args.fault_log)
+        result = review(args.capture, build=args.build, fault_log=args.fault_log,
+                        uart_session=args.uart_session)
     except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as error:
         print(json.dumps({"status": "blocked", "reason": str(error)}))
         return 2

@@ -226,10 +226,14 @@ def main() -> int:
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--port', type=int, default=3335)
     parser.add_argument('--seconds', type=float, default=1.0)
+    parser.add_argument('--result-file', type=Path,
+                        help='Optional temporary local file containing exactly the saved capture directory')
     args = parser.parse_args()
     try:
         elf, metadata = validate(args.build, args.zephyr, args.gdb)
         path = capture(args.gdb.resolve(), elf, metadata, args.output, args.port, args.seconds)
+        if args.result_file is not None:
+            args.result_file.write_text(str(path.resolve()), encoding='utf-8')
         print(f'Trace saved to {path}; target halted. Open report.html for the guided CPU/evidence overview, or diagnostics.json and capture.json for machine-readable findings. Firmware/ELF match is not verified.')
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
