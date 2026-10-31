@@ -46,7 +46,7 @@ public final class DevicetreeBindingInspector {
                     + (preview ? "\nA temporary preview does not prove the saved overlay "
                             + "is included by CMake or that the proposed configuration builds." : "")
                     + "\nMissing bindings or properties mean unknown/incomplete evidence, not unavailable hardware."
-                    + "\nNo package pins, electrical limits, driver initialisation, flash or live state were verified."
+                    + "\nNo physical pins, package pads, electrical limits, driver initialisation, flash or live state were verified."
                     + "\nNo project, generated DTS or firmware files were changed.";
         }
     }
