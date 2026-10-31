@@ -58,6 +58,42 @@ public final class SvdAutoDiscoveryTests {
             check(fromPack.state() == SvdAutoDiscovery.State.MATCHED
                     && Files.isRegularFile(fromPack.path()) && fromPack.registers() == 1,
                     "exact vendor CMSIS SVD inside installed pack extracted to a safe cache");
+            // Real vendor DFPs commonly declare a part-specific Dname whose
+            // register description is a shared, family-named SVD file.
+            Path familyRoot = Files.createDirectories(root.resolve("family-pack"));
+            Path familyPack = familyRoot.resolve("TI.MSPM0_DFP.pack");
+            try (var output = new ZipOutputStream(Files.newOutputStream(familyPack))) {
+                output.putNextEntry(new ZipEntry("TI.MSPM0_DFP.pdsc"));
+                output.write(("<package><devices><family Dfamily='MSPM0'>"
+                        + "<device Dname='MSPM0G3507'><debug svd='SVD/MSPM0G350X.svd'/>"
+                        + "</device></family></devices></package>")
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.closeEntry();
+                output.putNextEntry(new ZipEntry("SVD/MSPM0G350X.svd"));
+                output.write(svd("MSPM0G350X").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.closeEntry();
+            }
+            var mapped = SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3507",
+                    List.of(familyRoot), root.resolve("mapped-cache"));
+            check(mapped.state() == SvdAutoDiscovery.State.MATCHED
+                    && mapped.mappedByPack() && mapped.registers() == 1,
+                    "only explicit vendor PDSC exact Dname authorizes a shared family SVD");
+            Path wrongRoot = Files.createDirectories(root.resolve("wrong-pack"));
+            Path wrongPack = wrongRoot.resolve("Other.DFP.pack");
+            try (var output = new ZipOutputStream(Files.newOutputStream(wrongPack))) {
+                output.putNextEntry(new ZipEntry("Other.DFP.pdsc"));
+                output.write(("<package><devices><family Dfamily='MSPM0'>"
+                        + "<device Dname='MSPM0G3506'><debug svd='SVD/MSPM0G350X.svd'/>"
+                        + "</device></family></devices></package>")
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.closeEntry();
+                output.putNextEntry(new ZipEntry("SVD/MSPM0G350X.svd"));
+                output.write(svd("MSPM0G350X").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.closeEntry();
+            }
+            check(SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3507",
+                    List.of(wrongRoot), root.resolve("wrong-cache")).state()
+                    == SvdAutoDiscovery.State.MISSING, "another part's family map is never auto-used");
             Path other = Files.createDirectories(root.resolve("competing"));
             Files.writeString(other.resolve("MSPM0G3507.svd"), svd("MSPM0G3507")
                     .replace("0x400A0000", "0x400B0000"));
