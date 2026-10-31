@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from cpu_analysis import account
 
 
-def summarize(records):
+def summarize(records, *, idle_thread_id=None):
+    records = list(records)
     """Consume normalized Babeltrace records. Pair single-stream scheduled intervals only."""
     result = {'ctf_decode': 'validated', 'events': 0, 'streams': 0,
               'discarded_events_reported': 0, 'discarded_packets_reported': 0,
@@ -61,6 +63,7 @@ def summarize(records):
                 result['warnings'].append('Switch-out without matching switch-in; incomplete interval excluded.')
             active = None
     result['streams'] = len(streams)
+    result['cpu'] = account(records, idle_thread_id=idle_thread_id)
     result['first_timestamp_ns'] = first
     result['last_timestamp_ns'] = last
     if active is not None:
@@ -102,9 +105,9 @@ def decode(ctf):
                    'timestamp_ns': timestamp, 'thread_id': field('thread_id'), 'thread_name': field('name')}
 
 
-def analyze(ctf):
+def analyze(ctf, *, idle_thread_id=None):
     try:
-        return summarize(decode(ctf))
+        return summarize(decode(ctf), idle_thread_id=idle_thread_id)
     except ImportError:
         return {'ctf_decode': 'not checked', 'reason': 'Babeltrace 2 Python module bt2 is unavailable. '
                 'Install it for this Python interpreter or validate the CTF in Trace Compass.',
@@ -116,8 +119,9 @@ def analyze(ctf):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('ctf', type=Path)
+    parser.add_argument('--idle-thread-id', help='Explicit observed idle thread ID; never guessed')
     args = parser.parse_args()
-    result = analyze(args.ctf)
+    result = analyze(args.ctf, idle_thread_id=args.idle_thread_id)
     print(json.dumps(result, indent=2))
     return 1 if result['ctf_decode'] == 'invalid' else 0
 
