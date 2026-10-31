@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from analyze_trace import analyze
+from investigation import review_receipt, render_html
 from collections import deque
 import hashlib
 import json
@@ -195,10 +196,18 @@ def capture(gdb: Path, elf: Path, metadata: Path, destination: Path, port: int,
                    'loss_count': 'unknown: backend fullness indicates rejected output, not an event count',
                    'transport_read_complete': len(data) <= capacity,
                    'trace_sha256': hashlib.sha256(data).hexdigest(),
+                   'build_config_sha256': hashlib.sha256(
+                       (elf.parent / '.config').read_bytes()).hexdigest(),
                    'ctf_analysis': analyze(ctf),
                    'firmware_matches_elf': 'not verified',
                    'gdb_output': gdb_output}
         (stage / 'capture.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
+        guided = review_receipt(receipt, trace=data, metadata=metadata.read_bytes(),
+                                build_elf=elf.read_bytes(),
+                                build_config=(elf.parent / '.config').read_bytes())
+        (stage / 'diagnostics.json').write_text(
+            json.dumps(guided, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+        (stage / 'report.html').write_text(render_html(guided), encoding='utf-8')
         # A fresh directory for each snapshot prevents silently reusing an old trace.
         stamp = time.strftime('%Y%m%d-%H%M%S')
         for suffix in range(1000):
@@ -221,7 +230,7 @@ def main() -> int:
     try:
         elf, metadata = validate(args.build, args.zephyr, args.gdb)
         path = capture(args.gdb.resolve(), elf, metadata, args.output, args.port, args.seconds)
-        print(f'Trace saved to {path}; target halted. See capture.json for decoder validation, buffer-full evidence and timing limits. Firmware/ELF match is not verified.')
+        print(f'Trace saved to {path}; target halted. Open report.html for the guided CPU/evidence overview, or diagnostics.json and capture.json for machine-readable findings. Firmware/ELF match is not verified.')
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
         print(f'Capture failed: {exc}', file=__import__('sys').stderr)

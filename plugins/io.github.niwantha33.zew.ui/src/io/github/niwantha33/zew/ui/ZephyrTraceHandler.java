@@ -124,7 +124,8 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                     if (!owned.isAlive() || !diagnostics.isListening(ports.gdb()))
                         throw new IOException(diagnostics.describe(plan.board(), ports.gdb(), owned.isAlive() ? null : owned.exitValue()));
                     staging = Files.createTempDirectory("zew-trace-tool-");
-                    for (String name : List.of("capture_snapshot.py", "analyze_trace.py", "Zephyr_RTOS_Timeline.xml")) {
+                    for (String name : List.of("capture_snapshot.py", "analyze_trace.py", "cpu_analysis.py",
+                            "investigation.py", "Zephyr_RTOS_Timeline.xml")) {
                         var resource = Activator.getDefault().getBundle().getEntry("tools/rtos_analysis/" + name);
                         if (resource == null) throw new IOException("Trace component missing: " + name + ". Reinstall Workbench.");
                         try (var input = resource.openStream()) { Files.copy(input, staging.resolve(name)); }
@@ -136,12 +137,16 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                             "--output", out.toString(), "--port", Integer.toString(ports.gdb()));
                     new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofSeconds(45),
                             monitor::isCanceled, stream::println, ProjectContext.environment(settings)).requireSuccess();
-                    stream.println("Import the ctf folder inside the new capture in Trace Compass. Import the supplied XML analysis once.");
+                    stream.println("Snapshot includes capture.json and diagnostics.json with "
+                            + "offline provenance checks, CPU/ISR accounting and guided corrective actions.");
+                    stream.println("Import the ctf folder in Trace Compass; the supplied XML timeline may need to be imported once.");
                     if (!shell.isDisposed()) shell.getDisplay().asyncExec(() -> {
                         if (!shell.isDisposed()) {
                             MessageDialog.openInformation(shell, "RTOS trace captured",
                                     "Snapshot saved in:\n" + out + "\n\nImport the ctf folder inside the newest capture in Trace Compass. "
-                                    + "The supplied XML analysis must be imported once. Inspect capture.json for buffer-full and decoder evidence; firmware identity is not verified.");
+                                    + "The supplied XML analysis must be imported once. Open report.html for CPU/ISR "
+                                    + "composition and guided findings, or diagnostics.json for machine-readable evidence. "
+                                    + "Firmware identity is not verified.");
                             Program.launch(out.toString());
                         }
                     });
