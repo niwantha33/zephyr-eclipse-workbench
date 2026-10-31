@@ -144,6 +144,7 @@
     <command id="io.github.niwantha33.zew.trace" name="Capture RTOS Trace" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.rtosInvestigation" name="Review Saved RTOS Capture" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.applicationConsole" name="Capture UART Application Console" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.coredumpInvestigation" name="Investigate Saved Binary Core Dump" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugserver" name="Start Debug Server" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debug" name="Debug Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.flashDebug" name="Flash and Debug Application" categoryId="io.github.niwantha33.zew.commands"/>
@@ -181,6 +182,7 @@
     <handler commandId="io.github.niwantha33.zew.trace" class="io.github.niwantha33.zew.ui.ZephyrTraceHandler"/>
     <handler commandId="io.github.niwantha33.zew.rtosInvestigation" class="io.github.niwantha33.zew.ui.RtosInvestigationHandler"/>
     <handler commandId="io.github.niwantha33.zew.applicationConsole" class="io.github.niwantha33.zew.ui.ApplicationConsoleHandler"/>
+    <handler commandId="io.github.niwantha33.zew.coredumpInvestigation" class="io.github.niwantha33.zew.ui.CoredumpInvestigationHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugserver" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.debug" class="io.github.niwantha33.zew.ui.ZephyrDebugHandler"/>
     <handler commandId="io.github.niwantha33.zew.flashDebug" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
@@ -226,6 +228,7 @@
         <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace (Preview)..." style="push"/>
         <command commandId="io.github.niwantha33.zew.rtosInvestigation" label="Review Saved RTOS Capture (Offline)..." style="push"/>
         <command commandId="io.github.niwantha33.zew.applicationConsole" label="Capture UART Application Console..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.coredumpInvestigation" label="Investigate Saved Binary Core Dump (Offline)..." style="push"/>
         <separator name="updates" visible="true"/>
         <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check for Workbench Updates..." style="push"/>
         <command commandId="io.github.niwantha33.zew.updateConnection" label="Configure Workbench Updates..." style="push"/>
