@@ -102,7 +102,7 @@ def _snapshot(application: Path, destination: Path, exclude_build: Path) -> tupl
     return files, digest.hexdigest()
 
 
-def _reason(log: Path, overlay: bool) -> dict:
+def _reason(log: Path, overlay: Path | None) -> dict:
     """Only fixed reason codes and bounded source-line numbers leave the scratch."""
     size = log.stat().st_size if log.is_file() else 0
     with log.open("rb") as stream:
@@ -122,9 +122,18 @@ def _reason(log: Path, overlay: bool) -> dict:
     else:
         kind = "cmake-configure-failed"
     # Do not leak user source text, host paths, secrets or free-form CMake errors.
-    return {"code": kind, "diagnostic_classification": "heuristic",
-            "log_truncated": size > MAX_LOG_BYTES, "source_scope":
-            "candidate-or-source" if overlay else "source-or-toolchain"}
+    result = {"code": kind, "diagnostic_classification": "heuristic",
+              "log_truncated": size > MAX_LOG_BYTES, "source_scope":
+              "candidate-or-source" if overlay else "source-or-toolchain"}
+    if overlay is not None:
+        # Only a bounded line number for the exact explicitly selected
+        # candidate filename. This log hint is not a proof of source mapping.
+        match = re.search(re.escape(overlay.name.lower())
+                          + r":(\d{1,6})(?::\d{1,6})?(?!\d)", data)
+        if match and 0 < int(match.group(1)) <= 100000:
+            result["candidate_overlay_line_hint"] = int(match.group(1))
+            result["line_confidence"] = "heuristic-log-reference"
+    return result
 
 
 def _observed_generated(zephyr: Path, generated: Path, node: str,
@@ -251,7 +260,7 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
             exit_code = None
         outcome = "configure-failed"
         observed = None
-        explanation = _reason(log, candidate is not None)
+        explanation = _reason(log, candidate)
         scratch_dts = isolated_build / "zephyr" / "zephyr.dts"
         output_sha = None
         if exit_code == 0 and scratch_dts.is_file():
