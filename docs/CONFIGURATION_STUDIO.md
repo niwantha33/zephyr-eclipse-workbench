@@ -369,3 +369,19 @@ equivalence for complex sysbuild/module configurations, electrical/package
 pins, driver execution, flashed target or measured learning improvement.
 G0 remains **OPEN**. The headless real configuration CLI remains available
 for investigation and independent testing.
+
+
+## Selected peripheral evidence CLI — headless foundation
+
+The CLI now supports `zew peripheral` for a specific generated Devicetree
+node and an **explicit** Kconfig symbol, without guessing any driver relationship.
+This reuses true edtlib interpretation and the last generated `.config`.
+Output distinguishes configured node status, binding match, interpreted
+property type and selected Kconfig value; unknown module roots or absent
+symbols remain unknown rather than being labelled available/free hardware.
+
+This is a headless Phase-0 step, not a new or duplicated native IDE panel.
+Existing Configuration Studio Hardware/Insights real-configuration controls
+continue to operate as before. A future thin native report integration may
+reuse the same JSON evidence **only after its provenance contract is
+verified**; the current CLI does not auto-save overlays or enable peripherals.
