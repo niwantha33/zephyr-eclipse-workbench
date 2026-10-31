@@ -305,6 +305,10 @@ def review_uart(folder):
         findings.append({"code": "UART_LINES_MISMATCH", "severity": "blocking",
                          "evidence": "Saved UART message count differs from receipt",
                          "action": "Check the original capture for partial/truncated output."})
+    if receipt.get("message_index_complete") is False:
+        findings.append({"code": "UART_MESSAGE_INDEX_PARTIAL", "severity": "warning",
+                         "evidence": "Serial recorder stopped indexing messages at its size/line limit",
+                         "action": "Preserve raw.bin; shorten capture or reduce console volume."})
     if truncated:
         findings.append({"code": "UART_TRUNCATED_LINES", "severity": "warning",
                          "evidence": str(truncated) + " UART messages were truncated",
