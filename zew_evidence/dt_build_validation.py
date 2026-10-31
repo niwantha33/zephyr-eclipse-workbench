@@ -9,11 +9,13 @@ The application is copied first. Custom CMake code is executable; opt in only.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 from .collector import InputError, SCHEMA_VERSION, _digest
@@ -24,6 +26,8 @@ MAX_CONFIG_BYTES = 8 * 1024 * 1024
 MAX_LOG_BYTES = 1024 * 1024
 _BOARD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@/+~-]{0,159}$")
 _CACHE = re.compile(r"^([A-Za-z_][A-Za-z_0-9]*):[A-Z_]+=(.*)$")
+_NODE = re.compile(r"/(?:[A-Za-z0-9,._+@-]+(?:/[A-Za-z0-9,._+@-]+)*)?")
+_PROP = re.compile(r"[A-Za-z][A-Za-z0-9,._+?-]{0,99}")
 _SKIP_DIRS = {".git", ".west", ".zew-build", ".venv", "__pycache__",
               "node_modules", ".cache", "build"}
 _SKIP_FILES = {".env", ".env.local", ".env.production"}
@@ -123,9 +127,43 @@ def _reason(log: Path, overlay: bool) -> dict:
             "candidate-or-source" if overlay else "source-or-toolchain"}
 
 
+def _observed_generated(zephyr: Path, generated: Path, node: str,
+                        prop: str | None) -> bool | None:
+    """Use exact selected upstream dtlib; no generated pickle, no raw values."""
+    imported = {name: module for name, module in sys.modules.items()
+                if name == "devicetree" or name.startswith("devicetree.")}
+    for name in imported:
+        sys.modules.pop(name, None)
+    location = str(zephyr / "scripts/dts/python-devicetree/src")
+    if not Path(location, "devicetree/dtlib.py").is_file():
+        return None
+    sys.path.insert(0, location)
+    try:
+        dtlib = importlib.import_module("devicetree.dtlib")
+        dts = dtlib.DT(str(generated))
+        selected = dts.get_node(node)
+        return prop is None or prop in selected.props
+    except Exception:
+        return False
+    finally:
+        sys.path.remove(location)
+        for name in list(sys.modules):
+            if name == "devicetree" or name.startswith("devicetree."):
+                sys.modules.pop(name, None)
+        sys.modules.update(imported)
+
+
 def validate(build: Path, application: Path, zephyr: Path, python: Path, board: str,
              overlay: Path | None = None, ninja: Path | None = None,
-             timeout: int = 300, scratch_parent: Path | None = None) -> dict:
+             timeout: int = 300, scratch_parent: Path | None = None,
+             expect_node: str | None = None, expect_property: str | None = None) -> dict:
+    if expect_property is not None and expect_node is None:
+        raise InputError("--expect-property requires --expect-node")
+    if expect_node is not None and (len(expect_node) > 240 or
+                                    not _NODE.fullmatch(expect_node)):
+        raise InputError("Expected node must be a bounded absolute DTS path")
+    if expect_property is not None and not _PROP.fullmatch(expect_property):
+        raise InputError("Expected property has invalid characters")
     if not _BOARD.fullmatch(board) or ".." in board:
         raise InputError("Invalid selected board target")
     if not 30 <= timeout <= 900:
@@ -212,6 +250,7 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
         except OSError:
             exit_code = None
         outcome = "configure-failed"
+        observed = None
         explanation = _reason(log, candidate is not None)
         scratch_dts = isolated_build / "zephyr" / "zephyr.dts"
         output_sha = None
@@ -229,9 +268,17 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
                                 (source / candidate_rel).as_posix()
                                 in actual.get("EXTRA_DTC_OVERLAY_FILE", "").replace("\\", "/"))
             if same_zephyr and same_board and overlay_in_cache:
-                outcome = "configured-in-scratch"
-                explanation = {"code": "real-zephyr-cmake-accepted",
-                               "diagnostic_classification": "observed"}
+                observed = (_observed_generated(zephyr, scratch_dts,
+                                                expect_node, expect_property)
+                            if expect_node is not None else None)
+                if expect_node is not None and observed is not True:
+                    outcome = "expected-devicetree-evidence-unavailable"
+                    explanation = {"code": "requested-node-or-property-not-observed",
+                                   "diagnostic_classification": "observed"}
+                else:
+                    outcome = "configured-in-scratch"
+                    explanation = {"code": "real-zephyr-cmake-accepted",
+                                   "diagnostic_classification": "observed"}
             else:
                 outcome = "identity-unverified"
                 explanation = {"code": "scratch-build-identity-or-overlay-unverified",
@@ -256,12 +303,23 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
         "application_snapshot_files": file_count,
         "overlay": {"additional": candidate is not None, "sha256": candidate_sha,
                     "mode": "EXTRA_DTC_OVERLAY_FILE (highest priority)" if candidate else "normal discovery"},
+        "generated_observation": {
+            "requested": expect_node is not None,
+            "node_sha256": hashlib.sha256(expect_node.encode("utf-8")).hexdigest()
+                           if expect_node is not None else None,
+            "property_sha256": hashlib.sha256(expect_property.encode("utf-8")).hexdigest()
+                               if expect_property is not None else None,
+            "state": ("not-requested" if expect_node is None else
+                      "present" if observed is True else
+                      "unavailable" if observed is None else "not-present"),
+        },
         "diagnostic": explanation,
         "limitations": [
             "Configuration ran Zephyr's west/CMake in disposable scratch, not the selected build.",
             "Application inputs were copied; absolute paths and custom CMake hooks can depend on the original environment.",
             "A successful CMake configure does not establish firmware compilation, flash, runtime, or electrical pin safety.",
             "Adding EXTRA_DTC_OVERLAY_FILE does not prove this overlay was already included by the original build.",
+            "A requested generated node/property checks only presence in the actual scratch DTS, not binding or runtime safety.",
             "Kconfig, Devicetree and module resolution depend on the caller's pinned workspace/toolchain environment.",
             "Custom CMake code executes during configuration; only use trusted application and Zephyr workspaces.",
             "Only bounded, sanitized diagnostic classes are exported; no raw stdout, paths or private source.",
