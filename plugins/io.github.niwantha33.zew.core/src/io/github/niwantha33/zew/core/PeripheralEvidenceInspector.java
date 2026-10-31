@@ -214,7 +214,7 @@ public final class PeripheralEvidenceInspector {
                     Files.copy(stream, directory.resolve(name));
                 }
             }
-            List<String> command = new ArrayList<>(List.of(python.toString(),
+            List<String> command = new ArrayList<>(List.of(python.toString(), "-B",
                     directory.resolve("peripheral_inspect.py").toString(),
                     "--build", build.toString(), "--zephyr", zephyr.toString(),
                     "--node", node));
