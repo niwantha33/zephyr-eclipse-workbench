@@ -41,6 +41,7 @@ import org.eclipse.ui.IViewSite;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.SvdDevice;
+import io.github.niwantha33.zew.core.RegisterHistory;
 import io.github.niwantha33.zew.core.SvdDevice.Register;
 
 /** Read-only peripheral inspection through the user's selected native DSF session. */
@@ -55,6 +56,8 @@ public final class SocRegistersView extends ViewPart {
     private SvdDevice device;
     private String svdPath;
     private final Map<String, BigInteger> values = new HashMap<>();
+    private final RegisterHistory history = new RegisterHistory();
+    private String svdIdentity;
     private final Map<String, String> errors = new HashMap<>();
     private final Set<String> watches = new HashSet<>();
     private volatile long generation;
@@ -70,7 +73,7 @@ public final class SocRegistersView extends ViewPart {
         ui = parent.getDisplay();
         parent.setLayout(new GridLayout(1, false));
         var bar = new Composite(parent, SWT.NONE);
-        bar.setLayout(new GridLayout(4, false));
+        bar.setLayout(new GridLayout(7, false));
         bar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(bar, "Load SVD…", () -> {
             var dialog = new FileDialog(parent.getShell(), SWT.OPEN);
@@ -79,6 +82,8 @@ public final class SocRegistersView extends ViewPart {
             if (path != null) load(path);
         });
         button(bar, "Refresh selected + watches", this::refresh);
+        button(bar, "Pin baseline", this::pinBaseline);
+        button(bar, "Export history CSV…", this::exportHistory);
         button(bar, "Watch / unwatch", () -> {
             var selected = selected();
             if (selected != null) {
@@ -166,6 +171,8 @@ public final class SocRegistersView extends ViewPart {
     private void listenTo(DsfSession next) {
         DsfSession previous = listenedSession;
         if (previous == next) return;
+        // Never mix snapshot evidence across two different DSF debug sessions.
+        history.clear();
         listenedSession = next;
         if (previous != null) {
             try { previous.getExecutor().execute(() -> previous.removeServiceEventListener(runListener)); }
@@ -190,7 +197,15 @@ public final class SocRegistersView extends ViewPart {
             SvdDevice loaded;
             try (var input = Files.newInputStream(Path.of(path))) { loaded = SvdDevice.read(input); }
             generation++; busy = false; device = loaded; svdPath = path;
-            values.clear(); errors.clear(); watches.clear(); render();
+            values.clear(); errors.clear(); watches.clear(); history.clear();
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            try (var input = Files.newInputStream(Path.of(path))) {
+                byte[] buffer = new byte[4096];
+                int count;
+                while ((count = input.read(buffer)) >= 0) digest.update(buffer, 0, count);
+            }
+            svdIdentity = java.util.HexFormat.of().formatHex(digest.digest());
+            render();
             status.setText(device.name() + " — " + device.registers().size() + " registers — " + path
                     + ". Confirm this SVD matches the physical chip. Select a register and Refresh.");
         } catch (Exception ex) {
@@ -228,6 +243,8 @@ public final class SocRegistersView extends ViewPart {
                 String access = !r.readable() ? "Read blocked: " + r.readBlockReason() : r.access();
                 if (errors.containsKey(r.key())) access = errors.get(r.key());
                 else if (value != null && r.reset() != null && value.xor(r.reset()).and(r.resetMask()).signum() != 0) access += " — differs from reset";
+                if (history.changes().stream().anyMatch(change -> change.registerKey().equals(r.key())))
+                    access += " — CHANGED since pinned snapshot";
                 item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(), "0x" + r.address().toString(16),
                         value == null ? "—" : hex(value, r.size()), (r.reset() == null ? "—" : hex(r.reset(), r.size())), access });
                 for (var f : r.fields()) {
@@ -245,7 +262,11 @@ public final class SocRegistersView extends ViewPart {
                 entry.getValue().setExpanded(expanded.contains(entry.getKey()) || !query.isEmpty());
             summary.setText("Showing " + Math.min(matches, 2000) + " of " + matches
                     + " matching registers. " + (matches > 2000 ? "Narrow the search to see more. " : "")
-                    + watches.size() + " watches. Snapshot values; no automatic polling.");
+                    + watches.size() + " watches; " + history.samples().size()
+                    + " captured register snapshots (max " + RegisterHistory.LIMIT + ")."
+                    + (history.baseline() == null ? " No baseline pinned."
+                            : " Baseline: " + history.baseline().timestamp() + ".")
+                    + " No automatic polling.");
         } finally { tree.setRedraw(true); }
     }
     private static String hex(BigInteger value, int bits) {
@@ -340,8 +361,63 @@ public final class SocRegistersView extends ViewPart {
     private void finish(long request, String message) {
         if (closed || ui.isDisposed()) return;
         ui.asyncExec(() -> {
-            if (!tree.isDisposed() && request == generation) { busy = false; status.setText(message); }
+            if (!tree.isDisposed() && request == generation) {
+                busy = false;
+                if (message.startsWith("Refresh complete.") && !values.isEmpty()
+                        && svdIdentity != null && listenedSession != null) {
+                    try {
+                        history.record(new RegisterHistory.Sample(listenedSession.getId(),
+                                svdIdentity, java.time.Instant.now(), new HashMap<>(values)));
+                        render();
+                    } catch (IllegalArgumentException invalid) {
+                        status.setText("Register snapshot rejected: " + invalid.getMessage());
+                        return;
+                    }
+                }
+                status.setText(message + " Captured history: " + history.samples().size()
+                        + "; compare only within the same debug session and exact SVD.");
+            }
         });
+    }
+    private void pinBaseline() {
+        if (history.pinLatest()) {
+            render();
+            status.setText("Pinned the last completed, halted-session register snapshot at "
+                    + history.baseline().timestamp() + ". Refresh after stepping to compare values.");
+        } else status.setText("No completed snapshot. Select a halted frame and Refresh first.");
+    }
+    private static String csv(String value) {
+        return "\"" + value.replace("\"", "\"\"").replace("\r", " ").replace("\n", " ") + "\"";
+    }
+    private void exportHistory() {
+        if (history.samples().isEmpty()) {
+            status.setText("No register snapshots to export. Refresh selected + watches first.");
+            return;
+        }
+        var dialog = new FileDialog(getSite().getShell(), SWT.SAVE);
+        dialog.setText("Export bounded register history (includes local debug-session and SVD identifiers)");
+        dialog.setFilterExtensions(new String[] { "*.csv" });
+        dialog.setFileName("zew-register-history.csv");
+        dialog.setOverwrite(true);
+        String path = dialog.open();
+        if (path == null) return;
+        var text = new StringBuilder("captured_utc,debug_session,svd_sha256,register,value_hex\n");
+        for (var sample : history.samples()) {
+            for (var entry : sample.values().entrySet()) {
+                text.append(csv(sample.timestamp().toString())).append(',')
+                        .append(csv(sample.session())).append(',')
+                        .append(csv(sample.svdIdentity())).append(',')
+                        .append(csv(entry.getKey())).append(',')
+                        .append(csv("0x" + entry.getValue().toString(16))).append('\n');
+            }
+        }
+        try {
+            Files.writeString(Path.of(path), text.toString(), java.nio.charset.StandardCharsets.UTF_8);
+            status.setText("Exported " + history.samples().size() + " snapshot samples. "
+                    + "These are selectively read registers, NOT simultaneous MCU-state samples.");
+        } catch (Exception error) {
+            status.setText("Cannot export register history: " + error.getMessage());
+        }
     }
     @Override public void saveState(IMemento memento) {
         if (svdPath != null) memento.putString("svdPath", svdPath);
