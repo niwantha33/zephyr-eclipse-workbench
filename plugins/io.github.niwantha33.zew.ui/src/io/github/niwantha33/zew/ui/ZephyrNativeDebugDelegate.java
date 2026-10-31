@@ -55,7 +55,8 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
 
     private record Parameters(io.github.niwantha33.zew.core.TargetOperations.Plan plan,
                               String gdb, Path elf, int port, java.util.Properties settings,
-                              String runner, List<io.github.niwantha33.zew.core.OpenOcdThreadCheck.Region> threadMetadata) {}
+                              String runner, List<io.github.niwantha33.zew.core.OpenOcdThreadCheck.Region> threadMetadata,
+                              String variableAdvice) {}
 
     private Parameters prepare(ILaunchConfiguration configuration) throws CoreException {
         try {
@@ -98,7 +99,9 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             var config = io.github.niwantha33.zew.core.BuildArtifacts.configuration(plan.buildDirectory());
             var metadata = runner.equals("openocd") && "y".equals(config.get("CONFIG_DEBUG_THREAD_INFO"))
                     ? OpenOcdThreadMetadata.read(elf) : List.<io.github.niwantha33.zew.core.OpenOcdThreadCheck.Region>of();
-            return new Parameters(plan, gdb, elf, port, settings, runner, metadata);
+            String variableAdvice = io.github.niwantha33.zew.core.DebugVariableAdvice.describe(
+                    settings.getProperty("zew.buildConfiguration", "default"), config);
+            return new Parameters(plan, gdb, elf, port, settings, runner, metadata, variableAdvice);
         } catch (Exception error) {
             if (error instanceof CoreException core) throw core;
             throw failure("Debug target validation failed: " + error.getMessage(), error);
@@ -243,6 +246,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 info.println("Symbols: " + params.elf() + " | target: " + params.plan().board()
                         + " | profile: " + params.settings().getProperty("zew.buildConfiguration", "default")
                         + ". Debug attaches without flashing; use Flash when the device firmware differs from this build.");
+                info.println(params.variableAdvice());
                 info.println("CPU registers: select a suspended frame, then Window > Show View > Other > Debug > Registers. "
                         + "SoC peripheral registers: Window > Show View > Other > Debug > SoC Registers; "
                         + "load the exact chip vendor SVD, select a register and Refresh while halted.");
