@@ -419,6 +419,37 @@ def main():
                 for item in peripheral['images'][0]['checks'][:4]):
             raise ValueError('Successful peripheral selected observations were not supported by EDT')
         print('PASS: real generated EDT and Kconfig independent peripheral evidence, ' + label)
+        # Verify installed SWT resource uses the SAME headless EDT/Kconfig
+        # observations across all supported target builds, not a second parser.
+        native = subprocess.run([
+            str(python), '-I', '-B', str(REPO /
+                'plugins/io.github.niwantha33.zew.ui/scripts/peripheral_inspect.py'),
+            '--build', str(build_arg), '--zephyr',
+            str(Path(workspace_arg) / 'zephyr'), '--node', '/'
+        ], cwd=REPO, env=env, capture_output=True, text=True,
+           encoding='utf-8', errors='replace', timeout=180)
+        lines = native.stdout.strip().splitlines()
+        if len(lines) != 2 or lines[0] != 'ZEW-PERIPHERAL-1':
+            raise ValueError('Packaged native peripheral evidence protocol missing')
+        try:
+            fields = [base64.b64decode(value, validate=True).decode('ascii')
+                      for value in lines[1].split('\t')]
+        except (ValueError, UnicodeError) as error:
+            raise ValueError('Packaged native peripheral evidence protocol corrupt') from error
+        if (len(fields) != 14
+                or fields[0] != peripheral['status']
+                or native.returncode != observed.returncode
+                or fields[1] != peripheral['images'][0]['generated_dts_sha256']
+                or fields[2] != peripheral['images'][0]['generated_config_sha256']
+                or fields[3] != peripheral['node_path_sha256']
+                or fields[4] != '0' * 64
+                or fields[5] != peripheral['images'][0]['node']['state']
+                or fields[6] != peripheral['images'][0]['node']['binding']
+                or fields[7] != peripheral['images'][0]['node']['configured_status']
+                or fields[10] != 'not-requested'
+                or fields[11:13] != ['no', 'no']):
+            raise ValueError('Packaged native peripheral results differ from actual headless Zephyr evidence')
+        print('PASS: installed native peripheral resource equals headless evidence, ' + label)
         # Every real vendor build is now independently inspected by the
         # Evidence Engine. This is build-artifact evidence, NEVER a flash or
         # physical-board assertion. Run after deliberate failure recovery.
