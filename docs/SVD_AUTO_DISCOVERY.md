@@ -29,3 +29,33 @@ The tool automatically locates already installed packs; it does not silently dow
 ## Status
 
 Automated source-matching and UI tests are necessary but do not demonstrate that a genuine TI pack is already installed on the user's PC or that halted register reads work on real hardware.
+
+## Opt-in official vendor pack provisioning (MSPM0G3507)
+
+The **Download vendor SVD…** command offers an official TI MSPM0G1X0X_G3X0X_DFP 1.3.1
+CMSIS Device Family Pack from the Arm Keil distribution. It asks for consent
+before contacting the vendor and caches the pack in the managed setup's
+`vendor-svd` directory. A bounded HTTPS download and ZIP parse are followed
+by an exact device/variant PDSC-to-SVD mapping check using the existing
+SvdAutoDiscovery parser. The command fails closed on mismatched or ambiguous
+descriptions; it does **not** generate register addresses from guesses or
+access the physical target during provisioning.
+
+The pack's SHA-256 is shown after installation for provenance. This is a
+content fingerprint, **not** a substitute for a separately published and
+trusted upstream checksum or signature. The downloaded pack remains vendor
+content subject to its own license; it is not bundled into this repository.
+
+This download route is currently pinned only for MSPM0G3507. Other SoCs
+continue using installed official vendor packs or manual exact-device SVD
+selection. The downloaded description can populate the register names,
+addresses, and fields even when no debugger is connected. **Live register
+values require a successfully attached and suspended GDB session**; the
+terminated session in the reported screenshot cannot produce values.
+
+### Validation still required
+
+Run the Eclipse/Tycho build, verify that the official pack URL responds on
+Windows, inspect its exact MSPM0G3507 device mapping, and perform a
+hardware-in-loop halted-register read using XDS110. No build or hardware
+success is claimed by this source change alone.
