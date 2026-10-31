@@ -78,13 +78,21 @@ public final class SvdAutoDiscovery {
             Files.createDirectories(cache);
             if (Files.isSymbolicLink(cache)) throw new IOException("SVD cache cannot be a symbolic link");
             chosen = cache.resolve(normal(part) + "-" + sha.substring(0, 16) + ".svd");
-            if (!Files.exists(chosen)) {
+            if (Files.isSymbolicLink(chosen)) throw new IOException("SVD cache entry is a symbolic link");
+            boolean validCache = false;
+            if (Files.isRegularFile(chosen) && Files.size(chosen) <= MAX_SVD_BYTES) {
+                try (InputStream check = Files.newInputStream(chosen)) {
+                    validCache = fingerprint(bounded(check)).equals(sha);
+                }
+            }
+            if (!validCache) {
                 Path temp = Files.createTempFile(cache, "svd-verified-", ".tmp");
                 try {
                     Files.write(temp, bytes);
-                    try { Files.move(temp, chosen, java.nio.file.StandardCopyOption.ATOMIC_MOVE); }
+                    try { Files.move(temp, chosen, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
                     catch (java.nio.file.AtomicMoveNotSupportedException e) {
-                        Files.move(temp, chosen);
+                        Files.move(temp, chosen, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     }
                 } finally { Files.deleteIfExists(temp); }
             }
@@ -113,7 +121,17 @@ public final class SvdAutoDiscovery {
             if (!pdsc.getName().toLowerCase(Locale.ROOT).endsWith(".pdsc")
                     || pdsc.getSize() < 1 || pdsc.getSize() > 2_000_000) continue;
             try (var input = zip.getInputStream(pdsc)) {
-                var factory = DocumentBuilderFactory.newInstance();
+                paths.addAll(mappedSvdPaths(input, part));
+            } catch (Exception ignored) {
+                // Malformed PDSC is never a source of trusted device mapping.
+            }
+        }
+        return paths;
+    }
+
+    private static Set<String> mappedSvdPaths(InputStream input, String part) throws Exception {
+        var paths = new HashSet<String>();
+        var factory = DocumentBuilderFactory.newInstance();
                 factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
                 factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
                 factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
@@ -149,11 +167,27 @@ public final class SvdAutoDiscovery {
                         if (assigned) break;
                     }
                 }
-            } catch (Exception ignored) {
-                // Malformed PDSC is never a source of trusted device mapping.
-            }
-        }
         return paths;
+    }
+
+    private static void pdscCandidates(Path pdsc, String part, List<Candidate> candidates) {
+        try {
+            if (Files.isSymbolicLink(pdsc) || Files.size(pdsc) > 2_000_000) return;
+            Set<String> mapped;
+            try (InputStream input = Files.newInputStream(pdsc)) {
+                mapped = mappedSvdPaths(input, part);
+            }
+            Path base = pdsc.getParent().toRealPath();
+            for (String reference : mapped) {
+                Path svd = base.resolve(reference).normalize();
+                if (!svd.startsWith(base) || !Files.isRegularFile(svd)
+                        || Files.isSymbolicLink(svd) || Files.size(svd) > MAX_SVD_BYTES) continue;
+                try (InputStream input = Files.newInputStream(svd)) {
+                    Candidate candidate = validate(bounded(input), part, svd, null, true);
+                    if (candidate != null) candidates.add(candidate);
+                } catch (Exception ignored) { /* Never trust invalid installed SVD. */ }
+            }
+        } catch (Exception ignored) { /* Invalid vendor package descriptor. */ }
     }
 
     private static void packCandidates(Path pack, String part, Path cache, List<Candidate> candidates) {
@@ -223,6 +257,8 @@ public final class SvdAutoDiscovery {
                                 if (candidate != null) found.add(candidate);
                             } else if (name.endsWith(".pack"))
                                 packCandidates(file, part, cache, found);
+                            else if (name.endsWith(".pdsc"))
+                                pdscCandidates(file, part, found);
                             return FileVisitResult.CONTINUE;
                         }
                         @Override public FileVisitResult visitFileFailed(Path path, IOException failure) {
@@ -236,6 +272,9 @@ public final class SvdAutoDiscovery {
         }
         Map<String, Candidate> unique = new LinkedHashMap<>();
         for (var candidate : found) unique.putIfAbsent(candidate.fingerprint(), candidate);
+        if (truncated[0]) return new Result(State.INCOMPLETE_SCAN, part, null, 0, false,
+                "Search was incomplete; exact SVD not activated until all selected roots are checked.",
+                inspected);
         if (unique.size() == 1) {
             var candidate = unique.values().iterator().next();
             return new Result(State.MATCHED, part, candidate.path(), candidate.registers(),
