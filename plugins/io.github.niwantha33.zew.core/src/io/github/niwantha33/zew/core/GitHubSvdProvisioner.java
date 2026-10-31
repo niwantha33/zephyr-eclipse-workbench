@@ -45,6 +45,7 @@ public final class GitHubSvdProvisioner {
         Path destination = root.resolve(name);
         String source = "https://raw.githubusercontent.com/espressif/svd/" + REF + "/svd/" + name;
         if (Files.isRegularFile(destination) && !Files.isSymbolicLink(destination)
+                && Files.size(destination) <= MAX_SVD_SIZE
                 && exact(Files.readAllBytes(destination), part)) {
             return new Downloaded(destination, hash(Files.readAllBytes(destination)), source);
         }
@@ -73,7 +74,7 @@ public final class GitHubSvdProvisioner {
             Files.deleteIfExists(temp);
         }
     }
-    static boolean exact(byte[] bytes, String part) {
+    public static boolean exact(byte[] bytes, String part) {
         try {
             if (bytes.length == 0 || bytes.length > MAX_SVD_SIZE) return false;
             SvdDevice device = SvdDevice.read(new java.io.ByteArrayInputStream(bytes));
