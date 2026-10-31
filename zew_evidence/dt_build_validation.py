@@ -65,7 +65,7 @@ def _snapshot(application: Path, destination: Path, exclude_build: Path) -> tupl
             source = Path(current) / name
             if source.is_symlink():
                 raise InputError("Symlink inside application source")
-            if name in _SKIP_DIRS or source == exclude_build or exclude_build.is_relative_to(source):
+            if name in _SKIP_DIRS or source == exclude_build or source.is_relative_to(exclude_build):
                 continue
             kept.append(name)
         dirs[:] = kept
@@ -157,7 +157,7 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
     selected = source_cache.get("BOARD")
     if target and target != board:
         raise InputError("Selected board differs from existing build target")
-    if not target and selected and selected != board.split("/")[0]:
+    if not target and selected and selected not in (board, board.split("/")[0]):
         raise InputError("Selected board differs from existing build board")
     if not target and not selected:
         raise InputError("Existing build has no verifiable BOARD/BOARD_TARGET")
@@ -177,10 +177,7 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
             raise InputError("Candidate overlay exceeds 64 KiB")
         candidate_rel = candidate.relative_to(application)
         candidate_sha, _ = _digest(candidate)
-    if build.is_relative_to(application) and build != application:
-        excluded = build
-    else:
-        excluded = build
+    excluded = build
     # Only the environment explicitly supplied by caller is inherited; never
     # install providers, fetch modules, rewrite west config or probe hardware.
     with tempfile.TemporaryDirectory(prefix="zew-real-dt-", dir=scratch_parent) as scratch_name:
@@ -226,7 +223,8 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
             except (OSError, ValueError):
                 same_zephyr = False
             same_board = (actual.get("BOARD_TARGET", board) == board
-                          and actual.get("BOARD", board.split("/")[0]) == board.split("/")[0])
+                          and actual.get("BOARD", board.split("/")[0])
+                          in (board, board.split("/")[0]))
             overlay_in_cache = (candidate_rel is None or
                                 (source / candidate_rel).as_posix()
                                 in actual.get("EXTRA_DTC_OVERLAY_FILE", "").replace("\\", "/"))
