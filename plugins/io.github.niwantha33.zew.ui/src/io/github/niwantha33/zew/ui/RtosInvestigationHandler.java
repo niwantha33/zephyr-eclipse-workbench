@@ -15,6 +15,7 @@ import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.DirectoryDialog;
+import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.IConsole;
 import org.eclipse.ui.console.MessageConsole;
@@ -49,6 +50,17 @@ public final class RtosInvestigationHandler extends AbstractHandler {
         String selected = folder.open();
         if (selected == null) return null;
         Path capture = Path.of(selected);
+        String fatal = null;
+        if (MessageDialog.openQuestion(shell, "Optional fault evidence",
+                "Include a saved Zephyr fatal text log in this offline investigation? "
+                + "This only records its evidence and limitations; it does not infer a common session.")) {
+            var dialog = new FileDialog(shell, SWT.OPEN);
+            dialog.setText("Select one Zephyr fatal log (UTF-8)");
+            dialog.setFilterExtensions(new String[] {"*.log;*.txt", "*"});
+            fatal = dialog.open();
+            if (fatal == null) return null;
+        }
+        final String fatalLog = fatal;
         if (!Files.isRegularFile(capture.resolve("capture.json"))) {
             MessageDialog.openError(shell, "RTOS Investigation",
                     "Select one capture directory containing capture.json and ctf/channel0_0.");
@@ -75,6 +87,10 @@ public final class RtosInvestigationHandler extends AbstractHandler {
                         args.add(build.toString());
                     } else {
                         stream.println("No selected ELF/.config build snapshot; source identity remains unverified.");
+                    }
+                    if (fatalLog != null) {
+                        args.add("--fault-log");
+                        args.add(fatalLog);
                     }
                     stream.println("OFFLINE RTOS INVESTIGATION — no reset, flash, memory read or probe access.");
                     new ProcessRunner().run(args, project.getLocation().toFile().toPath(),
