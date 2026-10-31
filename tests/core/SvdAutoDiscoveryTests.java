@@ -78,6 +78,23 @@ public final class SvdAutoDiscoveryTests {
             check(mapped.state() == SvdAutoDiscovery.State.MATCHED
                     && mapped.mappedByPack() && mapped.registers() == 1,
                     "only explicit vendor PDSC exact Dname authorizes a shared family SVD");
+            Path unpacked = Files.createDirectories(root.resolve("unpacked/SVD"));
+            Files.writeString(unpacked.getParent().resolve("Vendor.DFP.pdsc"),
+                    "<package><devices><family Dfamily='MSPM0'>"
+                    + "<device Dname='MSPM0G3507'><debug svd='SVD/MSPM0G350X.svd'/>"
+                    + "</device></family></devices></package>");
+            Files.writeString(unpacked.resolve("MSPM0G350X.svd"), svd("MSPM0G350X"));
+            var expanded = SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3507",
+                    List.of(unpacked.getParent()), root.resolve("unpacked-cache"));
+            check(expanded.state() == SvdAutoDiscovery.State.MATCHED
+                    && expanded.mappedByPack(), "unpacked CMSIS .pdsc maps exact SoC safely");
+            // A cached pack entry must be repaired by its content hash, never trusted by filename.
+            Files.writeString(mapped.path(), svd("OTHERCHIP"));
+            var recached = SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3507",
+                    List.of(familyRoot), root.resolve("mapped-cache"));
+            check(recached.state() == SvdAutoDiscovery.State.MATCHED
+                    && Files.readString(recached.path()).contains("MSPM0G350X"),
+                    "tampered cached family SVD replaced only from verified pack bytes");
             Path wrongRoot = Files.createDirectories(root.resolve("wrong-pack"));
             Path wrongPack = wrongRoot.resolve("Other.DFP.pack");
             try (var output = new ZipOutputStream(Files.newOutputStream(wrongPack))) {
