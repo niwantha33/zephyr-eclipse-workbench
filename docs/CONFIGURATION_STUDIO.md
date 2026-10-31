@@ -385,3 +385,37 @@ Existing Configuration Studio Hardware/Insights real-configuration controls
 continue to operate as before. A future thin native report integration may
 reuse the same JSON evidence **only after its provenance contract is
 verified**; the current CLI does not auto-save overlays or enable peripherals.
+
+
+## Selected peripheral evidence — native Hardware / Insights
+
+A **Peripheral evidence…** action appears in both existing **Hardware** and
+**Insights** toolbars. Select a real generated Devicetree node first, and
+optionally a built property belonging to exactly that node. The action asks
+for an optional **explicit** `CONFIG_` symbol; leave it blank for DTS-only
+evidence. **No driver or symbol is guessed** from a compatible string.
+
+The action uses the selected managed Python and Zephyr checkout in a
+background Eclipse Job and calls the **same headless `zew peripheral`**
+collector/edtlib implementation, copied into the installed plug-in.
+`test_native_peripheral_evidence.py` requires these four packaged Python
+modules to be byte-identical to their headless counterparts. It also tests
+the installed resource under isolated Python. Native Java validates a bounded
+14-field base64 protocol (enums, source hashes and hashed selection identity)
+and rechecks generated DTS/.config SHA-256 on completion.
+
+The existing **Hardware → Validation / evidence** dock and **Insights** area
+show distinct facts: the generated node's status, whether upstream edtlib
+matched a binding, selected property interpretation, independently selected
+Kconfig y/n/m state, artifact SHA-256 identities, and supported next checks.
+Disabled nodes and disabled Kconfig symbols remain **observed**, never
+claimed ready/available. Unsupported or unknown evidence is not filled
+in by inference.
+
+Results are discarded on cancellation, project/build/node/property
+selection change, or source hash change. The native process runs read-only,
+without CMake execution, source changes, flashing, probe access or network.
+
+**No pin-free, driver-compiled, runtime-ready, electrical or physical
+package pin assertions are made.** Existing source-change review and
+opt-in real CMake validation remain separate workflows. G0 remains open.

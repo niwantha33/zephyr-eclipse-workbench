@@ -392,3 +392,25 @@ passing these prototype tests.
   No new native Studio/editor or automatic overlay change.
 - Manual competitor/hardware acceptance and complete licensing audit
   remain outstanding. **G0 is OPEN; no release authorised.**
+
+
+## Phase-0 native peripheral evidence integration — PR #101
+
+- Existing Configuration Studio Hardware / Insights gained one native
+  **Peripheral evidence…** action; it uses an explicitly selected built
+  node/property and optional manually entered `CONFIG_` symbol.
+- The installed UI packages exact copies of the headless evidence modules
+  (`collector.py`, `dt_binding_preview.py`,
+  `peripheral_evidence.py` and `__init__.py`), with byte-parity
+  regression to prevent separate Eclipse and CLI semantics.
+- The native Java bridge validates a strict, bounded encoded protocol,
+  hashes selection and generated DTS/Kconfig artifacts, rejects contradictory
+  success reports, cancels background work and refuses stale responses.
+- Real Windows board matrix checks the packaged native resource against
+  the headless `zew peripheral` for each of seven vendor/board scenarios;
+  read-only isolated-Python and Java negative tests cover the bridge.
+- Evidence is generated-build configuration and independent Kconfig
+  observation only, not inferred driver inclusion, pin usage, package
+  capability, physical probing or runtime validation.
+- Exact PR head CI and manual installed UI acceptance remain prerequisites
+  to merge and release. **G0 OPEN; no commercial release approval.**

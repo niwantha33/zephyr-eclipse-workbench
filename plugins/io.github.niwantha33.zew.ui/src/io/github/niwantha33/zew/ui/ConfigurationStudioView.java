@@ -51,6 +51,7 @@ import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeBindingInspector;
 import io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector;
+import io.github.niwantha33.zew.core.PeripheralEvidenceInspector;
 import io.github.niwantha33.zew.core.GpioBankEvidence;
 import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
@@ -116,6 +117,9 @@ public final class ConfigurationStudioView extends ViewPart {
     private Job helpJob;
     private Job diagnosisJob;
     private Job bindingJob;
+    private Job peripheralEvidenceJob;
+    private final java.util.concurrent.atomic.AtomicInteger peripheralEvidenceGeneration =
+            new java.util.concurrent.atomic.AtomicInteger();
     private Job realConfigureJob;
     private final java.util.concurrent.atomic.AtomicInteger realConfigureGeneration =
             new java.util.concurrent.atomic.AtomicInteger();
@@ -635,6 +639,8 @@ public final class ConfigurationStudioView extends ViewPart {
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
         action(hardwareActions, "Validate selected binding", () -> inspectSelectedBinding(false));
+        action(hardwareActions, "Peripheral evidence…", this::inspectPeripheralEvidence)
+                .setToolTipText("Exact generated DTS and optional independent CONFIG_ symbol; no pin or driver assumptions");
         action(hardwareActions, "Preview saved overlay binding", () -> inspectSelectedBinding(true));
         action(hardwareActions, "Real configure (scratch)", () -> validateRealDevicetree(false))
                 .setToolTipText("Run actual Zephyr CMake with copied source and a disposable build; explicit confirmation required");
@@ -654,6 +660,7 @@ public final class ConfigurationStudioView extends ViewPart {
         action(evidenceActions, "Open evidence…", () -> openEvidence(false));
         action(evidenceActions, "Compare evidence…", () -> openEvidence(true));
         action(evidenceActions, "Validate selected binding", () -> inspectSelectedBinding(false));
+        action(evidenceActions, "Peripheral evidence…", this::inspectPeripheralEvidence);
         action(evidenceActions, "Preview saved overlay binding", () -> inspectSelectedBinding(true));
         action(evidenceActions, "Real configure (scratch)", () -> validateRealDevicetree(false));
         action(evidenceActions, "Real configure + saved overlay", () -> validateRealDevicetree(true));
@@ -833,6 +840,96 @@ public final class ConfigurationStudioView extends ViewPart {
             }
         };
         diagnosisJob.schedule();
+    }
+
+    /**
+     * Render exactly the headless zew peripheral evidence contract through
+     * the existing Hardware evidence dock. The optional CONFIG_ choice is
+     * explicit, not deduced from compatible strings or a guessed driver.
+     */
+    private void inspectPeripheralEvidence() {
+        if (project == null || !project.isAccessible() || project.getLocation() == null
+                || inspectionBuild == null || inspectionSettings == null
+                || hardwareDevices.getSelectionCount() != 1) {
+            MessageDialog.openInformation(getSite().getShell(), "Selected peripheral evidence",
+                    "Select one generated hardware node and configure/build the exact target first.");
+            return;
+        }
+        var device = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+        if (device == null) return;
+        String node = device.path();
+        String property = null;
+        if (hardwareParameters.getSelectionCount() == 1) {
+            var row = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
+            if (row != null && node.equals(row.path())) property = row.name();
+        }
+        InputDialog ask = new InputDialog(getSite().getShell(),
+                "Optional independent Kconfig observation",
+                "Enter an exact CONFIG_ symbol to compare with this generated node (e.g. CONFIG_GPIO). "
+                + "Leave blank for node/binding evidence only. This does NOT infer driver dependencies.",
+                "", value -> {
+                    String requested = value.trim();
+                    return requested.isEmpty() || PeripheralEvidenceInspector.allowedSymbol(requested)
+                            ? null : "Enter a non-sensitive exact CONFIG_ symbol (uppercase and underscores).";
+                });
+        if (ask.open() != Window.OK) return;
+        final String symbol = ask.getValue().trim().isEmpty() ? null : ask.getValue().trim();
+        final IProject chosenProject = project;
+        final Path build = inspectionBuild;
+        final java.util.Properties settings = (java.util.Properties) inspectionSettings.clone();
+        final String propertyName = property;
+        final int generation = peripheralEvidenceGeneration.incrementAndGet();
+        if (peripheralEvidenceJob != null) peripheralEvidenceJob.cancel();
+        final var display = analysis.getDisplay();
+        final boolean stale = buildOutdated;
+        status.setText("Reading generated peripheral and independent Kconfig evidence…");
+        peripheralEvidenceJob = new Job("Inspect selected build peripheral evidence") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                PeripheralEvidenceInspector.Result result;
+                try {
+                    var resources = new java.util.LinkedHashMap<String, java.io.InputStream>();
+                    for (String name : java.util.List.of("peripheral_inspect.py",
+                            "zew_evidence/__init__.py", "zew_evidence/collector.py",
+                            "zew_evidence/dt_binding_preview.py", "zew_evidence/peripheral_evidence.py")) {
+                        resources.put(name, ConfigurationStudioView.class.getResourceAsStream(
+                                "/scripts/" + name));
+                    }
+                    result = PeripheralEvidenceInspector.inspect(
+                            Path.of(settings.getProperty("python")),
+                            Path.of(settings.getProperty("workspace"), "zephyr"),
+                            build, node, propertyName, symbol, resources, monitor::isCanceled);
+                } catch (Exception unavailable) {
+                    result = PeripheralEvidenceInspector.Result.unavailable();
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                final String report = result.describe(node, propertyName, symbol, stale);
+                display.asyncExec(() -> {
+                    if (analysis.isDisposed() || hardwareValidation.isDisposed()
+                            || generation != peripheralEvidenceGeneration.get()
+                            || project != chosenProject
+                            || !java.util.Objects.equals(build, inspectionBuild)
+                            || hardwareDevices.getSelectionCount() != 1) return;
+                    var current = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+                    if (current == null || !node.equals(current.path())) return;
+                    String selectedProperty = null;
+                    if (hardwareParameters.getSelectionCount() == 1) {
+                        var row = (DevicetreeParameters.Property)
+                                hardwareParameters.getSelection()[0].getData();
+                        if (row != null && node.equals(row.path())) selectedProperty = row.name();
+                    }
+                    if (!java.util.Objects.equals(propertyName, selectedProperty)) return;
+                    hardwareValidation.setText(report);
+                    analysis.setText(report);
+                    if (tabs.getSelectionIndex() == 1) hardwareDetails.setSelection(1);
+                    status.setText("Selected-build peripheral observations shown in Hardware and Insights. "
+                            + "No GPIO pin or driver causality was inferred.");
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        peripheralEvidenceJob.setSystem(true);
+        peripheralEvidenceJob.schedule();
     }
 
     /** Evaluate the selected built node with upstream edtlib in a background job. */
@@ -1106,6 +1203,8 @@ public final class ConfigurationStudioView extends ViewPart {
         if (diagnosisJob != null) diagnosisJob.cancel();
         bindingGeneration.incrementAndGet();
         if (bindingJob != null) bindingJob.cancel();
+        peripheralEvidenceGeneration.incrementAndGet();
+        if (peripheralEvidenceJob != null) peripheralEvidenceJob.cancel();
         realConfigureGeneration.incrementAndGet();
         if (realConfigureJob != null) realConfigureJob.cancel();
         helpGeneration.incrementAndGet();
@@ -2369,6 +2468,8 @@ public final class ConfigurationStudioView extends ViewPart {
         if (diagnosisJob != null) diagnosisJob.cancel();
         bindingGeneration.incrementAndGet();
         if (bindingJob != null) bindingJob.cancel();
+        peripheralEvidenceGeneration.incrementAndGet();
+        if (peripheralEvidenceJob != null) peripheralEvidenceJob.cancel();
         realConfigureGeneration.incrementAndGet();
         if (realConfigureJob != null) realConfigureJob.cancel();
         helpGeneration.incrementAndGet();
