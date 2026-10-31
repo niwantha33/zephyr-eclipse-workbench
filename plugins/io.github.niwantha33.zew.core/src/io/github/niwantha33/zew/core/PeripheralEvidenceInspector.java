@@ -250,6 +250,10 @@ public final class PeripheralEvidenceInspector {
                 Thread.currentThread().interrupt();
             return Result.unavailable();
         } finally {
+            if (packaged != null) for (InputStream resource : packaged.values()) {
+                if (resource != null) try { resource.close(); }
+                catch (IOException ignored) { /* packaged read-only stream */ }
+            }
             if (directory != null) {
                 // Only remove the private known files in the new temporary
                 // folder. No user-provided path can enter this deletion list.
