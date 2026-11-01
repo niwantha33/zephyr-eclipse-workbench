@@ -759,7 +759,9 @@ public final class ConfigurationStudioTests {
                             spi@1200 {
                                 compatible = "vendor,spi";
                                 status = "disabled";
-                                channel@0 { reg = <0>; };
+                                channel@0 {
+                                    reg = <0>;
+                                };
                             };
                         };
                     };
