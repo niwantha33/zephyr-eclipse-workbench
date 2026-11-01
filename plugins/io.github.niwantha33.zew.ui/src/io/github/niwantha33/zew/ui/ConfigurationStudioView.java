@@ -738,12 +738,16 @@ public final class ConfigurationStudioView extends ViewPart {
         guideSplit.setWeights(new int[] {52, 48});
         var snippetBar = new Composite(startPage, SWT.NONE);
         snippetBar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        snippetBar.setLayout(new GridLayout(6, false));
+        snippetBar.setLayout(new GridLayout(8, false));
         copyStartCode = action(snippetBar, "Copy C scaffold", () -> copyStartGuideText(
                 currentStartGuide == null ? "" : currentStartGuide.cExample()));
         action(snippetBar, "Open src/main.c", () -> openExistingStartFile("src/main.c"));
         action(snippetBar, "Open prj.conf", () -> openExistingStartFile("prj.conf"));
         action(snippetBar, "Open app.overlay", this::openOverlay);
+        action(snippetBar, "Check selected binding", () -> inspectSelectedBinding(false))
+                .setToolTipText("Inspect the upstream Zephyr binding for the selected generated controller.");
+        action(snippetBar, "Build & validate", this::build)
+                .setToolTipText("Build the exact project/profile and regenerate effective DTS and Kconfig.");
         action(snippetBar, "Copy Kconfig review", () -> copyStartGuideText(
                 currentStartGuide == null ? "" : currentStartGuide.configExample()));
         action(snippetBar, "Copy overlay guidance", () -> copyStartGuideText(
