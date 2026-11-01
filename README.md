@@ -144,7 +144,7 @@ For required JDK versions, probe/OpenOCD selection, updates, unsigned-plugin tru
 
 **Devicetree** — inspect nodes, compatible properties, pins and peripheral configuration derived from the selected Zephyr build. Hardware conclusions depend on the selected board, overlays and generated data.
 
-**SoC Registers** — open **Window → Show View → Other → Debug → SoC Registers**, load a **matching vendor CMSIS-SVD**, suspend a compatible target and refresh selected registers or watches. This is a read-only snapshot workflow, not background register polling.
+**Zephyr Hardware Register Explorer** — open **Window → Show View → Other → Debug → Zephyr Hardware Register Explorer**, load a **matching vendor CMSIS-SVD**, suspend a compatible target and refresh selected registers or watches. This is a read-only snapshot workflow, not background register polling.
 
 **RTOS and faults** — integrate supported CTF/Trace Compass workflows, CPU state inspection and offline evidence utilities. Complete target coverage and end-to-end fault-analysis validation remain ongoing.
 
