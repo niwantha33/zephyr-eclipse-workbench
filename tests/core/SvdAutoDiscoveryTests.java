@@ -30,8 +30,11 @@ public final class SvdAutoDiscoveryTests {
             Path vendor = Files.createDirectories(root.resolve("modules/hal/vendor"));
             Files.writeString(vendor.resolve("MSPM0G350X.svd"), svd("MSPM0G350X"));
             var missing = SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3507", List.of(root), root.resolve("cache"));
-            check(missing.state() == SvdAutoDiscovery.State.MISSING && missing.path() == null,
-                    "family-level model must not silently be assigned to an exact SoC");
+            check(missing.state() == SvdAutoDiscovery.State.MATCHED && missing.registers() == 1,
+                    "explicit TI MSPM0G350X mapping must load for the G3507 SoC");
+            check(SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3506",
+                    List.of(root), root.resolve("other-cache")).state() == SvdAutoDiscovery.State.MISSING,
+                    "TI family SVD must not automatically map to other part numbers");
             Path candidate = vendor.resolve("MSPM0G3507.svd");
             Files.writeString(candidate, svd("MSPM0G3507"));
             var matched = SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3507",
