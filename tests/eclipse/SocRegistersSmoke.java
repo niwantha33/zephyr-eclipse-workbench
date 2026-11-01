@@ -29,12 +29,27 @@ public final class SocRegistersSmoke {
             load.invoke(view, fixture.toString());
             var treeField = type.getDeclaredField("tree"); treeField.setAccessible(true);
             var tree = (Tree) treeField.get(view);
-            if (tree.getItemCount() != 1 || tree.getItem(0).getItemCount() != 1)
-                throw new AssertionError("SoC tree did not load");
-            var register = tree.getItem(0).getItem(0);
+            // SVD parsing runs in a background Job. Process SWT events
+            // until its UI hand-off completes, then expand the lazy tree.
+            long loadDeadline = System.nanoTime() + java.time.Duration.ofSeconds(15).toNanos();
+            while (tree.getItemCount() == 0 && System.nanoTime() < loadDeadline) {
+                if (!tree.getDisplay().readAndDispatch()) Thread.sleep(10);
+            }
+            if (tree.getItemCount() != 1)
+                throw new AssertionError("SoC peripheral tree did not load");
+            var peripheral = tree.getItem(0);
+            peripheral.setExpanded(true);
+            tree.notifyListeners(org.eclipse.swt.SWT.Expand,
+                    new org.eclipse.swt.widgets.Event() {{ item = peripheral; }});
+            if (peripheral.getItemCount() != 1)
+                throw new AssertionError("Lazy peripheral registers did not load");
+            var register = peripheral.getItem(0);
+            register.setExpanded(true);
+            tree.notifyListeners(org.eclipse.swt.SWT.Expand,
+                    new org.eclipse.swt.widgets.Event() {{ item = register; }});
             if (!register.getText(1).equals("0x40000004") || register.getItemCount() != 1
                     || !register.getItem(0).getText().equals("EN") || !register.getText(3).equals("—"))
-                throw new AssertionError("Register address/field/undefined reset rendering");
+                throw new AssertionError("Lazy register address/field/reset rendering");
             var boardField = type.getDeclaredField("selectedBoard");
             boardField.setAccessible(true);
             boardField.set(view, "lp_mspm0g3507/mspm0g3507");
