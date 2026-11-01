@@ -395,3 +395,35 @@ Exit 0 means **draft available for review only**, 1 manual review needed,
 2 invalid input. See [detailed guide](GUIDED_PERIPHERAL_REVIEW.md) and use
 the separate `dt-configure` command to test the saved change with real
 Zephyr CMake. No electrical or pin-availability inference is made.
+
+
+## Preflight an unsaved guided Devicetree change with actual West/CMake
+
+`zew dt-draft-configure` composes the existing binding-aware
+`peripheral-guide` with the existing, trusted disposable
+`dt-configure`. It stages only the exact SHA-256-verified proposed source
+addition **inside the copied application**, then checks the generated
+scratch `zephyr.dts` through upstream dtlib for **the exact requested
+status/int/enum value**.
+
+```sh
+python zew.py dt-draft-configure \
+  --build ./app/build --application ./app --zephyr ./workspace/zephyr \
+  --python ./workspace/.venv/bin/python --board BOARD/CORE \
+  --node /actual/generated/node --overlay ./app/app.overlay \
+  --status disabled --ninja /path/to/ninja
+```
+
+The input overlay may be existing or a not-yet-created in-application
+`.overlay`. It is **never** written. The original selected DTS and the
+existing overlay are re-hashed after execution; any mismatch rejects
+success. A matching CMake exit alone is insufficient: the selected
+generated node/property value must actually equal the user request.
+All diagnostic output is sanitized; read the separate opt-in guided
+diff using `zew peripheral-guide --show-diff`.
+
+Exit 0: exact value observed in genuinely configured disposable source.
+Exit 1: absent draft, failed/mismatched configuration or unverified
+identity. Exit 2: invalid input. As with `dt-configure`, this runs
+trusted CMake/project hooks outside a security sandbox. No firmware
+compile/flash or physical GPIO/pad correctness is established.
