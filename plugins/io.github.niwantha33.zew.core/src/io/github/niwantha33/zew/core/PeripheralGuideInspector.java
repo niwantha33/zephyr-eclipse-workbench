@@ -77,6 +77,7 @@ public final class PeripheralGuideInspector {
                 if (bytes.length > (i >= 12 ? 102400 : 128))
                     throw new IOException("Oversized guided overlay field");
                 f[i] = new String(bytes, StandardCharsets.UTF_8);
+                if (i >= 12 && "~".equals(f[i])) f[i] = "";
                 if (i < 12 && !f[i].matches("[a-z0-9-]{1,100}|[a-f0-9]{64}"))
                     throw new IOException("Invalid guide scalar");
                 if (i >= 12 && (f[i].contains("\u0000") || f[i].contains("\r")))
