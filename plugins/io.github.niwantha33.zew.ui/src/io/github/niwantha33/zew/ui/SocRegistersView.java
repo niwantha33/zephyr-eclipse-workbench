@@ -287,31 +287,50 @@ public final class SocRegistersView extends ViewPart {
     private void showSvdHelp(String board, String failure, String downloadUrl) {
         String page = officialSvdPage(board);
         String chip = SvdAutoDiscovery.partFromBoard(board);
-        String message = "Exact SoC: " + (chip.isBlank() ? board : chip) + "\\n\\n"
-                + "Reason: " + failure + "\\n\\n"
-                + (downloadUrl == null ? "" : "Attempted source: " + downloadUrl + "\\n\\n")
-                + "Official vendor catalogue: " + page + "\\n\\n"
-                + "1. Open the vendor page and search for the exact SoC or CMSIS Device Family Pack.\\n"
-                + "2. Obtain its SVD or installed .pack (the pack may contain an SVD).\\n"
-                + "3. If you have an .svd, use Import Register Definitions…; if you have a .pack, install it under"
-                + " the managed vendor-svd directory and use Find Device Definitions.\\n"
-                + "4. Reject a different device model: do not select a similar chip merely to show registers.\\n\\n"
-                + "This view needs a suspended debug frame only to read live register values.";
+        String device = chip.isBlank() ? board : chip.toUpperCase(Locale.ROOT);
+        String friendly = "We couldn't load the register information for " + device + ".\n\n"
+                + "1. Open the official device website below.\n"
+                + "2. Find a register description (.svd) for this device.\n"
+                + "3. Return here and choose Import Register Definitions.\n\n"
+                + "Official website:\n" + page;
+        String technical = "Device: " + device + "\n"
+                + "Reason: " + failure + "\n"
+                + "Attempted download: " + (downloadUrl == null ? "No automatic source available" : downloadUrl)
+                + "\nVendor page: " + page + "\n"
+                + "Live register values require a suspended debug session.";
         var dialog = new org.eclipse.jface.dialogs.MessageDialog(getSite().getShell(),
-                "SVD download / installation guidance", null, message,
-                org.eclipse.jface.dialogs.MessageDialog.INFORMATION,
-                new String[] { "Open official page", "Copy instructions", "Close" }, 2);
-        int choice = dialog.open();
-        if (choice == 0) {
-            try {
-                org.eclipse.swt.program.Program.launch(page);
-            } catch (Exception ignored) { status.setText("Open this official page in a browser: " + page); }
-        } else if (choice == 1) {
-            var clipboard = new org.eclipse.swt.dnd.Clipboard(ui);
-            try {
-                clipboard.setContents(new Object[] { message },
-                        new org.eclipse.swt.dnd.Transfer[] { org.eclipse.swt.dnd.TextTransfer.getInstance() });
-            } finally { clipboard.dispose(); }
+                "Device Registers Not Available", null, friendly,
+                org.eclipse.jface.dialogs.MessageDialog.WARNING,
+                new String[] { "Open Website", "Import Register Definitions", "Technical Details", "Close" }, 3);
+        switch (dialog.open()) {
+            case 0 -> org.eclipse.swt.program.Program.launch(page);
+            case 1 -> {
+                var picker = new FileDialog(getSite().getShell(), SWT.OPEN);
+                picker.setText("Import Device Register Definitions (.svd)");
+                picker.setFilterExtensions(new String[] { "*.svd;*.xml", "*.*" });
+                String file = picker.open();
+                if (file != null) {
+                    selectedBoard = board;
+                    load(file);
+                }
+            }
+            case 2 -> {
+                var details = new org.eclipse.jface.dialogs.MessageDialog(getSite().getShell(),
+                        "Technical Details", null, technical,
+                        org.eclipse.jface.dialogs.MessageDialog.INFORMATION,
+                        new String[] { "Copy Details", "Close" }, 1);
+                if (details.open() == 0) {
+                    var clipboard = new org.eclipse.swt.dnd.Clipboard(ui);
+                    try {
+                        clipboard.setContents(new Object[] { technical },
+                                new org.eclipse.swt.dnd.Transfer[] {
+                                        org.eclipse.swt.dnd.TextTransfer.getInstance() });
+                    } finally {
+                        clipboard.dispose();
+                    }
+                }
+            }
+            default -> { /* User closed the guidance. */ }
         }
     }
 
