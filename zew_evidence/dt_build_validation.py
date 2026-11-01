@@ -137,7 +137,8 @@ def _reason(log: Path, overlay: Path | None) -> dict:
 
 
 def _observed_generated(zephyr: Path, generated: Path, node: str,
-                        prop: str | None) -> bool | None:
+                        prop: str | None,
+                        expected: tuple[str, str | int] | None = None) -> bool | None:
     """Use exact selected upstream dtlib; no generated pickle, no raw values."""
     location = str(zephyr / "scripts/dts/python-devicetree/src")
     if not Path(location, "devicetree/dtlib.py").is_file():
@@ -151,7 +152,19 @@ def _observed_generated(zephyr: Path, generated: Path, node: str,
         dtlib = importlib.import_module("devicetree.dtlib")
         dts = dtlib.DT(str(generated))
         selected = dts.get_node(node)
-        return prop is None or prop in selected.props
+        if prop is None:
+            return expected is None
+        observed = selected.props.get(prop)
+        if observed is None:
+            return False
+        if expected is None:
+            return True
+        kind, value = expected
+        if kind == "int":
+            return observed.to_num() == value
+        if kind in ("status", "enum"):
+            return observed.to_string() == value
+        return False
     except Exception:
         return False
     finally:
@@ -165,9 +178,25 @@ def _observed_generated(zephyr: Path, generated: Path, node: str,
 def validate(build: Path, application: Path, zephyr: Path, python: Path, board: str,
              overlay: Path | None = None, ninja: Path | None = None,
              timeout: int = 300, scratch_parent: Path | None = None,
-             expect_node: str | None = None, expect_property: str | None = None) -> dict:
+             expect_node: str | None = None, expect_property: str | None = None,
+             draft_addition: str | None = None,
+             draft_original_sha256: str | None = None,
+             draft_expected: tuple[str, str | int] | None = None) -> dict:
     if expect_property is not None and expect_node is None:
         raise InputError("--expect-property requires --expect-node")
+    if draft_addition is None and (draft_original_sha256 is not None or draft_expected is not None):
+        raise InputError("Draft evidence requires an explicit guided source addition")
+    if draft_addition is not None:
+        if (overlay is None or expect_node is None or expect_property is None
+                or draft_expected is None or draft_original_sha256 is None
+                or not re.fullmatch(r"[a-f0-9]{64}", draft_original_sha256)):
+            raise InputError("Unsaved guide requires exact overlay and expected generated value")
+        if (not draft_addition.startswith("/* Review only — this does not validate pin/driver hardware. */\n&{")
+                or len(draft_addition.encode("utf-8")) > 8192
+                or not draft_addition.endswith(";\n};\n")):
+            raise InputError("Unsaved source addition is not a bounded headless guide draft")
+        if draft_expected[0] not in ("status", "enum", "int"):
+            raise InputError("Unknown generated property value verification kind")
     if expect_node is not None and (len(expect_node) > 240 or
                                     not _NODE.fullmatch(expect_node)):
         raise InputError("Expected node must be a bounded absolute DTS path")
@@ -222,13 +251,28 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
     candidate_sha = None
     candidate_rel = None
     if overlay is not None:
-        candidate = _canonical(overlay, "file")
+        if draft_addition is None:
+            candidate = _canonical(overlay, "file")
+        else:
+            proposed = Path(overlay).absolute()
+            if any(item.is_symlink() for item in (proposed, *proposed.parents)):
+                raise InputError("Symlinked candidate overlay is not supported")
+            if proposed.suffix != ".overlay" or not proposed.parent.is_dir():
+                raise InputError("Draft candidate must be an in-application .overlay")
+            if proposed.is_file():
+                candidate = _canonical(proposed, "file")
+            elif proposed.exists():
+                raise InputError("Non-regular candidate overlay")
+            else:
+                candidate = proposed
         if not candidate.is_relative_to(application):
             raise InputError("Candidate overlay must be inside the selected application")
-        if candidate.stat().st_size > 64 * 1024:
+        if candidate.is_file() and candidate.stat().st_size > 64 * 1024:
             raise InputError("Candidate overlay exceeds 64 KiB")
         candidate_rel = candidate.relative_to(application)
-        candidate_sha, _ = _digest(candidate)
+        candidate_sha = _digest(candidate)[0] if candidate.is_file() else "0" * 64
+        if draft_addition is not None and candidate_sha != draft_original_sha256:
+            raise InputError("Saved overlay changed since guided review")
     excluded = build
     # Only the environment explicitly supplied by caller is inherited; never
     # install providers, fetch modules, rewrite west config or probe hardware.
@@ -237,6 +281,24 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
         source = scratch / "application"
         source.mkdir()
         file_count, source_sha = _snapshot(application, source, excluded)
+        prepared_overlay_sha = None
+        if draft_addition is not None:
+            # The *only* mutation occurs in the disposable copied application.
+            # Its original bytes must exactly match the review snapshot.
+            source_overlay = source / candidate_rel
+            current_bytes = source_overlay.read_bytes() if source_overlay.is_file() else b""
+            if hashlib.sha256(current_bytes).hexdigest() != (
+                    candidate_sha if candidate_sha != "0" * 64
+                    else hashlib.sha256(b"").hexdigest()):
+                raise InputError("Copied source overlay no longer matches the reviewed input")
+            addition = draft_addition.encode("utf-8")
+            prepared = (current_bytes + (b"\n" if current_bytes and
+                        not current_bytes.endswith(b"\n") else b"") + addition)
+            if len(prepared) > 64 * 1024:
+                raise InputError("Prepared scratch overlay exceeds the bounded source limit")
+            source_overlay.parent.mkdir(parents=True, exist_ok=True)
+            source_overlay.write_bytes(prepared)
+            prepared_overlay_sha = hashlib.sha256(prepared).hexdigest()
         isolated_build = scratch / "build"
         command = [str(python), "-m", "west", "build", "--cmake-only",
                    "--pristine=always", "-b", board, "-d", str(isolated_build),
@@ -284,6 +346,10 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
                                 in actual.get("EXTRA_DTC_OVERLAY_FILE", "").replace("\\", "/"))
             if same_zephyr and same_board and overlay_in_cache:
                 observed = (_observed_generated(zephyr, scratch_dts,
+                                                expect_node, expect_property,
+                                                draft_expected)
+                            if draft_addition is not None else
+                            _observed_generated(zephyr, scratch_dts,
                                                 expect_node, expect_property)
                             if expect_node is not None else None)
                 if expect_node is not None and observed is not True:
@@ -302,8 +368,9 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
             outcome = "unavailable"
             explanation = {"code": "configure-timeout-or-launch-failed",
                            "diagnostic_classification": "observed"}
-    if _digest(original)[0] != original_sha or (candidate is not None and
-                                                _digest(candidate)[0] != candidate_sha):
+    if (_digest(original)[0] != original_sha
+            or (candidate is not None and (candidate.is_file() != (candidate_sha != "0" * 64)
+                or (candidate.is_file() and _digest(candidate)[0] != candidate_sha)))):
         outcome = "input-changed"
         explanation = {"code": "source-or-build-changed-during-check",
                        "diagnostic_classification": "observed"}
@@ -317,7 +384,11 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
         "application_snapshot_sha256": source_sha,
         "application_snapshot_files": file_count,
         "overlay": {"additional": candidate is not None, "sha256": candidate_sha,
-                    "mode": "EXTRA_DTC_OVERLAY_FILE (highest priority)" if candidate else "normal discovery"},
+                    "prepared_sha256": prepared_overlay_sha,
+                    "draft_staged_in_scratch_only": draft_addition is not None,
+                    "mode": ("unsaved-draft-in-disposable-source" if draft_addition is not None
+                             else "EXTRA_DTC_OVERLAY_FILE (highest priority)" if candidate
+                             else "normal discovery")},
         "generated_observation": {
             "requested": expect_node is not None,
             "node_sha256": hashlib.sha256(expect_node.encode("utf-8")).hexdigest()
@@ -334,7 +405,9 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
             "Application inputs were copied; absolute paths and custom CMake hooks can depend on the original environment.",
             "A successful CMake configure does not establish firmware compilation, flash, runtime, or electrical pin safety.",
             "Adding EXTRA_DTC_OVERLAY_FILE does not prove this overlay was already included by the original build.",
-            "A requested generated node/property checks only presence in the actual scratch DTS, not binding or runtime safety.",
+            ("Requested draft property value was observed in actual scratch DTS using selected dtlib."
+             if draft_addition is not None else
+             "A requested generated node/property checks only presence in the actual scratch DTS, not binding or runtime safety."),
             "Kconfig, Devicetree and module resolution depend on the caller's pinned workspace/toolchain environment.",
             "Custom CMake code executes during configuration; only use trusted application and Zephyr workspaces.",
             "Only bounded, sanitized diagnostic classes are exported; no raw stdout, paths or private source.",
