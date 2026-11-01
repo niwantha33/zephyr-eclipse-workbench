@@ -341,7 +341,7 @@ public final class SocRegistersView extends ViewPart {
         boolean approved = org.eclipse.jface.dialogs.MessageDialog.openQuestion(
                 getSite().getShell(), "Download official TI register definitions?",
                 "Download TexasInstruments MSPM0G1X0X_G3X0X Device Family Pack 1.3.1"
-                + " from keil.com into the managed workspace?\\n\\n"
+                + " from Texas Instruments into the managed workspace?\n\n"
                 + "The pack will be checked for an exact MSPM0G3507 device mapping. "
                 + "No MCU registers are read or written by this action.");
         if (!approved) return;
