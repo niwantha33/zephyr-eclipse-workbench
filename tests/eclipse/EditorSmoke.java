@@ -218,6 +218,39 @@ public final class EditorSmoke implements IApplication {
                     "installed hardware explorer exposes controller category navigation");
             hardwareState.select(0);
             hardwareSearch.setText("");
+            // Silicon catalogue is source-qualified and isolated from generated DTS.
+            var siliconSettingsField = type.getDeclaredField("inspectionSettings");
+            siliconSettingsField.setAccessible(true);
+            Object previousSiliconSettings = siliconSettingsField.get(view);
+            try {
+                var exactSiliconSettings = new java.util.Properties();
+                exactSiliconSettings.setProperty("board", "lp_mspm0g3507/mspm0g3507");
+                siliconSettingsField.set(view, exactSiliconSettings);
+                refresh.invoke(view);
+                var siliconTable = (org.eclipse.swt.widgets.Table) studioField(view, type, "vendorFeatures");
+                var siliconMessage = (org.eclipse.swt.widgets.Label) studioField(view, type, "vendorFeatureStatus");
+                check(siliconTable.getItemCount() >= 10
+                        && siliconMessage.getText().contains("Official TI specification")
+                        && java.util.Arrays.stream(siliconTable.getItems()).anyMatch(row ->
+                            row.getText(0).equals("ADC")
+                                && row.getText(1).startsWith("2 ")
+                                && row.getText(2).equals("1 DTS nodes"))
+                        && java.util.Arrays.stream(siliconTable.getItems()).anyMatch(row ->
+                            row.getText(0).equals("I2C")
+                                && row.getText(1).startsWith("2 ")
+                                && row.getText(2).equals("0 DTS nodes")),
+                        "installed silicon tab distinguishes official TI ADC/I2C silicon from actual DTS nodes");
+                var i2cSilicon = java.util.Arrays.stream(siliconTable.getItems())
+                        .filter(row -> row.getText(0).equals("I2C")).findFirst().orElseThrow();
+                siliconTable.setSelection(i2cSilicon);
+                siliconTable.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+                check(((org.eclipse.swt.widgets.Text) studioField(view, type, "vendorFeatureDescription"))
+                        .getText().contains("do not invent an overlay"),
+                        "missing Zephyr I2C binding does not become a fabricated configuration");
+            } finally {
+                siliconSettingsField.set(view, previousSiliconSettings);
+                refresh.invoke(view);
+            }
             kind.select(kind.indexOf("ADC"));
             kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             check(hardware.getItemCount() > 0
@@ -352,8 +385,9 @@ public final class EditorSmoke implements IApplication {
             hardwareSearch.setText("no-such-controller");
             check(hardware.getItemCount() == 0, "hardware search has an honest empty state");
             var guidance = (org.eclipse.swt.widgets.Label) studioField(view, type, "parameterTitle");
-            check(guidance.getText().contains("No peripheral matches this filter"),
-                    "built target with empty filter never falsely asks the user to rebuild");
+            check(guidance.getText().contains("filters hide all matches")
+                    && !guidance.getText().contains("NO GENERATED DTS"),
+                    "search-only empty state explains filter rather than pretending the build is missing");
             var cancel = new org.eclipse.swt.widgets.Event(); cancel.detail = org.eclipse.swt.SWT.ICON_CANCEL;
             hardwareSearch.notifyListeners(org.eclipse.swt.SWT.Selection, cancel);
             check(hardwareSearch.getText().isEmpty() && hardware.getItemCount() > 0,

@@ -59,6 +59,7 @@ import io.github.niwantha33.zew.core.GpioBankEvidence;
 import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
 import io.github.niwantha33.zew.core.PeripheralCoverage;
+import io.github.niwantha33.zew.core.VendorFeatureCatalogue;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
@@ -89,7 +90,9 @@ public final class ConfigurationStudioView extends ViewPart {
     private org.eclipse.swt.widgets.Tree hardwareDevices, hardwarePeripheralTree;
     private Text hardwareSearch;
     private Combo hardwareState, hardwareKind;
-    private Label hardwareSummary, navigationLocation;
+    private Label hardwareSummary, navigationLocation, vendorFeatureStatus;
+    private Table vendorFeatures;
+    private Text vendorFeatureDescription;
     private Button backButton, forwardButton;
     private final java.util.List<String> navigationHistory = new java.util.ArrayList<>();
     private int navigationPosition = -1;
@@ -475,6 +478,62 @@ public final class ConfigurationStudioView extends ViewPart {
             showHardwareParameters(selected);
         });
         hardwarePeripheralTree.addListener(SWT.DefaultSelection, event -> revealHardwareSource());
+
+        var siliconPage = tab(navTabs, "Silicon / vendor");
+        siliconPage.setLayout(new GridLayout(1, false));
+        vendorFeatureStatus = new Label(siliconPage, SWT.WRAP);
+        vendorFeatureStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        vendorFeatureStatus.setText("Silicon data requires an exact SoC and a verified vendor source.");
+        vendorFeatures = new Table(siliconPage, SWT.BORDER | SWT.SINGLE
+                | SWT.FULL_SELECTION | SWT.V_SCROLL | SWT.H_SCROLL);
+        vendorFeatures.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        vendorFeatures.setHeaderVisible(true);
+        vendorFeatures.setLinesVisible(true);
+        for (String columnTitle : new String[] {"Peripheral", "Vendor silicon spec", "Build DTS", "Evidence"}) {
+            var column = new TableColumn(vendorFeatures, SWT.LEFT);
+            column.setText(columnTitle);
+        }
+        vendorFeatures.getColumn(0).setWidth(95);
+        vendorFeatures.getColumn(1).setWidth(155);
+        vendorFeatures.getColumn(2).setWidth(95);
+        vendorFeatures.getColumn(3).setWidth(150);
+        vendorFeatureDescription = new Text(siliconPage, SWT.MULTI | SWT.WRAP
+                | SWT.READ_ONLY | SWT.V_SCROLL | SWT.BORDER);
+        GridData siliconDetails = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        siliconDetails.heightHint = 85;
+        vendorFeatureDescription.setLayoutData(siliconDetails);
+        vendorFeatureDescription.setText("Silicon capability is not Zephyr driver/DTS integration, "
+                + "electrical availability, or runtime use.");
+        vendorFeatures.addListener(SWT.Selection, event -> {
+            if (vendorFeatures.getSelectionCount() == 0) return;
+            var data = vendorFeatures.getSelection()[0].getData();
+            if (!(data instanceof VendorFeatureCatalogue.Feature feature)) return;
+            var described = snapshot == null ? List.<DevicetreeHardware.Device>of()
+                    : DevicetreeHardware.inspect(snapshot.devicetree());
+            var covered = PeripheralCoverage.count(described, feature.category());
+            vendorFeatureDescription.setText(feature.category() + " | TI silicon specification: "
+                    + feature.silicon() + " " + feature.unit()
+                    + "\n" + feature.details()
+                    + "\nSelected Zephyr DTS nodes: " + covered.present()
+                    + " (" + covered.enabled() + " okay/default, " + covered.disabled() + " disabled)."
+                    + (covered.present() == 0 ? "\nNo corresponding node in this build; do not invent an overlay." : "")
+                    + "\nVerified vendor source: " + feature.source());
+        });
+        var siliconActions = new Composite(siliconPage, SWT.NONE);
+        siliconActions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        siliconActions.setLayout(new GridLayout(2, true));
+        action(siliconActions, "Find exact register SVD…", this::openExactSiliconCatalogue);
+        action(siliconActions, "Explore selected DTS category", () -> {
+            if (vendorFeatures.getSelectionCount() == 0) return;
+            var selected = vendorFeatures.getSelection()[0].getData();
+            if (!(selected instanceof VendorFeatureCatalogue.Feature feature)) return;
+            hardwareSearch.setText("");
+            hardwareState.select(0);
+            int categoryIndex = hardwareKind.indexOf(feature.category());
+            hardwareKind.select(categoryIndex < 0 ? 0 : categoryIndex);
+            refreshHardware();
+            navTabs.setSelection(0);
+        });
 
         var devicetreeNav = tab(navTabs, "Devicetree");
         devicetreeNav.setLayout(new GridLayout(1, false));
@@ -2160,6 +2219,36 @@ public final class ConfigurationStudioView extends ViewPart {
         }
     }
 
+    /** Never put vendor silicon features into the generated-DTS tree. */
+    private void refreshVendorFeatures(List<DevicetreeHardware.Device> devices) {
+        if (vendorFeatures == null || vendorFeatures.isDisposed()) return;
+        vendorFeatures.removeAll();
+        String board = inspectionSettings == null ? "" : inspectionSettings.getProperty("board", "");
+        var catalogue = VendorFeatureCatalogue.exactPart(board);
+        if (catalogue == null) {
+            vendorFeatureStatus.setText("No reviewed exact-part silicon summary bundled for this target. "
+                    + "Use Find exact register SVD to inspect installed verified vendor data. "
+                    + "No hardware capability or Zephyr support is guessed.");
+            vendorFeatureDescription.setText("The generated DTS remains visible under Peripherals. "
+                    + "No silicon-level peripheral inventory is inferred from a family or Cortex-M CPU.");
+            return;
+        }
+        vendorFeatureStatus.setText("Official TI specification for exact " + catalogue.part()
+                + " (silicon only). Compare with Zephyr build DTS; package pins and driver support unverified.");
+        for (var feature : catalogue.features()) {
+            var count = PeripheralCoverage.count(devices, feature.category());
+            var item = new TableItem(vendorFeatures, SWT.NONE);
+            item.setText(new String[] {feature.category(), feature.silicon() + " " + feature.unit(),
+                    count.present() + " DTS nodes", "TI datasheet, not driver"});
+            item.setData(feature);
+        }
+        vendorFeatureDescription.setText("Selected build: " + devices.size()
+                + " total DTS nodes" + (buildOutdated ? " (BUILD REQUIRED / potentially stale)" : "")
+                + ". TI product features are a separate source. For each peripheral select a row "
+                + "to compare; missing DTS nodes are not safe to configure using invented overlays."
+                + "\nVendor source: " + catalogue.source());
+    }
+
     /** Group actual generated nodes, preserving children of matched controllers. */
     private void refreshPeripheralNavigation(List<DevicetreeHardware.Device> devices) {
         if (hardwarePeripheralTree == null || hardwarePeripheralTree.isDisposed()) return;
@@ -2483,6 +2572,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     + " matching / " + devices.size()
                     + " generated DTS nodes · silicon capabilities require an exact vendor SVD.");
             refreshPeripheralNavigation(devices);
+            refreshVendorFeatures(devices);
         } finally { hardwareDevices.setRedraw(true); }
     }
 
