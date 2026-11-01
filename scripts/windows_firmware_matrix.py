@@ -495,6 +495,51 @@ def main():
                         hashlib.sha256((Path(build_arg) / 'zephyr/zephyr.dts').read_bytes()).hexdigest()):
                 raise ValueError('Real TI bound GPIO source-guide positive acceptance failed')
             print('PASS: real TI GPIO controller bound by Zephyr edtlib produced review-only source draft')
+            # A stronger, UNSAVED guided draft preflight: use the REAL TI
+            # GPIO node that upstream edtlib just verified. Stage status
+            # only in a disposable app copy, execute genuine Zephyr
+            # West/CMake, and require exact dtlib generated string match.
+            # "okay" is intentionally non-disruptive for board consumers.
+            original_dts_bytes = (Path(build_arg) / 'zephyr/zephyr.dts').read_bytes()
+            ci_overlay = app / 'app.overlay'
+            before_ci_overlay = (hashlib.sha256(ci_overlay.read_bytes()).hexdigest()
+                                 if ci_overlay.is_file() else None)
+            scratch_parent = root / 'unsaved-draft-scratch'
+            scratch_parent.mkdir(exist_ok=True)
+            unsaved = subprocess.run([
+                str(python), str(REPO / 'zew.py'), 'dt-draft-configure',
+                '--build', str(build_arg), '--application', str(app),
+                '--zephyr', str(Path(workspace_arg) / 'zephyr'),
+                '--python', str(python), '--board', str(target),
+                '--node', actual_node, '--overlay', str(ci_overlay),
+                '--status', 'okay', '--kind', 'gpio',
+                '--ninja', str(ninja), '--timeout', '300',
+                '--scratch-parent', str(scratch_parent)
+            ], cwd=REPO, env=env, capture_output=True, text=True,
+               encoding='utf-8', errors='replace', timeout=390)
+            try:
+                checked_draft = json.loads(unsaved.stdout)
+            except (ValueError, TypeError) as error:
+                raise ValueError('Real TI unsaved guide CMake preflight returned no JSON') from error
+            if (unsaved.returncode != 0
+                    or checked_draft['status'] != 'configured-in-scratch'
+                    or checked_draft['post_generated_value']['state'] != 'exact-value-observed'
+                    or checked_draft['real_configure']['generated_observation']['state'] != 'present'
+                    or checked_draft['real_configure']['overlay']['draft_staged_in_scratch_only'] is not True
+                    or checked_draft['real_configure']['overlay']['prepared_sha256']
+                        != checked_draft['guide']['proposed_overlay_sha256']
+                    or checked_draft['guide']['generated_dts_sha256']
+                        != hashlib.sha256(original_dts_bytes).hexdigest()):
+                raise ValueError('Real TI unsaved guided status preflight was not proven: '
+                                 + str(checked_draft.get('real_configure', {}).get('diagnostic', {}))[:300])
+            if (Path(build_arg) / 'zephyr/zephyr.dts').read_bytes() != original_dts_bytes:
+                raise ValueError('Unsaved guide preflight mutated the selected generated DTS')
+            if ((hashlib.sha256(ci_overlay.read_bytes()).hexdigest()
+                 if ci_overlay.is_file() else None) != before_ci_overlay):
+                raise ValueError('Unsaved guide preflight mutated the actual app.overlay')
+            if list(scratch_parent.iterdir()):
+                raise ValueError('Unsaved guide preflight leaked disposable source/build data')
+            print('PASS: real TI guided unsaved source applied in scratch and exact DTS value observed')
             gui_overlay = app / 'app.overlay'
             before_gui_overlay = (hashlib.sha256(gui_overlay.read_bytes()).hexdigest()
                                   if gui_overlay.is_file() else None)
