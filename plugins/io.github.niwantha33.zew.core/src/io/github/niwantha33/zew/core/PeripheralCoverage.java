@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.core;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -37,11 +36,6 @@ public final class PeripheralCoverage {
         int found = 0, enabled = 0;
         for (var device : devices) {
             if (!HardwarePeripheralIndex.matches(device, category)) continue;
-            if (HardwarePeripheralIndex.category(device).equals("Other")
-                    && !HardwarePeripheralIndex.ALL.equals(category)) {
-                // "Other" is a navigation category, not a peripheral tally.
-                continue;
-            }
             found++;
             if (effectiveEnabled(device, devices)) enabled++;
         }
