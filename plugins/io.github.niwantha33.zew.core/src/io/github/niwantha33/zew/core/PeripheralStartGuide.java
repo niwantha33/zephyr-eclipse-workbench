@@ -141,6 +141,8 @@ public final class PeripheralStartGuide {
         }
         var io = properties.stream().filter(p -> p.path().equals("/zephyr,user")
                 && p.name().equals("io-channels")).findFirst().orElse(null);
+        boolean oneCellInput = properties.stream().anyMatch(p -> p.path().equals(path)
+                && p.name().equals("#io-channel-cells") && "1".equals(singleCell(p.value())));
         int matchedIndex = -1;
         String channel = "";
         boolean ambiguous = false;
@@ -166,7 +168,7 @@ public final class PeripheralStartGuide {
             }
             if (index == 0) ambiguous = true;
         }
-        boolean ioMatched = !ambiguous && matchedIndex >= 0;
+        boolean ioMatched = oneCellInput && !ambiguous && matchedIndex >= 0;
         String adcSteps = common
                 + "ADC-specific Devicetree relationships:\n"
                 + "  • Controller node: " + path + "\n"
@@ -191,6 +193,20 @@ public final class PeripheralStartGuide {
                 + "verifying the matching ADC input and pinctrl.\n"
                 + "// See Zephyr sample: " + sample("ADC") + "\n",
                 "", sample("ADC"), selected.line());
+        // Require an actual child channel configuration for adc_channel_setup_dt.
+        // Without it the sample may configure no gain/reference or simply fail.
+        String channelPath = path + "/channel@" + channel;
+        boolean configuredChannel = devices.stream().anyMatch(d -> d.path().equals(channelPath))
+                && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,gain"))
+                && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,reference"))
+                && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,acquisition-time"))
+                && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,resolution"));
+        if (!configuredChannel) return new Guide("ADC", path, State.SETUP_REQUIRED,
+                "An io-channels link to this controller exists, but channel@" + channel
+                + " lacks a verified complete Zephyr ADC child configuration. " + scope,
+                adcSteps + "Inspect " + channelPath + " for actual gain/reference/acquisition-time/resolution "
+                + "and pin mapping. The example remains withheld until the generated DTS is complete.",
+                config("ADC", effectiveKconfig), "", "", sample("ADC"), selected.line());
         String cCode = adcExample(matchedIndex, channel);
         return new Guide("ADC", path, State.ADC_WIRING_FOUND,
                 "Existing generated DTS connects /zephyr,user io-channels index "
@@ -208,7 +224,7 @@ public final class PeripheralStartGuide {
         // This example follows the Zephyr 4.4 adc_dt sample. It is a scaffold,
         // never a claim of compiled firmware or verified physical ADC input.
         return """
-                /* REFERENCE EXAMPLE — do not overwrite working main.c.
+                /* REFERENCE EXAMPLE — do not overwrite working main.c.\n                 * This buffer holds a raw storage word, NOT a calibrated voltage.
                  * Generated DTS has io-channels index INDEX -> input CHANNEL.
                  * Verify gain/reference/pinctrl/channel child before building.
                  */
@@ -219,8 +235,7 @@ public final class PeripheralStartGuide {
                 #include <zephyr/sys/printk.h>
                 #include <stdint.h>
 
-                #if !DT_NODE_EXISTS(DT_PATH(zephyr_user)) || \\
-                    !DT_NODE_HAS_PROP(DT_PATH(zephyr_user), io_channels)
+                #if !DT_NODE_EXISTS(DT_PATH(zephyr_user)) || !DT_NODE_HAS_PROP(DT_PATH(zephyr_user), io_channels)
                 #error "Missing zephyr,user io-channels: review app.overlay and rebuild"
                 #endif
                 static const struct adc_dt_spec adc_input =
@@ -228,7 +243,7 @@ public final class PeripheralStartGuide {
 
                 int main(void)
                 {
-                    int16_t sample = 0;
+                    uint32_t sample = 0;
                     struct adc_sequence sequence = {
                         .buffer = &sample,
                         .buffer_size = sizeof(sample),
@@ -246,7 +261,7 @@ public final class PeripheralStartGuide {
                         (void)adc_sequence_init_dt(&adc_input, &sequence);
                         err = adc_read_dt(&adc_input, &sequence);
                         if (err == 0) {
-                            printk("ADC raw: %d\\n", sample);
+                            printk("ADC raw sample storage: 0x%x\\n", sample);
                         } else {
                             printk("ADC read failed: %d\\n", err);
                         }
