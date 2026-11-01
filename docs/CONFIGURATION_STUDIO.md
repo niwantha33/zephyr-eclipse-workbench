@@ -419,3 +419,47 @@ without CMake execution, source changes, flashing, probe access or network.
 **No pin-free, driver-compiled, runtime-ready, electrical or physical
 package pin assertions are made.** Existing source-change review and
 opt-in real CMake validation remain separate workflows. G0 remains open.
+
+
+## Guided binding-grounded peripheral draft in native Configuration Studio
+
+The existing **Hardware** and **Insights** toolbars now include **Guided overlay
+draft…**; the existing parameter panel also has **Guided binding draft…**.
+Select a real node from the last generated Devicetree. You can request:
+**Enable node**, **Disable node**, **Existing integer property…**, or
+**Binding string enum…**. An integer or enum request requires selecting one
+real built property belonging to the *same* selected node. Unknown binding
+types or choices never produce an accepted draft.
+
+A separate dialog asks before showing a local source diff, which may include
+existing application source. It calls the installed exact-copy headless
+`zew peripheral-guide` using the selected managed Python, selected Zephyr
+checkout, current build directory and `selectedOverlay`. Python source
+parity tests prevent the installed evaluator from diverging from the CLI.
+
+When the selected upstream binding permits the source intent, the native UI
+displays a **unified diff** in the existing **Changes / app.overlay** dock.
+The existing **Copy proposed change** button copies *only the new addition*,
+not existing overlay context or secret comments. **Edit application overlay…**
+opens the normal source editor so the user can review and save it; this action
+has **no auto-save or auto-apply path**.
+
+The existing **Validation / evidence** dock and **Insights** show the
+selected generated DTS and original/proposed overlay hashes, binding status,
+requested property type and explicitly limited confidence. The native bridge
+validates a typed bounded protocol, node/property SHA-256 identities, actual
+generated DTS hash and original overlay hash before accepting results.
+Background execution can be cancelled, and stale project/build/node/property/
+overlay selections discard responses. It never flashes hardware.
+
+After deliberate source saving, use **Real configure + saved overlay** to run
+the separate opt-in actual West/CMake configuration in disposable scratch.
+That operation does not validate physical pins or actual firmware execution.
+
+The current native guide is deliberately limited to node status, real
+existing unsigned integer properties, and actual Zephyr string enums.
+No generated GPIO/pin assignment, phandle, IRQ, DMA, pinctrl, clock routing,
+driver ownership, or physical device availability is inferred. The UI does
+not invent values or convert unknown results into successful diagnoses.
+
+**G0 remains OPEN; no release-readiness claim.**

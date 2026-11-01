@@ -103,6 +103,50 @@ public final class ConfigurationStudioTests {
                     encodePeripheral.apply(wrongPeripheralConfig), selectedNode, "ngpios", selectedSymbol));
             rejects(() -> io.github.niwantha33.zew.core.PeripheralEvidenceInspector.parse(
                     "ZEW-PERIPHERAL-1\nnot-base64", selectedNode, "ngpios", selectedSymbol));
+            String[] guideFields = {"draft-requires-real-configuration", "status",
+                    nodeDigest, java.util.HexFormat.of().formatHex(sha256.digest(
+                        "status".getBytes(java.nio.charset.StandardCharsets.UTF_8))),
+                    "a".repeat(64), "b".repeat(64), "c".repeat(64),
+                    "matched", "confirmed", "status-string", "okay",
+                    "existing-file-proposal",
+                    "--- selected-overlay-before\n+++ selected-overlay-proposal\n@@ -1 +1,5 @@\n"
+                    + " /* unchanged */\n+/* Review only — this does not validate pin/driver hardware. */\n"
+                    + "+&{/soc/gpio@1234} {\n+    status = \"disabled\";\n+};\n",
+                    "/* Review only — this does not validate pin/driver hardware. */\n"
+                    + "&{/soc/gpio@1234} {\n    status = \"disabled\";\n};\n"};
+            java.util.function.Function<String[], String> guideWire = fields -> {
+                var data = new StringBuilder("ZEW-GUIDE-1\n");
+                for (int i = 0; i < fields.length; i++) {
+                    if (i > 0) data.append('\t');
+                    data.append(encode.encodeToString(fields[i].getBytes(
+                            java.nio.charset.StandardCharsets.UTF_8)));
+                }
+                return data.toString();
+            };
+            var guided = io.github.niwantha33.zew.core.PeripheralGuideInspector.parse(
+                    guideWire.apply(guideFields), selectedNode, "status");
+            ok(guided.hasDraft() && guided.addition().contains("status = \"disabled\"")
+                    && guided.describe(selectedNode, "status", "status", false)
+                        .contains("NOT proof"),
+                    "guided preview provides source-only evidence and exact copyable addition");
+            final String[] wrongGuideHash = guideFields.clone();
+            wrongGuideHash[2] = "d".repeat(64);
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralGuideInspector.parse(
+                    guideWire.apply(wrongGuideHash), selectedNode, "status"));
+            final String[] unknownGuideProperty = guideFields.clone();
+            unknownGuideProperty[7] = "unmatched";
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralGuideInspector.parse(
+                    guideWire.apply(unknownGuideProperty), selectedNode, "status"));
+            final String[] missingGuideDiff = guideFields.clone();
+            missingGuideDiff[13] = "";
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralGuideInspector.parse(
+                    guideWire.apply(missingGuideDiff), selectedNode, "status"));
+            final String[] injectedGuideValue = guideFields.clone();
+            injectedGuideValue[8] = "ready-for-flash";
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralGuideInspector.parse(
+                    guideWire.apply(injectedGuideValue), selectedNode, "status"));
+            rejects(() -> io.github.niwantha33.zew.core.PeripheralGuideInspector.parse(
+                    "ZEW-GUIDE-1\nbad", selectedNode, "status"));
             var parsed = io.github.niwantha33.zew.core.KconfigInspector.parse(message.toString());
             // Native EDT bridge accepts only the bounded structured protocol,
             // never raw paths/values or an invented "interpreted" status.
