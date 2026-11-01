@@ -56,12 +56,15 @@ public final class PeripheralStartGuide {
                 "", "", sample(selectedCategory), -1);
         var devices = DevicetreeHardware.inspect(source);
         DevicetreeHardware.Device selected = null;
+        String requestedAdcInput = "";
         if (selectedPath != null) {
             for (var device : devices) if (device.path().equals(selectedPath)) {
                 selected = device;
                 break;
             }
             if (selected != null && selected.name().startsWith("channel@")) {
+                Long input = number(selected.name().substring("channel@".length()));
+                requestedAdcInput = input == null ? "" : Long.toString(input);
                 String parent = selected.path().substring(0, selected.path().lastIndexOf('/'));
                 selected = devices.stream().filter(device -> device.path().equals(parent))
                         .findFirst().orElse(null);
@@ -132,9 +135,13 @@ public final class PeripheralStartGuide {
         }
         var properties = DevicetreeParameters.inspect(source);
         var aliases = new LinkedHashMap<Long, String>();
+        var duplicatePhandles = new java.util.HashSet<Long>();
         for (var p : properties) if (p.name().equals("phandle")) {
             Long parsed = number(singleCell(p.value()));
-            if (parsed != null) aliases.putIfAbsent(parsed, p.path());
+            if (parsed != null) {
+                String previous = aliases.putIfAbsent(parsed, p.path());
+                if (previous != null && !previous.equals(p.path())) duplicatePhandles.add(parsed);
+            }
         }
         var io = properties.stream().filter(p -> p.path().equals("/zephyr,user")
                 && p.name().equals("io-channels")).findFirst().orElse(null);
@@ -157,9 +164,13 @@ public final class PeripheralStartGuide {
                 Long id = number(parts[1]);
                 if (phandle == null || id == null) { ambiguous = true; break; }
                 if (path.equals(aliases.get(phandle))) {
-                    if (matchedIndex != -1) { ambiguous = true; break; }
-                    matchedIndex = index;
-                    channel = Long.toString(id);
+                    if (duplicatePhandles.contains(phandle)) { ambiguous = true; break; }
+                    String input = Long.toString(id);
+                    if (requestedAdcInput.isEmpty() || requestedAdcInput.equals(input)) {
+                        if (matchedIndex != -1) { ambiguous = true; break; }
+                        matchedIndex = index;
+                        channel = input;
+                    }
                 }
                 index++;
             }
@@ -194,6 +205,9 @@ public final class PeripheralStartGuide {
         // Without it the sample may configure no gain/reference or simply fail.
         String channelPath = path + "/channel@" + channel;
         boolean configuredChannel = devices.stream().anyMatch(d -> d.path().equals(channelPath))
+                && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("reg")
+                        && channel.equals(Long.toString(number(singleCell(p.value())) == null
+                                ? -1 : number(singleCell(p.value())))))
                 && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,gain"))
                 && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,reference"))
                 && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,acquisition-time"))
