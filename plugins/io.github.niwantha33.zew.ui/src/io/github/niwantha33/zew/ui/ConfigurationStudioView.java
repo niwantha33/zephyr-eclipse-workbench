@@ -57,6 +57,7 @@ import io.github.niwantha33.zew.core.DevicetreeDraftConfigureInspector;
 import io.github.niwantha33.zew.core.GpioBankEvidence;
 import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
+import io.github.niwantha33.zew.core.PeripheralCoverage;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
@@ -431,6 +432,21 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareState.setItems("All nodes", "Okay/default", "Disabled");
         hardwareState.select(0);
         hardwareState.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        var catalogueTools = new Composite(devicePanel, SWT.NONE);
+        catalogueTools.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        catalogueTools.setLayout(new GridLayout(2, true));
+        Button allPeripheralCategories = action(catalogueTools, "Show all DTS controllers", () -> {
+            hardwareSearch.setText("");
+            hardwareState.select(0);
+            hardwareKind.select(0);
+            refreshHardware();
+        });
+        allPeripheralCategories.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        allPeripheralCategories.setToolTipText("Clear category/search/status filters; only real generated Zephyr DTS nodes appear.");
+        Button exactSilicon = action(catalogueTools, "Exact silicon catalogue (SVD)…",
+                this::openExactSiliconCatalogue);
+        exactSilicon.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        exactSilicon.setToolTipText("View exact vendor SVD peripheral/register descriptions, separate from Zephyr DTS.");
         var navTabs = new TabFolder(devicePanel, SWT.NONE);
         navTabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
@@ -2031,6 +2047,27 @@ public final class ConfigurationStudioView extends ViewPart {
         }
     }
 
+    /**
+     * Launch the existing on-demand exact-part vendor SVD discovery. Never
+     * mistake SVD-only register blocks for Zephyr-driver enabled devices.
+     */
+    private void openExactSiliconCatalogue() {
+        if (project == null || !project.isAccessible()) {
+            MessageDialog.openInformation(getSite().getShell(), "Exact silicon catalogue",
+                    "Select an imported project with an exact board/SoC first.");
+            return;
+        }
+        try {
+            var view = getSite().getWorkbenchWindow().getActivePage()
+                    .showView(SocRegistersHandler.VIEW_ID);
+            if (view instanceof SocRegistersView registers) registers.useLaunchProject(project);
+            status.setText("Searching installed exact vendor SVD for " + project.getName()
+                    + ". This catalogue does not establish Zephyr DTS or driver support.");
+        } catch (org.eclipse.ui.PartInitException error) {
+            MessageDialog.openError(getSite().getShell(), "Cannot open SVD catalogue", error.getMessage());
+        }
+    }
+
     /** Group actual generated nodes, preserving children of matched controllers. */
     private void refreshPeripheralNavigation(List<DevicetreeHardware.Device> devices) {
         if (hardwarePeripheralTree == null || hardwarePeripheralTree.isDisposed()) return;
@@ -2073,14 +2110,15 @@ public final class ConfigurationStudioView extends ViewPart {
                 // Child ADC channels remain under their actual controller.
                 boolean child = parentItem != null;
                 if (!child && (!HardwarePeripheralIndex.matches(device, categoryFilter)
-                        || !DevicetreeHardware.matches(device, query, state))) continue;
+                        || !PeripheralCoverage.matches(device, devices, categoryFilter, state, query))) continue;
                 if (!child && name.startsWith("channel@")) continue;
                 var group = groups.get(category);
                 if (parentItem == null && group == null) continue;
                 var item = parentItem != null
                         ? new org.eclipse.swt.widgets.TreeItem(parentItem, SWT.NONE)
                         : new org.eclipse.swt.widgets.TreeItem(group, SWT.NONE);
-                item.setText(name + (device.enabled() ? "" : "  [disabled]"));
+                item.setText(name + (PeripheralCoverage.effectiveEnabled(device, devices)
+                        ? "  [DTS okay]" : "  [DTS disabled]"));
                 item.setData(device);
                 item.setData("path", device.path());
                 item.setExpanded(true);
@@ -2265,8 +2303,8 @@ public final class ConfigurationStudioView extends ViewPart {
                 : DevicetreeHardware.inspect(snapshot.devicetree());
         var matches = new java.util.LinkedHashSet<String>();
         for (var device : devices)
-            if (HardwarePeripheralIndex.matches(device, hardwareKind.getText())
-                    && DevicetreeHardware.matches(device, hardwareSearch.getText(), hardwareState.getText()))
+            if (PeripheralCoverage.matches(device, devices, hardwareKind.getText(),
+                    hardwareState.getText(), hardwareSearch.getText()))
                 matches.add(device.path());
         var visible = new java.util.HashSet<>(matches);
         // Keep ADC channels and other descendants accessible under matching controllers.
@@ -2299,7 +2337,9 @@ public final class ConfigurationStudioView extends ViewPart {
                 var item = parentItem == null ? new org.eclipse.swt.widgets.TreeItem(hardwareDevices, SWT.NONE)
                         : new org.eclipse.swt.widgets.TreeItem(parentItem, SWT.NONE);
                 item.setText(new String[] {device.name(), device.compatible(),
-                        device.status().isBlank() ? "Default (okay)" : device.status()});
+                        PeripheralCoverage.effectiveEnabled(device, devices)
+                                ? (device.status().isBlank() ? "DTS default (okay)" : device.status())
+                                : "DTS disabled/inherited"});
                 item.setData(device);
                 item.setExpanded(expanded.contains(device.path()) || device.path().equals("/")
                         || !hardwareSearch.getText().isBlank() || hardwareState.getSelectionIndex() != 0);
@@ -2326,14 +2366,30 @@ public final class ConfigurationStudioView extends ViewPart {
                 hardwareDevices.showSelection();
                 describeHardware();
             } else {
-                hardwareDescription.setText(devices.isEmpty()
-                        ? "Build the exact target to generate zephyr.dts. Existing overlays remain editable."
-                        : "No matching built nodes for " + hardwareKind.getText()
-                                + ". Clear search or change category/status.");
                 showHardwareParameters(null);
+                var coverage = PeripheralCoverage.explain(devices, hardwareKind.getText(),
+                        hardwareState.getText(), hardwareSearch.getText(), buildOutdated);
+                hardwareDescription.setText(coverage.explanation());
+                hardwareInspector.setText(coverage.explanation());
+                hardwareValidation.setText(coverage.explanation());
+                parameterTitle.setText(coverage.explanation());
             }
-            hardwareSummary.setText(matches.size() + " matching nodes · " + devices.size()
-                    + " in build · source tree and grouped peripherals are read-only");
+            var coverage = PeripheralCoverage.explain(devices, hardwareKind.getText(),
+                    hardwareState.getText(), hardwareSearch.getText(), buildOutdated);
+            var available = PeripheralCoverage.allCounts(devices);
+            StringBuilder categories = new StringBuilder();
+            for (String kind : HardwarePeripheralIndex.FILTERS) {
+                if (HardwarePeripheralIndex.ALL.equals(kind) || "Other".equals(kind)) continue;
+                var count = available.get(kind);
+                if (categories.length() > 0) categories.append(" · ");
+                categories.append(kind).append(" ").append(count.present())
+                        .append(" (").append(count.enabled()).append(" okay/")
+                        .append(count.disabled()).append(" disabled)");
+            }
+            hardwareKind.setToolTipText("Generated DTS counts (not silicon availability): " + categories);
+            hardwareSummary.setText(coverage.explanation() + "\n" + matches.size()
+                    + " matching / " + devices.size()
+                    + " generated DTS nodes · silicon capabilities require an exact vendor SVD.");
             refreshPeripheralNavigation(devices);
         } finally { hardwareDevices.setRedraw(true); }
     }
