@@ -38,13 +38,10 @@ public final class PeripheralStartGuide {
     private static final Map<String, String> SAMPLES = Map.ofEntries(
             Map.entry("ADC", "samples/drivers/adc/adc_dt"),
             Map.entry("UART", "samples/subsys/console/echo"),
-            Map.entry("I2C", "samples/drivers/i2c"),
-            Map.entry("SPI", "samples/drivers/spi"),
-            Map.entry("CAN", "samples/drivers/can"),
+            Map.entry("CAN", "samples/drivers/can/counter"),
             Map.entry("GPIO", "samples/basic/blinky"),
-            Map.entry("PWM", "samples/drivers/pwm"),
             Map.entry("DAC", "samples/drivers/dac"),
-            Map.entry("I2S", "samples/drivers/i2s"));
+            Map.entry("I2S", "samples/drivers/i2s/echo"));
 
     public static Guide inspect(String generatedDts, String category, String selectedPath,
                                 String effectiveKconfig, boolean stale) {
@@ -274,8 +271,12 @@ public final class PeripheralStartGuide {
 
     private static String sample(String category) {
         String path = SAMPLES.get(category);
-        return path == null ? "docs.zephyrproject.org/latest/hardware/peripherals/"
-                : "https://github.com/zephyrproject-rtos/zephyr/tree/v4.4.0/" + path;
+        return path == null ? switch (category) {
+            case "I2C" -> "https://docs.zephyrproject.org/latest/hardware/peripherals/i2c.html";
+            case "SPI" -> "https://docs.zephyrproject.org/latest/hardware/peripherals/spi.html";
+            case "PWM" -> "https://docs.zephyrproject.org/latest/hardware/peripherals/pwm.html";
+            default -> "https://docs.zephyrproject.org/latest/samples/index.html";
+        } : "https://github.com/zephyrproject-rtos/zephyr/tree/v4.4.0/" + path;
     }
 
     private static String config(String category, String effective) {
