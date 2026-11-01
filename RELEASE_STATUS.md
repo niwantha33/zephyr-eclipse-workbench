@@ -414,3 +414,26 @@ passing these prototype tests.
   capability, physical probing or runtime validation.
 - Exact PR head CI and manual installed UI acceptance remain prerequisites
   to merge and release. **G0 OPEN; no commercial release approval.**
+
+
+## Phase-0 binding-grounded guided peripheral source draft (development PR)
+
+- Added headless `zew peripheral-guide` for explicit GPIO, ADC, SPI or I²C
+  *review intent* grounded in the exact built generated DTS and selected
+  upstream Zephyr edtlib binding. No new SWT pin editor or fake wizard.
+- Conservative supported requests are source-only node status, existing
+  binding-interpreted 32-bit unsigned integer properties and existing
+  binding-interpreted string enum options. Exact type, const and enum checks
+  and deprecated-property rejection are applied when known.
+- Symbolic `&{/selected/node}` source proposal is **not** written; users
+  must opt into `--show-diff` to see private saved overlay context. Default
+  machine JSON exposes only fixed classifications and hashes.
+- Structural/pinctrl/gpios, compatible, clocks, DMA, interrupts, raw
+  phandles, source rewrites and electrical pins are excluded. Missing binding,
+  unknown types or unsupported commands yield manual review, not guessed
+  outputs. The requested peripheral kind is never classified as verified.
+- Unit fixtures cover exact selected checkout and real-style upstream spec,
+  negative property/enum/secret cases, source protection, explicit sysbuild
+  image and deterministic/privacy behavior. Real seven-target Windows matrix
+  exercises the guide's generated DTS provenance and no-guess contract.
+- No build, flash, hardware, licence or G0 qualification claim. **G0 OPEN.**
