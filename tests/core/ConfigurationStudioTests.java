@@ -843,6 +843,129 @@ public final class ConfigurationStudioTests {
                     .explanation().contains("NO GENERATED DTS"),
                     "no DTS never implies no peripherals in the silicon");
 
+            // DTS-first onboarding must not manufacture ADC pins, drivers or an
+            // application scaffold when this Zephyr/board has no controller.
+            var adcStart = io.github.niwantha33.zew.core.PeripheralStartGuide.class;
+            var noBuild = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    "", "ADC", null, "", false);
+            ok(noBuild.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.BUILD_REQUIRED
+                    && noBuild.cExample().isBlank(), "no build cannot offer invented ADC code");
+            var noAdc = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    mspm0Dts, "ADC", null, "CONFIG_ADC=y", false);
+            ok(noAdc.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.NOT_IN_DTS
+                    && noAdc.cExample().isBlank()
+                    && noAdc.explanation().contains("NOT evidence"),
+                    "MSPM0 Zephyr DTS missing ADC shows upstream-support path rather than an overlay");
+            String twoAdcs = """
+                    / {
+                        soc {
+                            adc0: adc@4000 {
+                                compatible = "vendor,adc";
+                                status = "okay";
+                                phandle = <0x10>;
+                                #io-channel-cells = <1>;
+                                #address-cells = <1>;
+                                #size-cells = <0>;
+                                channel@3 {
+                                    reg = <3>;
+                                    zephyr,gain = "ADC_GAIN_1";
+                                    zephyr,reference = "ADC_REF_INTERNAL";
+                                    zephyr,acquisition-time = <0>;
+                                    zephyr,resolution = <12>;
+                                };
+                            };
+                            adc1: adc@6000 {
+                                compatible = "vendor,adc";
+                                status = "okay";
+                                phandle = <0x20>;
+                                #io-channel-cells = <1>;
+                                channel@2 {
+                                    reg = <2>;
+                                };
+                            };
+                            uart0: uart@5000 {
+                                compatible = "vendor,uart";
+                                status = "disabled";
+                            };
+                        };
+                        zephyr,user {
+                            io-channels = <0x20 2>, <0x10 3>;
+                        };
+                    };
+                    """;
+            var wired = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    twoAdcs, "ADC", "/soc/adc@4000/channel@3", "CONFIG_ADC=y", false);
+            ok(wired.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.ADC_WIRING_FOUND
+                    && wired.controllerPath().equals("/soc/adc@4000")
+                    && wired.cExample().contains("DT_PATH(zephyr_user), 1")
+                    && wired.cExample().contains("adc_channel_setup_dt")
+                    && wired.cExample().contains("adc_sequence_init_dt")
+                    && wired.cExample().contains("adc_read_dt")
+                    && wired.cExample().contains("uint32_t sample")
+                    && wired.cExample().contains("raw sample storage")
+                    && wired.steps().contains("input 3"),
+                    "exact controller phandle and index choose ADC #1 without invented package pin");
+            String multipleInputs = twoAdcs.replace("<0x20 2>, <0x10 3>",
+                    "<0x10 5>, <0x10 3>");
+            var exactChannel = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    multipleInputs, "ADC", "/soc/adc@4000/channel@3", "CONFIG_ADC=y", false);
+            ok(exactChannel.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.ADC_WIRING_FOUND
+                    && exactChannel.cExample().contains("DT_PATH(zephyr_user), 1"),
+                    "explicit selected ADC channel selects exact index among multiple io-channels");
+            var ambiguousController = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    multipleInputs, "ADC", "/soc/adc@4000", "CONFIG_ADC=y", false);
+            ok(ambiguousController.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.SETUP_REQUIRED
+                    && ambiguousController.cExample().isBlank(),
+                    "without channel selection multiple inputs require user choice, never guess");
+            String duplicateHandle = twoAdcs.replace("phandle = <0x20>;", "phandle = <0x10>;");
+            ok(io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    duplicateHandle, "ADC", "/soc/adc@4000/channel@3", "CONFIG_ADC=y", false)
+                    .cExample().isBlank(), "duplicate Devicetree phandle identity blocks automatic channel match");
+            String mismatchedReg = twoAdcs.replace("reg = <3>;", "reg = <9>;");
+            ok(io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    mismatchedReg, "ADC", "/soc/adc@4000/channel@3", "CONFIG_ADC=y", false)
+                    .cExample().isBlank(), "ADC child reg must match io-channel input before sample generation");
+            var partialAdc = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    twoAdcs, "ADC", "/soc/adc@6000", "CONFIG_ADC=y", false);
+            ok(partialAdc.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.SETUP_REQUIRED
+                    && partialAdc.cExample().isBlank(),
+                    "ADC with io-channels but missing channel settings cannot promise working example");
+            var staleAdc = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    twoAdcs, "ADC", "/soc/adc@4000", "CONFIG_ADC=y", true);
+            ok(staleAdc.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.BUILD_REQUIRED
+                    && staleAdc.cExample().isBlank(),
+                    "stale build disables ADC scaffold even if last generated DTS had wiring");
+            String noIo = twoAdcs.replace("io-channels = <0x20 2>, <0x10 3>;", "");
+            var disconnected = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    noIo, "ADC", "/soc/adc@4000", "CONFIG_ADC=y", false);
+            ok(disconnected.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.SETUP_REQUIRED
+                    && disconnected.cExample().isBlank(), "no zephyr,user io-channels blocks example");
+            String disabledAdc = twoAdcs.replaceFirst("status = \"okay\";", "status = \"disabled\";");
+            var off = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    disabledAdc, "ADC", "/soc/adc@4000", "CONFIG_ADC=y", false);
+            ok(off.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.DTS_DISABLED
+                    && off.cExample().isBlank(), "disabled ADC never treated as available");
+            var uartGuide = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    twoAdcs, "UART", "/soc/uart@5000", "CONFIG_SERIAL=y", false);
+            ok(uartGuide.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.DTS_DISABLED
+                    && uartGuide.steps().contains("binding"),
+                    "UART follows real generated node and warns on disabled state");
+            String onUart = twoAdcs.replace("status = \"disabled\";", "status = \"okay\";");
+            for (String startCategory : new String[]{"UART", "SPI", "I2C", "CAN", "PWM", "DAC"}) {
+                var info = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                        onUart, startCategory, "/soc/uart@5000", "CONFIG_SERIAL=y", false);
+                if (startCategory.equals("UART"))
+                    ok(info.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.INSPECT_BINDING,
+                            "UART guides to actual binding, not fabricated C API usage");
+                else
+                    ok(info.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.NOT_IN_DTS
+                            && info.cExample().isBlank(), "no invented bus controller for " + startCategory);
+            }
+            String malformedIo = twoAdcs.replace("<0x20 2>, <0x10 3>",
+                    "<0x20 2>, <0x10 3 4>");
+            ok(io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    malformedIo, "ADC", "/soc/adc@4000", "CONFIG_ADC=y", false)
+                    .cExample().isBlank(), "ambiguous ADC phandle cell shape never yields a scaffold");
             String gpioDts = """
                     / {
                         soc {

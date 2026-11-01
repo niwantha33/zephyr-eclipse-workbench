@@ -60,6 +60,7 @@ import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
 import io.github.niwantha33.zew.core.PeripheralCoverage;
 import io.github.niwantha33.zew.core.VendorFeatureCatalogue;
+import io.github.niwantha33.zew.core.PeripheralStartGuide;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.DevicetreeDependencyEvidence;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
@@ -98,6 +99,11 @@ public final class ConfigurationStudioView extends ViewPart {
     private final java.util.List<String> navigationHistory = new java.util.ArrayList<>();
     private int navigationPosition = -1;
     private Text hardwareDescription, hardwareInspector, hardwarePreview, hardwareValidation, gpioExample;
+    private Combo startGuideCategory;
+    private Text startGuideSteps, startGuideC, startGuideOverlay, startGuideConfig;
+    private Label startGuideStatus;
+    private Button copyStartCode;
+    private PeripheralStartGuide.Guide currentStartGuide;
     private String proposedOverlayDraft = "";
     private record ReviewedGuidedDraft(IProject project, Path build, String overlayName,
             String node, String property, String intent, String value,
@@ -733,6 +739,89 @@ public final class ConfigurationStudioView extends ViewPart {
             finally { clipboard.dispose(); }
         });
 
+        // Built-DTS-first getting-started workflow. This is source guidance,
+        // never an automatic board pin assignment or generated DTS edit.
+        var startPage = tab(hardwareDetails, "Start peripheral");
+        startPage.setLayout(new GridLayout(1, false));
+        var startBar = new Composite(startPage, SWT.NONE);
+        startBar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        startBar.setLayout(new GridLayout(5, false));
+        new Label(startBar, SWT.NONE).setText("Peripheral");
+        startGuideCategory = new Combo(startBar, SWT.DROP_DOWN | SWT.READ_ONLY);
+        startGuideCategory.setItems(HardwarePeripheralIndex.FILTERS.stream()
+                .filter(kind -> !HardwarePeripheralIndex.ALL.equals(kind)
+                        && !"Other".equals(kind)).toArray(String[]::new));
+        startGuideCategory.select(startGuideCategory.indexOf("ADC"));
+        startGuideCategory.addListener(SWT.Selection, event -> {
+            if (hardwareKind.indexOf(startGuideCategory.getText()) >= 0) {
+                hardwareKind.select(hardwareKind.indexOf(startGuideCategory.getText()));
+                hardwareSearch.setText("");
+                hardwareState.select(0);
+                refreshHardware();
+            }
+            refreshStartGuide();
+        });
+        action(startBar, "Find controller in DTS", () -> {
+            String category = startGuideCategory.getText();
+            hardwareKind.select(hardwareKind.indexOf(category));
+            hardwareSearch.setText("");
+            hardwareState.select(0);
+            refreshHardware();
+            tabs.setSelection(1);
+            var nav = (org.eclipse.swt.widgets.TabFolder) hardwarePeripheralTree.getParent().getParent();
+            nav.setSelection(0);
+        }).setToolTipText("Navigate only real controller nodes from this exact generated DTS.");
+        action(startBar, "Inspect generated DTS", () -> {
+            hardwareDetails.setSelection(2);
+            if (hardwareDevices.getSelectionCount() > 0) revealHardwareSource();
+        });
+        action(startBar, "Official Zephyr guide / sample", this::openStartGuideSample);
+        startGuideStatus = new Label(startPage, SWT.WRAP);
+        startGuideStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        startGuideStatus.setText("Choose the peripheral and build the exact target.");
+        var guideSplit = new SashForm(startPage, SWT.HORIZONTAL);
+        guideSplit.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        var stepsPanel = new Composite(guideSplit, SWT.NONE);
+        stepsPanel.setLayout(new GridLayout(1, false));
+        new Label(stepsPanel, SWT.NONE).setText("UNDERSTAND THE SOC DTS → CONNECT THE APPLICATION");
+        startGuideSteps = new Text(stepsPanel, SWT.BORDER | SWT.READ_ONLY | SWT.MULTI
+                | SWT.WRAP | SWT.V_SCROLL);
+        startGuideSteps.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        startGuideSteps.setText("Select ADC to learn how the controller, channel and io-channels connect.");
+        var codePanel = new Composite(guideSplit, SWT.NONE);
+        codePanel.setLayout(new GridLayout(1, false));
+        new Label(codePanel, SWT.NONE).setText("REFERENCE CODE — NEVER AUTO-WRITTEN");
+        startGuideC = new Text(codePanel, SWT.BORDER | SWT.READ_ONLY | SWT.MULTI
+                | SWT.H_SCROLL | SWT.V_SCROLL);
+        startGuideC.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        startGuideC.setText("A C scaffold appears only when the generated ADC io-channels wiring is verified.");
+        guideSplit.setWeights(new int[] {52, 48});
+        var snippetBar = new Composite(startPage, SWT.NONE);
+        snippetBar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        snippetBar.setLayout(new GridLayout(8, false));
+        copyStartCode = action(snippetBar, "Copy C scaffold", () -> copyStartGuideText(
+                currentStartGuide == null ? "" : currentStartGuide.cExample()));
+        action(snippetBar, "Open src/main.c", () -> openExistingStartFile("src/main.c"));
+        action(snippetBar, "Open prj.conf", () -> openExistingStartFile("prj.conf"));
+        action(snippetBar, "Open app.overlay", this::openOverlay);
+        action(snippetBar, "Check selected binding", () -> inspectSelectedBinding(false))
+                .setToolTipText("Inspect the upstream Zephyr binding for the selected generated controller.");
+        action(snippetBar, "Build & validate", this::build)
+                .setToolTipText("Build the exact project/profile and regenerate effective DTS and Kconfig.");
+        action(snippetBar, "Copy Kconfig review", () -> copyStartGuideText(
+                currentStartGuide == null ? "" : currentStartGuide.configExample()));
+        action(snippetBar, "Copy overlay guidance", () -> copyStartGuideText(
+                currentStartGuide == null ? "" : currentStartGuide.overlayExample()));
+        startGuideConfig = new Text(startPage, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP);
+        GridData cfgLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        cfgLayout.heightHint = 40;
+        startGuideConfig.setLayoutData(cfgLayout);
+        startGuideOverlay = new Text(startPage, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP);
+        GridData overlayLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        overlayLayout.heightHint = 45;
+        startGuideOverlay.setLayoutData(overlayLayout);
+        copyStartCode.setEnabled(false);
+
         studioVertical.setWeights(new int[] {78, 22});
 
         var hardwareActions = new Composite(hardware, SWT.NONE);
@@ -752,6 +841,8 @@ public final class ConfigurationStudioView extends ViewPart {
                 .setToolTipText("Apply saved overlay additionally in disposable Zephyr configure; no firmware is flashed");
         action(hardwareActions, "Edit application overlay…", this::openOverlay);
         action(hardwareActions, "GPIO example C", () -> hardwareDetails.setSelection(4));
+        action(hardwareActions, "Start ADC reading →", () -> openStartGuide("ADC"));
+        action(hardwareActions, "Start selected peripheral →", () -> openStartGuide(null));
         addGpioButton = action(hardwareActions, "Add DTS GPIO…", this::prepareNewGpio);
         addGpioButton.setEnabled(false);
         addGpioButton.setToolTipText("Select an unreferenced logical index. Creates a reviewed source request, not an availability or live-state claim.");
@@ -2581,6 +2672,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     + " generated DTS nodes · silicon capabilities require an exact vendor SVD.");
             refreshPeripheralNavigation(devices);
             refreshVendorFeatures(devices);
+            refreshStartGuide();
         } finally { hardwareDevices.setRedraw(true); }
     }
 
@@ -2939,6 +3031,92 @@ public final class ConfigurationStudioView extends ViewPart {
                     + " to prj.conf; build to validate. Backup: " + backup);
         } catch (Exception error) {
             MessageDialog.openError(getSite().getShell(), "Configuration not saved", error.getMessage());
+        }
+    }
+
+    private void openStartGuide(String overrideCategory) {
+        if (startGuideCategory == null || startGuideCategory.isDisposed()) return;
+        String kind = overrideCategory;
+        if (kind == null && hardwareDevices.getSelectionCount() == 1) {
+            var d = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+            kind = HardwarePeripheralIndex.category(d);
+        }
+        if (kind == null || "Other".equals(kind)) kind = hardwareKind.getText();
+        if (kind == null || HardwarePeripheralIndex.ALL.equals(kind) || "Other".equals(kind))
+            kind = "ADC";
+        int index = startGuideCategory.indexOf(kind);
+        if (index >= 0) startGuideCategory.select(index);
+        hardwareDetails.setSelection(5);
+        refreshStartGuide();
+        status.setText("Read-only " + kind + " guide. Review Devicetree, Kconfig and application wiring.");
+    }
+
+    private void refreshStartGuide() {
+        if (startGuideSteps == null || startGuideSteps.isDisposed()
+                || startGuideCategory == null || startGuideCategory.isDisposed()) return;
+        String path = null;
+        if (hardwareDevices != null && !hardwareDevices.isDisposed()
+                && hardwareDevices.getSelectionCount() == 1) {
+            var selected = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+            if (selected != null) path = selected.path();
+        }
+        String kconfig = "";
+        if (snapshot != null) {
+            kconfig = snapshot.options().stream()
+                    .filter(o -> "y".equals(o.effective()))
+                    .map(o -> "CONFIG_" + o.symbol() + "=y")
+                    .collect(java.util.stream.Collectors.joining("\n"));
+        }
+        currentStartGuide = PeripheralStartGuide.inspect(
+                snapshot == null ? "" : snapshot.devicetree(),
+                startGuideCategory.getText(), path, kconfig, buildOutdated);
+        startGuideStatus.setText(currentStartGuide.category() + " — "
+                + currentStartGuide.state() + " | " + currentStartGuide.explanation());
+        startGuideSteps.setText(currentStartGuide.steps() + "\n\nOfficial upstream reference: "
+                + currentStartGuide.upstreamSample());
+        startGuideC.setText(currentStartGuide.cExample().isBlank()
+                ? "No verified ADC wiring scaffold is available. Follow the prerequisites on the left."
+                : currentStartGuide.cExample());
+        startGuideConfig.setText(currentStartGuide.configExample());
+        startGuideOverlay.setText(currentStartGuide.overlayExample().isBlank()
+                ? "No new overlay is proposed. DTS files are read-only and no pads/channels are guessed."
+                : currentStartGuide.overlayExample());
+        copyStartCode.setEnabled(currentStartGuide.state()
+                == PeripheralStartGuide.State.ADC_WIRING_FOUND);
+    }
+
+    private void copyStartGuideText(String value) {
+        if (value == null || value.isBlank()) {
+            status.setText("No evidence-qualified example for this selection. Follow the guide first.");
+            return;
+        }
+        var clipboard = new Clipboard(getSite().getShell().getDisplay());
+        try {
+            clipboard.setContents(new Object[] {value}, new Transfer[] {TextTransfer.getInstance()});
+        } finally { clipboard.dispose(); }
+        status.setText("Copied reference text only. No source modified; compile and binding verification required.");
+    }
+
+    private void openExistingStartFile(String path) {
+        if (project == null || !project.isAccessible() || !project.getFile(path).exists()) {
+            status.setText("No " + path + " in this project. Select its actual file in Project Explorer; "
+                    + "nothing has been created or overwritten.");
+            return;
+        }
+        openResource(path);
+    }
+
+    private void openStartGuideSample() {
+        if (currentStartGuide == null) return;
+        String url = currentStartGuide.upstreamSample();
+        if (!url.startsWith("https://github.com/zephyrproject-rtos/zephyr/tree/")
+                && !url.startsWith("https://docs.zephyrproject.org/latest/")) {
+            status.setText("No verified upstream sample URL for this peripheral. "
+                    + "Inspect the Zephyr samples directory for this exact version.");
+            return;
+        }
+        if (!org.eclipse.swt.program.Program.launch(url)) {
+            status.setText("Could not open browser. Official sample: " + url);
         }
     }
 
