@@ -153,6 +153,44 @@ def read_snapshot(gdb: Path, elf: Path, port: int, duration: float,
         session.close()
 
 
+def build_provenance(build: Path, zephyr: Path) -> dict:
+    """Derive trace prerequisites from the effective build, not user source files.
+
+    ZEPHYR_BASE in the CMake cache is authoritative when present. A mismatch
+    must abort before the wrong checkout's CTF metadata is copied to a trace.
+    Older/custom CMake caches may lack it; that absence is explicitly recorded.
+    """
+    cache = build / 'CMakeCache.txt'
+    base = None
+    if cache.is_file():
+        if cache.stat().st_size > 4 * 1024 * 1024:
+            raise ValueError('Build CMakeCache.txt exceeds the supported size')
+        for line in cache.read_text(encoding='utf-8', errors='replace').splitlines():
+            if line.startswith('ZEPHYR_BASE:') and '=' in line:
+                base = line.split('=', 1)[1].strip().strip('"')
+                break
+    if base:
+        if not Path(base).is_dir() or not Path(base).samefile(zephyr):
+            raise ValueError('Selected Zephyr checkout does not match build CMakeCache.txt ZEPHYR_BASE. '
+                             'Use the exact Zephyr checkout used to configure this build.')
+        evidence = 'verified: ZEPHYR_BASE matches build CMakeCache.txt'
+    else:
+        evidence = 'unverified: build CMakeCache.txt does not declare ZEPHYR_BASE'
+    config = build / 'zephyr' / '.config'
+    options = {}
+    if config.is_file():
+        supported = ('CONFIG_TRACING', 'CONFIG_TRACING_CTF', 'CONFIG_TRACING_BACKEND_RAM',
+                     'CONFIG_RAM_TRACING_BUFFER_SIZE', 'CONFIG_TRACING_SYNC',
+                     'CONFIG_THREAD_NAME', 'CONFIG_DEBUG_THREAD_INFO')
+        for line in config.read_text(encoding='utf-8', errors='replace').splitlines():
+            if '=' in line:
+                key, value = line.split('=', 1)
+                if key in supported:
+                    options[key] = value
+    return {'metadata_provenance': evidence,
+            'trace_build_options': dict(sorted(options.items()))}
+
+
 def validate(build: Path, zephyr: Path, gdb: Path) -> tuple[Path, Path]:
     elf = build / 'zephyr' / 'zephyr.elf'
     config = build / 'zephyr' / '.config'
@@ -164,6 +202,7 @@ def validate(build: Path, zephyr: Path, gdb: Path) -> tuple[Path, Path]:
     for option in ('CONFIG_TRACING=y', 'CONFIG_TRACING_CTF=y', 'CONFIG_TRACING_BACKEND_RAM=y'):
         if option not in settings:
             raise ValueError(f'The selected build does not enable {option}')
+    build_provenance(build, zephyr)  # Reject mismatched metadata before touching the target.
     return elf.resolve(), metadata.resolve()
 
 
@@ -186,7 +225,9 @@ def capture(gdb: Path, elf: Path, metadata: Path, destination: Path, port: int,
         shutil.copyfile(metadata, ctf / 'metadata')
         timeline = Path(__file__).with_name('Zephyr_RTOS_Timeline.xml')
         shutil.copyfile(timeline, stage / 'Zephyr_RTOS_Timeline.xml')
+        provenance = build_provenance(elf.parent.parent, metadata.parents[4])
         receipt = {'elf_sha256': hashlib.sha256(elf.read_bytes()).hexdigest(),
+                   **provenance,
                    'metadata_sha256': hashlib.sha256(metadata.read_bytes()).hexdigest(),
                    'trace_bytes': binary.stat().st_size,
                    'buffer_capacity': capacity,
