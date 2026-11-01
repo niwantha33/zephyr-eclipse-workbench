@@ -684,6 +684,29 @@ public final class ConfigurationStudioTests {
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.matches(uartController,
                     io.github.niwantha33.zew.core.HardwarePeripheralIndex.ALL),
                     "all peripherals includes disabled controllers");
+            var silicon = io.github.niwantha33.zew.core.VendorFeatureCatalogue.exactPart(
+                    "lp_mspm0g3507/mspm0g3507");
+            ok(silicon != null && silicon.part().equals("mspm0g3507")
+                    && silicon.source().equals("https://www.ti.com/product/MSPM0G3507"),
+                    "exact MSPM0G3507 feature counts retain the official TI source");
+            for (var expected : java.util.Map.of(
+                    "ADC", "2", "DAC", "1", "UART", "4", "I2C", "2",
+                    "SPI", "2", "CAN", "1", "Timers", "7", "DMA", "1").entrySet()) {
+                ok(silicon.features().stream().anyMatch(feature ->
+                        feature.category().equals(expected.getKey())
+                                && feature.silicon().equals(expected.getValue())),
+                        "reviewed TI spec preserves " + expected.getKey());
+            }
+            ok(silicon.features().stream().filter(feature -> feature.category().equals("PWM"))
+                    .allMatch(feature -> feature.unit().contains("channels")),
+                    "up to 22 PWM channels must not be misreported as 22 controllers");
+            ok(io.github.niwantha33.zew.core.VendorFeatureCatalogue.exactPart(
+                    "lp_mspm0g3507/mspm0g3506") == null
+                    && io.github.niwantha33.zew.core.VendorFeatureCatalogue.exactPart(
+                    "nrf52840dk/nrf52840") == null
+                    && io.github.niwantha33.zew.core.VendorFeatureCatalogue.exactPart(
+                    "lp_mspm0g3507") == null,
+                    "no vendor feature table is guessed for adjacent parts or unspecified targets");
             // Zephyr 4.4 MSPM0G3507 may contain UART/CAN, yet no ADC/I2C/SPI
             // controller nodes at all. Never label absent DTS as absent silicon.
             String mspm0Dts = """
