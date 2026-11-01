@@ -38,6 +38,10 @@ _KIND = frozenset(("gpio", "adc", "spi", "i2c"))
 _MAX_SHOW_DIFF = 100 * 1024
 
 
+class _ManualReview(Exception):
+    """Expected incomplete binding evidence; do not claim a source draft."""
+
+
 def _selected_image(build: Path, images: list[str]) -> tuple[str, Path]:
     chosen = _images(Path(build).absolute(), images)
     if len(chosen) != 1:
@@ -175,7 +179,7 @@ def guide(build: Path, zephyr: Path, node_path: str,
                 node = edt.get_node(node_path)
             except Exception:
                 result["source"]["node"] = "not-in-generated-dts"
-                return result
+                raise _ManualReview()
             src = result["source"]
             src["node"] = "present-in-generated-dts"
             src["generated_status"] = node.status if node.status in (
@@ -183,7 +187,7 @@ def guide(build: Path, zephyr: Path, node_path: str,
             src["binding"] = "matched" if node.binding_path else "unmatched"
             src["interface_hints"] = _interfaces(node)
             if not node.binding_path:
-                return result
+                raise _ManualReview()
             spec = None
             if request_kind == "status":
                 # status is a Zephyr standard property, not a device-driver readiness claim.
@@ -191,28 +195,28 @@ def guide(build: Path, zephyr: Path, node_path: str,
             else:
                 property = node.props.get(property_name)
                 if property is None or getattr(property, "spec", None) is None:
-                    return result
+                    raise _ManualReview()
                 spec = property.spec
                 src["property_type"] = spec.type if spec.type in (
                     "int", "string", "boolean", "array", "string-array", "phandle",
                     "phandle-array", "uint8-array") else "other"
                 src["selected_property_deprecated"] = bool(spec.deprecated)
                 if src["selected_property_deprecated"]:
-                    return result
+                    raise _ManualReview()
                 if request_kind == "int":
                     if spec.type != "int":
-                        return result
+                        raise _ManualReview()
                     number = int(value[1:-1])
                     if spec.enum is not None and number not in spec.enum:
-                        return result
+                        raise _ManualReview()
                     if spec.const is not None and number != spec.const:
-                        return result
+                        raise _ManualReview()
                 else:
                     if spec.type != "string" or not spec.enum:
-                        return result
+                        raise _ManualReview()
                     proposed = json.loads(value)
                     if proposed not in spec.enum or spec.const is not None and proposed != spec.const:
-                        return result
+                        raise _ManualReview()
             src["confidence"] = "confirmed"
             block = ("/* Review only — this does not validate pin/driver hardware. */\n"
                      + "&{" + node_path + "} {\n    " + property_name + " = " + value
@@ -238,6 +242,8 @@ def guide(build: Path, zephyr: Path, node_path: str,
                 if len(diff.encode("utf-8")) > _MAX_SHOW_DIFF:
                     raise InputError("Generated review diff exceeds 100 KiB")
                 preview["visible_diff"] = diff
+    except _ManualReview:
+        pass
     except InputError:
         raise
     except Exception:
