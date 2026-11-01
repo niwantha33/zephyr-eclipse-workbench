@@ -1977,7 +1977,7 @@ public final class ConfigurationStudioView extends ViewPart {
             hardwareInspector.setText("Node: " + device.path() + "\nNo built properties for this selection.");
         }
         hardwareValidation.setText("DISCOVERED FROM BUILD  |  " + device.path()
-                + "\nController state: " + (device.enabled() ? "okay or inherited okay" : device.status())
+                + "\nNode status property: " + (device.status().isBlank() ? "not explicit; ancestor status not evaluated" : device.status())
                 + "\nBuilt parameter rows: " + shown.size()
                 + "\nResolved logical route entries: " + routes.size()
                 + "\nPHYSICAL PINOUT: NOT VERIFIED - exact part/package data not supplied."
@@ -2035,7 +2035,7 @@ public final class ConfigurationStudioView extends ViewPart {
             }
             sourceNotes.append(sourceScanNote);
             hardwareValidation.setText("GPIO CONTROLLER FROM COMPILED DTS  |  " + device.path()
-                    + "\nState: " + (device.enabled() ? "okay or inherited okay" : device.status())
+                    + "\nNode status property: " + (device.status().isBlank() ? "not explicit; ancestor status not evaluated" : device.status())
                     + "\nBoard DTS-only declarations (NOT used pins): " + gpio.uses().size()
                     + "\n" + gpio.provenance()
                     + "\nAPPLICATION/RUNTIME GPIO USAGE: UNKNOWN; no compiled-code or target proof."
