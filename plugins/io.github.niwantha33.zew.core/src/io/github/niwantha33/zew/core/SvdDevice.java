@@ -101,12 +101,12 @@ public record SvdDevice(String name, List<Register> registers) {
                     int offset, width;
                     if (child(f, "bitRange") != null) {
                         String[] range = text(f, "bitRange", "").replace("[", "").replace("]", "").split(":");
-                        offset = Integer.parseInt(range[1]); width = Integer.parseInt(range[0]) - offset + 1;
+                        offset = number(range[1]).intValueExact(); width = number(range[0]).intValueExact() - offset + 1;
                     } else if (child(f, "lsb") != null) {
-                        offset = Integer.parseInt(text(f, "lsb", ""));
-                        width = Integer.parseInt(text(f, "msb", "")) - offset + 1;
+                        offset = number(text(f, "lsb", "")).intValueExact();
+                        width = number(text(f, "msb", "")).intValueExact() - offset + 1;
                     } else {
-                        offset = Integer.parseInt(text(f, "bitOffset", "")); width = Integer.parseInt(text(f, "bitWidth", ""));
+                        offset = number(text(f, "bitOffset", "")).intValueExact(); width = number(text(f, "bitWidth", "")).intValueExact();
                     }
                     if (offset < 0 || width < 1 || offset + width > size) throw new IllegalArgumentException("Invalid field: " + name);
                     fields.add(new Field(text(f, "name", ""), offset, width, text(f, "description", ""),
