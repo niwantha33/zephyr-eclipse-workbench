@@ -53,6 +53,7 @@ import io.github.niwantha33.zew.core.DevicetreeBindingInspector;
 import io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector;
 import io.github.niwantha33.zew.core.PeripheralEvidenceInspector;
 import io.github.niwantha33.zew.core.PeripheralGuideInspector;
+import io.github.niwantha33.zew.core.DevicetreeDraftConfigureInspector;
 import io.github.niwantha33.zew.core.GpioBankEvidence;
 import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
@@ -92,6 +93,14 @@ public final class ConfigurationStudioView extends ViewPart {
     private int navigationPosition = -1;
     private Text hardwareDescription, hardwareInspector, hardwarePreview, hardwareValidation, gpioExample;
     private String proposedOverlayDraft = "";
+    private record ReviewedGuidedDraft(IProject project, Path build, String overlayName,
+            String node, String property, String intent, String value,
+            String originalDtsSha, String originalOverlaySha, String additionSha,
+            String proposedOverlaySha, String sourceAddition) {}
+    private ReviewedGuidedDraft reviewedGuidedDraft;
+    private Job unsavedDraftJob;
+    private final java.util.concurrent.atomic.AtomicInteger unsavedDraftGeneration =
+            new java.util.concurrent.atomic.AtomicInteger();
     private TabFolder hardwareDetails;
     private Table hardwareParameters, gpioUsageTable;
     private Label gpioUsageSummary;
@@ -589,9 +598,11 @@ public final class ConfigurationStudioView extends ViewPart {
         changesPage.setLayout(new GridLayout(1, false));
         var changeToolbar = new Composite(changesPage, SWT.NONE);
         changeToolbar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        changeToolbar.setLayout(new GridLayout(2, false));
+        changeToolbar.setLayout(new GridLayout(3, false));
         action(changeToolbar, "Edit application overlay…", this::openOverlay);
         action(changeToolbar, "Copy proposed change", this::copyHardwarePreview);
+        action(changeToolbar, "Test unsaved draft with CMake…", this::testUnsavedGuidedDraft)
+                .setToolTipText("Opt-in: actual West/CMake on disposable source, exact generated value verified");
         hardwarePreview = new Text(changesPage,
                 SWT.BORDER | SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL | SWT.READ_ONLY);
         hardwarePreview.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -951,6 +962,9 @@ public final class ConfigurationStudioView extends ViewPart {
         guidedOverlayGeneration.incrementAndGet();
         if (guidedOverlayJob != null) guidedOverlayJob.cancel();
         proposedOverlayDraft = "";
+        reviewedGuidedDraft = null;
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         if (hardwarePreview != null && !hardwarePreview.isDisposed())
             hardwarePreview.setText("No proposed changes. The hardware selection changed; the previous draft is invalid. "
                     + "Run Guided overlay draft… again for the newly selected node/property.");
@@ -1036,6 +1050,9 @@ public final class ConfigurationStudioView extends ViewPart {
         final var display = analysis.getDisplay();
         final boolean stale = buildOutdated;
         proposedOverlayDraft = "";
+        reviewedGuidedDraft = null;
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         hardwarePreview.setText("Inspecting selected generated Devicetree and upstream binding…"
                 + "\nAny former draft has been invalidated. No file is changed.");
         status.setText("Inspecting the actual selected Zephyr binding; preparing source-only draft…");
@@ -1081,6 +1098,18 @@ public final class ConfigurationStudioView extends ViewPart {
                     analysis.setText(report);
                     if (observed.hasDraft()) {
                         proposedOverlayDraft = observed.addition();
+                        try {
+                            reviewedGuidedDraft = new ReviewedGuidedDraft(
+                                    chosenProject, build, selectedOverlayName, node, property,
+                                    intent, requestedValue, observed.dtsHash(),
+                                    observed.previousOverlayHash(),
+                                    DevicetreeDraftConfigureInspector.digest(
+                                            observed.addition().getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                                    observed.newOverlayHash(), observed.addition());
+                        } catch (java.io.IOException invalid) {
+                            reviewedGuidedDraft = null;
+                            proposedOverlayDraft = "";
+                        }
                         hardwarePreview.setText("BINDING-GROUNDED PROPOSED DIFF — NOT APPLIED\n"
                                 + "The change has NOT been built, saved, or electrically verified.\n"
                                 + "Use 'Copy proposed change' to copy only the new addition.\n"
@@ -1092,6 +1121,7 @@ public final class ConfigurationStudioView extends ViewPart {
                                 + "Nothing saved. Copy only the proposed addition.");
                     } else {
                         proposedOverlayDraft = "";
+                        reviewedGuidedDraft = null;
                         hardwarePreview.setText("No verified source draft is available. "
                                 + "The selected Zephyr binding or property does not support the request.\n"
                                 + "No file was changed. Use the source editor and the real configure tool.");
@@ -1383,9 +1413,14 @@ public final class ConfigurationStudioView extends ViewPart {
         if (realConfigureJob != null) realConfigureJob.cancel();
         guidedOverlayGeneration.incrementAndGet();
         if (guidedOverlayJob != null) guidedOverlayJob.cancel();
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         proposedOverlayDraft = "";
+        reviewedGuidedDraft = null;
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         if (hardwarePreview != null && !hardwarePreview.isDisposed())
             hardwarePreview.setText("No proposed changes. Build or project context changed; all previous source drafts are invalid. "
                     + "Select a node and request a new reviewed draft.");
@@ -2654,6 +2689,8 @@ public final class ConfigurationStudioView extends ViewPart {
         if (realConfigureJob != null) realConfigureJob.cancel();
         guidedOverlayGeneration.incrementAndGet();
         if (guidedOverlayJob != null) guidedOverlayJob.cancel();
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();
