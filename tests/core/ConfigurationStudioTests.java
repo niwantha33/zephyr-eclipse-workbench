@@ -866,15 +866,15 @@ public final class ConfigurationStudioTests {
                     "UART follows real generated node and warns on disabled state");
             String onUart = twoAdcs.replace("uart0: uart@5000 {\n                                compatible = \"vendor,uart\";\n                                status = \"disabled\";",
                     "uart0: uart@5000 {\n                                compatible = \"vendor,uart\";\n                                status = \"okay\";");
-            for (String peripheral : new String[]{"UART", "SPI", "I2C", "CAN", "PWM", "DAC"}) {
+            for (String startCategory : new String[]{"UART", "SPI", "I2C", "CAN", "PWM", "DAC"}) {
                 var info = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
-                        onUart, peripheral, "/soc/uart@5000", "CONFIG_SERIAL=y", false);
-                if (peripheral.equals("UART"))
+                        onUart, startCategory, "/soc/uart@5000", "CONFIG_SERIAL=y", false);
+                if (startCategory.equals("UART"))
                     ok(info.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.INSPECT_BINDING,
                             "UART guides to actual binding, not fabricated C API usage");
                 else
                     ok(info.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.NOT_IN_DTS
-                            && info.cExample().isBlank(), "no invented bus controller for " + peripheral);
+                            && info.cExample().isBlank(), "no invented bus controller for " + startCategory);
             }
             String malformedIo = twoAdcs.replace("<0x20 2>, <0x10 3>",
                     "<0x20 2>, <0x10 3 4>");
