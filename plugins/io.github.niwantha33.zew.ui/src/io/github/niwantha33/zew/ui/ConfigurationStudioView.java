@@ -715,7 +715,7 @@ public final class ConfigurationStudioView extends ViewPart {
             hardwareDetails.setSelection(2);
             if (hardwareDevices.getSelectionCount() > 0) revealHardwareSource();
         });
-        action(startBar, "Official Zephyr sample", this::openStartGuideSample);
+        action(startBar, "Official Zephyr guide / sample", this::openStartGuideSample);
         startGuideStatus = new Label(startPage, SWT.WRAP);
         startGuideStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         startGuideStatus.setText("Choose the peripheral and build the exact target.");
@@ -3007,7 +3007,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private void openStartGuideSample() {
         if (currentStartGuide == null) return;
         String url = currentStartGuide.upstreamSample();
-        if (!url.startsWith("https://github.com/zephyrproject-rtos/zephyr/tree/")) {
+        if (!url.startsWith("https://github.com/zephyrproject-rtos/zephyr/tree/")
+                && !url.startsWith("https://docs.zephyrproject.org/latest/")) {
             status.setText("No verified upstream sample URL for this peripheral. "
                     + "Inspect the Zephyr samples directory for this exact version.");
             return;
