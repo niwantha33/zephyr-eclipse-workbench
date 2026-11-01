@@ -502,3 +502,41 @@ Run a real firmware build separately, after deliberately editing and
 saving the selected overlay. This preflight does not establish driver
 compilation, pin availability, electrical correctness or runtime readiness.
 **G0 remains OPEN.**
+
+
+## Review → preflight → explicitly save → rebuild (native)
+
+The existing **Changes / app.overlay** dock includes **Save verified draft
+with backup…**. This action is deliberately separate from **Guided overlay
+draft…**, **Test unsaved draft with CMake…** and **Build & validate**.
+
+1. Select an exact node from the **last generated** DTS. Create the guided
+   binding-checked source diff and inspect it in Changes. This alone writes
+   no source and proves no firmware operation.
+2. Approve **Test unsaved draft with CMake…**. West/CMake executes trusted
+   project hooks with host permissions **on a disposable application copy**.
+   Only a result with the exact requested property value observed in scratch
+   generated `zephyr.dts` can qualify for source saving. This is not a
+   security sandbox, compiled firmware, or hardware verification.
+3. Press **Save verified draft with backup…** to display a *second* explicit
+   confirmation showing the selected project, overlay, exact source addition,
+   property/value and original/proposed hashes. Cancel has no write.
+   The save rechecks the selected DTS, original overlay bytes, copied
+   proposal hash and CMake proof; it uses the existing atomic overlay writer
+   with a new timestamp-free unique backup under `.zew/overlay-backups` for
+   an **existing** overlay. A nonexistent `.overlay` is created atomically
+   only when the exact proposal still matches.
+4. **Build & validate** remains an explicit *separate* normal Zephyr build
+   action after saving. The saved source is marked unverified until this
+   build and independent firmware/hardware checks complete. The user must
+   ensure the selected overlay is included in that build; the preflight
+   used an additional scratch overlay, which is not automatically copied
+   into build settings.
+
+Changing project, build, node, property or overlay invalidates the draft
+and CMake proof. An unrelated manual source request cannot be saved via
+this evidence-gated action. The source writer rejects stale source,
+symlink/path escapes and non-atomic replacements. No GPIO package pad,
+driver inclusion, runtime usage or electrical safety is ever inferred.
+
+**G0 OPEN.** The guided workflow and local CI are not a production release.
