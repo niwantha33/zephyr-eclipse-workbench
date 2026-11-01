@@ -60,6 +60,7 @@ import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
 import io.github.niwantha33.zew.core.PeripheralCoverage;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
+import io.github.niwantha33.zew.core.DevicetreeDependencyEvidence;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains.Domain;
@@ -1982,7 +1983,9 @@ public final class ConfigurationStudioView extends ViewPart {
                 + "\nPHYSICAL PINOUT: NOT VERIFIED - exact part/package data not supplied."
                 + "\nNo pin conflict or electrical-capability claim is possible."
                 + (buildOutdated ? "\nBUILD REQUIRED - generated configuration may be stale." : "")
-                + "\nAfter any overlay change, Build & validate with Zephyr.");
+                + "\nAfter any overlay change, Build & validate with Zephyr."
+                + DevicetreeDependencyEvidence.describe(
+                        DevicetreeDependencyEvidence.inspect(properties, device.path())));
         parameterTitle.setText(device.path() + " · " + shown.size() + " built parameters · "
                 + (gpio == null ? routes.size() + " logical routes"
                     : gpio.bitPositions() + " GPIO register bit indexes · "
