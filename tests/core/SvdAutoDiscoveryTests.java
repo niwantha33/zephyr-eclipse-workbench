@@ -35,6 +35,7 @@ public final class SvdAutoDiscoveryTests {
             check(SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3506",
                     List.of(root), root.resolve("other-cache")).state() == SvdAutoDiscovery.State.MISSING,
                     "TI family SVD must not automatically map to other part numbers");
+            Files.delete(vendor.resolve("MSPM0G350X.svd"));
             Path candidate = vendor.resolve("MSPM0G3507.svd");
             Files.writeString(candidate, svd("MSPM0G3507"));
             var matched = SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3507",
