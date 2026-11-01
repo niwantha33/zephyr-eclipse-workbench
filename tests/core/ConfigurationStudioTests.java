@@ -147,6 +147,51 @@ public final class ConfigurationStudioTests {
                     guideWire.apply(injectedGuideValue), selectedNode, "status"));
             rejects(() -> io.github.niwantha33.zew.core.PeripheralGuideInspector.parse(
                     "ZEW-GUIDE-1\nbad", selectedNode, "status"));
+            String[] unsavedFields = {"configured", "real-zephyr-cmake-accepted",
+                    "b".repeat(64), "c".repeat(64), "0".repeat(64),
+                    "a".repeat(64), "a".repeat(64), nodeDigest,
+                    java.util.HexFormat.of().formatHex(sha256.digest(
+                            "status".getBytes(java.nio.charset.StandardCharsets.UTF_8))),
+                    "exact-value-observed", "staged", "identity-verified", "4"};
+            java.util.function.Function<String[], String> unsavedWire = values -> {
+                var wire = new StringBuilder("ZEW-DRAFT-CMAKE-1\n");
+                for (int i = 0; i < values.length; i++) {
+                    if (i > 0) wire.append('\t');
+                    wire.append(encode.encodeToString(values[i].getBytes(
+                            java.nio.charset.StandardCharsets.US_ASCII)));
+                }
+                return wire.toString();
+            };
+            var checkedUnsaved = io.github.niwantha33.zew.core.DevicetreeDraftConfigureInspector.parse(
+                    unsavedWire.apply(unsavedFields), selectedNode, "status",
+                    "b".repeat(64), "0".repeat(64), "d".repeat(64), "a".repeat(64));
+            ok(checkedUnsaved.configured()
+                    && checkedUnsaved.describe(selectedNode, "status", "disabled", false)
+                            .contains("NOT a security sandbox"),
+                    "real unsaved source CMake evidence is narrow, proven and not runtime readiness");
+            final String[] wrongUnsavedValue = unsavedFields.clone();
+            wrongUnsavedValue[9] = "unavailable-or-mismatched";
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeDraftConfigureInspector.parse(
+                    unsavedWire.apply(wrongUnsavedValue), selectedNode, "status",
+                    "b".repeat(64), "0".repeat(64), "d".repeat(64), "a".repeat(64)));
+            final String[] wrongUnsavedSource = unsavedFields.clone();
+            wrongUnsavedSource[6] = "f".repeat(64);
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeDraftConfigureInspector.parse(
+                    unsavedWire.apply(wrongUnsavedSource), selectedNode, "status",
+                    "b".repeat(64), "0".repeat(64), "d".repeat(64), "a".repeat(64)));
+            final String[] wrongUnsavedNode = unsavedFields.clone();
+            wrongUnsavedNode[7] = "e".repeat(64);
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeDraftConfigureInspector.parse(
+                    unsavedWire.apply(wrongUnsavedNode), selectedNode, "status",
+                    "b".repeat(64), "0".repeat(64), "d".repeat(64), "a".repeat(64)));
+            final String[] failedUnsavedCmake = unsavedFields.clone();
+            failedUnsavedCmake[0] = "failed";
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeDraftConfigureInspector.parse(
+                    unsavedWire.apply(failedUnsavedCmake), selectedNode, "status",
+                    "b".repeat(64), "0".repeat(64), "d".repeat(64), "a".repeat(64)));
+            rejects(() -> io.github.niwantha33.zew.core.DevicetreeDraftConfigureInspector.parse(
+                    "ZEW-DRAFT-CMAKE-1\nbad", selectedNode, "status",
+                    "b".repeat(64), "0".repeat(64), "d".repeat(64), "a".repeat(64)));
             var parsed = io.github.niwantha33.zew.core.KconfigInspector.parse(message.toString());
             // Native EDT bridge accepts only the bounded structured protocol,
             // never raw paths/values or an invented "interpreted" status.

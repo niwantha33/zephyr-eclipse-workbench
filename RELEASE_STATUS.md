@@ -483,3 +483,27 @@ passing these prototype tests.
 - Running CMake executes trusted project hooks with host privileges.
   This is *not* a security sandbox. No compilation, flash, runtime,
   physical-pad or release qualification claim. **G0 remains OPEN**.
+
+
+## Native unsaved guided CMake preflight — development PR #108
+
+- Added **Test unsaved draft with CMake…** inside existing Configuration
+  Studio Changes dock after the binding-guided source review action.
+- Native UI retains exact selected project/build/node/property/overlay,
+  requested value, original DTS/overlay and source addition SHA-256.
+  Any changed selection invalidates the draft and cancels preflight.
+- Real trusted West/CMake runs in a cancellable background Eclipse Job,
+  with explicit CMake trust/host permissions warning. The source addition
+  is staged *only in the disposable application copy*.
+- Packaged Python uses byte-identical headless collector, EDT guide and
+  real CMake validation modules. A strict 13-field Base64 protocol includes
+  only source hashes, generated-value evidence, bounded counts and fixed
+  diagnostic reason codes; no raw log or copied source.
+- Exact requested generated property value and selected checkout/board/
+  overlay provenance are required, not simply CMake exit 0.
+- Added Java negative protocol tests, isolated Python byte parity and
+  no-source tests, plus real Windows TI MSPM0 headless/native evidence
+  parity with actual Zephyr CMake for an unsaved GPIO source draft.
+- No source is saved, no firmware is compiled/flashed, and no physical pin
+  use/readiness is inferred. G0 remains OPEN; exact PR-head CI and manual
+  installed-UI acceptance required before any merge or release.

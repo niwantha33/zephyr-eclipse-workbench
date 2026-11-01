@@ -463,3 +463,42 @@ driver ownership, or physical device availability is inferred. The UI does
 not invent values or convert unknown results into successful diagnoses.
 
 **G0 remains OPEN; no release-readiness claim.**
+
+
+## Real CMake preflight of the reviewed unsaved source (native)
+
+The existing **Changes / app.overlay** dock now offers **Test unsaved draft
+with CMake…**. It is enabled as a guarded action for the latest
+**Guided overlay draft…** produced from the current selected built
+Devicetree node. The action requires an exact reviewed binding-grounded
+status/integer/string-enum proposal; arbitrary proposed source changes,
+unverified GPIO/pin assignments or stale selections cannot use it.
+
+The action asks for explicit approval before executing the selected trusted
+project's real Zephyr West/CMake in a disposable copied application/build.
+**CMake hooks run with host permissions; scratch is not a security sandbox.**
+No original project overlay, generated build or target is intentionally
+modified and no Ninja firmware compile or flash occurs.
+
+The installed plug-in bundles the exact headless `peripheral_guide`,
+`dt_draft_validation` and `dt_build_validation` modules, with regression
+tests requiring byte identity. The selected original DTS, saved-overlay and
+source-addition SHA-256 from the *reviewed UI draft* must be reproduced
+before CMake is allowed to launch. The selected original artifacts are
+rehashed afterwards. Python returns only typed, bounded hashes/statuses
+and exact generated-value confidence; no raw CMake logs or source text
+leave the worker.
+
+A successful message is shown **only** if actual scratch West/CMake accepts
+the copied source, generated `zephyr.dts` matches the requested exact
+status/int/string-enum *value*, and checkout/board/overlay provenance is
+verified. Merely finding the node or obtaining CMake exit 0 is not success.
+Results appear in **Validation / evidence** and **Insights** while the
+original unified diff remains available in **Changes / app.overlay** for
+copy/review. Changing the node, property, selected project/build/overlay
+or source draft cancels/discards stale checks.
+
+Run a real firmware build separately, after deliberately editing and
+saving the selected overlay. This preflight does not establish driver
+compilation, pin availability, electrical correctness or runtime readiness.
+**G0 remains OPEN.**

@@ -53,6 +53,7 @@ import io.github.niwantha33.zew.core.DevicetreeBindingInspector;
 import io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector;
 import io.github.niwantha33.zew.core.PeripheralEvidenceInspector;
 import io.github.niwantha33.zew.core.PeripheralGuideInspector;
+import io.github.niwantha33.zew.core.DevicetreeDraftConfigureInspector;
 import io.github.niwantha33.zew.core.GpioBankEvidence;
 import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
@@ -92,6 +93,14 @@ public final class ConfigurationStudioView extends ViewPart {
     private int navigationPosition = -1;
     private Text hardwareDescription, hardwareInspector, hardwarePreview, hardwareValidation, gpioExample;
     private String proposedOverlayDraft = "";
+    private record ReviewedGuidedDraft(IProject project, Path build, String overlayName,
+            String node, String property, String intent, String value,
+            String originalDtsSha, String originalOverlaySha, String additionSha,
+            String proposedOverlaySha, String sourceAddition) {}
+    private ReviewedGuidedDraft reviewedGuidedDraft;
+    private Job unsavedDraftJob;
+    private final java.util.concurrent.atomic.AtomicInteger unsavedDraftGeneration =
+            new java.util.concurrent.atomic.AtomicInteger();
     private TabFolder hardwareDetails;
     private Table hardwareParameters, gpioUsageTable;
     private Label gpioUsageSummary;
@@ -589,9 +598,11 @@ public final class ConfigurationStudioView extends ViewPart {
         changesPage.setLayout(new GridLayout(1, false));
         var changeToolbar = new Composite(changesPage, SWT.NONE);
         changeToolbar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        changeToolbar.setLayout(new GridLayout(2, false));
+        changeToolbar.setLayout(new GridLayout(3, false));
         action(changeToolbar, "Edit application overlay…", this::openOverlay);
         action(changeToolbar, "Copy proposed change", this::copyHardwarePreview);
+        action(changeToolbar, "Test unsaved draft with CMake…", this::testUnsavedGuidedDraft)
+                .setToolTipText("Opt-in: actual West/CMake on disposable source, exact generated value verified");
         hardwarePreview = new Text(changesPage,
                 SWT.BORDER | SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL | SWT.READ_ONLY);
         hardwarePreview.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -951,6 +962,9 @@ public final class ConfigurationStudioView extends ViewPart {
         guidedOverlayGeneration.incrementAndGet();
         if (guidedOverlayJob != null) guidedOverlayJob.cancel();
         proposedOverlayDraft = "";
+        reviewedGuidedDraft = null;
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         if (hardwarePreview != null && !hardwarePreview.isDisposed())
             hardwarePreview.setText("No proposed changes. The hardware selection changed; the previous draft is invalid. "
                     + "Run Guided overlay draft… again for the newly selected node/property.");
@@ -1036,6 +1050,9 @@ public final class ConfigurationStudioView extends ViewPart {
         final var display = analysis.getDisplay();
         final boolean stale = buildOutdated;
         proposedOverlayDraft = "";
+        reviewedGuidedDraft = null;
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         hardwarePreview.setText("Inspecting selected generated Devicetree and upstream binding…"
                 + "\nAny former draft has been invalidated. No file is changed.");
         status.setText("Inspecting the actual selected Zephyr binding; preparing source-only draft…");
@@ -1081,6 +1098,18 @@ public final class ConfigurationStudioView extends ViewPart {
                     analysis.setText(report);
                     if (observed.hasDraft()) {
                         proposedOverlayDraft = observed.addition();
+                        try {
+                            reviewedGuidedDraft = new ReviewedGuidedDraft(
+                                    chosenProject, build, selectedOverlayName, node, property,
+                                    intent, requestedValue, observed.dtsHash(),
+                                    observed.previousOverlayHash(),
+                                    DevicetreeDraftConfigureInspector.digest(
+                                            observed.addition().getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                                    observed.newOverlayHash(), observed.addition());
+                        } catch (java.io.IOException invalid) {
+                            reviewedGuidedDraft = null;
+                            proposedOverlayDraft = "";
+                        }
                         hardwarePreview.setText("BINDING-GROUNDED PROPOSED DIFF — NOT APPLIED\n"
                                 + "The change has NOT been built, saved, or electrically verified.\n"
                                 + "Use 'Copy proposed change' to copy only the new addition.\n"
@@ -1092,6 +1121,7 @@ public final class ConfigurationStudioView extends ViewPart {
                                 + "Nothing saved. Copy only the proposed addition.");
                     } else {
                         proposedOverlayDraft = "";
+                        reviewedGuidedDraft = null;
                         hardwarePreview.setText("No verified source draft is available. "
                                 + "The selected Zephyr binding or property does not support the request.\n"
                                 + "No file was changed. Use the source editor and the real configure tool.");
@@ -1104,6 +1134,128 @@ public final class ConfigurationStudioView extends ViewPart {
         };
         guidedOverlayJob.setUser(true);
         guidedOverlayJob.schedule();
+    }
+
+    /**
+     * Opt-in West/CMake preflight of EXACTLY the current reviewed guided draft.
+     * Actual project CMake hooks execute with host permissions in scratch.
+     * No original overlay/build is written; no firmware is compiled/flashed.
+     */
+    private void testUnsavedGuidedDraft() {
+        final ReviewedGuidedDraft draft = reviewedGuidedDraft;
+        if (draft == null || proposedOverlayDraft.isEmpty()
+                || !proposedOverlayDraft.equals(draft.sourceAddition())
+                || project != draft.project() || !project.isAccessible()
+                || !java.util.Objects.equals(inspectionBuild, draft.build())
+                || !java.util.Objects.equals(selectedOverlay, draft.overlayName())
+                || inspectionSettings == null || hardwareDevices.getSelectionCount() != 1) {
+            MessageDialog.openInformation(getSite().getShell(), "Reviewed guided draft required",
+                    "Create a new verified binding-guided draft for the selected node first. "
+                    + "Older drafts or arbitrary source edits cannot be preflighted.");
+            return;
+        }
+        var current = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+        if (current == null || !draft.node().equals(current.path())) return;
+        if (!"status".equals(draft.intent())) {
+            if (hardwareParameters.getSelectionCount() != 1) return;
+            var row = (DevicetreeParameters.Property)
+                    hardwareParameters.getSelection()[0].getData();
+            if (row == null || !draft.node().equals(row.path())
+                    || !draft.property().equals(row.name())) return;
+        }
+        final java.util.Properties settings = (java.util.Properties) inspectionSettings.clone();
+        final String board = settings.getProperty("board", "");
+        if (board.isBlank()) {
+            MessageDialog.openInformation(getSite().getShell(), "Select an exact board",
+                    "Choose the full board / SoC / CPU-core identity in Project settings first.");
+            return;
+        }
+        final Path app = project.getLocation().toFile().toPath();
+        final Path overlay = app.resolve(draft.overlayName()).normalize();
+        if (!overlay.startsWith(app.normalize()) || !overlay.toString().endsWith(".overlay")
+                || !Files.isDirectory(overlay.getParent())) {
+            MessageDialog.openInformation(getSite().getShell(), "Invalid overlay destination",
+                    "The guided draft must target a .overlay in the current application.");
+            return;
+        }
+        if (!MessageDialog.openQuestion(getSite().getShell(),
+                "Execute real CMake for UNSAVED guided source?",
+                "Run trusted Zephyr West/CMake on a disposable copy of this unsaved draft?\n\n"
+                + "Board/SoC/core: " + board
+                + "\nSelected node: " + draft.node()
+                + "\nSelected property: " + draft.property()
+                + "\nExact requested value: " + draft.value()
+                + "\nApplication overlay: " + draft.overlayName()
+                + "\n\nThe exact value must appear in scratch generated DTS."
+                + "\nNo original source/build is intentionally changed; no firmware is compiled or flashed."
+                + "\n\nIMPORTANT: CMake and project/module hooks execute with host permissions. "
+                + "Scratch is NOT a security sandbox. Only continue with trusted source.")) return;
+        final int generation = unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
+        final var display = analysis.getDisplay();
+        final boolean stale = buildOutdated;
+        status.setText("Running actual West/CMake with reviewed unsaved source in disposable scratch…");
+        unsavedDraftJob = new Job("Guided unsaved source: actual Zephyr CMake preflight") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                DevicetreeDraftConfigureInspector.Result evidence;
+                try {
+                    var resources = new java.util.LinkedHashMap<String, java.io.InputStream>();
+                    for (String name : java.util.List.of("dt_draft_configure_inspect.py",
+                            "zew_evidence/__init__.py", "zew_evidence/collector.py",
+                            "zew_evidence/dt_binding_preview.py", "zew_evidence/peripheral_guide.py",
+                            "zew_evidence/dt_build_validation.py", "zew_evidence/dt_draft_validation.py"))
+                        resources.put(name, ConfigurationStudioView.class.getResourceAsStream(
+                                "/scripts/" + name));
+                    final Path ninja = settings.getProperty("tools.ninja", "").isBlank()
+                            ? null : Path.of(settings.getProperty("tools.ninja"));
+                    evidence = DevicetreeDraftConfigureInspector.inspect(
+                            Path.of(settings.getProperty("python")),
+                            Path.of(settings.getProperty("workspace"), "zephyr"),
+                            app, draft.build(), overlay, ninja, board,
+                            draft.node(), draft.property(), draft.intent(), draft.value(),
+                            draft.originalDtsSha(), draft.originalOverlaySha(),
+                            draft.additionSha(), draft.proposedOverlaySha(),
+                            ProjectContext.environment(settings), resources, monitor::isCanceled);
+                } catch (Exception unavailable) {
+                    evidence = DevicetreeDraftConfigureInspector.Result.unavailable();
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                final String report = evidence.describe(
+                        draft.node(), draft.property(), draft.value(), stale);
+                final boolean accepted = evidence.configured();
+                display.asyncExec(() -> {
+                    if (analysis.isDisposed() || hardwareValidation.isDisposed()
+                            || generation != unsavedDraftGeneration.get()
+                            || reviewedGuidedDraft != draft
+                            || !java.util.Objects.equals(proposedOverlayDraft, draft.sourceAddition())
+                            || project != draft.project()
+                            || !java.util.Objects.equals(inspectionBuild, draft.build())
+                            || !java.util.Objects.equals(selectedOverlay, draft.overlayName())
+                            || hardwareDevices.getSelectionCount() != 1) return;
+                    var selected = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+                    if (selected == null || !draft.node().equals(selected.path())) return;
+                    if (!"status".equals(draft.intent())) {
+                        if (hardwareParameters.getSelectionCount() != 1) return;
+                        var row = (DevicetreeParameters.Property)
+                                hardwareParameters.getSelection()[0].getData();
+                        if (row == null || !draft.node().equals(row.path())
+                                || !draft.property().equals(row.name())) return;
+                    }
+                    hardwareValidation.setText(report);
+                    analysis.setText(report);
+                    hardwareDetails.setSelection(1);
+                    status.setText(accepted
+                            ? "Exact unsaved value observed after real scratch CMake. "
+                              + "Original source unchanged; review and save separately."
+                            : "Unsaved draft NOT validated. See Validation/evidence; "
+                              + "original source unchanged.");
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        unsavedDraftJob.setUser(true);
+        unsavedDraftJob.schedule();
     }
 
     /** Evaluate the selected built node with upstream edtlib in a background job. */
@@ -1383,9 +1535,14 @@ public final class ConfigurationStudioView extends ViewPart {
         if (realConfigureJob != null) realConfigureJob.cancel();
         guidedOverlayGeneration.incrementAndGet();
         if (guidedOverlayJob != null) guidedOverlayJob.cancel();
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         proposedOverlayDraft = "";
+        reviewedGuidedDraft = null;
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         if (hardwarePreview != null && !hardwarePreview.isDisposed())
             hardwarePreview.setText("No proposed changes. Build or project context changed; all previous source drafts are invalid. "
                     + "Select a node and request a new reviewed draft.");
@@ -2654,6 +2811,8 @@ public final class ConfigurationStudioView extends ViewPart {
         if (realConfigureJob != null) realConfigureJob.cancel();
         guidedOverlayGeneration.incrementAndGet();
         if (guidedOverlayJob != null) guidedOverlayJob.cancel();
+        unsavedDraftGeneration.incrementAndGet();
+        if (unsavedDraftJob != null) unsavedDraftJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();

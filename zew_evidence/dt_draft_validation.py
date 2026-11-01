@@ -35,7 +35,10 @@ def preflight(build: Path, application: Path, zephyr: Path, python: Path, board:
               integer: str | None = None, enum: str | None = None,
               kind: str | None = None, ninja: Path | None = None,
               timeout: int = 300, scratch_parent: Path | None = None,
-              bindings: list[Path] | None = None) -> dict:
+              bindings: list[Path] | None = None,
+              expected_dts_sha256: str | None = None,
+              expected_overlay_sha256: str | None = None,
+              expected_addition_sha256: str | None = None) -> dict:
     """Run real West/CMake only for an actual verified user-selected guide draft."""
     if overlay is None:
         raise InputError("Choose the exact in-application .overlay target")
@@ -53,6 +56,13 @@ def preflight(build: Path, application: Path, zephyr: Path, python: Path, board:
         "proposed_overlay_sha256": guidance["proposal"]["post_change_overlay_sha256"],
         "source_addition_sha256": guidance["proposal"]["source_addition_sha256"],
     }
+    if (expected_dts_sha256 is not None
+            and guidance["generated_dts_sha256"] != expected_dts_sha256
+            or expected_overlay_sha256 is not None
+            and (guidance["overlay"]["original_sha256"] or "0" * 64) != expected_overlay_sha256
+            or expected_addition_sha256 is not None
+            and guidance["proposal"]["source_addition_sha256"] != expected_addition_sha256):
+        raise InputError("Reviewed guided draft changed; request a fresh source preview")
     if guidance["status"] != "draft-requires-real-configuration":
         return {
             "schema_version": SCHEMA_VERSION, "status": "manual-review-required",

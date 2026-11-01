@@ -186,6 +186,13 @@ public final class EditorSmoke implements IApplication {
             var preview = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwarePreview");
             check(!preview.getEditable() && preview.getText().contains("No proposed changes"),
                     "hardware overlay draft starts read-only with no implicit edits");
+            var changePage = (org.eclipse.swt.widgets.Composite) dock.getItem(0).getControl();
+            var changeActions = (org.eclipse.swt.widgets.Composite) changePage.getChildren()[0];
+            check(Arrays.stream(changeActions.getChildren())
+                    .anyMatch(child -> child instanceof org.eclipse.swt.widgets.Button button
+                            && button.getText().equals("Test unsaved draft with CMake…"))
+                    && studioField(view, type, "reviewedGuidedDraft") == null,
+                    "installed SWT exposes opt-in unsaved draft preflight but creates no automatic source intent");
             var mode = chip.getClass().getDeclaredClasses()[0];
             var chooseMode = chip.getClass().getMethod("setMode", mode);
             var packageMode = java.util.Arrays.stream(mode.getEnumConstants())
