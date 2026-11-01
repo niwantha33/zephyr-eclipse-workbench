@@ -272,7 +272,14 @@ public final class SvdAutoDiscovery {
             if (truncated[0]) break;
         }
         Map<String, Candidate> unique = new LinkedHashMap<>();
-        for (var candidate : found) unique.putIfAbsent(candidate.fingerprint(), candidate);
+        for (var candidate : found) {
+            // The same bytes may be discovered as a standalone family SVD and
+            // via an explicit vendor .pdsc mapping. Retain the stronger evidence
+            // independently of filesystem traversal order.
+            unique.merge(candidate.fingerprint(), candidate,
+                    (existing, incoming) -> !existing.mappedByPack() && incoming.mappedByPack()
+                            ? incoming : existing);
+        }
         if (truncated[0]) return new Result(State.INCOMPLETE_SCAN, part, null, 0, false,
                 "Search was incomplete; exact SVD not activated until all selected roots are checked.",
                 inspected);
