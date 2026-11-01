@@ -271,6 +271,50 @@ public final class SocRegistersView extends ViewPart {
         job.schedule();
     }
 
+    private String officialSvdPage(String board) {
+        String chip = SvdAutoDiscovery.partFromBoard(board);
+        if (chip.startsWith("esp32")) return "https://github.com/espressif/svd";
+        if (chip.startsWith("mspm0")) return "https://www.ti.com/tool/MSPM0-SDK";
+        if (chip.startsWith("stm32")) return "https://www.st.com/en/embedded-software/stm32cube-mcu-mpu-packages.html";
+        if (chip.startsWith("nrf")) return "https://www.nordicsemi.com/Products/Development-software/nRF-Connect-SDK";
+        if (chip.startsWith("mimx") || chip.startsWith("lpc") || chip.startsWith("mcx"))
+            return "https://mcuxpresso.nxp.com/";
+        if (chip.startsWith("ra") || chip.startsWith("r7fa")) return "https://www.renesas.com/us/en/software-tool/flexible-software-package-fsp";
+        if (chip.startsWith("efr32")) return "https://www.silabs.com/developers/simplicity-studio";
+        return "https://www.keil.arm.com/packs/";
+    }
+
+    private void showSvdHelp(String board, String failure, String downloadUrl) {
+        String page = officialSvdPage(board);
+        String chip = SvdAutoDiscovery.partFromBoard(board);
+        String message = "Exact SoC: " + (chip.isBlank() ? board : chip) + "\\n\\n"
+                + "Reason: " + failure + "\\n\\n"
+                + (downloadUrl == null ? "" : "Attempted source: " + downloadUrl + "\\n\\n")
+                + "Official vendor catalogue: " + page + "\\n\\n"
+                + "1. Open the vendor page and search for the exact SoC or CMSIS Device Family Pack.\\n"
+                + "2. Obtain its SVD or installed .pack (the pack may contain an SVD).\\n"
+                + "3. If you have an .svd, use Load SVD…; if you have a .pack, install it under"
+                + " the managed vendor-svd directory and use Find vendor SVD.\\n"
+                + "4. Reject a different device model: do not select a similar chip merely to show registers.\\n\\n"
+                + "This view needs a suspended debug frame only to read live register values.";
+        var dialog = new org.eclipse.jface.dialogs.MessageDialog(getSite().getShell(),
+                "SVD download / installation guidance", null, message,
+                org.eclipse.jface.dialogs.MessageDialog.INFORMATION,
+                new String[] { "Open official page", "Copy instructions", "Close" }, 2);
+        int choice = dialog.open();
+        if (choice == 0) {
+            try {
+                org.eclipse.swt.program.Program.launch(page);
+            } catch (Exception ignored) { status.setText("Open this official page in a browser: " + page); }
+        } else if (choice == 1) {
+            var clipboard = new org.eclipse.swt.dnd.Clipboard(ui);
+            try {
+                clipboard.setContents(new Object[] { message },
+                        new org.eclipse.swt.dnd.Transfer[] { org.eclipse.swt.dnd.TextTransfer.getInstance() });
+            } finally { clipboard.dispose(); }
+        }
+    }
+
     private void downloadVendorSvd() {
         IProject project = selectedProjectName == null ? null
                 : ResourcesPlugin.getWorkspace().getRoot().getProject(selectedProjectName);
@@ -323,6 +367,7 @@ public final class SocRegistersView extends ViewPart {
                             if (tree.isDisposed() || request != discoveryGeneration) return;
                             status.setText("Espressif SVD download/validation failed: "
                                     + error.getMessage() + ". No unrelated chip map was loaded.");
+                            showSvdHelp(board, error.getMessage(), "https://github.com/espressif/svd");
                         });
                         return new Status(IStatus.WARNING, Activator.ID,
                                 "Espressif SVD provisioning failed", error);
@@ -335,7 +380,8 @@ public final class SocRegistersView extends ViewPart {
         }
         if (!VendorSvdProvisioner.supports(board)) {
             status.setText("Automatic download is not yet verified for " + board
-                    + ". Use an official installed vendor CMSIS pack or Load SVD…");
+                    + ". Open official download guidance for the exact chip.");
+            showSvdHelp(board, "No verified automatic download source configured for this SoC.", null);
             return;
         }
         boolean approved = org.eclipse.jface.dialogs.MessageDialog.openQuestion(
@@ -366,6 +412,7 @@ public final class SocRegistersView extends ViewPart {
                         if (tree.isDisposed() || request != discoveryGeneration) return;
                         status.setText("Official TI SVD download or verification failed: "
                                 + error.getMessage() + ". No guessed register map was loaded.");
+                        showSvdHelp(board, error.getMessage(), "https://software-dl.ti.com/msp430/esd/MSPM0-CMSIS/MSPM0G1X0X_G3X0X/latest/exports/TexasInstruments.MSPM0G1X0X_G3X0X_DFP.1.3.1.pack");
                     });
                     return new Status(IStatus.WARNING, Activator.ID, "Vendor SVD provisioning failed", error);
                 }
