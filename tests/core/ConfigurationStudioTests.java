@@ -684,6 +684,96 @@ public final class ConfigurationStudioTests {
             ok(io.github.niwantha33.zew.core.HardwarePeripheralIndex.matches(uartController,
                     io.github.niwantha33.zew.core.HardwarePeripheralIndex.ALL),
                     "all peripherals includes disabled controllers");
+            // Zephyr 4.4 MSPM0G3507 may contain UART/CAN, yet no ADC/I2C/SPI
+            // controller nodes at all. Never label absent DTS as absent silicon.
+            String mspm0Dts = """
+                    / {
+                        soc {
+                            pin-controller@400a0000 {
+                                compatible = "ti,mspm0-pinctrl";
+                                gpioa: gpio@400a0000 {
+                                    compatible = "ti,mspm0-gpio";
+                                    status = "okay";
+                                };
+                            };
+                            uart0: uart@40108000 {
+                                compatible = "ti,mspm0-uart";
+                                status = "okay";
+                            };
+                            uart1: uart@40100000 {
+                                compatible = "ti,mspm0-uart";
+                                status = "disabled";
+                            };
+                            canfd0: can@40508000 {
+                                compatible = "ti,mspm0-canfd";
+                                status = "okay";
+                            };
+                            pwma0: pwma0 {
+                                compatible = "ti,mspm0-timer-pwm";
+                                status = "okay";
+                            };
+                            timg0: timg0@40084000 {
+                                compatible = "ti,mspm0-timer";
+                                status = "disabled";
+                            };
+                            spi@40468000 {
+                                compatible = "ti,mspm0-spi";
+                                status = "disabled";
+                            };
+                        };
+                    };
+                    """;
+            var inventory = io.github.niwantha33.zew.core.DevicetreeHardware.inspect(mspm0Dts);
+            var coverage = io.github.niwantha33.zew.core.PeripheralCoverage.class;
+            ok(inventory.stream().anyMatch(node -> node.name().equals("uart@40108000")),
+                    "real-style generated DTS parser retains UART registers");
+            var uartCount = io.github.niwantha33.zew.core.PeripheralCoverage.count(inventory, "UART");
+            ok(uartCount.present() == 2 && uartCount.enabled() == 1 && uartCount.disabled() == 1,
+                    "UART count includes enabled and disabled controllers without conflating either");
+            var canCount = io.github.niwantha33.zew.core.PeripheralCoverage.count(inventory, "CAN");
+            ok(canCount.present() == 1 && canCount.enabled() == 1,
+                    "TI CAN-FD controller appears as CAN using its actual node compatible");
+            ok(io.github.niwantha33.zew.core.PeripheralCoverage.count(inventory, "PWM").present() == 1
+                    && io.github.niwantha33.zew.core.PeripheralCoverage.count(inventory, "Timers").present() == 1,
+                    "PWM timer child is PWM rather than double-counted as a timer");
+            var disabledSpi = io.github.niwantha33.zew.core.PeripheralCoverage.count(inventory, "SPI");
+            ok(disabledSpi.present() == 1 && disabledSpi.disabled() == 1,
+                    "disabled DTS peripheral remains listed, not treated as missing silicon");
+            var missingAdc = io.github.niwantha33.zew.core.PeripheralCoverage.explain(
+                    inventory, "ADC", "All nodes", "", false);
+            ok(missingAdc.categoryCount().present() == 0
+                    && missingAdc.explanation().contains("NOT DESCRIBED")
+                    && missingAdc.explanation().contains("does not mean the MCU lacks"),
+                    "absent ADC DTS must never be reported as absent MCU hardware");
+            var filteredUart = io.github.niwantha33.zew.core.PeripheralCoverage.explain(
+                    inventory, "UART", "Disabled", "40108000", false);
+            ok(filteredUart.matching() == 0
+                    && filteredUart.explanation().contains("filters hide"),
+                    "a hidden UART has a different diagnosis from a missing DTS node");
+            ok(io.github.niwantha33.zew.core.PeripheralCoverage.explain(
+                    inventory, "I2C", "All nodes", "", true).explanation().contains("BUILD REQUIRED"),
+                    "stale DTS is never treated as verified current SoC coverage");
+            var disabledParentDts = """
+                    / {
+                        soc {
+                            spi@1200 {
+                                compatible = "vendor,spi";
+                                status = "disabled";
+                                channel@0 { reg = <0>; };
+                            };
+                        };
+                    };
+                    """;
+            var disabledParent = io.github.niwantha33.zew.core.DevicetreeHardware.inspect(disabledParentDts);
+            var spiChild = disabledParent.stream()
+                    .filter(node -> node.name().equals("channel@0")).findFirst().orElseThrow();
+            ok(!io.github.niwantha33.zew.core.PeripheralCoverage.effectiveEnabled(spiChild, disabledParent),
+                    "disabled ancestor propagates to child even when child's own status is default");
+            ok(io.github.niwantha33.zew.core.PeripheralCoverage.explain(
+                    java.util.List.of(), "ADC", "All nodes", "", false)
+                    .explanation().contains("NO GENERATED DTS"),
+                    "no DTS never implies no peripherals in the silicon");
+
             String gpioDts = """
                     / {
                         soc {
