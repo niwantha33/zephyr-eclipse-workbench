@@ -290,7 +290,7 @@ public final class SocRegistersView extends ViewPart {
         String device = chip.isBlank() ? board : chip.toUpperCase(Locale.ROOT);
         String friendly = "We couldn't load the register information for " + device + ".\n\n"
                 + "1. Open the official device website below.\n"
-                + "2. Download its register description (.svd) or device pack (.pack).\n"
+                + "2. Find a register description (.svd) for this device.\n"
                 + "3. Return here and choose Import Register Definitions.\n\n"
                 + "Official website:\n" + page;
         String technical = "Device: " + device + "\n"
