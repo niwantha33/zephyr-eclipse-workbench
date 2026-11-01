@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Devicetree Intelligence Studio — evidence-first engineering specification
 
-**Status:** research and implementation specification, NOT a completed feature or release approval.
+**Status:** first native evidence increment implemented on this PR; broader work remains unimplemented and commercial-release approval is still open.
 **Date:** 2026-11-01
 **Integration:** Extend existing native Configuration Studio Hardware/Insights, never build a duplicate view.
 
@@ -21,6 +21,15 @@ References:
 - https://docs.zephyrproject.org/latest/hardware/pinctrl/index.html
 - https://docs.zephyrproject.org/latest/develop/sca/dtdoctor.html
 - https://docs.nordicsemi.com/r/bundle/nrf-connect-vscode/page/index.html/extensions-included
+
+## Implemented on this PR (increment A, partial)
+
+- `DevicetreeDependencyEvidence` inspects **direct, generated numeric phandle references only** for a selected node.
+- Resolves `pinctrl-N`, scalar links and bounded provider-specifier groups (`#gpio-cells`, `#clock-cells`, etc.) with explicitly indexed providers.
+- Stops at unknown/ambiguous providers and missing specifier cell counts; raw specifier arguments are never guessed as provider phandles.
+- Hardware > Validation / evidence now shows the selected peripheral's resolved references and precise unknown conditions.
+- Regression tests cover pinctrl, clock argument boundaries, GPIO references, unresolved DMA, unavailable `#clock-cells`, malformed generated syntax and direct-node scoping.
+- No SoC package mapping, physical conflict validation, new wizard, driver linkage or runtime proof is introduced by this increment.
 
 ## UX: select a peripheral -> explain -> edit -> validate -> navigate
 
@@ -102,4 +111,4 @@ Hardware: exact evaluation board + revision + probe captured for any claims of f
 
 ## Non-goals and truthful status
 
-This document makes no claim that any feature is already implemented, that these pin mappings exist in the repository, that CI is green, or that usability has been measured. No artificial '60% learning curve improvement' without a predeclared, timed beginner-study protocol and measured outcomes. The commercial acceptance gate remains OPEN.
+Only the explicitly labelled increment-A dependency inspector is implemented here. No vendor physical pin mapping, full feature delivery, CI pass until jobs finish, or measured usability claim is implied. No artificial '60% learning curve improvement' without a predeclared, timed beginner-study protocol and measured outcomes. The commercial acceptance gate remains OPEN.
