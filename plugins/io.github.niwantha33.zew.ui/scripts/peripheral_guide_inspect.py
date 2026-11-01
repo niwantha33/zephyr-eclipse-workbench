@@ -50,7 +50,7 @@ def fields_for(report):
 
 def wire(fields):
     print("ZEW-GUIDE-1")
-    print("\t".join(base64.b64encode(str(item).encode("utf-8")).decode("ascii")
+    print("\t".join(base64.b64encode((str(item) if str(item) else "~").encode("utf-8")).decode("ascii")
                     for item in fields))
 
 
