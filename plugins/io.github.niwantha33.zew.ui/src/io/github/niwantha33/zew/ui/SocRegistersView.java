@@ -134,6 +134,11 @@ public final class SocRegistersView extends ViewPart {
         for (int i = 0; i < headings.length; i++) {
             var column = new TreeColumn(tree, SWT.LEFT); column.setText(headings[i]); column.setWidth(widths[i]);
         }
+        tree.addListener(SWT.Expand, e -> {
+            if (!(e.item instanceof TreeItem item)) return;
+            if (item.getData("registers") instanceof java.util.List<?>) populatePeripheral(item);
+            else if (item.getData() instanceof Register r) populateFields(item, r);
+        });
         tree.addListener(SWT.MouseHover, e -> {
             var item = tree.getItem(new org.eclipse.swt.graphics.Point(e.x, e.y));
             tree.setToolTipText(item == null ? null : (String) item.getData("description"));
@@ -597,49 +602,49 @@ public final class SocRegistersView extends ViewPart {
     }
     private void render() {
         if (device == null || tree == null || tree.isDisposed()) return;
-        Register selected = selected();
-        var expanded = new HashSet<String>();
-        for (var p : tree.getItems()) {
-            if (p.getExpanded()) expanded.add(p.getText());
-            for (var r : p.getItems()) if (r.getExpanded()) expanded.add(((Register)r.getData()).key());
+        Register chosen = selected();
+        var expandedPeripherals = new HashSet<String>();
+        var expandedRegisters = new HashSet<String>();
+        for (TreeItem peripheral : tree.getItems()) {
+            if (peripheral.getExpanded()) expandedPeripherals.add(peripheral.getText());
+            for (TreeItem register : peripheral.getItems()) {
+                if (register.getExpanded() && register.getData() instanceof Register r)
+                    expandedRegisters.add(r.key());
+            }
         }
         tree.setRedraw(false);
         try {
             tree.removeAll();
             String query = search.getText().toLowerCase(Locale.ROOT).trim();
-            var peripherals = new HashMap<String, TreeItem>();
-            int matches = 0;
-            for (var r : device.registers()) {
-                if (!(r.key() + " " + r.description() + " " + r.fields()).toLowerCase(Locale.ROOT).contains(query)) continue;
-                if (++matches > 200) continue;
-                var peripheral = peripherals.computeIfAbsent(r.peripheral(), name -> {
-                    var item = new TreeItem(tree, SWT.NONE); item.setText(name);
-                    item.setExpanded(expanded.contains(name) || !query.isEmpty()); return item;
-                });
-                var item = new TreeItem(peripheral, SWT.NONE); item.setData(r); item.setData("description", r.description());
-                BigInteger value = values.get(r.key());
-                String access = !r.readable() ? "Read blocked: " + r.readBlockReason() : r.access();
-                if (errors.containsKey(r.key())) access = errors.get(r.key());
-                else if (value != null && r.reset() != null && value.xor(r.reset()).and(r.resetMask()).signum() != 0) access += " — differs from reset";
-                if (history.changes().stream().anyMatch(change -> change.registerKey().equals(r.key())))
-                    access += " — CHANGED since pinned snapshot";
-                item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(), "0x" + r.address().toString(16),
-                        value == null ? "—" : hex(value, r.size()), (r.reset() == null ? "—" : hex(r.reset(), r.size())), access });
-                for (var f : r.fields()) {
-                    var field = new TreeItem(item, SWT.NONE); field.setData(r); field.setData("description", f.description());
-                    var mask = BigInteger.ONE.shiftLeft(f.width()).subtract(BigInteger.ONE);
-                    field.setText(new String[] { f.name(), "[" + (f.offset() + f.width() - 1) + ":" + f.offset() + "]",
-                            value == null ? "—" : hex(value.shiftRight(f.offset()).and(mask), f.width()),
-                            (r.reset() == null ? "—" : hex(r.reset().shiftRight(f.offset()).and(mask), f.width())),
-                            f.access() + (f.readAction().isEmpty() ? "" : " / readAction: " + f.readAction()) });
-                }
-                item.setExpanded(expanded.contains(r.key()) || !query.isEmpty());
-                if (selected != null && selected.key().equals(r.key())) tree.setSelection(item);
+            var matches = new java.util.LinkedHashMap<String, java.util.List<Register>>();
+            for (Register r : device.registers()) {
+                if (!(r.key() + " " + r.description() + " " + r.fields())
+                        .toLowerCase(Locale.ROOT).contains(query)) continue;
+                matches.computeIfAbsent(r.peripheral(), key -> new java.util.ArrayList<>()).add(r);
             }
-            for (var entry : peripherals.entrySet())
-                entry.getValue().setExpanded(expanded.contains(entry.getKey()) || !query.isEmpty());
-            summary.setText("Showing " + Math.min(matches, 200) + " of " + matches
-                    + " matching registers. " + (matches > 200 ? "Narrow the search to see more. " : "")
+            for (var entry : matches.entrySet()) {
+                TreeItem peripheral = new TreeItem(tree, SWT.NONE);
+                peripheral.setText(entry.getKey());
+                peripheral.setData("registers", entry.getValue());
+                // Lightweight placeholder: no register or field widgets until expanded.
+                new TreeItem(peripheral, SWT.NONE).setText("Expand to show "
+                        + entry.getValue().size() + " registers");
+                if (expandedPeripherals.contains(entry.getKey())) {
+                    populatePeripheral(peripheral);
+                    peripheral.setExpanded(true);
+                    for (TreeItem child : peripheral.getItems()) {
+                        if (child.getData() instanceof Register r && expandedRegisters.contains(r.key())) {
+                            populateFields(child, r);
+                            child.setExpanded(true);
+                        }
+                        if (child.getData() instanceof Register r && chosen != null
+                                && chosen.key().equals(r.key())) tree.setSelection(child);
+                    }
+                }
+            }
+            int count = matches.values().stream().mapToInt(java.util.List::size).sum();
+            summary.setText("All " + matches.size() + " peripherals; " + count
+                    + " matching registers available. Expand a peripheral to see its registers. "
                     + watches.size() + " watches; " + history.samples().size()
                     + " captured register snapshots (max " + RegisterHistory.LIMIT + ")."
                     + (history.baseline() == null ? " No baseline pinned."
@@ -647,6 +652,52 @@ public final class SocRegistersView extends ViewPart {
                     + " No automatic polling.");
         } finally { tree.setRedraw(true); }
     }
+
+    private void populatePeripheral(TreeItem peripheral) {
+        if (peripheral.isDisposed() || Boolean.TRUE.equals(peripheral.getData("populated"))) return;
+        @SuppressWarnings("unchecked")
+        java.util.List<Register> registers = (java.util.List<Register>) peripheral.getData("registers");
+        if (registers == null) return;
+        peripheral.removeAll();
+        for (Register r : registers) {
+            TreeItem item = new TreeItem(peripheral, SWT.NONE);
+            item.setData(r);
+            item.setData("description", r.description());
+            BigInteger value = values.get(r.key());
+            String access = !r.readable() ? "Read blocked: " + r.readBlockReason() : r.access();
+            if (errors.containsKey(r.key())) access = errors.get(r.key());
+            else if (value != null && r.reset() != null
+                    && value.xor(r.reset()).and(r.resetMask()).signum() != 0)
+                access += " — differs from reset";
+            if (history.changes().stream().anyMatch(change -> change.registerKey().equals(r.key())))
+                access += " — CHANGED since pinned snapshot";
+            item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(),
+                    "0x" + r.address().toString(16),
+                    value == null ? "—" : hex(value, r.size()),
+                    r.reset() == null ? "—" : hex(r.reset(), r.size()), access });
+            if (!r.fields().isEmpty()) new TreeItem(item, SWT.NONE).setText("Expand for fields");
+        }
+        peripheral.setData("populated", Boolean.TRUE);
+    }
+
+    private void populateFields(TreeItem item, Register r) {
+        if (item.isDisposed() || Boolean.TRUE.equals(item.getData("populated"))) return;
+        item.removeAll();
+        BigInteger value = values.get(r.key());
+        for (var f : r.fields()) {
+            TreeItem field = new TreeItem(item, SWT.NONE);
+            field.setData(r);
+            field.setData("description", f.description());
+            var mask = BigInteger.ONE.shiftLeft(f.width()).subtract(BigInteger.ONE);
+            field.setText(new String[] { f.name(), "[" + (f.offset() + f.width() - 1)
+                    + ":" + f.offset() + "]",
+                    value == null ? "—" : hex(value.shiftRight(f.offset()).and(mask), f.width()),
+                    r.reset() == null ? "—" : hex(r.reset().shiftRight(f.offset()).and(mask), f.width()),
+                    f.access() + (f.readAction().isEmpty() ? "" : " / readAction: " + f.readAction()) });
+        }
+        item.setData("populated", Boolean.TRUE);
+    }
+
     private static String hex(BigInteger value, int bits) {
         return "0x" + String.format("%0" + ((bits + 3) / 4) + "X", value);
     }
