@@ -264,7 +264,10 @@ def validate(build: Path, application: Path, zephyr: Path, python: Path, board: 
             elif proposed.exists():
                 raise InputError("Non-regular candidate overlay")
             else:
-                candidate = proposed
+                # On Windows, Path.absolute() can retain path spelling/case
+                # that differs from the canonical selected application.
+                # Resolve existing parents even for a not-yet-created overlay.
+                candidate = proposed.resolve(strict=False)
         if not candidate.is_relative_to(application):
             raise InputError("Candidate overlay must be inside the selected application")
         if candidate.is_file() and candidate.stat().st_size > 64 * 1024:
