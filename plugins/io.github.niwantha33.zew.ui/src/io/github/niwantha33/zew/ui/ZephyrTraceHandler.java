@@ -60,7 +60,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                 + "\nConfiguration: " + expectedProfile + "\n\n"
                 + "First build and flash this exact configuration. The capture resets the target, "
                 + "runs it briefly and leaves it halted. Firmware identity cannot yet be verified.\n\n"
-                + "This preview uses the board's OpenOCD runner and needs CTF RAM tracing enabled.")) return null;
+                + "This preview uses the board's OpenOCD runner and needs CTF RAM tracing enabled.\n"                + "If standalone Trace Compass is installed, Workbench requests opening the saved trace.")) return null;
         Job job = new Job("Capture RTOS trace — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 var console = new MessageConsole("RTOS trace — " + project.getName(), null);
@@ -125,7 +125,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                         throw new IOException(diagnostics.describe(plan.board(), ports.gdb(), owned.isAlive() ? null : owned.exitValue()));
                     staging = Files.createTempDirectory("zew-trace-tool-");
                     for (String name : List.of("capture_snapshot.py", "analyze_trace.py", "cpu_analysis.py",
-                            "timing_analysis.py", "investigation.py", "Zephyr_RTOS_Timeline.xml")) {
+                            "timing_analysis.py", "investigation.py", "trace_compass_bridge.py", "Zephyr_RTOS_Timeline.xml")) {
                         var resource = Activator.getDefault().getBundle().getEntry("tools/rtos_analysis/" + name);
                         if (resource == null) throw new IOException("Trace component missing: " + name + ". Reinstall Workbench.");
                         try (var input = resource.openStream()) { Files.copy(input, staging.resolve(name)); }
@@ -147,11 +147,25 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                         throw new IOException("Capture report missing or outside selected project output.");
                     stream.println("Snapshot includes capture.json and diagnostics.json with "
                             + "offline provenance checks, CPU/ISR accounting and guided corrective actions.");
-                    stream.println("Import the ctf folder in Trace Compass; the supplied XML timeline may need to be imported once.");
+                    stream.println("CTF metadata identity: see capture.json metadata_provenance and trace_build_options.");
+                    // --cli --open is supported by the Trace Compass standalone RCP.
+                    // No viewer/failed viewer must never discard a saved capture.
+                    try {
+                        var viewer = List.of(settings.getProperty("python"),
+                                staging.resolve("trace_compass_bridge.py").toString(),
+                                "--capture", captureDir.toString(), "--open");
+                        new ProcessRunner().run(viewer, Path.of(settings.getProperty("workspace")),
+                                Duration.ofSeconds(10), monitor::isCanceled, stream::println,
+                                ProjectContext.environment(settings));
+                    } catch (Exception viewerError) {
+                        stream.println("Standalone Trace Compass handoff unavailable: " + viewerError.getMessage());
+                    }
+                    stream.println("If not opened automatically: import ctf/ as Generic CTF. "
+                            + "Import Zephyr_RTOS_Timeline.xml once using Tracing > XML Analyses.");
                     if (!shell.isDisposed()) shell.getDisplay().asyncExec(() -> {
                         if (!shell.isDisposed()) {
                             MessageDialog.openInformation(shell, "RTOS trace captured",
-                                    "Snapshot saved in:\n" + captureDir + "\n\nImport the ctf folder in Trace Compass. "
+                                    "Snapshot saved in:\n" + captureDir + "\n\nIf standalone Trace Compass is installed, an open request was attempted. " + "Otherwise import the ctf folder manually. "
                                     + "The supplied XML analysis must be imported once. Open report.html for CPU/ISR "
                                     + "composition and guided findings, or diagnostics.json for machine-readable evidence. "
                                     + "Firmware identity is not verified.");
