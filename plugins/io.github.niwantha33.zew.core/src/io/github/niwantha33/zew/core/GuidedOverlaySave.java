@@ -60,14 +60,16 @@ public final class GuidedOverlaySave {
         if (!Files.isRegularFile(generated, LinkOption.NOFOLLOW_LINKS)
                 || !hash(Files.readAllBytes(generated)).equals(request.originalDtsSha()))
             throw new IOException("Selected build DTS changed after review. Rebuild/review first.");
-        Path root = application.toRealPath();
+        // Preserve the caller's original Windows path spelling for the
+        // existing checkedTarget() owner-path check. That writer separately
+        // canonicalises both paths and rejects symlinks/path escapes.
         Path resolved = selectedOverlay.toAbsolutePath().normalize();
         if (!resolved.toString().endsWith(".overlay"))
             throw new IOException("Selected source must be an application .overlay.");
         // Existing writer canonicalises parent and rejects any symlinks,
         // escaped paths and unsafe candidates before doing any source edits.
         var preview = DevicetreeOverlayChanges.previewAddition(
-                root, resolved, request.addition());
+                application, resolved, request.addition());
         byte[] current = preview.original().getBytes(StandardCharsets.UTF_8);
         String original = preview.existed() ? hash(current) : ZERO;
         if (!original.equals(request.originalOverlaySha())
