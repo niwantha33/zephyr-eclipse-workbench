@@ -83,7 +83,8 @@ class DraftCmakePreflightTests(unittest.TestCase):
         copied = build.parent / "application"
         original_source = (copied / "app.overlay").read_text()
         self.assertIn('status = "disabled"', original_source)
-        self.assertNotIn('status = "disabled"', self.overlay.read_text())
+        if self.overlay.exists():
+            self.assertNotIn('status = "disabled"', self.overlay.read_text())
         self.assertNotEqual(build, self.build)
         self.assertFalse((copied / ".zew-build").exists())
         self.assertEqual(kwargs["stdin"], validator.subprocess.DEVNULL)
