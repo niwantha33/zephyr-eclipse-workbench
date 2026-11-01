@@ -419,6 +419,82 @@ def main():
                 for item in peripheral['images'][0]['checks'][:4]):
             raise ValueError('Successful peripheral selected observations were not supported by EDT')
         print('PASS: real generated EDT and Kconfig independent peripheral evidence, ' + label)
+        # The guided overlay proposal consumes real configured DTS / EDT but
+        # cannot invent a bound GPIO, ADC or physical pin. Selecting '/' is
+        # intentionally conservative: a missing binding must return manual
+        # review instead of claiming it can enable the root node.
+        proposed = subprocess.run([
+            str(python), str(REPO / 'zew.py'), 'peripheral-guide',
+            '--build', str(build_arg), '--zephyr',
+            str(Path(workspace_arg) / 'zephyr'), '--node', '/',
+            '--status', 'disabled', '--kind', 'gpio'
+        ], cwd=REPO, env=env, capture_output=True, text=True,
+           encoding='utf-8', errors='replace', timeout=180)
+        try:
+            plan = json.loads(proposed.stdout)
+        except (ValueError, TypeError) as error:
+            raise ValueError('Real Zephyr peripheral-guide emitted invalid JSON') from error
+        if (proposed.returncode not in (0, 1)
+                or plan['status'] not in
+                   ('draft-requires-real-configuration', 'manual-review-required')
+                or plan['generated_dts_sha256'] !=
+                   hashlib.sha256((Path(build_arg) / 'zephyr/zephyr.dts').read_bytes()).hexdigest()
+                or plan['request_type'] != 'status'
+                or plan['proposal']['visible_diff'] is not None
+                or plan['source']['confidence'] not in ('confirmed', 'unknown')
+                or plan['requested_peripheral_kind'] != 'gpio'):
+            raise ValueError('Real configured Zephyr guided-source provenance or no-guess contract failed')
+        if (plan['proposal']['available'] and
+                (plan['status'] != 'draft-requires-real-configuration'
+                 or proposed.returncode != 0)):
+            raise ValueError('Peripheral guide source was claimed ready without matching EDT')
+        print('PASS: real Zephyr binding-grounded source draft contract, ' + label)
+        if label == 'ti':
+            # Positive *real* Zephyr binding witness: select a GPIO
+            # controller only when upstream edtlib verifies the property
+            # and binding in this exact generated DTS. No guessed pad.
+            witness_code = (
+                'import sys\n'
+                'from pathlib import Path\n'
+                'zephyr=Path(sys.argv[2])\n'
+                'sys.path.insert(0,str(zephyr/"scripts/dts/python-devicetree/src"))\n'
+                'from devicetree import edtlib\n'
+                'edt=edtlib.EDT(sys.argv[1],[str(zephyr/"dts/bindings")])\n'
+                'paths=sorted(n.path for n in edt.nodes if n.binding_path '
+                'and "gpio-controller" in n.props and n.path.startswith("/"))\n'
+                'print(paths[0] if paths else "")\n'
+            )
+            witness = subprocess.run([
+                str(python), '-c', witness_code, str(Path(build_arg) / 'zephyr/zephyr.dts'),
+                str(Path(workspace_arg) / 'zephyr')
+            ], cwd=REPO, env=env, capture_output=True, text=True,
+               encoding='utf-8', errors='replace', timeout=180)
+            if witness.returncode != 0 or not witness.stdout.strip().startswith('/'):
+                raise ValueError('No genuinely bound GPIO controller from selected TI Zephyr DTS/edtlib')
+            actual_node = witness.stdout.strip()
+            positive = subprocess.run([
+                str(python), str(REPO / 'zew.py'), 'peripheral-guide',
+                '--build', str(build_arg), '--zephyr',
+                str(Path(workspace_arg) / 'zephyr'), '--node', actual_node,
+                '--status', 'disabled', '--kind', 'gpio', '--show-diff'
+            ], cwd=REPO, env=env, capture_output=True, text=True,
+               encoding='utf-8', errors='replace', timeout=180)
+            try:
+                positive_report = json.loads(positive.stdout)
+            except (ValueError, TypeError) as error:
+                raise ValueError('Actual GPIO controller guide did not return JSON') from error
+            if (positive.returncode != 0
+                    or positive_report['status'] != 'draft-requires-real-configuration'
+                    or positive_report['source']['binding'] != 'matched'
+                    or 'gpio-controller-property' not in
+                        positive_report['source']['interface_hints']
+                    or not positive_report['proposal']['available']
+                    or 'status = "disabled";' not in
+                        positive_report['proposal']['visible_diff']
+                    or positive_report['generated_dts_sha256'] !=
+                        hashlib.sha256((Path(build_arg) / 'zephyr/zephyr.dts').read_bytes()).hexdigest()):
+                raise ValueError('Real TI bound GPIO source-guide positive acceptance failed')
+            print('PASS: real TI GPIO controller bound by Zephyr edtlib produced review-only source draft')
         # Verify installed SWT resource uses the SAME headless EDT/Kconfig
         # observations across all supported target builds, not a second parser.
         native = subprocess.run([

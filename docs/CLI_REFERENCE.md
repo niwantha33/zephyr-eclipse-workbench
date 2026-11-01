@@ -368,3 +368,30 @@ Exit **1**: incomplete or unavailable. Exit **2**: invalid input.
 No tool execution, writes, network, flashing or hardware probes.
 `zew dt-configure` is the separate opt-in real CMake check for changed
 source and candidate overlays.
+
+
+## Guided GPIO / ADC / SPI / I2C source-review foundation
+
+```sh
+python zew.py peripheral-guide --build ./build --zephyr ./west/zephyr \
+  --node /soc/adc@40000000 --kind adc --set-int zephyr,resolution=12
+```
+
+The guide accepts exactly one `--status okay|disabled`,
+`--set-int PROPERTY=INTEGER`, or `--set-enum PROPERTY=CHOICE`, using
+the **selected real upstream binding's type and enum/const restrictions**.
+Structural properties, pinmux, phandle refs and GPIO route declarations
+cannot be suggested as automatically validated.
+
+It is **read-only** and generates a bounded symbolic-source proposal only
+when the exact built node is matched and the requested binding value is
+supported. Plain output includes the requested change category, per-artifact
+hashes, evidence confidence and proposal hash **not source text**. Pass
+`--application APP --overlay APP/app.overlay --show-diff` to opt into a
+real review diff (which includes existing user source). It does not write a
+file, flash, configure, fetch dependencies or execute CMake.
+
+Exit 0 means **draft available for review only**, 1 manual review needed,
+2 invalid input. See [detailed guide](GUIDED_PERIPHERAL_REVIEW.md) and use
+the separate `dt-configure` command to test the saved change with real
+Zephyr CMake. No electrical or pin-availability inference is made.
