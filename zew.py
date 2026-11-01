@@ -30,6 +30,7 @@ from zew_evidence.config_request_check import check as check_config_requests
 from zew_evidence.config_semantics import enrich as evaluate_config_semantics
 from zew_evidence.dt_binding_preview import inspect as inspect_dt_binding
 from zew_evidence.peripheral_evidence import inspect as inspect_peripheral_evidence
+from zew_evidence.peripheral_guide import guide as guide_peripheral
 from zew_evidence.dt_build_validation import validate as validate_dt_build
 
 
@@ -109,6 +110,30 @@ def main(argv: list[str] | None = None) -> int:
     peripheral.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR")
     peripheral.add_argument("--bindings", type=Path, action="append", default=[],
                             help="Additional explicit Zephyr module binding roots")
+    guided = subs.add_parser("peripheral-guide",
+                             help="Binding-grounded reviewed overlay draft; no writes or inferred pin routes")
+    guided.add_argument("--build", type=Path, required=True)
+    guided.add_argument("--zephyr", type=Path, required=True)
+    guided.add_argument("--node", required=True, help="Exact selected generated DTS node path")
+    guided.add_argument("--kind", choices=("gpio", "adc", "spi", "i2c"),
+                        help="User's peripheral intent, NOT independently verified device category")
+    request = guided.add_mutually_exclusive_group(required=True)
+    request.add_argument("--status", choices=("okay", "disabled"),
+                         help="Explicit node status request")
+    request.add_argument("--set-int", metavar="PROPERTY=INTEGER",
+                         help="Existing binding-interpreted int property (32-bit positive)")
+    request.add_argument("--set-enum", metavar="PROPERTY=TOKEN",
+                         help="Existing binding-interpreted string enum choice")
+    guided.add_argument("--application", type=Path,
+                        help="Exact application root for optional selected overlay")
+    guided.add_argument("--overlay", type=Path,
+                        help="Explicit in-application .overlay, never modified")
+    guided.add_argument("--show-diff", action="store_true",
+                        help="Explicitly show reviewed source diff, including existing overlay context")
+    guided.add_argument("--bindings", type=Path, action="append", default=[],
+                        help="Actual Zephyr module binding root, repeat for modules")
+    guided.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR",
+                        help="Exactly one explicit image when using a sysbuild root")
     real_dts = subs.add_parser("dt-configure",
                                help="Opt-in real west/CMake Devicetree configuration in disposable scratch")
     real_dts.add_argument("--build", type=Path, required=True,
@@ -153,7 +178,14 @@ def main(argv: list[str] | None = None) -> int:
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "peripheral":
+        if args.command == "peripheral-guide":
+            output = guide_peripheral(args.build, args.zephyr, args.node,
+                                      status=args.status, integer=args.set_int,
+                                      enum=args.set_enum, app=args.application,
+                                      overlay=args.overlay, kind=args.kind,
+                                      images=args.image, bindings=args.bindings,
+                                      show_diff=args.show_diff)
+        elif args.command == "peripheral":
             output = inspect_peripheral_evidence(args.build, args.zephyr, args.node,
                                                  args.property, args.symbol, args.image,
                                                  args.bindings)
@@ -263,6 +295,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(output, sort_keys=True, indent=2, ensure_ascii=False))
     if args.command == "verify":
         return 0 if output["status"] == "recorded-artifacts-match" else 1
+    if args.command == "peripheral-guide":
+        return 0 if output["status"] == "draft-requires-real-configuration" else 1
     if args.command == "peripheral":
         return 0 if output["status"] == "selected-observations-present" else 1
     if args.command == "dt-configure":
