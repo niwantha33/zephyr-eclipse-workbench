@@ -437,3 +437,26 @@ passing these prototype tests.
   image and deterministic/privacy behavior. Real seven-target Windows matrix
   exercises the guide's generated DTS provenance and no-guess contract.
 - No build, flash, hardware, licence or G0 qualification claim. **G0 OPEN.**
+
+
+## Native guided peripheral source review — draft PR #105
+
+- Embedded the exact headless `zew peripheral-guide` evaluator into the
+  installed SWT plugin and added a **Guided overlay draft…** action to existing
+  Hardware, Insights and parameter controls, without creating a second editor.
+- Explicit user input distinguishes enable/disable status, existing integer
+  property and actual binding-defined string enum. Source preview is opt-in
+  because an overlay diff can show user/private source context.
+- A typed, bounded, hash-checked Java↔Python wire protocol returns the source
+  diff and only the appendable new addition; **Copy proposed change** does
+  not copy existing overlay contents. The action never writes a file.
+- Added cancellation, stale-selection guards, private temp cleanup, missing
+  binding/manual-review states and explicit next steps for separately running
+  actual Zephyr configuration *after* saving source deliberately.
+- Native bundled Python is byte-identical to the headless core. Unit tests
+  verify exact source diff, no writes, wrong-node/enum fail-closed behaviour;
+  Windows native matrix tests actual TI GPIO node interpreted by Zephyr
+  `edtlib`, comparing guide and native output hashes.
+- No claimed controller/pad availability, real firmware compilation/flash,
+  electrical correctness or physical qualification. **G0 OPEN**. PR review,
+  exact-head CI and manual UI smoke remain required before merge/release.
