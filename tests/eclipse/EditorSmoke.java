@@ -219,6 +219,28 @@ public final class EditorSmoke implements IApplication {
                     && hardware.getItem(0).getItem(0).getItem(0).getItemCount() == 1
                     && hardware.getItem(0).getItem(0).getItem(0).getItem(0).getText().equals("channel@0"),
                     "ADC category keeps child channels available for configuration");
+            var peripheralCoverage = (org.eclipse.swt.widgets.Label) studioField(view, type, "hardwareSummary");
+            var peripheralDescription = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareDescription");
+            kind.select(kind.indexOf("I2C"));
+            kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(grouped.getItemCount() == 1 && grouped.getItem(0).getText().equals("I2C (0)")
+                    && peripheralDescription.getText().contains("NOT DESCRIBED IN SELECTED BUILD DTS")
+                    && peripheralDescription.getText().contains("does not mean the MCU lacks")
+                    && peripheralCoverage.getText().contains("NOT DESCRIBED"),
+                    "missing I2C node is explicitly distinguished from silicon capability");
+            kind.select(kind.indexOf("UART"));
+            kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(grouped.getItemCount() == 1
+                    && grouped.getItem(0).getText().equals("UART (1)")
+                    && grouped.getItem(0).getItem(0).getText().contains("[DTS okay]")
+                    && peripheralCoverage.getText().contains("UART in generated DTS: 1"),
+                    "real UART is enumerated and status-sourced from built DTS");
+            kind.select(kind.indexOf("ADC"));
+            hardwareState.select(hardwareState.indexOf("Okay/default"));
+            kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            check(peripheralCoverage.getText().contains("filters hide"),
+                    "disabled ADC is not mislabeled as an absent silicon ADC");
+            hardwareState.select(0);
             kind.select(kind.indexOf("GPIO"));
             kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             check(grouped.getItemCount() == 1
