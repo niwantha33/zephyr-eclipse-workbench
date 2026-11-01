@@ -487,9 +487,9 @@ public final class ConfigurationStudioView extends ViewPart {
         vendorFeatures.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         vendorFeatures.setHeaderVisible(true);
         vendorFeatures.setLinesVisible(true);
-        for (String heading : new String[] {"Peripheral", "Vendor silicon spec", "Build DTS", "Evidence"}) {
+        for (String columnTitle : new String[] {"Peripheral", "Vendor silicon spec", "Build DTS", "Evidence"}) {
             var column = new TableColumn(vendorFeatures, SWT.LEFT);
-            column.setText(heading);
+            column.setText(columnTitle);
         }
         vendorFeatures.getColumn(0).setWidth(95);
         vendorFeatures.getColumn(1).setWidth(155);
