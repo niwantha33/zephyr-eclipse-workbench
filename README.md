@@ -1,127 +1,95 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
 # Zephyr Eclipse Workbench
 
-**New development direction (2026-10-30):** [Evidence Engine Program v2](docs/EVIDENCE_ENGINE_PROGRAM_V2.md) supersedes the earlier sixteen-area release plan. [Current gate-based status](RELEASE_STATUS.md) and [Phase-0 CLI contract](docs/CLI_REFERENCE.md). The existing Eclipse IDE remains supported; the new evidence core is a separate, limited, read-only prototype, not a production release.
+### Develop, configure, build, flash and debug Zephyr RTOS applications in Eclipse.
 
-An Eclipse-based development environment for Zephyr applications across semiconductor vendors.
+[![GitHub release](https://img.shields.io/github/v/release/niwantha33/zephyr-eclipse-workbench?include_prereleases&label=latest%20release)](https://github.com/niwantha33/zephyr-eclipse-workbench/releases)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/niwantha33/zephyr-eclipse-workbench)](https://github.com/niwantha33/zephyr-eclipse-workbench/stargazers)
+[![GitHub issues](https://img.shields.io/github/issues/niwantha33/zephyr-eclipse-workbench)](https://github.com/niwantha33/zephyr-eclipse-workbench/issues)
 
-## Install from the beginning
+**Zephyr Eclipse Workbench** is an open-source, Eclipse-based IDE integration for **Zephyr RTOS firmware development**. It brings project setup, board selection, West/CMake builds, Kconfig and Devicetree configuration, flashing, GDB debugging and hardware inspection into a familiar embedded C/C++ workflow.
 
-Install **Eclipse IDE for Embedded C/C++ Developers** first. Then install the
-Workbench `_p2.zip` from [GitHub Releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases)
-through **Help > Install New Software > Add > Archive**, restart Eclipse, and
-select **Zephyr > Set Up Zephyr**. The Source code ZIP is not the plug-in installer.
+**[Download releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases) · [Installation guide](docs/FRESH_INSTALL.md) · [Getting started](docs/BEGINNER_SETUP.md) · [Report an issue](https://github.com/niwantha33/zephyr-eclipse-workbench/issues)**
 
-Follow the [fresh-install guide](docs/FRESH_INSTALL.md) for the exact Windows
-file, setup order, updates, probe tools and optional Trace Compass installation.
+> **Release availability:** Current published packages are **preview releases**, not a certified production release. Feature availability and physical-board validation vary by target. See [release status](RELEASE_STATUS.md) for verified coverage and open acceptance gates.
 
-## Project status
+## Why Zephyr Eclipse Workbench?
 
-**Release gate:** This remains a development preview. See [current implementation/evidence and remaining acceptance checks](docs/RELEASE_STATUS_2026-10-30.md) and the [commercial release acceptance matrix](docs/COMMERCIAL_RELEASE_ACCEPTANCE.md). Do not interpret CI packaging success as proof of physical flash/debug support or completed observability.
+- **An Eclipse home for Zephyr:** create or import Zephyr applications without leaving the embedded C/C++ IDE.
+- **Guided environment setup:** provision and reuse managed build dependencies instead of manually assembling every tool path.
+- **Cross-vendor board discovery:** explore targets from your Zephyr checkout, including vendor, SoC, core and board qualifiers.
+- **Configuration in context:** work with Kconfig, `prj.conf`, Devicetree and hardware-oriented configuration views.
+- **Build to debug workflow:** use per-project builds, generated firmware artifacts, Zephyr flash runners and CDT/GDB debugging.
+- **Hardware investigation:** inspect CPU registers, SVD-defined peripherals and supported diagnostic evidence without replacing Zephyr's standard toolchain.
 
-0.1.21 includes shared target dependency repair, native flash/debug integration,
-separate Debug/Release build profiles and an OpenOCD CTF RAM snapshot preview.
-See the [build and trace guide](docs/BUILD_CONFIGURATIONS_AND_TRACE_PREVIEW.md)
-and the [RTOS analysis roadmap](docs/RTOS_ANALYSIS_ROADMAP.md).
-The proposed [observability specification](docs/RTOS_OBSERVABILITY_SPEC.md)
-covers application logs, CPU charts, register analysis and fault/core-dump
-investigation; these expanded analysers are not yet implemented.
+## Features at a glance
 
-Use the native project Properties > Zephyr page to select an exact board/core, then build through Eclipse. Missing supported compiler, HAL and build-host dependencies are prepared automatically. Each project keeps its independent build output.
+| Capability | What it provides |
+| --- | --- |
+| **Project wizard and import** | Create a Zephyr application or discover existing applications in folders and workspaces. |
+| **Managed tools and setup** | Guided installation and checks for Python, West, CMake, Ninja, Zephyr sources and required toolchains. |
+| **Board and SoC explorer** | Select exact Zephyr board targets and qualifiers across supported vendor ecosystems. |
+| **Firmware build profiles** | Separate Debug/Release outputs, pristine rebuild and access to actual ELF/BIN/HEX artifacts. |
+| **Kconfig Studio** | Inspect and edit application configuration with organized navigation and diagnostics. |
+| **Devicetree and hardware views** | Explore hardware nodes, GPIO/pinctrl and peripheral properties using available build metadata. |
+| **Flash and native debug** | Launch supported West runners, OpenOCD and Eclipse CDT/GDB sessions for compatible hardware. |
+| **CPU and SoC registers** | View CPU register state and inspect matching CMSIS-SVD peripheral registers and fields while halted. |
+| **RTOS trace and investigation** | Support for trace capture/analysis workflows and offline diagnostic utilities where configured. |
+| **Evidence and diagnostics** | Inspect build artifacts, compare observed configuration/output and export bounded offline investigation data. |
+| **Update management** | Install workbench updates through the published Eclipse update-channel workflow. |
 
-This is a development preview. Eclipse/p2 packaging and native Windows regression
-tests pass, along with six Windows firmware build cases across TI, STM32,
-Nordic and Espressif, including MCUboot. MSPM0 snapshot capture and timeline
-viewing were observed on physical hardware. These results do not establish
-all-vendor hardware support or completion of the clean-machine desktop tests.
+**Compatibility note:** These are capabilities present in the project at different maturity levels, **not** a guarantee that every feature works with every board. In particular, SoC-register access requires a correct vendor SVD and compatible halted debug session; automatic SVD download/discovery and universal physical debugging are not guaranteed. The evidence CLI is limited and read-only. See [register guide](docs/DEBUG_REGISTERS_AND_THREADS.md) and [current validation status](RELEASE_STATUS.md).
 
-## Scope
+## Quick start — Windows
 
-- Eclipse IDE for Embedded C/C++ Developers with an installable plug-in.
-- Hardware discovery from the selected Zephyr checkout, including external board roots.
-- Common build and configuration controls across TI, STMicroelectronics, Espressif, Nordic, Realtek, and other Zephyr-supported vendors.
-- Existing West, CMake, Ninja, Kconfig, Devicetree, compiler, and runner infrastructure.
-- Open-source dependencies permitting commercial use without mandatory software licence/subscription/royalty fees; per-component licence obligations still apply.
-- Optional pinned Git submodules where upstream packaging/West/p2 integration is unsuitable.
-- Separate evidence for discovery, compilation, flashing, and debugging.
-- Integrated update management for the workbench, compatible Eclipse components and managed tools, with staged recovery and pinned project dependencies.
-- Measurable quality targets for a simpler Zephyr workflow than competing IDE configurations; comparative results are not yet available.
+1. Download and extract **Eclipse IDE for Embedded C/C++ Developers** from the [official Eclipse packages](https://www.eclipse.org/downloads/packages/).
+2. Go to [Releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases), read the release's **START_HERE** instructions and download its **`_p2.zip`** asset. **Source code ZIP is not the Eclipse installer.**
+3. In Eclipse choose **Help → Install New Software → Add → Archive**, select the `_p2.zip`, install the Workbench feature and restart.
+4. Choose **Zephyr → Set Up Zephyr** and complete guided tool setup.
+5. Use **File → New → Other → Zephyr → Zephyr Project**, or **File → Import → Zephyr → Existing Zephyr Application**.
+6. Select the exact board/core under **Project → Properties → Zephyr**; then **Build**, **Flash** or **Debug** as supported by your hardware.
 
-Vendor presence does not imply support for every chip or peripheral. Physical execution requires a compatible board, connection, probe, and vendor tools where applicable.
+For required JDK versions, probe/OpenOCD selection, updates, unsigned-plugin trust prompts and optional Trace Compass support, follow the **[complete fresh-install guide](docs/FRESH_INSTALL.md)**. **Do not assume flashing a physical board happens during setup.**
 
-## Historical initial baseline
+## Configuration and hardware inspection
 
-| Item | Baseline | Evidence |
-|---|---|---|
-| Host | Windows first; Linux planned | User-reported Windows environment |
-| Eclipse | Embedded C/C++ package 2026-09 | Candidate; plug-in not yet tested |
-| Zephyr | v4.4.0 | User-reported successful ESP32-S3 Hello World build |
-| West | 1.5.0 | User-reported terminal output |
-| Initial board target | esp32s3_devkitc/esp32s3/procpu | Compilation reported; exact physical board unconfirmed |
-| Java, Python, SDK | Record exact versions during implementation | Not yet established |
+**Kconfig and `prj.conf`** — navigate application options and review generated configuration rather than treating a requested option as proof it was applied.
 
-The reported command-line build is not evidence that this plug-in works.
+**Devicetree** — inspect nodes, compatible properties, pins and peripheral configuration derived from the selected Zephyr build. Hardware conclusions depend on the selected board, overlays and generated data.
 
-## Preview 0.1.11 — project workflow
+**SoC Registers** — open **Window → Show View → Other → Debug → SoC Registers**, load a **matching vendor CMSIS-SVD**, suspend a compatible target and refresh selected registers or watches. This is a read-only snapshot workflow, not background register polling.
 
-The review branch adds native **File > New > Other > Zephyr > Zephyr Project**
-and **File > Import > Zephyr > Existing Zephyr Application**, independently
-bound to the verified managed Windows x64 environment. New source projects are
-portable and protected against overwrite. Each application has an isolated
-build directory, and the existing HelloZephyr build cache is retained.
+**RTOS and faults** — integrate supported CTF/Trace Compass workflows, CPU state inspection and offline evidence utilities. Complete target coverage and end-to-end fault-analysis validation remain ongoing.
 
-This section describes the historical 0.1.11 baseline. Current dependency preparation and validation are described in the [0.1.20 repair notes](docs/CROSS_VENDOR_REPAIR_0.1.20.md).
+## Supported platforms and hardware
 
-**Updates:** A source merge is separate from an Eclipse installation update. Use the Workbench update command and restart Eclipse after installation. The update channel points to an immutable, verified p2 release.
+The Workbench uses **Zephyr's own board catalogue and build infrastructure**, rather than maintaining a claim of universal support. Example ecosystems include **Texas Instruments (TI MSPM0), STMicroelectronics STM32, Espressif ESP32/ESP32-S3, Nordic Semiconductor nRF**, and other boards available in the selected Zephyr workspace. Discovery and compilation do **not** automatically establish verified flashing, hardware debugging, SVD or tracing for a particular device.
 
-## Standard project workflow
+- **Host:** Windows x64 is the documented installation path; see release notes for other host availability.
+- **Build:** Zephyr, West, CMake, Ninja and target-specific toolchains.
+- **Debug:** Eclipse CDT/GDB with compatible runner and probe software; OpenOCD is the documented managed native backend.
+- **Trace:** Optional Trace Compass; not bundled with the Workbench.
 
-Use **File > New > Zephyr Project** to start a project, **File > Open Projects
-from File System...** to open a folder or archive, and **File > Export > General
-> Archive File** to share it. Zephyr applications are detected and configured
-automatically, including existing generic CDT CMake imports. Saved board targets
-are retained; missing targets are selected in **Project Properties > Zephyr**.
-No separate project repair step is required.
+## Documentation
 
-## Start here
+| Guide | Purpose |
+| --- | --- |
+| [Fresh installation](docs/FRESH_INSTALL.md) | Set up Eclipse, install the plugin and prepare tools. |
+| [Beginner setup](docs/BEGINNER_SETUP.md) | First workspace and firmware build. |
+| [One-click project workflow](docs/ONE_CLICK_WORKFLOW.md) | Create, build, find firmware, flash and debug. |
+| [Existing application import](docs/IMPORT_EXISTING_APPLICATIONS.md) | Bring an existing Zephyr app into Eclipse. |
+| [Tool manager](docs/TOOLS_MANAGER.md) | Detect and manage development tools. |
+| [SoC registers and debug](docs/DEBUG_REGISTERS_AND_THREADS.md) | SVD registers, GDB and thread diagnostics. |
+| [Update channel](docs/UPDATE_CHANNEL.md) | Install and manage Workbench updates. |
+| [Current release evidence](RELEASE_STATUS.md) | Verified capabilities, limitations and release gates. |
 
-- [One-click project setup, build, firmware output, Flash and Debug workflow](docs/ONE_CLICK_WORKFLOW.md)
-- [Standard new, open, configure and export workflows](docs/IMPORT_EXISTING_APPLICATIONS.md)
-- [Global, cross-vendor OpenOCD tool manager](docs/SHARED_OPENOCD_TOOLS.md)
-- [Build, install locally and use the development slice](docs/DEVELOPMENT.md)
-- [Set up workbench updates once](docs/UPDATE_CHANNEL.md)
-- [Detect and reuse tools with Tools Manager](docs/TOOLS_MANAGER.md)
-- [Beginner setup and verified first build](docs/BEGINNER_SETUP.md)
-- [First build evidence and limitations](docs/BUILD_REPORT.md)
-- [Guided tools/project/update workflow](docs/GUIDED_WORKFLOW.md)
-- [Step-by-step roadmap](docs/ROADMAP.md)
-- [Architecture and boundaries](docs/ARCHITECTURE.md)
-- [Hardware research and compatibility policy](docs/COMPATIBILITY.md)
-- [Validation and release criteria](docs/VALIDATION.md)
-- [Automatic updates and recovery](docs/UPDATES.md)
-- [Quality targets and comparison method](docs/QUALITY.md)
-- [Open-source and commercial-use policy](docs/LICENSING.md)
-- [Dependency register and submodules](docs/DEPENDENCIES.md)
-- [Contributing](CONTRIBUTING.md)
+## Open source and contributions
 
-## Licensing and publication
+Zephyr Eclipse Workbench is an independent project, not an official Zephyr Project or Eclipse Foundation distribution. Original project code is available under **[Apache License 2.0](LICENSE)** unless otherwise stated. Dependencies and vendor tools retain their individual licenses; check [licensing guidance](docs/LICENSING.md).
 
-Original workbench material is licensed under [Apache-2.0](LICENSE), unless a more specific notice applies. Third-party components retain their own licences and obligations.
-The core workflow must use open-source software permitting commercial use without mandatory licence fees. Proprietary blobs and closed utilities are excluded from that workflow; some board features may therefore be unavailable. Exact dependency and firmware-feature audits are pending. See [the policy](docs/LICENSING.md).
+Contributions, hardware validation reports, bug reports and feature proposals are welcome via [Issues](https://github.com/niwantha33/zephyr-eclipse-workbench/issues) and [Pull Requests](https://github.com/niwantha33/zephyr-eclipse-workbench/pulls). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-This is an independent integration project. Upstream sources: [Zephyr](https://github.com/zephyrproject-rtos/zephyr) and [Eclipse Embedded CDT](https://eclipse-embed-cdt.github.io/).
+## Search keywords
 
-
-
-Native Eclipse Run/Debug controls, CCS/other-IDE adapter boundaries and the editor improvement roadmap are described in [IDE integration](docs/IDE_INTEGRATION.md).
-
-### SoC peripheral registers
-
-Open **Window > Show View > Other > Debug > SoC Registers**, load the exact chip vendor SVD, and refresh a selected register while halted in native Debug. Includes search, bitfields, watches and reset comparison. See [register inspection](docs/DEBUG_REGISTERS_AND_THREADS.md) for supported SVD features and validation limits.
-
-**Additional opt-in evidence prototype:** the headless
-[`zew config-check`](docs/CONFIG_REQUEST_CHECK.md) compares explicit
-boolean/tristate requests from a selected `prj.conf` or pasted snippet with
-the **last generated** `.config`. It reports conflicting settings, absent
-evidence and mismatches without modifying files or inventing dependency
-causes. It is a Phase-0 feasibility CLI, **not** a finished semantic
-Truth Check or evidence of a measured learning-curve gain.
+Zephyr RTOS IDE · Zephyr Eclipse IDE · Eclipse Zephyr plugin · Zephyr firmware development · embedded C/C++ IDE · RTOS development environment · West build · Zephyr CMake · Kconfig editor · Devicetree editor · Devicetree overlay · pin configuration · GPIO configuration · SoC configuration · CMSIS-SVD · SVD register viewer · MCU peripheral registers · ARM Cortex-M debug · GDB · OpenOCD · embedded debugging · RTOS thread analysis · CTF tracing · Trace Compass · Zephyr fault analysis · STM32 Zephyr · ESP32 Zephyr · Nordic nRF Zephyr · TI MSPM0 Zephyr · cross-vendor embedded development
