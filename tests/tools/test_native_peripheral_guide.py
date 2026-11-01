@@ -69,6 +69,7 @@ class NativePeripheralGuideTests(unittest.TestCase):
         self.assertEqual(lines[0], "ZEW-GUIDE-1")
         fields = [base64.b64decode(v, validate=True).decode("utf-8")
                   for v in lines[1].split("\t")]
+        fields[12:] = ["" if value == "~" else value for value in fields[12:]]
         self.assertEqual(len(fields), 14)
         return completed.returncode, fields, completed.stdout
 
