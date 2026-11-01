@@ -16,6 +16,28 @@
 
 > **Release availability:** Current published packages are **preview releases**, not a certified production release. Feature availability and physical-board validation vary by target. See [release status](RELEASE_STATUS.md) for verified coverage and open acceptance gates.
 
+## Built for engineers who need proof, not just a green build
+
+**Most Zephyr IDEs help you build and flash. Zephyr Eclipse Workbench also focuses on verifying which artifacts, configuration and debugger assumptions you are actually using.** Its strongest direction is an **evidence-aware workflow** from selected board to build artifacts, target debug checks and shareable investigations.
+
+### Flagship: build and debug integrity safeguards
+
+**Debug-server preflight:** Before attaching GDB for a supported OpenOCD launch, the Workbench can compare bounded Zephyr thread metadata read from the target with the matching launch ELF. When metadata differs, it **fails closed** with concrete mismatch information instead of proceeding with invalid RTOS offsets. This protects the diagnostic workflow from misleading thread views; it does **not** validate the complete flashed firmware image.
+
+**Build and artifact verification:** Its read-only Evidence CLI collects allowlisted build artifacts with SHA-256 digests, compares working and failing build snapshots and rechecks archived artifact identities against an explicitly selected build. Reports distinguish **matching, changed, missing and unknown** rather than inventing root causes.
+
+**Reproducible investigation sharing:** A sanitised offline evidence bundle preserves a deterministic graph and integrity manifest. Bounded inspection checks archive structure and content hashes without extraction, while excluding raw ELF files, source, arbitrary configuration strings and logs. Hash matching detects changes; **it is not digital signing or producer authentication**.
+
+**Update delivery safeguards:** The repository's publication pipeline is designed to validate packaged Eclipse update artifacts, pin published content to an immutable commit and check manifest file digests. Build/publisher checks are separate from the offline Evidence CLI and from physical-board validation.
+
+> **Critical scope:** These are implemented safeguards with different levels of test coverage, not a claim of cryptographic secure boot, complete build-server attestation, guaranteed target firmware identity or production certification. Check [debug metadata handling](docs/DEBUG_REGISTERS_AND_THREADS.md), [Evidence CLI contract](docs/CLI_REFERENCE.md), [update publication design](docs/PRIVATE_UPDATE_PUBLISH.md), and [release gate status](RELEASE_STATUS.md).
+
+### Why this is a meaningful market distinction
+
+The existing **IDE for Zephyr**, **Ac6 Workbench for Zephyr** and **Nordic nRF Connect for VS Code** document tool management, build/flash/debug, graphical configuration and, in some cases, memory/static analysis and SBOM features. We **do not** claim that those tools lack integrity checking altogether. Our positioning is a deliberate **hardware + generated-configuration + build-provenance + debug-preflight + offline-investigation** combination, with explicit unknown states and traceable evidence.
+
+**Primary value:** *Know what was requested. Inspect what was built. Check what the debugger can trust. Preserve the evidence.*
+
 ## What makes this Workbench different?
 
 ### 1. Visual Hardware Studio — understand the chip, not just the DTS text
@@ -98,7 +120,9 @@ This is a **product design distinction**, not a benchmarked claim of exclusivity
 | **Flash and native debug** | Launch supported West runners, OpenOCD and Eclipse CDT/GDB sessions for compatible hardware. |
 | **CPU and SoC registers** | View CPU register state and inspect matching CMSIS-SVD peripheral registers and fields while halted. |
 | **RTOS trace and investigation** | Support for trace capture/analysis workflows and offline diagnostic utilities where configured. |
-| **Evidence and diagnostics** | Inspect build artifacts, compare observed configuration/output and export bounded offline investigation data. |
+| **Build Evidence Engine** | SHA-256 artifact snapshots, working/failing build comparisons, snapshot freshness verification and sanitised investigation bundles. |
+| **Debug-server integrity preflight** | Compare selected ELF Zephyr thread metadata with target reads before supported GDB attachment; stop on mismatches. |
+| **Evidence and diagnostics** | Inspect observed configuration/output, preserve unknowns and export bounded offline investigation data. |
 | **Update management** | Install workbench updates through the published Eclipse update-channel workflow. |
 
 **Compatibility note:** These are capabilities present in the project at different maturity levels, **not** a guarantee that every feature works with every board. In particular, SoC-register access requires a correct vendor SVD and compatible halted debug session; automatic SVD download/discovery and universal physical debugging are not guaranteed. The evidence CLI is limited and read-only. See [register guide](docs/DEBUG_REGISTERS_AND_THREADS.md) and [current validation status](RELEASE_STATUS.md).
@@ -154,4 +178,4 @@ Contributions, hardware validation reports, bug reports and feature proposals ar
 
 ## Search keywords
 
-Zephyr hardware visualization · Zephyr Visual Hardware Studio · chip pinout viewer · Zephyr Configuration Studio · configuration evidence engine · Zephyr diagnostics IDE · RTOS fault investigation ·  Zephyr Eclipse IDE · Eclipse Zephyr plugin · Zephyr firmware development · embedded C/C++ IDE · RTOS development environment · West build · Zephyr CMake · Kconfig editor · Devicetree editor · Devicetree overlay · pin configuration · GPIO configuration · SoC configuration · CMSIS-SVD · SVD register viewer · MCU peripheral registers · ARM Cortex-M debug · GDB · OpenOCD · embedded debugging · RTOS thread analysis · CTF tracing · Trace Compass · Zephyr fault analysis · STM32 Zephyr · ESP32 Zephyr · Nordic nRF Zephyr · TI MSPM0 Zephyr · cross-vendor embedded development
+Zephyr build artifact integrity · Zephyr debug server integrity · ELF thread metadata validation · Zephyr build provenance · firmware evidence graph · SHA-256 artifact verification · reproducible build comparison · offline diagnostic bundle · Zephyr hardware visualization · Zephyr Visual Hardware Studio · chip pinout viewer · Zephyr Configuration Studio · configuration evidence engine · Zephyr diagnostics IDE · RTOS fault investigation ·  Zephyr Eclipse IDE · Eclipse Zephyr plugin · Zephyr firmware development · embedded C/C++ IDE · RTOS development environment · West build · Zephyr CMake · Kconfig editor · Devicetree editor · Devicetree overlay · pin configuration · GPIO configuration · SoC configuration · CMSIS-SVD · SVD register viewer · MCU peripheral registers · ARM Cortex-M debug · GDB · OpenOCD · embedded debugging · RTOS thread analysis · CTF tracing · Trace Compass · Zephyr fault analysis · STM32 Zephyr · ESP32 Zephyr · Nordic nRF Zephyr · TI MSPM0 Zephyr · cross-vendor embedded development
