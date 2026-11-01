@@ -507,3 +507,24 @@ passing these prototype tests.
 - No source is saved, no firmware is compiled/flashed, and no physical pin
   use/readiness is inferred. G0 remains OPEN; exact PR-head CI and manual
   installed-UI acceptance required before any merge or release.
+
+
+## Preflight-gated reviewed guided overlay saving — development PR
+
+- Existing native Changes dock now offers **Save verified draft with backup…**
+  after the binding-guided draft and real unsaved scratch CMake preflight.
+- Reuses existing `DevicetreeOverlayChanges` backed-up atomic writer.
+  New `GuidedOverlaySave` requires exact generated DTS, original/proposed
+  overlay and proposed-addition hashes, matching selected node/property,
+  and an independently parsed successful **exact-value-observed** scratch
+  preflight before any write.
+- A second explicit modal confirmation shows the exact source addition and
+  hashes. A new overlay is created atomically only if absent; an existing
+  overlay gets a byte-preserving backup. Stale source/build, symlink/path
+  escape, duplicate and wrong generated value cases fail closed.
+- Saving a guided source **does not** configure normal build overlays,
+  compile, flash or prove physical GPIO availability. The existing native
+  **Build & validate** action is deliberately a separate user choice.
+- Added real-filesystem Java race and backup tests plus installed Eclipse UI
+  smoke verifying an inert, unapproved save button. No auto-merge/release;
+  **G0 remains OPEN**.

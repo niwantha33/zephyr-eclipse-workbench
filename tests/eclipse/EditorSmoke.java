@@ -193,6 +193,12 @@ public final class EditorSmoke implements IApplication {
                             && button.getText().equals("Test unsaved draft with CMake…"))
                     && studioField(view, type, "reviewedGuidedDraft") == null,
                     "installed SWT exposes opt-in unsaved draft preflight but creates no automatic source intent");
+            check(Arrays.stream(changeActions.getChildren())
+                    .anyMatch(child -> child instanceof org.eclipse.swt.widgets.Button button
+                            && button.getText().equals("Save verified draft with backup…"))
+                    && studioField(view, type, "verifiedGuidedPreflight") == null,
+                    "installed SWT offers reviewed backed-up source save without auto-committing");
+
             var mode = chip.getClass().getDeclaredClasses()[0];
             var chooseMode = chip.getClass().getMethod("setMode", mode);
             var packageMode = java.util.Arrays.stream(mode.getEnumConstants())
