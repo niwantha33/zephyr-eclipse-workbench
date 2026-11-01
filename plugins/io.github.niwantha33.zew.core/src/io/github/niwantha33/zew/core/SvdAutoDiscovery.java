@@ -71,7 +71,7 @@ public final class SvdAutoDiscovery {
         SvdDevice device = SvdDevice.read(new ByteArrayInputStream(bytes));
         // Either exact SVD model identity OR an installed vendor pack's explicit
         // PDSC Dname/Dvariant -> debug svd mapping for this exact target.
-        if (!vendorPackMapped && !normal(device.name()).equals(normal(part))) return null;
+        if (!vendorPackMapped && !SvdPartCompatibility.matches(part, device.name())) return null;
         String sha = fingerprint(bytes);
         Path chosen = source;
         if (cache != null) {
@@ -252,7 +252,8 @@ public final class SvdAutoDiscovery {
                             }
                             if (attrs.isSymbolicLink() || !attrs.isRegularFile()) return FileVisitResult.CONTINUE;
                             String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
-                            if (name.endsWith(".svd") && normal(name).contains(normal(part))) {
+                            if (name.endsWith(".svd") && (normal(name).contains(normal(part))
+                                    || ("mspm0g3507".equals(part) && normal(name).contains("mspm0g350x")))) {
                                 Candidate candidate = fileCandidate(file, part);
                                 if (candidate != null) found.add(candidate);
                             } else if (name.endsWith(".pack"))
@@ -271,7 +272,14 @@ public final class SvdAutoDiscovery {
             if (truncated[0]) break;
         }
         Map<String, Candidate> unique = new LinkedHashMap<>();
-        for (var candidate : found) unique.putIfAbsent(candidate.fingerprint(), candidate);
+        for (var candidate : found) {
+            // The same bytes may be discovered as a standalone family SVD and
+            // via an explicit vendor .pdsc mapping. Retain the stronger evidence
+            // independently of filesystem traversal order.
+            unique.merge(candidate.fingerprint(), candidate,
+                    (existing, incoming) -> !existing.mappedByPack() && incoming.mappedByPack()
+                            ? incoming : existing);
+        }
         if (truncated[0]) return new Result(State.INCOMPLETE_SCAN, part, null, 0, false,
                 "Search was incomplete; exact SVD not activated until all selected roots are checked.",
                 inspected);

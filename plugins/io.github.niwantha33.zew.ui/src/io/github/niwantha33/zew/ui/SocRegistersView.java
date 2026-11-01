@@ -51,6 +51,7 @@ import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 import io.github.niwantha33.zew.core.SvdDevice;
 import io.github.niwantha33.zew.core.SvdAutoDiscovery;
+import io.github.niwantha33.zew.core.SvdPartCompatibility;
 import io.github.niwantha33.zew.core.VendorSvdProvisioner;
 import io.github.niwantha33.zew.core.GitHubSvdProvisioner;
 import io.github.niwantha33.zew.core.RegisterHistory;
@@ -535,8 +536,7 @@ public final class SocRegistersView extends ViewPart {
             SvdDevice loaded;
             try (var input = Files.newInputStream(Path.of(path))) { loaded = SvdDevice.read(input); }
             if (!exactPackDeviceMapping && selectedBoard != null && !selectedBoard.isBlank()
-                    && !loaded.name().replaceAll("[^A-Za-z0-9]", "").equalsIgnoreCase(
-                            SvdAutoDiscovery.partFromBoard(selectedBoard).replaceAll("[^A-Za-z0-9]", ""))) {
+                    && !SvdPartCompatibility.matches(SvdAutoDiscovery.partFromBoard(selectedBoard), loaded.name())) {
                 status.setText("Rejected SVD model " + loaded.name() + ": expected exact SoC "
                         + SvdAutoDiscovery.partFromBoard(selectedBoard)
                         + ". A family-level or other-chip register map cannot be substituted.");

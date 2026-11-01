@@ -32,6 +32,28 @@ public final class SvdDeviceTests {
         check(d.name().equals("TestChip") && r.address().equals(new BigInteger("40000004", 16)), "address");
         check(r.size() == 32 && r.reset().intValue() == 128 && r.fields().get(1).width() == 3, "properties");
         check(r.readable(), "readable register");
+        // TI MSPM0G350X: device-wide 32-bit resetMask inherited by an
+        // 8-bit register in an array inside a cluster must be narrowed.
+        String tiByte = "<cluster><name>EVENTLP[%s]</name><dim>1</dim>"
+                + "<dimIncrement>32</dimIncrement><addressOffset>0x100</addressOffset>"
+                + "<register><name>PORT[%s]</name><dim>32</dim><dimIncrement>1</dimIncrement>"
+                + "<addressOffset>0x0</addressOffset><size>8</size><resetValue>0x0</resetValue>"
+                + "<fields><field><name>CHANID</name><bitOffset>0x0</bitOffset>"
+                + "<bitWidth>0x8</bitWidth></field></fields></register></cluster>";
+        var ti = parse(device(peripheral(tiByte))
+                .replace("<resetValue>0x80</resetValue>",
+                        "<resetValue>0x0</resetValue><resetMask>0xFFFFFFFF</resetMask>"));
+        check(ti.registers().size() == 32, "TI byte register array inside cluster");
+        check(ti.registers().get(0).resetMask().intValueExact() == 0xFF,
+                "inherited 32-bit reset mask is narrowed for 8-bit TI register");
+        check(ti.registers().get(31).address().equals(new BigInteger("4000011f", 16)),
+                "last TI byte register address");
+        rejects(device(peripheral(tiByte.replace("<size>8</size>",
+                "<size>8</size><resetMask>0xFFFFFFFF</resetMask>")))
+                .replace("<resetValue>0x80</resetValue>",
+                        "<resetValue>0x0</resetValue><resetMask>0xFFFFFFFF</resetMask>"),
+                "explicit register reset mask wider than its width remains invalid");
+
         String hexFields = "<register><name>HEX</name><addressOffset>0x0</addressOffset><fields>"
                 + "<field><name>ZERO</name><bitOffset>0x0</bitOffset><bitWidth>0x1</bitWidth></field>"
                 + "<field><name>HIGH</name><lsb>0x4</lsb><msb>0x7</msb></field>"
