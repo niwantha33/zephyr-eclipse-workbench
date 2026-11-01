@@ -530,38 +530,66 @@ public final class SocRegistersView extends ViewPart {
     private void load(String path) { load(path, false); }
 
     private void load(String path, boolean exactPackDeviceMapping) {
-        // Bound document size before the DOM allocation; vendor files are loaded offline.
-        try {
-            if (Files.size(Path.of(path)) > 32 * 1024 * 1024) throw new IllegalArgumentException("SVD exceeds 32 MiB");
-            SvdDevice loaded;
-            try (var input = Files.newInputStream(Path.of(path))) { loaded = SvdDevice.read(input); }
-            if (!exactPackDeviceMapping && selectedBoard != null && !selectedBoard.isBlank()
-                    && !SvdPartCompatibility.matches(SvdAutoDiscovery.partFromBoard(selectedBoard), loaded.name())) {
-                status.setText("Rejected SVD model " + loaded.name() + ": expected exact SoC "
-                        + SvdAutoDiscovery.partFromBoard(selectedBoard)
-                        + ". A family-level or other-chip register map cannot be substituted.");
-                return;
+        // Parsing a multi-megabyte vendor SVD on SWT's UI thread can starve
+        // DSF/GDB progress and make a healthy debug session appear frozen.
+        // This operation is offline: never resume, suspend or terminate GDB.
+        final long request = ++discoveryGeneration;
+        final String board = selectedBoard;
+        final String project = selectedProjectName;
+        status.setText("Loading register definitions in background; debug session remains unchanged…");
+        Job job = new Job("Load register definitions") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                try {
+                    Path file = Path.of(path);
+                    if (Files.size(file) > 32 * 1024 * 1024)
+                        throw new IllegalArgumentException("SVD exceeds 32 MiB");
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    SvdDevice loaded;
+                    try (var input = Files.newInputStream(file)) { loaded = SvdDevice.read(input); }
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    var digest = java.security.MessageDigest.getInstance("SHA-256");
+                    try (var input = Files.newInputStream(file)) {
+                        byte[] buffer = new byte[4096];
+                        int count;
+                        while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+                    }
+                    final String identity = java.util.HexFormat.of().formatHex(digest.digest());
+                    if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
+                        if (closed || tree.isDisposed() || request != discoveryGeneration) return;
+                        if (!exactPackDeviceMapping && board != null && !board.isBlank()
+                                && !SvdPartCompatibility.matches(SvdAutoDiscovery.partFromBoard(board), loaded.name())) {
+                            status.setText("Register definitions are for " + loaded.name()
+                                    + ", not the selected " + SvdAutoDiscovery.partFromBoard(board)
+                                    + ". Previous definitions were kept.");
+                            return;
+                        }
+                        generation++; busy = false; device = loaded; svdPath = path;
+                        svdIdentity = identity;
+                        values.clear(); errors.clear(); watches.clear(); history.clear();
+                        render();
+                        discoveryExplanation = (exactPackDeviceMapping
+                                ? "Installed CMSIS pack maps " + board + " to " + loaded.name()
+                                : "Register model: " + loaded.name() + "; selected board: " + board)
+                                + ". Live readings require an explicit refresh while halted.";
+                        status.setText(loaded.name() + " — " + loaded.registers().size()
+                                + " definitions loaded. Debug execution was not changed.");
+                    });
+                    return Status.OK_STATUS;
+                } catch (Exception ex) {
+                    if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
+                        if (closed || tree.isDisposed() || request != discoveryGeneration) return;
+                        status.setText("Register definitions could not be loaded; previous model retained: "
+                                + ex.getMessage());
+                    });
+                    return new Status(IStatus.WARNING, Activator.ID,
+                            "Register definition loading failed", ex);
+                }
             }
-            generation++; busy = false; device = loaded; svdPath = path;
-            values.clear(); errors.clear(); watches.clear(); history.clear();
-            var digest = java.security.MessageDigest.getInstance("SHA-256");
-            try (var input = Files.newInputStream(Path.of(path))) {
-                byte[] buffer = new byte[4096];
-                int count;
-                while ((count = input.read(buffer)) >= 0) digest.update(buffer, 0, count);
-            }
-            svdIdentity = java.util.HexFormat.of().formatHex(digest.digest());
-            render();
-            discoveryExplanation = (exactPackDeviceMapping
-                    ? "Installed CMSIS pack maps " + selectedBoard + " to SVD model " + device.name()
-                    : "SVD device name: " + device.name() + "; exact project part: " + selectedBoard)
-                    + ". Register values are read only on explicit halted refresh.";
-            status.setText(device.name() + " — " + device.registers().size() + " registers — " + path
-                    + ". SVD is not proof of connected silicon identity. Select a safe register and Refresh while halted.");
-        } catch (Exception ex) {
-            status.setText("SVD not loaded (previous device retained): " + ex.getMessage());
-        }
+        };
+        job.setSystem(true);
+        job.schedule();
     }
+
     private Register selected() {
         if (tree.getSelectionCount() == 0) return null;
         var item = tree.getSelection()[0];
@@ -583,7 +611,7 @@ public final class SocRegistersView extends ViewPart {
             int matches = 0;
             for (var r : device.registers()) {
                 if (!(r.key() + " " + r.description() + " " + r.fields()).toLowerCase(Locale.ROOT).contains(query)) continue;
-                if (++matches > 2000) continue;
+                if (++matches > 200) continue;
                 var peripheral = peripherals.computeIfAbsent(r.peripheral(), name -> {
                     var item = new TreeItem(tree, SWT.NONE); item.setText(name);
                     item.setExpanded(expanded.contains(name) || !query.isEmpty()); return item;
@@ -610,8 +638,8 @@ public final class SocRegistersView extends ViewPart {
             }
             for (var entry : peripherals.entrySet())
                 entry.getValue().setExpanded(expanded.contains(entry.getKey()) || !query.isEmpty());
-            summary.setText("Showing " + Math.min(matches, 2000) + " of " + matches
-                    + " matching registers. " + (matches > 2000 ? "Narrow the search to see more. " : "")
+            summary.setText("Showing " + Math.min(matches, 200) + " of " + matches
+                    + " matching registers. " + (matches > 200 ? "Narrow the search to see more. " : "")
                     + watches.size() + " watches; " + history.samples().size()
                     + " captured register snapshots (max " + RegisterHistory.LIMIT + ")."
                     + (history.baseline() == null ? " No baseline pinned."
