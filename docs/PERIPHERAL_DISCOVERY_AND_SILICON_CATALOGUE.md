@@ -31,6 +31,18 @@ includes or supports each feature. CAN-FD and vendor timer-PWM bindings are
 classified by compatible without counting pinctrl state names or LED consumers
 as controllers.
 
+**Silicon / vendor** is a *separate source tab* in the Hardware explorer.
+For the exact `lp_mspm0g3507/mspm0g3507` target it presents a
+reviewed, source-linked TI published feature summary: ADC **2 units**,
+DAC **1**, UART **4**, I2C **2**, SPI **2**, CAN-FD **1**, timers **7**,
+one DMA controller with 7 channels, and **up to 22 PWM channels**
+(the last is explicitly *not* 22 PWM controllers). Its right-hand
+column compares the actual selected generated-DTS node count, which may be
+zero even though silicon exists. Clicking a feature explains the difference
+or selects its *real* DTS nodes. Package availability remains unverified.
+For other SoCs there is no guessed catalogue; exact vendor SVD discovery
+remains available.
+
 **Exact silicon catalogue (SVD)…** opens the existing offline SoC Register
 view and attempts exact-device SVD discovery from installed local vendor
 SDKs and CMSIS packs. If the exact part is missing or ambiguous, the UI
