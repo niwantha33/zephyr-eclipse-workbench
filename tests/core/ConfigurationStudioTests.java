@@ -838,6 +838,26 @@ public final class ConfigurationStudioTests {
                     && wired.cExample().contains("raw sample storage")
                     && wired.steps().contains("input 3"),
                     "exact controller phandle and index choose ADC #1 without invented package pin");
+            String multipleInputs = twoAdcs.replace("<0x20 2>, <0x10 3>",
+                    "<0x10 5>, <0x10 3>");
+            var exactChannel = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    multipleInputs, "ADC", "/soc/adc@4000/channel@3", "CONFIG_ADC=y", false);
+            ok(exactChannel.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.ADC_WIRING_FOUND
+                    && exactChannel.cExample().contains("DT_PATH(zephyr_user), 1"),
+                    "explicit selected ADC channel selects exact index among multiple io-channels");
+            var ambiguousController = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    multipleInputs, "ADC", "/soc/adc@4000", "CONFIG_ADC=y", false);
+            ok(ambiguousController.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.SETUP_REQUIRED
+                    && ambiguousController.cExample().isBlank(),
+                    "without channel selection multiple inputs require user choice, never guess");
+            String duplicateHandle = twoAdcs.replace("phandle = <0x20>;", "phandle = <0x10>;");
+            ok(io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    duplicateHandle, "ADC", "/soc/adc@4000/channel@3", "CONFIG_ADC=y", false)
+                    .cExample().isBlank(), "duplicate Devicetree phandle identity blocks automatic channel match");
+            String mismatchedReg = twoAdcs.replace("reg = <3>;", "reg = <9>;");
+            ok(io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
+                    mismatchedReg, "ADC", "/soc/adc@4000/channel@3", "CONFIG_ADC=y", false)
+                    .cExample().isBlank(), "ADC child reg must match io-channel input before sample generation");
             var partialAdc = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
                     twoAdcs, "ADC", "/soc/adc@6000", "CONFIG_ADC=y", false);
             ok(partialAdc.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.SETUP_REQUIRED
