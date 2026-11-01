@@ -540,6 +540,65 @@ def main():
             if list(scratch_parent.iterdir()):
                 raise ValueError('Unsaved guide preflight leaked disposable source/build data')
             print('PASS: real TI guided unsaved source applied in scratch and exact DTS value observed')
+            # Native Eclipse source resources MUST give the same factual
+            # result as the headless unsaved preflight on this actual TI
+            # board / real Zephyr edtlib GPIO controller. No application
+            # overlay gets written or flashed by either invocation.
+            reviewed = subprocess.run([
+                str(python), str(REPO / 'zew.py'), 'peripheral-guide',
+                '--build', str(build_arg), '--zephyr',
+                str(Path(workspace_arg) / 'zephyr'), '--node', actual_node,
+                '--status', 'okay', '--application', str(app),
+                '--overlay', str(ci_overlay)
+            ], cwd=REPO, env=env, capture_output=True, text=True,
+               encoding='utf-8', errors='replace', timeout=180)
+            if reviewed.returncode != 0:
+                raise ValueError('Real TI selected guide review was not accepted')
+            try:
+                selected_review = json.loads(reviewed.stdout)
+            except (ValueError, TypeError) as error:
+                raise ValueError('Selected TI binding review returned invalid JSON') from error
+            native_draft = subprocess.run([
+                str(python), '-I', '-B', str(REPO /
+                    'plugins/io.github.niwantha33.zew.ui/scripts/dt_draft_configure_inspect.py'),
+                '--build', str(build_arg), '--application', str(app),
+                '--zephyr', str(Path(workspace_arg) / 'zephyr'),
+                '--board', str(target), '--node', actual_node,
+                '--overlay', str(ci_overlay), '--status', 'okay',
+                '--ninja', str(ninja),
+                '--expected-dts-sha256', selected_review['generated_dts_sha256'],
+                '--expected-overlay-sha256',
+                selected_review['overlay']['original_sha256'] or '0' * 64,
+                '--expected-addition-sha256',
+                selected_review['proposal']['source_addition_sha256']
+            ], cwd=REPO, env=env, capture_output=True, text=True,
+               encoding='utf-8', errors='replace', timeout=390)
+            parts = native_draft.stdout.strip().splitlines()
+            if len(parts) != 2 or parts[0] != 'ZEW-DRAFT-CMAKE-1':
+                raise ValueError('Installed unsaved CMake adapter did not return versioned protocol')
+            try:
+                native_values = [base64.b64decode(x, validate=True).decode('ascii')
+                                 for x in parts[1].split('\t')]
+            except (ValueError, UnicodeError) as error:
+                raise ValueError('Invalid native unsaved CMake protocol base64') from error
+            if (native_draft.returncode != 0 or len(native_values) != 13
+                    or native_values[0:2] != ['configured', 'real-zephyr-cmake-accepted']
+                    or native_values[2] != selected_review['generated_dts_sha256']
+                    or native_values[4] !=
+                        (selected_review['overlay']['original_sha256'] or '0' * 64)
+                    or native_values[5] != selected_review['proposal']['post_change_overlay_sha256']
+                    or native_values[6] != native_values[5]
+                    or native_values[7] != selected_review['node_sha256']
+                    or native_values[8] != selected_review['property_sha256']
+                    or native_values[9:12] !=
+                        ['exact-value-observed', 'staged', 'identity-verified']):
+                raise ValueError('Installed native unsaved CMake did not prove exact generated TI GPIO value')
+            if (Path(build_arg) / 'zephyr/zephyr.dts').read_bytes() != original_dts_bytes:
+                raise ValueError('Native scratch CMake edited original configured DTS')
+            if ((hashlib.sha256(ci_overlay.read_bytes()).hexdigest()
+                 if ci_overlay.is_file() else None) != before_ci_overlay):
+                raise ValueError('Native scratch CMake edited original user app.overlay')
+            print('PASS: native unsaved draft scratch CMake equals exact headless real TI GPIO evidence')
             gui_overlay = app / 'app.overlay'
             before_gui_overlay = (hashlib.sha256(gui_overlay.read_bytes()).hexdigest()
                                   if gui_overlay.is_file() else None)
