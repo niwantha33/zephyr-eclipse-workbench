@@ -32,6 +32,19 @@ public final class SvdDeviceTests {
         check(d.name().equals("TestChip") && r.address().equals(new BigInteger("40000004", 16)), "address");
         check(r.size() == 32 && r.reset().intValue() == 128 && r.fields().get(1).width() == 3, "properties");
         check(r.readable(), "readable register");
+        String hexFields = "<register><name>HEX</name><addressOffset>0x0</addressOffset><fields>"
+                + "<field><name>ZERO</name><bitOffset>0x0</bitOffset><bitWidth>0x1</bitWidth></field>"
+                + "<field><name>HIGH</name><lsb>0x4</lsb><msb>0x7</msb></field>"
+                + "<field><name>RANGE</name><bitRange>[0xB:0x8]</bitRange></field>"
+                + "</fields></register>";
+        var hex = parse(device(peripheral(hexFields))).registers().get(0);
+        check(hex.fields().get(0).offset() == 0 && hex.fields().get(0).width() == 1,
+                "TI-style 0x0 bit offset parses");
+        check(hex.fields().get(1).offset() == 4 && hex.fields().get(1).width() == 4,
+                "hex lsb/msb parses");
+        check(hex.fields().get(2).offset() == 8 && hex.fields().get(2).width() == 4,
+                "hex bit range parses");
+
         var ro = parse(device(peripheral(reg.replace("<fields>", "<readAction>clear</readAction><fields>"))));
         check(!ro.registers().get(0).readable(), "read clear must be blocked");
         var fieldAction = parse(device(peripheral(reg.replace("<name>EN</name>", "<name>EN</name><readAction>modify</readAction>"))));
