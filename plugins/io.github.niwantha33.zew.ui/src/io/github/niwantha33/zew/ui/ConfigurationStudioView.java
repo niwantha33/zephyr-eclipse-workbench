@@ -52,6 +52,7 @@ import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeBindingInspector;
 import io.github.niwantha33.zew.core.DevicetreeRealConfigureInspector;
 import io.github.niwantha33.zew.core.PeripheralEvidenceInspector;
+import io.github.niwantha33.zew.core.PeripheralGuideInspector;
 import io.github.niwantha33.zew.core.GpioBankEvidence;
 import io.github.niwantha33.zew.core.GpioSourceEvidence;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
@@ -121,6 +122,9 @@ public final class ConfigurationStudioView extends ViewPart {
     private final java.util.concurrent.atomic.AtomicInteger peripheralEvidenceGeneration =
             new java.util.concurrent.atomic.AtomicInteger();
     private Job realConfigureJob;
+    private Job guidedOverlayJob;
+    private final java.util.concurrent.atomic.AtomicInteger guidedOverlayGeneration =
+            new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger realConfigureGeneration =
             new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger bindingGeneration = new java.util.concurrent.atomic.AtomicInteger();
@@ -566,6 +570,8 @@ public final class ConfigurationStudioView extends ViewPart {
         parameterActions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         parameterActions.setLayout(new GridLayout(2, true));
         Button configure = action(parameterActions, "Configure property…", this::prepareHardwareOverride);
+        action(parameterActions, "Guided binding draft…", this::prepareGuidedOverlay)
+                .setToolTipText("Upstream edtlib checks the selected binding; preview a source diff without saving");
         configure.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         Button source = action(parameterActions, "Show declaration", this::revealParameterSource);
         source.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -639,6 +645,8 @@ public final class ConfigurationStudioView extends ViewPart {
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
         action(hardwareActions, "Validate selected binding", () -> inspectSelectedBinding(false));
+        action(hardwareActions, "Guided overlay draft…", this::prepareGuidedOverlay)
+                .setToolTipText("Review a binding-checked status, integer or enum source request; no writes");
         action(hardwareActions, "Peripheral evidence…", this::inspectPeripheralEvidence)
                 .setToolTipText("Exact generated DTS and optional independent CONFIG_ symbol; no pin or driver assumptions");
         action(hardwareActions, "Preview saved overlay binding", () -> inspectSelectedBinding(true));
@@ -661,6 +669,7 @@ public final class ConfigurationStudioView extends ViewPart {
         action(evidenceActions, "Compare evidence…", () -> openEvidence(true));
         action(evidenceActions, "Validate selected binding", () -> inspectSelectedBinding(false));
         action(evidenceActions, "Peripheral evidence…", this::inspectPeripheralEvidence);
+        action(evidenceActions, "Guided overlay draft…", this::prepareGuidedOverlay);
         action(evidenceActions, "Preview saved overlay binding", () -> inspectSelectedBinding(true));
         action(evidenceActions, "Real configure (scratch)", () -> validateRealDevicetree(false));
         action(evidenceActions, "Real configure + saved overlay", () -> validateRealDevicetree(true));
@@ -930,6 +939,154 @@ public final class ConfigurationStudioView extends ViewPart {
         };
         peripheralEvidenceJob.setSystem(true);
         peripheralEvidenceJob.schedule();
+    }
+
+    /**
+     * Guided source intent is derived only from an explicitly selected node
+     * and an explicitly selected property. The headless EDT guide decides
+     * what is permitted; this dialog never claims a pin or driver is ready.
+     */
+    private void prepareGuidedOverlay() {
+        if (project == null || !project.isAccessible() || project.getLocation() == null
+                || inspectionBuild == null || inspectionSettings == null
+                || hardwareDevices.getSelectionCount() != 1) {
+            MessageDialog.openInformation(getSite().getShell(), "Guided overlay review",
+                    "Select one generated hardware node and build the exact board first.");
+            return;
+        }
+        var selectedDevice = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+        if (selectedDevice == null) return;
+        final String node = selectedDevice.path();
+        String chosenProperty = null;
+        if (hardwareParameters.getSelectionCount() == 1) {
+            var selected = (DevicetreeParameters.Property)
+                    hardwareParameters.getSelection()[0].getData();
+            if (selected != null && node.equals(selected.path())) chosenProperty = selected.name();
+        }
+        int choice = new MessageDialog(getSite().getShell(), "Guided Zephyr source draft", null,
+                "Choose a source request for the selected generated Devicetree node:\n" + node
+                + "\n\nThe exact selected Zephyr binding must permit the request."
+                + "\nNo GPIO pin, interrupt, pinmux or driver relationship will be guessed."
+                + "\nOnly a reviewable source diff will be produced. Nothing will be saved.",
+                MessageDialog.QUESTION,
+                new String[] {"Enable node", "Disable node", "Existing integer property…",
+                        "Binding string enum…", "Cancel"}, 4).open();
+        if (choice < 0 || choice > 3) return;
+        final String intent = choice <= 1 ? "status" : choice == 2 ? "int" : "enum";
+        final String property = choice <= 1 ? "status" : chosenProperty;
+        if (property == null) {
+            MessageDialog.openInformation(getSite().getShell(), "Choose a built property",
+                    "Select a property that belongs to this exact generated node first.\n"
+                    + "The guide only accepts existing upstream binding-interpreted "
+                    + "integer and string-enum properties.");
+            return;
+        }
+        String value = choice == 0 ? "okay" : choice == 1 ? "disabled" : null;
+        if (value == null) {
+            InputDialog request = new InputDialog(getSite().getShell(), "Binding-guided value",
+                    "Selected property: " + property + "\nGenerated node: " + node
+                    + "\n\nEnter " + ("int".equals(intent)
+                            ? "an unsigned 32-bit decimal or hexadecimal integer"
+                            : "an exact string choice declared by the Zephyr binding")
+                    + ". The guide will reject incompatible types, deprecated values, "
+                    + "unknown choices and pinmux/phandle fields.",
+                    "", candidate -> candidate.length() == 0 || candidate.length() > 80
+                    || candidate.contains("\n") || candidate.contains("\r")
+                            ? "Enter a nonempty, bounded value without line breaks." : null);
+            if (request.open() != Window.OK) return;
+            value = request.getValue();
+        }
+        final String requestedValue = value;
+        final IProject chosenProject = project;
+        final Path app = chosenProject.getLocation().toFile().toPath();
+        final Path build = inspectionBuild;
+        final var settings = (java.util.Properties) inspectionSettings.clone();
+        final String selectedOverlayName = selectedOverlay;
+        final Path overlay = app.resolve(selectedOverlayName).normalize();
+        if (!overlay.startsWith(app.normalize()) || !overlay.toString().endsWith(".overlay")
+                || !Files.isDirectory(overlay.getParent())) {
+            MessageDialog.openInformation(getSite().getShell(), "Choose an application overlay",
+                    "The source-draft destination must be an .overlay file inside "
+                    + "the selected project. Select a valid overlay first.");
+            return;
+        }
+        if (!MessageDialog.openQuestion(getSite().getShell(), "Show local source diff?",
+                "Inspect the saved overlay and show its proposed diff locally?\n"
+                + overlay.getFileName() + "\n\n"
+                + "The diff may include existing project source comments or values. "
+                + "It is not sent to a remote service."
+                + "\nNo file is written, configured, built or flashed.")) return;
+        final int generation = guidedOverlayGeneration.incrementAndGet();
+        if (guidedOverlayJob != null) guidedOverlayJob.cancel();
+        final var display = analysis.getDisplay();
+        final boolean stale = buildOutdated;
+        proposedOverlayDraft = "";
+        status.setText("Inspecting the actual selected Zephyr binding; preparing source-only draft…");
+        guidedOverlayJob = new Job("Guided selected Zephyr overlay source review") {
+            @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                PeripheralGuideInspector.Result result;
+                try {
+                    var packaged = new java.util.LinkedHashMap<String, java.io.InputStream>();
+                    for (String name : java.util.List.of("peripheral_guide_inspect.py",
+                            "zew_evidence/__init__.py", "zew_evidence/collector.py",
+                            "zew_evidence/dt_binding_preview.py", "zew_evidence/peripheral_guide.py"))
+                        packaged.put(name, ConfigurationStudioView.class.getResourceAsStream("/scripts/" + name));
+                    result = PeripheralGuideInspector.inspect(
+                            Path.of(settings.getProperty("python")),
+                            Path.of(settings.getProperty("workspace"), "zephyr"), build,
+                            app, overlay, node, property, intent, requestedValue,
+                            packaged, monitor::isCanceled);
+                } catch (Exception unavailable) {
+                    result = PeripheralGuideInspector.Result.unavailable();
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                final String report = result.describe(node, property, intent, stale);
+                final PeripheralGuideInspector.Result observed = result;
+                display.asyncExec(() -> {
+                    if (analysis.isDisposed() || hardwareValidation.isDisposed()
+                            || hardwarePreview.isDisposed()
+                            || generation != guidedOverlayGeneration.get()
+                            || project != chosenProject
+                            || !java.util.Objects.equals(build, inspectionBuild)
+                            || !java.util.Objects.equals(selectedOverlayName, selectedOverlay)
+                            || hardwareDevices.getSelectionCount() != 1) return;
+                    var current = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
+                    if (current == null || !node.equals(current.path())) return;
+                    if (!"status".equals(intent)) {
+                        if (hardwareParameters.getSelectionCount() != 1) return;
+                        var row = (DevicetreeParameters.Property)
+                                hardwareParameters.getSelection()[0].getData();
+                        if (row == null || !node.equals(row.path())
+                                || !property.equals(row.name())) return;
+                    }
+                    hardwareValidation.setText(report);
+                    analysis.setText(report);
+                    if (observed.hasDraft()) {
+                        proposedOverlayDraft = observed.addition();
+                        hardwarePreview.setText("BINDING-GROUNDED PROPOSED DIFF — NOT APPLIED\n"
+                                + "The change has NOT been built, saved, or electrically verified.\n"
+                                + "Use 'Copy proposed change' to copy only the new addition.\n"
+                                + "Edit and save the selected application overlay deliberately, "
+                                + "then run 'Real configure + saved overlay'.\n\n"
+                                + observed.diff());
+                        hardwareDetails.setSelection(0);
+                        status.setText("Reviewed source draft available in Changes / app.overlay. "
+                                + "Nothing saved. Copy only the proposed addition.");
+                    } else {
+                        proposedOverlayDraft = "";
+                        hardwarePreview.setText("No verified source draft is available. "
+                                + "The selected Zephyr binding or property does not support the request.\n"
+                                + "No file was changed. Use the source editor and the real configure tool.");
+                        hardwareDetails.setSelection(1);
+                        status.setText("Binding guidance unavailable; manual source review required.");
+                    }
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        guidedOverlayJob.setUser(true);
+        guidedOverlayJob.schedule();
     }
 
     /** Evaluate the selected built node with upstream edtlib in a background job. */
@@ -1207,6 +1364,8 @@ public final class ConfigurationStudioView extends ViewPart {
         if (peripheralEvidenceJob != null) peripheralEvidenceJob.cancel();
         realConfigureGeneration.incrementAndGet();
         if (realConfigureJob != null) realConfigureJob.cancel();
+        guidedOverlayGeneration.incrementAndGet();
+        if (guidedOverlayJob != null) guidedOverlayJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         definitionCache.clear();
@@ -2472,6 +2631,8 @@ public final class ConfigurationStudioView extends ViewPart {
         if (peripheralEvidenceJob != null) peripheralEvidenceJob.cancel();
         realConfigureGeneration.incrementAndGet();
         if (realConfigureJob != null) realConfigureJob.cancel();
+        guidedOverlayGeneration.incrementAndGet();
+        if (guidedOverlayJob != null) guidedOverlayJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
         if (headingFont != null && !headingFont.isDisposed()) headingFont.dispose();
