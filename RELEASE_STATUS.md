@@ -460,3 +460,26 @@ passing these prototype tests.
 - No claimed controller/pad availability, real firmware compilation/flash,
   electrical correctness or physical qualification. **G0 OPEN**. PR review,
   exact-head CI and manual UI smoke remain required before merge/release.
+
+
+## Unsaved guided source preflight — real CMake milestone
+
+- Added `zew dt-draft-configure`, a headless-first opt-in check of a
+  user-selected, binding-approved **unsaved** status/int/enum source draft.
+- The exact guided source addition is recovered from a review diff and
+  SHA-256 checked against the headless guide. Original overlay hash,
+  selected-build DTS, board/core and checkout identity are verified.
+- The existing scratch West/CMake validator now stages additions only
+  in the copied app overlay. The original project and generated build are
+  never edited. Both prepared scratch source hash and new generated
+  DTS SHA-256 are returned.
+- Actual selected Zephyr `dtlib` reads the scratch DTS **value**, not
+  merely property presence: `status`/string-enum `to_string` and
+  int `to_num`. Wrong value rejects success, even if CMake succeeded.
+- Negative fixtures cover wrong values, missing binding, stale overlay
+  and no-source writes. The native Windows TI MSPM0 matrix additionally
+  tests actual GPIO binding selection and actual West/CMake preflight
+  without source changes; portable CLI packaging coverage is updated.
+- Running CMake executes trusted project hooks with host privileges.
+  This is *not* a security sandbox. No compilation, flash, runtime,
+  physical-pad or release qualification claim. **G0 remains OPEN**.
