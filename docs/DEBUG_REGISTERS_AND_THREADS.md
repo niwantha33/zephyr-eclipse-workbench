@@ -9,7 +9,7 @@ This uses the current native Zephyr DSF-GDB session.
 
 ## Named SoC peripherals
 
-Open **Window > Show View > Other > Debug > SoC Registers**. Click **Load SVD**
+Open **Window > Show View > Other > Debug > Zephyr Hardware Register Explorer**. Click **Load SVD**
 and choose the exact chip's vendor CMSIS-SVD file. The file is loaded locally;
 Workbench does not download or guess a device definition. The selected SVD path
 is restored when the view is reopened. Check its device name against your
@@ -19,7 +19,7 @@ The native tree shows peripherals, registers, bitfields, addresses, access,
 reset values and values from the selected CDT DSF-GDB debug session. Search by
 peripheral, register, field or description. Select a register (or one of its
 fields), halt the target, select a suspended frame in Debug, then click
-**Refresh selected + watches**. **Watch / unwatch** includes a register in later
+**Refresh Live Values**. **Watch / unwatch** includes a register in later
 refreshes, including when filtered out of the tree. Values differing from the
 SVD reset value within its reset mask are marked. An unspecified reset value
 is shown as unavailable, not assumed to be zero.
@@ -169,14 +169,14 @@ These tests do not establish successful RTOS enumeration on hardware.
 
 ## Native debugging data and peripheral views
 
-Use **Zephyr > Show Debug Data / SoC Peripherals** to open native Variables,
-Expressions and CPU Registers alongside **SoC Registers**. A successful Zephyr
+Use **Zephyr > Show Debug Data / Hardware Register Explorer** to open native Variables,
+Expressions and CPU Registers alongside **Zephyr Hardware Register Explorer**. A successful Zephyr
 launch opens these views and initially activates CPU Registers. Select a suspended
 stack frame to inspect its locals; globals can be added explicitly in Expressions.
 Values may be unavailable for optimised code, missing symbols or a running target.
 
 A separately installed view titled **Peripherals** is not the Workbench SVD view
-and may require a different launch integration. Use **SoC Registers > Load SVD…**
+and may require a different launch integration. Use **Zephyr Hardware Register Explorer > Import Register Definitions…**
 and choose the exact physical chip's vendor file. Loading a model does not prove
 it matches the device. Peripheral reads remain explicit and honour the SVD access
 restrictions; the tool does not infer package/register definitions from a board name.
