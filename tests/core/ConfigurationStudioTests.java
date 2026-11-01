@@ -853,7 +853,7 @@ public final class ConfigurationStudioTests {
                     noIo, "ADC", "/soc/adc@4000", "CONFIG_ADC=y", false);
             ok(disconnected.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.SETUP_REQUIRED
                     && disconnected.cExample().isBlank(), "no zephyr,user io-channels blocks example");
-            String disabledAdc = twoAdcs.replaceFirst("status = \\"okay\\";", "status = \\"disabled\\";");
+            String disabledAdc = twoAdcs.replaceFirst("status = \"okay\";", "status = \"disabled\";");
             var off = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
                     disabledAdc, "ADC", "/soc/adc@4000", "CONFIG_ADC=y", false);
             ok(off.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.DTS_DISABLED
@@ -863,7 +863,7 @@ public final class ConfigurationStudioTests {
             ok(uartGuide.state() == io.github.niwantha33.zew.core.PeripheralStartGuide.State.DTS_DISABLED
                     && uartGuide.steps().contains("binding"),
                     "UART follows real generated node and warns on disabled state");
-            String onUart = twoAdcs.replace("status = \\"disabled\\";", "status = \\"okay\\";");
+            String onUart = twoAdcs.replace("status = \"disabled\";", "status = \"okay\";");
             for (String startCategory : new String[]{"UART", "SPI", "I2C", "CAN", "PWM", "DAC"}) {
                 var info = io.github.niwantha33.zew.core.PeripheralStartGuide.inspect(
                         onUart, startCategory, "/soc/uart@5000", "CONFIG_SERIAL=y", false);
