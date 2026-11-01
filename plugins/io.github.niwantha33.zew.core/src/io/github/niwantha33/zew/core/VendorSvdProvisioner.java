@@ -28,7 +28,7 @@ public final class VendorSvdProvisioner {
     private static final String TI_MSPM0_PACK =
             "TexasInstruments.MSPM0G1X0X_G3X0X_DFP.1.3.1.pack";
     private static final URI TI_MSPM0_URI =
-            URI.create("https://www.keil.com/pack/" + TI_MSPM0_PACK);
+            URI.create("https://software-dl.ti.com/msp430/esd/MSPM0-CMSIS/MSPM0G1X0X_G3X0X/latest/exports/" + TI_MSPM0_PACK);
 
     public record Provisioned(Path pack, String sha256, SvdAutoDiscovery.Result device) {}
 
@@ -73,7 +73,7 @@ public final class VendorSvdProvisioner {
                         URI next = uri.resolve(location);
                         if (!"https".equalsIgnoreCase(next.getScheme()))
                             throw new IOException("Insecure redirect from vendor pack host.");
-                        // Only the official Keil download endpoints are permitted.
+                        // Follow only TI's official CMSIS-pack download endpoints.
                         String host = next.getHost().toLowerCase(java.util.Locale.ROOT);
                         if (!isApprovedRedirectHost(host))
                             throw new IOException("Unexpected vendor redirect host: " + host);
@@ -138,8 +138,7 @@ public final class VendorSvdProvisioner {
     public static boolean isApprovedRedirectHost(String host) {
         if (host == null) return false;
         return switch (host.toLowerCase(java.util.Locale.ROOT)) {
-            case "www.keil.com", "keil.com", "www.keil.arm.com",
-                    "keil.arm.com", "keilpack.azureedge.net" -> true;
+            case "software-dl.ti.com", "downloads.ti.com" -> true;
             default -> false;
         };
     }
