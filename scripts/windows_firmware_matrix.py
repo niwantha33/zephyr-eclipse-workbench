@@ -495,6 +495,38 @@ def main():
                         hashlib.sha256((Path(build_arg) / 'zephyr/zephyr.dts').read_bytes()).hexdigest()):
                 raise ValueError('Real TI bound GPIO source-guide positive acceptance failed')
             print('PASS: real TI GPIO controller bound by Zephyr edtlib produced review-only source draft')
+            gui_overlay = app / 'app.overlay'
+            before_gui_overlay = (hashlib.sha256(gui_overlay.read_bytes()).hexdigest()
+                                  if gui_overlay.is_file() else None)
+            guided_native = subprocess.run([
+                str(python), '-I', '-B',
+                str(REPO / 'plugins/io.github.niwantha33.zew.ui/scripts/peripheral_guide_inspect.py'),
+                '--build', str(build_arg), '--zephyr',
+                str(Path(workspace_arg) / 'zephyr'), '--node', actual_node,
+                '--application', str(app), '--overlay', str(gui_overlay),
+                '--status', 'disabled'
+            ], cwd=REPO, env=env, capture_output=True, text=True,
+               encoding='utf-8', errors='replace', timeout=180)
+            output_lines = guided_native.stdout.strip().splitlines()
+            if len(output_lines) != 2 or output_lines[0] != 'ZEW-GUIDE-1':
+                raise ValueError('Native real Zephyr source guide did not emit valid wire header')
+            try:
+                gui_fields = [base64.b64decode(x, validate=True).decode('utf-8')
+                              for x in output_lines[1].split('\t')]
+            except (ValueError, UnicodeError) as error:
+                raise ValueError('Native Zephyr source guide emitted invalid encoding') from error
+            if (guided_native.returncode != 0 or len(gui_fields) != 14
+                    or gui_fields[0:2] != ['draft-requires-real-configuration', 'status']
+                    or gui_fields[4] != positive_report['generated_dts_sha256']
+                    or gui_fields[7:9] != ['matched', 'confirmed']
+                    or not gui_fields[12].startswith('--- selected-overlay-before')
+                    or 'status = "disabled";' not in gui_fields[13]
+                    or gui_fields[5] != (before_gui_overlay or '0' * 64)):
+                raise ValueError('Native guided source proposal mismatches actual headless TI binding')
+            if ((hashlib.sha256(gui_overlay.read_bytes()).hexdigest()
+                 if gui_overlay.is_file() else None) != before_gui_overlay):
+                raise ValueError('Native guided draft modified the original application overlay')
+            print('PASS: installed guided overlay SWT adapter verified real TI GPIO source diff')
         # Verify installed SWT resource uses the SAME headless EDT/Kconfig
         # observations across all supported target builds, not a second parser.
         native = subprocess.run([
