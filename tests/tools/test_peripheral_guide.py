@@ -214,8 +214,10 @@ class GuidedPeripheralTests(unittest.TestCase):
         with contextlib.redirect_stdout(output := io.StringIO()):
             self.assertEqual(main(args + ["--show-diff"]), 0)
         self.assertIn("status = ", json.loads(output.getvalue())["proposal"]["visible_diff"])
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(main(args[:-1] + ["bogus"]), 2)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as invalid:
+                main(args[:-1] + ["bogus"])
+        self.assertEqual(invalid.exception.code, 2)
 
 
 if __name__ == "__main__":
