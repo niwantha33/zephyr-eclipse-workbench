@@ -433,6 +433,7 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwarePeripheralTree.setToolTipText("Only controllers/channels detected from the built Devicetree. No unverified package pins.");
         hardwarePeripheralTree.addListener(SWT.Selection, event -> {
             if (hardwarePeripheralTree.getSelectionCount() == 0) return;
+            invalidateGuidedDraftSelection();
             var device = hardwarePeripheralTree.getSelection()[0].getData();
             if (!(device instanceof DevicetreeHardware.Device selected)) return;
             for (var node : hardwareItems()) {
@@ -464,7 +465,10 @@ public final class ConfigurationStudioView extends ViewPart {
             var column = new org.eclipse.swt.widgets.TreeColumn(hardwareDevices, SWT.LEFT);
             column.setText(columnName);
         }
-        hardwareDevices.addListener(SWT.Selection, event -> describeHardware());
+        hardwareDevices.addListener(SWT.Selection, event -> {
+            invalidateGuidedDraftSelection();
+            describeHardware();
+        });
         hardwareDevices.addListener(SWT.DefaultSelection, event -> revealHardwareSource());
 
         hardwareSummary = new Label(devicePanel, SWT.WRAP);
@@ -561,6 +565,7 @@ public final class ConfigurationStudioView extends ViewPart {
         }
         hardwareParameters.addListener(SWT.DefaultSelection, event -> prepareHardwareOverride());
         hardwareParameters.addListener(SWT.Selection, event -> {
+            invalidateGuidedDraftSelection();
             if (hardwareParameters.getSelectionCount() == 0) return;
             var selected = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
             chipPins.selectRoute(selected.path(), selected.name());
@@ -941,6 +946,16 @@ public final class ConfigurationStudioView extends ViewPart {
         peripheralEvidenceJob.schedule();
     }
 
+    /** A copied override belongs to one exact selected node/property/build. */
+    private void invalidateGuidedDraftSelection() {
+        guidedOverlayGeneration.incrementAndGet();
+        if (guidedOverlayJob != null) guidedOverlayJob.cancel();
+        proposedOverlayDraft = "";
+        if (hardwarePreview != null && !hardwarePreview.isDisposed())
+            hardwarePreview.setText("The hardware selection changed. Any previous source draft is invalid. "
+                    + "Run Guided overlay draft… again for the newly selected node/property.");
+    }
+
     /**
      * Guided source intent is derived only from an explicitly selected node
      * and an explicitly selected property. The headless EDT guide decides
@@ -1021,6 +1036,8 @@ public final class ConfigurationStudioView extends ViewPart {
         final var display = analysis.getDisplay();
         final boolean stale = buildOutdated;
         proposedOverlayDraft = "";
+        hardwarePreview.setText("Inspecting selected generated Devicetree and upstream binding…"
+                + "\nAny former draft has been invalidated. No file is changed.");
         status.setText("Inspecting the actual selected Zephyr binding; preparing source-only draft…");
         guidedOverlayJob = new Job("Guided selected Zephyr overlay source review") {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
@@ -1368,6 +1385,10 @@ public final class ConfigurationStudioView extends ViewPart {
         if (guidedOverlayJob != null) guidedOverlayJob.cancel();
         helpGeneration.incrementAndGet();
         if (helpJob != null) helpJob.cancel();
+        proposedOverlayDraft = "";
+        if (hardwarePreview != null && !hardwarePreview.isDisposed())
+            hardwarePreview.setText("Build or project context changed. All previous source drafts are invalid. "
+                    + "Select a node and request a new reviewed draft.");
         definitionCache.clear();
         kconfigCache.clear();
         inspectionBuild = null;
