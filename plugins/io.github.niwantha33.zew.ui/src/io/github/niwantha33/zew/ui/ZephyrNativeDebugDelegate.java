@@ -253,7 +253,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                             + "Thread enumeration does not establish ELF/target identity.");
                 info.println(params.variableAdvice());
                 info.println("CPU registers: select a suspended frame, then Window > Show View > Other > Debug > Registers. "
-                        + "SoC peripheral registers: Window > Show View > Other > Debug > SoC Registers; "
+                        + "SoC peripheral registers: Window > Show View > Other > Debug > Zephyr Hardware Register Explorer; "
                         + "load the exact chip vendor SVD, select a register and Refresh while halted.");
                 info.println("Zephyr thread tracking: refresh the native CDT thread list after every suspend. "
                         + "Routine OpenOCD INFO register-polling is hidden after one explanation; warnings and errors are preserved.");

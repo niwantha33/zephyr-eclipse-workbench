@@ -91,15 +91,15 @@ public final class SocRegistersView extends ViewPart {
         var bar = new Composite(parent, SWT.NONE);
         bar.setLayout(new GridLayout(4, false));
         bar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        button(bar, "Find vendor SVD", this::chooseProjectForDiscovery);
-        button(bar, "Download vendor SVD…", this::downloadVendorSvd);
-        button(bar, "Load SVD…", () -> {
+        button(bar, "Find Device Definitions", this::chooseProjectForDiscovery);
+        button(bar, "Get Device Registers…", this::downloadVendorSvd);
+        button(bar, "Import Register Definitions…", () -> {
             var dialog = new FileDialog(parent.getShell(), SWT.OPEN);
             dialog.setFilterExtensions(new String[] { "*.svd;*.xml", "*.*" });
             String path = dialog.open();
             if (path != null) load(path);
         });
-        button(bar, "Refresh selected + watches", this::refresh);
+        button(bar, "Refresh Live Values", this::refresh);
         var options = new Composite(parent, SWT.NONE);
         options.setLayout(new GridLayout(4, false));
         options.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -124,7 +124,7 @@ public final class SocRegistersView extends ViewPart {
         contextInfo.setText("No selected debug frame. CPU registers, Variables and Expressions are separate native Debug views.");
         summary = new Label(parent, SWT.WRAP);
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        summary.setText("No SVD model loaded yet. Find vendor SVD searches installed SDKs and packs; register values require a halted manual read.");
+        summary.setText("No SVD model loaded yet. Find Device Definitions searches installed SDKs and packs; register values require a halted manual read.");
         tree = new Tree(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         tree.setHeaderVisible(true); tree.setLinesVisible(true);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -169,7 +169,7 @@ public final class SocRegistersView extends ViewPart {
                     .filter(p -> SelectedProject.importedProject(p) != null).toList();
             if (imported.size() == 1) useLaunchProject(imported.get(0));
         } else {
-            discoveryExplanation = "Multiple live Zephyr debug projects found. Use Find vendor SVD to choose an exact project.";
+            discoveryExplanation = "Multiple live Zephyr debug projects found. Use Find Device Definitions to choose an exact project.";
             status.setText(discoveryExplanation);
         }
     }
@@ -191,7 +191,7 @@ public final class SocRegistersView extends ViewPart {
             status.setText(discoveryExplanation);
         }
         final long request = ++discoveryGeneration;
-        Job job = new Job("Find vendor SVD — " + project.getName()) {
+        Job job = new Job("Find Device Definitions — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 final SvdAutoDiscovery.Result result;
                 final String board;
@@ -246,7 +246,7 @@ public final class SocRegistersView extends ViewPart {
                     if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
                         if (request != discoveryGeneration || tree.isDisposed()) return;
                         discoveryExplanation = "SVD discovery failed for " + project.getName()
-                                + ": " + error.getMessage() + ". Use Load SVD… for an exact device.";
+                                + ": " + error.getMessage() + ". Use Import Register Definitions… for an exact device.";
                         status.setText(discoveryExplanation);
                     });
                     return new Status(IStatus.WARNING, Activator.ID, "SVD search failed", error);
@@ -261,7 +261,7 @@ public final class SocRegistersView extends ViewPart {
                         status.setText(discoveryExplanation + " Looked in: "
                                 + String.join("; ", result.inspected().stream().limit(8).toList()));
                         summary.setText("SoC " + result.part() + ": no verified SVD available. "
-                                + "Install the vendor's CMSIS pack under the managed workspace, or Load SVD…");
+                                + "Install the vendor's CMSIS pack under the managed workspace, or Import Register Definitions…");
                     }
                 });
                 return Status.OK_STATUS;
@@ -293,8 +293,8 @@ public final class SocRegistersView extends ViewPart {
                 + "Official vendor catalogue: " + page + "\\n\\n"
                 + "1. Open the vendor page and search for the exact SoC or CMSIS Device Family Pack.\\n"
                 + "2. Obtain its SVD or installed .pack (the pack may contain an SVD).\\n"
-                + "3. If you have an .svd, use Load SVD…; if you have a .pack, install it under"
-                + " the managed vendor-svd directory and use Find vendor SVD.\\n"
+                + "3. If you have an .svd, use Import Register Definitions…; if you have a .pack, install it under"
+                + " the managed vendor-svd directory and use Find Device Definitions.\\n"
                 + "4. Reject a different device model: do not select a similar chip merely to show registers.\\n\\n"
                 + "This view needs a suspended debug frame only to read live register values.";
         var dialog = new org.eclipse.jface.dialogs.MessageDialog(getSite().getShell(),
@@ -722,7 +722,7 @@ public final class SocRegistersView extends ViewPart {
     }
     private void exportHistory() {
         if (history.samples().isEmpty()) {
-            status.setText("No register snapshots to export. Refresh selected + watches first.");
+            status.setText("No register snapshots to export. Refresh Live Values first.");
             return;
         }
         var dialog = new FileDialog(getSite().getShell(), SWT.SAVE);

@@ -18,7 +18,7 @@ public final class DebugConsoleOutput {
             if (!explained) {
                 explained = true;
                 return List.of("Workbench: routine OpenOCD thread-register polling is hidden. "
-                        + "Inspect Variables, Expressions, Registers and SoC Registers for suspended target data. "
+                        + "Inspect Variables, Expressions, Registers and Zephyr Hardware Register Explorer for suspended target data. "
                         + "This console shows debugger/server diagnostics; application logs require their configured UART/RTT transport.");
             }
             return List.of();

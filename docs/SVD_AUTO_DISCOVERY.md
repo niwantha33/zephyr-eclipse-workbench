@@ -1,15 +1,15 @@
 # Verified automatic vendor SVD discovery
 
-Previously the SoC Registers view could attach to a native DSF-GDB frame yet stay blank because it never connected the selected Zephyr project's SoC with installed SVD files.
+Previously the Zephyr Hardware Register Explorer view could attach to a native DSF-GDB frame yet stay blank because it never connected the selected Zephyr project's SoC with installed SVD files.
 
 ## How it works
 
-1. Launch Debug As → Zephyr Application for an imported project, or open SoC Registers with a unique live Zephyr debug launch.
+1. Launch Debug As → Zephyr Application for an imported project, or open Zephyr Hardware Register Explorer with a unique live Zephyr debug launch.
 2. The view resolves the exact project board qualifier; for LP-MSPM0G3507 this is mspm0g3507.
 3. A background job searches project .zew/svd, the managed setup's vendor-svd folder, installed Arm CMSIS packs, local West vendor HALs, the Zephyr workspace and SDK. Additional paths can be supplied via ZEW_VENDOR_SVD_DIRS (Windows uses semicolons).
 4. It only accepts an exact SVD device name, or an installed vendor CMSIS pack descriptor (.pdsc) that explicitly maps this exact part to a shared family SVD. Other-chip or generic CPU-core matches are rejected.
 5. When validated, the view shows peripheral/register names, addresses, reset values, bit fields and SVD read safety. Actual live values remain blank until a manual Refresh on a halted debug frame.
-6. If no vendor SVD is installed, the view reports the missing exact chip and searched paths instead of inventing registers. Find vendor SVD lets the user select a project; Load SVD lets them select a trusted exact-chip file.
+6. If no vendor SVD is installed, the view reports the missing exact chip and searched paths instead of inventing registers. Find Device Definitions lets the user select a project; Load SVD lets them select a trusted exact-chip file.
 
 ## TI MSPM0G3507
 
@@ -32,7 +32,7 @@ Automated source-matching and UI tests are necessary but do not demonstrate that
 
 ## Opt-in official vendor pack provisioning (MSPM0G3507)
 
-The **Download vendor SVD…** command offers an official TI MSPM0G1X0X_G3X0X_DFP 1.3.1
+The **Get Device Registers…** command offers an official TI MSPM0G1X0X_G3X0X_DFP 1.3.1
 CMSIS Device Family Pack from the Arm Keil distribution. It asks for consent
 before contacting the vendor and caches the pack in the managed setup's
 `vendor-svd` directory. A bounded HTTPS download and ZIP parse are followed
@@ -62,7 +62,7 @@ success is claimed by this source change alone.
 
 ## Cross-vendor register-source discovery extension
 
-The SoC Registers view now also searches `CMSIS_PACK_ROOT`,
+The Zephyr Hardware Register Explorer view now also searches `CMSIS_PACK_ROOT`,
 `CMSIS_PACK_PATH`, `KEIL_PACK_ROOT`, `PACK_ROOT`, vendor
 install locations, `modules/hal/{espressif,stm32,nordic,ti}`, and
 Espressif IDF directories. These are **discovery sources**, not proof
