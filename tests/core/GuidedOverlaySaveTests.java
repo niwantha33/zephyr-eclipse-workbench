@@ -88,7 +88,7 @@ public final class GuidedOverlaySaveTests {
             if (existing) {
                 ok(saved.backup() != null && Files.readString(saved.backup()).equals(original),
                         "Original source backed up before replacement");
-                ok(saved.backup().startsWith(app.resolve(".zew/overlay-backups")),
+                ok(saved.backup().toRealPath().startsWith(app.toRealPath().resolve(".zew/overlay-backups")),
                         "Backup scoped inside application");
             } else {
                 ok(saved.backup() == null, "New source has no fabricated prior backup");
