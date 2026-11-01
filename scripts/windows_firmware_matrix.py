@@ -419,6 +419,36 @@ def main():
                 for item in peripheral['images'][0]['checks'][:4]):
             raise ValueError('Successful peripheral selected observations were not supported by EDT')
         print('PASS: real generated EDT and Kconfig independent peripheral evidence, ' + label)
+        # The guided overlay proposal consumes real configured DTS / EDT but
+        # cannot invent a bound GPIO, ADC or physical pin. Selecting '/' is
+        # intentionally conservative: a missing binding must return manual
+        # review instead of claiming it can enable the root node.
+        proposed = subprocess.run([
+            str(python), str(REPO / 'zew.py'), 'peripheral-guide',
+            '--build', str(build_arg), '--zephyr',
+            str(Path(workspace_arg) / 'zephyr'), '--node', '/',
+            '--status', 'disabled', '--kind', 'gpio'
+        ], cwd=REPO, env=env, capture_output=True, text=True,
+           encoding='utf-8', errors='replace', timeout=180)
+        try:
+            plan = json.loads(proposed.stdout)
+        except (ValueError, TypeError) as error:
+            raise ValueError('Real Zephyr peripheral-guide emitted invalid JSON') from error
+        if (proposed.returncode not in (0, 1)
+                or plan['status'] not in
+                   ('draft-requires-real-configuration', 'manual-review-required')
+                or plan['generated_dts_sha256'] !=
+                   hashlib.sha256((Path(build_arg) / 'zephyr/zephyr.dts').read_bytes()).hexdigest()
+                or plan['request_type'] != 'status'
+                or plan['proposal']['visible_diff'] is not None
+                or plan['source']['confidence'] not in ('confirmed', 'unknown')
+                or plan['requested_peripheral_kind'] != 'gpio'):
+            raise ValueError('Real configured Zephyr guided-source provenance or no-guess contract failed')
+        if (plan['proposal']['available'] and
+                (plan['status'] != 'draft-requires-real-configuration'
+                 or proposed.returncode != 0)):
+            raise ValueError('Peripheral guide source was claimed ready without matching EDT')
+        print('PASS: real Zephyr binding-grounded source draft contract, ' + label)
         # Verify installed SWT resource uses the SAME headless EDT/Kconfig
         # observations across all supported target builds, not a second parser.
         native = subprocess.run([
