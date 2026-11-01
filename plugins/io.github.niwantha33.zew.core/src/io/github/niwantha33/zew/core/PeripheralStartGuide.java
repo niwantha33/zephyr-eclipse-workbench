@@ -206,8 +206,7 @@ public final class PeripheralStartGuide {
         String channelPath = path + "/channel@" + channel;
         boolean configuredChannel = devices.stream().anyMatch(d -> d.path().equals(channelPath))
                 && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("reg")
-                        && channel.equals(Long.toString(number(singleCell(p.value())) == null
-                                ? -1 : number(singleCell(p.value())))))
+                        && channel.equals(String.valueOf(number(singleCell(p.value())))))
                 && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,gain"))
                 && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,reference"))
                 && properties.stream().anyMatch(p -> p.path().equals(channelPath) && p.name().equals("zephyr,acquisition-time"))
