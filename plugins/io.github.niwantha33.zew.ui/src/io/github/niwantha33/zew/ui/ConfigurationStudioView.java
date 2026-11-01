@@ -61,6 +61,7 @@ import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
 import io.github.niwantha33.zew.core.PeripheralCoverage;
 import io.github.niwantha33.zew.core.VendorFeatureCatalogue;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
+import io.github.niwantha33.zew.core.DevicetreeDependencyEvidence;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains.Domain;
@@ -2035,13 +2036,15 @@ public final class ConfigurationStudioView extends ViewPart {
             hardwareInspector.setText("Node: " + device.path() + "\nNo built properties for this selection.");
         }
         hardwareValidation.setText("DISCOVERED FROM BUILD  |  " + device.path()
-                + "\nController state: " + (device.enabled() ? "okay or inherited okay" : device.status())
+                + "\nNode status property: " + (device.status().isBlank() ? "not explicit; ancestor status not evaluated" : device.status())
                 + "\nBuilt parameter rows: " + shown.size()
                 + "\nResolved logical route entries: " + routes.size()
                 + "\nPHYSICAL PINOUT: NOT VERIFIED - exact part/package data not supplied."
                 + "\nNo pin conflict or electrical-capability claim is possible."
                 + (buildOutdated ? "\nBUILD REQUIRED - generated configuration may be stale." : "")
-                + "\nAfter any overlay change, Build & validate with Zephyr.");
+                + "\nAfter any overlay change, Build & validate with Zephyr."
+                + DevicetreeDependencyEvidence.describe(
+                        DevicetreeDependencyEvidence.inspect(properties, device.path())));
         parameterTitle.setText(device.path() + " · " + shown.size() + " built parameters · "
                 + (gpio == null ? routes.size() + " logical routes"
                     : gpio.bitPositions() + " GPIO register bit indexes · "
@@ -2091,7 +2094,7 @@ public final class ConfigurationStudioView extends ViewPart {
             }
             sourceNotes.append(sourceScanNote);
             hardwareValidation.setText("GPIO CONTROLLER FROM COMPILED DTS  |  " + device.path()
-                    + "\nState: " + (device.enabled() ? "okay or inherited okay" : device.status())
+                    + "\nNode status property: " + (device.status().isBlank() ? "not explicit; ancestor status not evaluated" : device.status())
                     + "\nBoard DTS-only declarations (NOT used pins): " + gpio.uses().size()
                     + "\n" + gpio.provenance()
                     + "\nAPPLICATION/RUNTIME GPIO USAGE: UNKNOWN; no compiled-code or target proof."
@@ -2553,7 +2556,12 @@ public final class ConfigurationStudioView extends ViewPart {
                 hardwareDescription.setText(coverage.explanation());
                 hardwareInspector.setText(coverage.explanation());
                 hardwareValidation.setText(coverage.explanation());
-                parameterTitle.setText(coverage.explanation());
+                // Preserve the actionable empty-filter message when built DTS evidence exists.
+                // Coverage explains why no matches exist in the other evidence panes.
+                boolean builtDtsPresent = snapshot != null && !snapshot.devicetree().isBlank();
+                parameterTitle.setText(builtDtsPresent
+                        ? "No peripheral matches this filter. Change category/state or clear the search."
+                        : coverage.explanation());
             }
             var coverage = PeripheralCoverage.explain(devices, hardwareKind.getText(),
                     hardwareState.getText(), hardwareSearch.getText(), buildOutdated);
