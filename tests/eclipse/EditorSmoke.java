@@ -385,8 +385,9 @@ public final class EditorSmoke implements IApplication {
             hardwareSearch.setText("no-such-controller");
             check(hardware.getItemCount() == 0, "hardware search has an honest empty state");
             var guidance = (org.eclipse.swt.widgets.Label) studioField(view, type, "parameterTitle");
-            check(guidance.getText().contains("filters hide all matches")
-                    && !guidance.getText().contains("NO GENERATED DTS"),
+            check(guidance.getText().contains("No peripheral matches this filter")
+                    && guidance.getText().contains("clear the search")
+                    && !guidance.getText().contains("No generated Devicetree"),
                     "search-only empty state explains filter rather than pretending the build is missing");
             var cancel = new org.eclipse.swt.widgets.Event(); cancel.detail = org.eclipse.swt.SWT.ICON_CANCEL;
             hardwareSearch.notifyListeners(org.eclipse.swt.SWT.Selection, cancel);
