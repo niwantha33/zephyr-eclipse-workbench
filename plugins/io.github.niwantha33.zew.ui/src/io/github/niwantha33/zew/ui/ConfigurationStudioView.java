@@ -952,7 +952,7 @@ public final class ConfigurationStudioView extends ViewPart {
         if (guidedOverlayJob != null) guidedOverlayJob.cancel();
         proposedOverlayDraft = "";
         if (hardwarePreview != null && !hardwarePreview.isDisposed())
-            hardwarePreview.setText("The hardware selection changed. Any previous source draft is invalid. "
+            hardwarePreview.setText("No proposed changes. The hardware selection changed; the previous draft is invalid. "
                     + "Run Guided overlay draft… again for the newly selected node/property.");
     }
 
@@ -1387,7 +1387,7 @@ public final class ConfigurationStudioView extends ViewPart {
         if (helpJob != null) helpJob.cancel();
         proposedOverlayDraft = "";
         if (hardwarePreview != null && !hardwarePreview.isDisposed())
-            hardwarePreview.setText("Build or project context changed. All previous source drafts are invalid. "
+            hardwarePreview.setText("No proposed changes. Build or project context changed; all previous source drafts are invalid. "
                     + "Select a node and request a new reviewed draft.");
         definitionCache.clear();
         kconfigCache.clear();
