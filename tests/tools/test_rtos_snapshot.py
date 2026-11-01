@@ -36,6 +36,36 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'CONFIG_TRACING_CTF'):
             subject.validate(self.build, self.z, self.gdb)
 
+    def test_build_cache_anchors_trace_metadata_to_exact_checkout(self):
+        cache = self.build / 'CMakeCache.txt'
+        cache.write_text('ZEPHYR_BASE:PATH=' + str(self.z) + '\n')
+        elf, metadata = subject.validate(self.build, self.z, self.gdb)
+        self.assertTrue(elf.is_file())
+        self.assertTrue(metadata.is_file())
+        evidence = subject.build_provenance(self.build, self.z)
+        self.assertIn('verified', evidence['metadata_provenance'])
+        self.assertEqual(evidence['trace_build_options']['CONFIG_TRACING_CTF'], 'y')
+
+        other = self.root / 'wrong-zephyr'
+        other.mkdir()
+        cache.write_text('ZEPHYR_BASE:PATH=' + str(other) + '\n')
+        with self.assertRaisesRegex(ValueError, 'does not match'):
+            subject.validate(self.build, self.z, self.gdb)
+
+    def test_receipt_explains_build_trace_configuration_and_metadata_identity(self):
+        (self.build / 'CMakeCache.txt').write_text('ZEPHYR_BASE:PATH=' + str(self.z) + '\n')
+        config = self.build / 'zephyr/.config'
+        config.write_text(config.read_text() + 'CONFIG_RAM_TRACING_BUFFER_SIZE=4096\n'
+                          + 'CONFIG_TRACING_SYNC=y\nCONFIG_THREAD_NAME=y\n')
+        elf, metadata = subject.validate(self.build, self.z, self.gdb)
+        fake, _ = self.fake_gdb()
+        with fake:
+            capture = subject.capture(self.gdb, elf, metadata, self.root / 'captures', 3335, 0.05)
+        receipt = json.loads((capture / 'capture.json').read_text())
+        self.assertIn('verified', receipt['metadata_provenance'])
+        self.assertEqual(receipt['trace_build_options']['CONFIG_RAM_TRACING_BUFFER_SIZE'], '4096')
+        self.assertEqual(receipt['trace_build_options']['CONFIG_THREAD_NAME'], 'y')
+
     def fake_gdb(self, behavior='ok', pos=9, capacity=4096):
         # A real child process speaks MI only. It rejects every unknown command,
         # including Python scripting, and emits asynchronous noise before replies.
