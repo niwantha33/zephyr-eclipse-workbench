@@ -173,7 +173,8 @@ public final class EditorSmoke implements IApplication {
                     && adcControllerInGroup && adcChannelInGroup,
                     "ADC peripheral-first tree retains controller and channel: " + groupedDescription);
             var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
-            check(dock.getItemCount() == 5
+            check(dock.getItemCount() == 6
+                    && dock.getItem(5).getText().equals("Start peripheral")
                     && dock.getItem(0).getText().startsWith("Changes")
                     && dock.getItem(1).getText().startsWith("Validation")
                     && dock.getItem(2).getText().startsWith("Generated DTS")
