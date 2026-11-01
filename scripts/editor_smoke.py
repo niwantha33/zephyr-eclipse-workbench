@@ -124,7 +124,25 @@ with tempfile.TemporaryDirectory(prefix='zew CDT editor Ω ') as directory:
                                       f'-Dzew.remote.compilationRoot={compiler_alias}']
                     try:
                         run([jdk / 'bin/java', *properties, '-jar', launcher, '-nosplash', '-consolelog', '-clean', '-data', temporary / 'workspace', '-application', 'zew.editor.smoke.workbench' if args.native_workbench else 'zew.editor.smoke.run', fixture, 'verify' if attempt else 'apply'])
-                    except subprocess.CalledProcessError:
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                        print('=== Eclipse native smoke failure ===', file=sys.stderr)
+                        print(f'Process failure: {error}', file=sys.stderr)
+                        for diagnostic in (
+                            temporary / 'workspace/.metadata/.log',
+                            eclipse / 'configuration' / '.log',
+                            eclipse / 'configuration' / 'org.eclipse.osgi' / '.log',
+                        ):
+                            if diagnostic.is_file():
+                                print(f'=== {diagnostic} (last 250 lines) ===', file=sys.stderr)
+                                for line in diagnostic.read_text(errors='replace').splitlines()[-250:]:
+                                    print(line[:1000], file=sys.stderr)
+                        # Save diagnostic files before TemporaryDirectory erases the workspace.
+                        evidence = Path(os.environ.get('RUNNER_TEMP', tempfile.gettempdir())) / 'zew-editor-smoke-failure'
+                        evidence.mkdir(parents=True, exist_ok=True)
+                        for diagnostic in (temporary / 'workspace/.metadata/.log', eclipse / 'configuration' / '.log'):
+                            if diagnostic.is_file():
+                                shutil.copyfile(diagnostic, evidence / ('workspace.log' if 'workspace' in str(diagnostic) else 'configuration.log'))
+                        print(f'Eclipse logs saved to {evidence}', file=sys.stderr)
                         trace = Path(debug_directory) / 'gdb-mi-trace.log'
                         if trace.is_file():
                             print('=== Test-only GDB MI stack/error trace (last 100 records) ===', file=sys.stderr)
