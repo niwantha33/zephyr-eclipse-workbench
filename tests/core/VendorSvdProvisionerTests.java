@@ -12,15 +12,15 @@ public final class VendorSvdProvisionerTests {
                 "exact selected TI target eligible");
         check(!VendorSvdProvisioner.supports("lp_mspm0g3507/mspm0g3506"),
                 "other target not silently mapped");
-        check(VendorSvdProvisioner.isApprovedRedirectHost("www.keil.com"),
-                "Keil origin allowed");
-        check(VendorSvdProvisioner.isApprovedRedirectHost("keilpack.azureedge.net"),
-                "observed official CDN redirect accepted");
-        check(VendorSvdProvisioner.isApprovedRedirectHost("KEILPACK.AZUREEDGE.NET"),
+        check(VendorSvdProvisioner.isApprovedRedirectHost("software-dl.ti.com"),
+                "TI official origin allowed");
+        check(VendorSvdProvisioner.isApprovedRedirectHost("downloads.ti.com"),
+                "TI official redirect accepted");
+        check(VendorSvdProvisioner.isApprovedRedirectHost("DOWNLOADS.TI.COM"),
                 "DNS host matching case insensitive");
-        for (String host : new String[] {"keilpack.azureedge.net.evil.test",
-                "evilkeilpack.azureedge.net", "other.azureedge.net",
-                "keil.com.evil.test", "", "example.com"}) {
+        for (String host : new String[] {"downloads.ti.com.evil.test",
+                "evildownloads.ti.com", "other.ti.com",
+                "software-dl.ti.com.evil.test", "", "example.com"}) {
             check(!VendorSvdProvisioner.isApprovedRedirectHost(host),
                     "unapproved redirect rejected: " + host);
         }
