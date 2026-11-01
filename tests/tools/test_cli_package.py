@@ -73,6 +73,12 @@ class CliPackageTests(unittest.TestCase):
             self.assertIn("--show-diff", guide_help.stdout)
             self.assertIn("--set-enum", guide_help.stdout)
             self.assertIn("--set-int", guide_help.stdout)
+            preflight_help = subprocess.run(
+                [sys.executable, str(first), "dt-draft-configure", "--help"],
+                cwd=root, env=env, text=True, capture_output=True, timeout=15, check=True)
+            self.assertIn("--status", preflight_help.stdout)
+            self.assertIn("--set-enum", preflight_help.stdout)
+            self.assertIn("--scratch-parent", preflight_help.stdout)
             configure_help = subprocess.run(
                 [sys.executable, str(first), "dt-configure", "--help"],
                 cwd=root, env=env, text=True, capture_output=True, timeout=15, check=True)

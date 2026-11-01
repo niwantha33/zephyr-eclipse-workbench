@@ -91,3 +91,57 @@ that exact saved overlay. A successful configure still does not prove
 compiled firmware or physical correctness.
 
 **G0 is open.** This CLI is not production qualification or release approval.
+
+
+## Real Zephyr preflight of an *unsaved* guided draft (Phase 0)
+
+The new `zew dt-draft-configure` command tests the exact user-requested
+binding-grounded change **before editing the real application overlay**.
+It invokes real `west build --cmake-only --pristine=always` against a
+bounded, copied application, using the matching original board/core and
+Zephyr checkout.
+
+```sh
+python zew.py dt-draft-configure \
+  --build ./app/.zew-build/debug --application ./app \
+  --zephyr ./west/zephyr --python ./west/.venv/bin/python \
+  --board lp_mspm0g3507/mspm0g3507 --node /soc/gpio@4000 \
+  --overlay ./app/app.overlay --status okay --kind gpio
+```
+
+The node path here is an illustration, **not a supplied SoC GPIO mapping**.
+Use an exact node discovered from the current generated DTS and the
+corresponding real board identity in `CMakeCache.txt`. Supply
+`--ninja /path/to/ninja` where needed. The command also accepts
+`--set-int NAME=VALUE`, `--set-enum NAME=CHOICE`, and additional
+real module `--bindings DIR` roots (repeatable). The target overlay
+must be a selected .overlay within the application; it may not exist yet.
+
+The command proceeds in two strict phases. It first runs the same
+**read-only upstream edtlib binding guide** as `zew peripheral-guide`,
+which may reject unknown or unsafe changes without launching CMake.
+Then it verifies the original DTS and overlay SHA-256 and appends the exact
+hashed addition **only to the disposable application copy**. It invokes
+actual trusted West/CMake, verifies scratch board/checkout/overlay
+provenance, and parses the resulting `zephyr.dts` through upstream Zephyr
+`dtlib` to check **exactly the requested status, 32-bit integer or enum
+string value**. A successful CMake exit without the requested value
+**never** reports an accepted preflight.
+
+The JSON result contains only typed evidence, artifact hashes and fixed
+diagnostic classifications. It never prints copied source content, raw
+CMake log, local paths, or the unsaved proposal. Use `peripheral-guide
+--show-diff` separately when you want to review the source addition.
+Exit **0** means real configuration completed and the exact requested
+generated value was observed. Exit **1** means manual review/failed or
+unavailable configuration. Exit **2** means invalid input.
+
+**Security boundary:** This is not a sandbox. Project CMake scripts and
+module hooks can execute with normal host privileges. Only run it on
+trusted sources. The selected project and build are never written,
+compiled, flashed or debugged by this command, but the scratch execution
+can run arbitrary CMake hooks. The result proves configuration of the
+*copied* application in this environment, **not** driver compilation,
+a free package pad, electrical suitability, pinmux ownership, firmware
+deployment, runtime state, or release qualification. The saved overlay
+still requires explicit review and save followed by the real build.

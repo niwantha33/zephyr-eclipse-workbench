@@ -32,6 +32,7 @@ from zew_evidence.dt_binding_preview import inspect as inspect_dt_binding
 from zew_evidence.peripheral_evidence import inspect as inspect_peripheral_evidence
 from zew_evidence.peripheral_guide import guide as guide_peripheral
 from zew_evidence.dt_build_validation import validate as validate_dt_build
+from zew_evidence.dt_draft_validation import preflight as preflight_draft
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -134,6 +135,24 @@ def main(argv: list[str] | None = None) -> int:
                         help="Actual Zephyr module binding root, repeat for modules")
     guided.add_argument("--image", action="append", default=[], metavar="NAME=RELATIVE_DIR",
                         help="Exactly one explicit image when using a sysbuild root")
+    draft_check = subs.add_parser("dt-draft-configure",
+        help="Opt-in real scratch CMake test of an UNSAVED binding-guided source change")
+    for key in ("build", "application", "zephyr", "python", "overlay"):
+        draft_check.add_argument("--" + key, type=Path, required=True)
+    draft_check.add_argument("--board", required=True,
+                             help="Exact board/SoC/core from the existing CMakeCache")
+    draft_check.add_argument("--node", required=True,
+                             help="Actual selected generated DTS node")
+    guided_choice = draft_check.add_mutually_exclusive_group(required=True)
+    guided_choice.add_argument("--status", choices=("okay", "disabled"))
+    guided_choice.add_argument("--set-int", metavar="PROPERTY=INTEGER")
+    guided_choice.add_argument("--set-enum", metavar="PROPERTY=CHOICE")
+    draft_check.add_argument("--kind", choices=("gpio", "adc", "spi", "i2c"))
+    draft_check.add_argument("--bindings", action="append", type=Path, default=[],
+                             help="Explicit real Zephyr module binding roots")
+    draft_check.add_argument("--ninja", type=Path)
+    draft_check.add_argument("--scratch-parent", type=Path)
+    draft_check.add_argument("--timeout", type=int, default=300)
     real_dts = subs.add_parser("dt-configure",
                                help="Opt-in real west/CMake Devicetree configuration in disposable scratch")
     real_dts.add_argument("--build", type=Path, required=True,
@@ -178,7 +197,15 @@ def main(argv: list[str] | None = None) -> int:
     checking.add_argument("--build", type=Path, required=True, help="Existing build root to check without modification")
     args = parser.parse_args(argv)
     try:
-        if args.command == "peripheral-guide":
+        if args.command == "dt-draft-configure":
+            output = preflight_draft(args.build, args.application, args.zephyr,
+                                     args.python, args.board, args.node, args.overlay,
+                                     status=args.status, integer=args.set_int,
+                                     enum=args.set_enum, kind=args.kind,
+                                     ninja=args.ninja, timeout=args.timeout,
+                                     scratch_parent=args.scratch_parent,
+                                     bindings=args.bindings)
+        elif args.command == "peripheral-guide":
             output = guide_peripheral(args.build, args.zephyr, args.node,
                                       status=args.status, integer=args.set_int,
                                       enum=args.set_enum, app=args.application,
@@ -295,6 +322,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(output, sort_keys=True, indent=2, ensure_ascii=False))
     if args.command == "verify":
         return 0 if output["status"] == "recorded-artifacts-match" else 1
+    if args.command == "dt-draft-configure":
+        return 0 if output["status"] == "configured-in-scratch" else 1
     if args.command == "peripheral-guide":
         return 0 if output["status"] == "draft-requires-real-configuration" else 1
     if args.command == "peripheral":
