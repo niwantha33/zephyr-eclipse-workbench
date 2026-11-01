@@ -39,14 +39,16 @@ public final class SocRegistersSmoke {
                 throw new AssertionError("SoC peripheral tree did not load");
             var peripheral = tree.getItem(0);
             peripheral.setExpanded(true);
-            tree.notifyListeners(org.eclipse.swt.SWT.Expand,
-                    new org.eclipse.swt.widgets.Event() {{ item = peripheral; }});
+            var peripheralEvent = new org.eclipse.swt.widgets.Event();
+            peripheralEvent.item = peripheral;
+            tree.notifyListeners(org.eclipse.swt.SWT.Expand, peripheralEvent);
             if (peripheral.getItemCount() != 1)
                 throw new AssertionError("Lazy peripheral registers did not load");
             var register = peripheral.getItem(0);
             register.setExpanded(true);
-            tree.notifyListeners(org.eclipse.swt.SWT.Expand,
-                    new org.eclipse.swt.widgets.Event() {{ item = register; }});
+            var registerEvent = new org.eclipse.swt.widgets.Event();
+            registerEvent.item = register;
+            tree.notifyListeners(org.eclipse.swt.SWT.Expand, registerEvent);
             if (!register.getText(1).equals("0x40000004") || register.getItemCount() != 1
                     || !register.getItem(0).getText().equals("EN") || !register.getText(3).equals("—"))
                 throw new AssertionError("Lazy register address/field/reset rendering");
