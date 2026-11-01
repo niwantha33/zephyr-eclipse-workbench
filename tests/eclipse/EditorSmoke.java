@@ -173,7 +173,8 @@ public final class EditorSmoke implements IApplication {
                     && adcControllerInGroup && adcChannelInGroup,
                     "ADC peripheral-first tree retains controller and channel: " + groupedDescription);
             var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
-            check(dock.getItemCount() == 5
+            check(dock.getItemCount() == 6
+                    && dock.getItem(5).getText().equals("Start peripheral")
                     && dock.getItem(0).getText().startsWith("Changes")
                     && dock.getItem(1).getText().startsWith("Validation")
                     && dock.getItem(2).getText().startsWith("Generated DTS")
@@ -253,6 +254,33 @@ public final class EditorSmoke implements IApplication {
             }
             kind.select(kind.indexOf("ADC"));
             kind.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            // Native workbench must guide from the real controller and never
+            // synthesize ADC code for a disabled / missing controller.
+            var startGuideMethod = type.getDeclaredMethod("openStartGuide", String.class);
+            startGuideMethod.setAccessible(true);
+            startGuideMethod.invoke(view, "ADC");
+            var guideTabs = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
+            var guideStatus = (org.eclipse.swt.widgets.Label) studioField(view, type, "startGuideStatus");
+            var guideSteps = (org.eclipse.swt.widgets.Text) studioField(view, type, "startGuideSteps");
+            var guideCode = (org.eclipse.swt.widgets.Text) studioField(view, type, "startGuideC");
+            var copyCode = (org.eclipse.swt.widgets.Button) studioField(view, type, "copyStartCode");
+            check(guideTabs.getItem(5).getText().equals("Start peripheral")
+                    && guideTabs.getSelectionIndex() == 5
+                    && guideStatus.getText().contains("DTS_DISABLED")
+                    && guideSteps.getText().contains("adc@4000")
+                    && guideSteps.getText().contains("CONFIG_ADC")
+                    && !copyCode.getEnabled()
+                    && !guideCode.getText().contains("int main(void)"),
+                    "installed ADC starter locates real disabled controller but does not offer fake working code");
+            startGuideMethod.invoke(view, "I2C");
+            check(guideStatus.getText().contains("NOT_IN_DTS")
+                    && !copyCode.getEnabled()
+                    && guideSteps.getText().contains("upstream-compatible DTS"),
+                    "installed starter explains missing Zephyr I2C node across SoCs without guessing pinmux");
+            startGuideMethod.invoke(view, "UART");
+            check(guideStatus.getText().contains("INSPECT_BINDING")
+                    && guideSteps.getText().contains("/soc/uart@5000"),
+                    "installed UART path follows compiled controller rather than ADC-specific assumptions");
             check(hardware.getItemCount() > 0
                     && hardware.getItem(0).getItem(0).getItem(0).getText().equals("adc@4000")
                     && hardware.getItem(0).getItem(0).getItem(0).getItemCount() == 1
