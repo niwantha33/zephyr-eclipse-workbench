@@ -180,7 +180,7 @@ public final class PeripheralGuideInspector {
             else command.addAll(List.of("--set-" + intent, property + "=" + raw));
             Path stdout = directory.resolve("response.txt");
             var process = new ProcessBuilder(command)
-                    .redirectOutput(stdout).redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .redirectOutput(stdout.toFile()).redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
             long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(90);
             while (process.isAlive()) {
