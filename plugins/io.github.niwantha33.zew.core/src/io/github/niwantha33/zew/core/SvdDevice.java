@@ -114,7 +114,14 @@ public record SvdDevice(String name, List<Register> registers) {
                 }
                 String resetText = inherit(r, parent, device, "resetValue", "");
                 BigInteger reset = resetText.isEmpty() ? null : number(resetText);
-                BigInteger mask = number(inherit(r, parent, device, "resetMask", BigInteger.ONE.shiftLeft(size).subtract(BigInteger.ONE).toString()));
+                // An inherited device/cluster resetMask can be wider than a register
+                // overriding its size (for example TI's 8-bit EVENTLP fields).
+                // Restrict inherited masks to the actual register width, but
+                // continue rejecting invalid explicit per-register masks.
+                BigInteger widthMask = BigInteger.ONE.shiftLeft(size).subtract(BigInteger.ONE);
+                BigInteger mask = number(inherit(r, parent, device, "resetMask", widthMask.toString()));
+                if (child(r, "resetMask") == null && mask.signum() >= 0)
+                    mask = mask.and(widthMask);
                 if ((reset != null && (reset.signum() < 0 || reset.bitLength() > size)) || mask.signum() < 0 || mask.bitLength() > size)
                     throw new IllegalArgumentException("Invalid reset value/mask: " + name);
                 out.add(new Register(peripheral, name, address, size, reset, mask, access, action,
