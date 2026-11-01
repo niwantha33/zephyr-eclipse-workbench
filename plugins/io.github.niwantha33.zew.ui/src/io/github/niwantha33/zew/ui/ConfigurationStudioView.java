@@ -2464,7 +2464,12 @@ public final class ConfigurationStudioView extends ViewPart {
                 hardwareDescription.setText(coverage.explanation());
                 hardwareInspector.setText(coverage.explanation());
                 hardwareValidation.setText(coverage.explanation());
-                parameterTitle.setText(coverage.explanation());
+                // Preserve the actionable empty-filter message when built DTS evidence exists.
+                // Coverage explains why no matches exist in the other evidence panes.
+                boolean builtDtsPresent = snapshot != null && !snapshot.devicetree().isBlank();
+                parameterTitle.setText(builtDtsPresent
+                        ? "No peripheral matches this filter. Change category/state or clear the search."
+                        : coverage.explanation());
             }
             var coverage = PeripheralCoverage.explain(devices, hardwareKind.getText(),
                     hardwareState.getText(), hardwareSearch.getText(), buildOutdated);
