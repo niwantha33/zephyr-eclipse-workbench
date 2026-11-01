@@ -499,6 +499,50 @@ public final class ConfigurationStudioTests {
                     "ADC parameter view retains per-channel values and DTS string syntax");
             ok(adcParameters.stream().noneMatch(p -> p.path().equals("/soc/uart@5000")),
                     "ADC parameters exclude unrelated controllers");
+            // Native dependency resolver: generated phandles are not physical pad or runtime claims.
+            var dependencyProperties = java.util.List.of(
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/pinctrl/uart-default", "phandle", "<0x10>", 1),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/clock@1000", "phandle", "<0x20>", 2),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/clock@1000", "#clock-cells", "<1>", 3),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/gpio@1000", "phandle", "<0x30>", 4),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/gpio@1000", "#gpio-cells", "<2>", 5),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/uart@1000", "pinctrl-0", "<0x10>", 6),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/uart@1000", "clocks", "<0x20 7 0x20 8>", 7),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/uart@1000", "tx-gpios", "<0x30 1 2>", 8),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/uart@1000", "dmas", "<0x41 2>", 9),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/other@2000", "pinctrl-0", "<0x10>", 10));
+            var dependencies = io.github.niwantha33.zew.core.DevicetreeDependencyEvidence.inspect(
+                    dependencyProperties, "/soc/uart@1000");
+            ok(dependencies.size() == 5
+                    && dependencies.stream().filter(r -> r.state().equals("resolved-dts-node")).count() == 4
+                    && dependencies.stream().anyMatch(r -> r.property().equals("dmas")
+                            && r.state().equals("unresolved-specifier-boundary") && r.target().isEmpty())
+                    && dependencies.stream().noneMatch(r -> r.target().equals("/soc/other@2000")),
+                    "pin, GPIO, clock specifier cells stay separate from physical pad/runtime claims");
+            var insufficientCells = java.util.List.of(
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/clock@1000", "phandle", "<0x20>", 1),
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/uart@1000", "clocks", "<0x20 7>", 2));
+            ok(io.github.niwantha33.zew.core.DevicetreeDependencyEvidence.inspect(
+                    insufficientCells, "/soc/uart@1000").get(0).state().equals("unknown-provider-cell-count"),
+                    "a missing #clock-cells must not misinterpret clock specifier arguments as providers");
+            var malformedCells = java.util.List.of(
+                    new io.github.niwantha33.zew.core.DevicetreeParameters.Property(
+                            "/soc/uart@1000", "clocks", "<0x20 + 7>", 1));
+            ok(io.github.niwantha33.zew.core.DevicetreeDependencyEvidence.inspect(
+                    malformedCells, "/soc/uart@1000").get(0).state().equals("unparsed-generated-cells"),
+                    "unsupported generated syntax remains unknown rather than guessed");
             var routes = io.github.niwantha33.zew.core.DevicetreeParameters.pinRoutes(properties, "/soc/adc@4000");
             ok(routes.size() == 1 && routes.get(0).path().equals("/pinctrl/adc-default/group1")
                     && routes.get(0).value().contains("0x1234") && routes.get(0).value().contains("0x5678"),
