@@ -1,27 +1,89 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Zephyr Eclipse Workbench
 
-### Develop, configure, build, flash and debug Zephyr RTOS applications in Eclipse.
+### See your hardware. Understand your configuration. Investigate your firmware.
+
+**More than a Zephyr code editor — a hardware-aware engineering and evidence workbench.**
 
 [![GitHub release](https://img.shields.io/github/v/release/niwantha33/zephyr-eclipse-workbench?include_prereleases&label=latest%20release)](https://github.com/niwantha33/zephyr-eclipse-workbench/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/niwantha33/zephyr-eclipse-workbench)](https://github.com/niwantha33/zephyr-eclipse-workbench/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/niwantha33/zephyr-eclipse-workbench)](https://github.com/niwantha33/zephyr-eclipse-workbench/issues)
 
-**Zephyr Eclipse Workbench** is an open-source, Eclipse-based IDE integration for **Zephyr RTOS firmware development**. It brings project setup, board selection, West/CMake builds, Kconfig and Devicetree configuration, flashing, GDB debugging and hardware inspection into a familiar embedded C/C++ workflow.
+**Zephyr Eclipse Workbench** is an open-source, Eclipse-based IDE integration for **Zephyr RTOS firmware development**. It connects **chip-level hardware views, effective Kconfig and Devicetree evidence, firmware builds, debug registers and RTOS diagnostics** in a familiar embedded C/C++ workflow. Instead of only asking *what did I configure?*, Workbench helps engineers ask *what did the build actually select, what can the target reveal, and what evidence supports the answer?*
 
 **[Download releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases) · [Installation guide](docs/FRESH_INSTALL.md) · [Getting started](docs/BEGINNER_SETUP.md) · [Report an issue](https://github.com/niwantha33/zephyr-eclipse-workbench/issues)**
 
 > **Release availability:** Current published packages are **preview releases**, not a certified production release. Feature availability and physical-board validation vary by target. See [release status](RELEASE_STATUS.md) for verified coverage and open acceptance gates.
 
-## Why Zephyr Eclipse Workbench?
+## What makes this Workbench different?
 
-- **An Eclipse home for Zephyr:** create or import Zephyr applications without leaving the embedded C/C++ IDE.
-- **Guided environment setup:** provision and reuse managed build dependencies instead of manually assembling every tool path.
-- **Cross-vendor board discovery:** explore targets from your Zephyr checkout, including vendor, SoC, core and board qualifiers.
-- **Configuration in context:** work with Kconfig, `prj.conf`, Devicetree and hardware-oriented configuration views.
-- **Build to debug workflow:** use per-project builds, generated firmware artifacts, Zephyr flash runners and CDT/GDB debugging.
-- **Hardware investigation:** inspect CPU registers, SVD-defined peripherals and supported diagnostic evidence without replacing Zephyr's standard toolchain.
+### 1. Visual Hardware Studio — understand the chip, not just the DTS text
+
+Explore the selected board's generated Devicetree and its hardware relationships through **peripheral and pin-oriented views**, including the **Chip Pin Canvas**. Navigate GPIO, pinctrl, ADC and other discovered nodes in context, instead of manually tracing source includes and overlay files. Device/package geometry and pin assignments require authoritative metadata; incomplete evidence must not be presented as confirmed wiring.
+
+**Why it matters:** a beginner can start with *which device and pin does this application refer to?*; an experienced engineer can investigate board configuration without losing the link to generated inputs.
+
+### 2. Configuration Studio + Insights — distinguish requests from reality
+
+A line in `prj.conf` or a Devicetree overlay is **not proof** that the generated firmware uses it. Configuration diagnosis compares requested settings with **the selected build's generated `.config` and `zephyr.dts`**, identifies differences, missing or disabled nodes and stale snapshots, and labels unknowns instead of guessing. For deeper offline configuration checking, the opt-in Evidence CLI can interrogate Kconfiglib for the selected Zephyr tree.
+
+**Why it matters:** investigate *why is my ADC/GPIO/device unavailable?* with observed evidence, not misleading green checks or assumed pin mappings. Diagnosis does not prove runtime peripheral initialisation or physical electrical behaviour.
+
+### 3. SoC Register Inspector — connect debugging to named peripherals
+
+Use a matching **CMSIS-SVD** to browse peripheral registers, bitfields, reset values, address information and watch snapshots while a compatible target is suspended. The native view reads through the existing CDT/GDB session; it does not silently scan or modify hardware.
+
+**Why it matters:** inspect hardware state beside C source and debug frames rather than translating every address by hand. **Exact-device SVD matching, live probe behaviour and automatic vendor-SVD acquisition still require verification**; the current workflow supports manually loading a matching SVD.
+
+### 4. RTOS Analysis + Fault Investigation — investigate behaviour beyond breakpoints
+
+Bring together supported **CTF trace capture, Trace Compass workflows, thread-oriented diagnostics, CPU register state, fault-log analysis and ELF-symbol context**. Offline investigation utilities and evidence bundles provide repeatable artifacts for debugging discussions.
+
+**Why it matters:** a build passing does not explain a stalled task, unexpected exception or scheduling issue. These diagnostics aim to connect observed firmware behaviour to actionable engineering questions. Comprehensive CPU-load, stack, trace-loss and on-device fault validation remain in progress.
+
+### 5. Cross-vendor engineering without a vendor-specific project silo
+
+Use **Zephyr's board catalogue, West, CMake, standard build outputs and supported runners** across ecosystems such as STM32, ESP32, Nordic nRF and TI MSPM0. Project-specific profiles and an Eclipse-native workflow help keep board selection, build, flash and debug consistent.
+
+**Why it matters:** the workflow follows standard Zephyr project structure instead of hiding the underlying build system. Hardware support remains dependent on actual board, toolchain, runner and probe compatibility.
+
+### The central idea: an evidence-connected workflow
+
+```text
+Selected board / SoC / application
+                |
+    Kconfig + Devicetree inputs
+                |
+     Generated build evidence
+      (.config / zephyr.dts)
+                |
+   Hardware Studio + Insights
+                |
+        Firmware / ELF
+                |
+   Flash + CDT/GDB debugging
+                |
+ SVD registers / RTOS trace / faults
+                |
+       Investigation evidence
+```
+
+**The differentiator is the connection between these views, not a claim that every individual editor, debugger or visualisation is unique.** Some connections are implemented; others are partial or pending target-specific verification. See [release evidence](RELEASE_STATUS.md) for the exact boundaries.
+
+## How this compares to VS Code Zephyr workflows
+
+Modern VS Code tooling already provides project creation, SDK installation, Kconfig, Devicetree editing, flashing and debugging. Nordic nRF Connect also offers a visual Devicetree editor and RTOS-aware debugging. **Workbench is positioned around a more integrated hardware-to-evidence investigation experience within Eclipse**, rather than presenting those established capabilities as inventions.
+
+| Engineering question | Workbench's focus |
+| --- | --- |
+| Which pin, node and controller does this build refer to? | Visual Hardware Studio and generated Devicetree inspection |
+| Did my requested configuration actually take effect? | Configuration Studio diagnosis and generated `.config` evidence |
+| What is the peripheral register state while halted? | SVD-backed SoC register snapshots in the debug session |
+| What happened around a fault or thread issue? | Trace, fault/ELF context and offline investigation artifacts |
+| Can I apply the workflow across chip vendors? | Standard Zephyr target discovery, per-project builds and supported runners |
+
+This is a **product design distinction**, not a benchmarked claim of exclusivity or superiority. Independent competitor comparisons and physical-device acceptance testing remain outstanding.
 
 ## Features at a glance
 
@@ -92,4 +154,4 @@ Contributions, hardware validation reports, bug reports and feature proposals ar
 
 ## Search keywords
 
-Zephyr RTOS IDE · Zephyr Eclipse IDE · Eclipse Zephyr plugin · Zephyr firmware development · embedded C/C++ IDE · RTOS development environment · West build · Zephyr CMake · Kconfig editor · Devicetree editor · Devicetree overlay · pin configuration · GPIO configuration · SoC configuration · CMSIS-SVD · SVD register viewer · MCU peripheral registers · ARM Cortex-M debug · GDB · OpenOCD · embedded debugging · RTOS thread analysis · CTF tracing · Trace Compass · Zephyr fault analysis · STM32 Zephyr · ESP32 Zephyr · Nordic nRF Zephyr · TI MSPM0 Zephyr · cross-vendor embedded development
+Zephyr hardware visualization · Zephyr Visual Hardware Studio · chip pinout viewer · Zephyr Configuration Studio · configuration evidence engine · Zephyr diagnostics IDE · RTOS fault investigation ·  Zephyr Eclipse IDE · Eclipse Zephyr plugin · Zephyr firmware development · embedded C/C++ IDE · RTOS development environment · West build · Zephyr CMake · Kconfig editor · Devicetree editor · Devicetree overlay · pin configuration · GPIO configuration · SoC configuration · CMSIS-SVD · SVD register viewer · MCU peripheral registers · ARM Cortex-M debug · GDB · OpenOCD · embedded debugging · RTOS thread analysis · CTF tracing · Trace Compass · Zephyr fault analysis · STM32 Zephyr · ESP32 Zephyr · Nordic nRF Zephyr · TI MSPM0 Zephyr · cross-vendor embedded development
