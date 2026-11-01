@@ -123,7 +123,7 @@
     <view id="io.github.niwantha33.zew.ui.debugExpressionProbe" name="Zephyr GDB Expression Probe"
           category="org.eclipse.debug.ui"
           class="io.github.niwantha33.zew.ui.DebugExpressionProbeView" restorable="true"/>
-    <view id="io.github.niwantha33.zew.ui.socRegisters" name="SoC Peripherals / Registers"
+    <view id="io.github.niwantha33.zew.ui.socRegisters" name="Zephyr Hardware Register Explorer"
           category="org.eclipse.debug.ui"
           class="io.github.niwantha33.zew.ui.SocRegistersView" restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.configurationStudio"
@@ -142,7 +142,7 @@
   </extension>
   <extension point="org.eclipse.ui.commands">
     <command id="io.github.niwantha33.zew.debugExpressionProbe" name="Inspect GDB Symbol (Read-only)" categoryId="io.github.niwantha33.zew.commands"/>
-    <command id="io.github.niwantha33.zew.socRegisters" name="Show Debug Data and SoC Peripherals" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.socRegisters" name="Show Debug Data and Hardware Register Explorer" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.faultAnalysis" name="Investigate Fatal Log" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.trace" name="Capture RTOS Trace" categoryId="io.github.niwantha33.zew.commands"/>
@@ -228,7 +228,7 @@
         <command commandId="io.github.niwantha33.zew.flashDebug" label="Flash and Debug Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debug" label="Debug Application..." style="push"/>
         <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.socRegisters" label="Show Debug Data / SoC Peripherals" style="push"/>
+        <command commandId="io.github.niwantha33.zew.socRegisters" label="Show Debug Data / Hardware Register Explorer" style="push"/>
         <command commandId="io.github.niwantha33.zew.debugExpressionProbe" label="Inspect GDB Symbol (Read-only)..." style="push"/>
         <command commandId="io.github.niwantha33.zew.faultAnalysis" label="Investigate Fatal Log…" style="push"/>
         <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace (Preview)..." style="push"/>
