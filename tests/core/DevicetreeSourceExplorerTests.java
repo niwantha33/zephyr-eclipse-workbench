@@ -29,15 +29,15 @@ public final class DevicetreeSourceExplorerTests {
             Files.writeString(build.resolve("zephyr.dts.d"), dependencies);
             var inventory = DevicetreeSourceExplorer.inspect(app, build.getParent());
             ok(inventory.sources().size() == 3, "multiple vendor files and overlay with deduplication");
-            ok(inventory.sources().stream().anyMatch(s -> s.path().equals(boardFile)
+            ok(inventory.sources().stream().anyMatch(s -> s.path().equals(boardFile.toRealPath())
                     && s.kind().equals("Board / shield DTS") && s.buildInput()),
-                    "board file discovered by dependency, not a selected vendor name");
-            ok(inventory.sources().stream().anyMatch(s -> s.path().equals(socFile)
+                    "board file discovered by dependency, not a selected vendor name; inventory=" + inventory.sources());
+            ok(inventory.sources().stream().anyMatch(s -> s.path().equals(socFile.toRealPath())
                     && s.kind().equals("SoC / architecture DTSI") && s.buildInput()),
-                    "SoC include discovered by dependency without vendor assumptions");
-            ok(inventory.sources().stream().anyMatch(s -> s.path().equals(candidate)
+                    "SoC include discovered by dependency without vendor assumptions; inventory=" + inventory.sources());
+            ok(inventory.sources().stream().anyMatch(s -> s.path().equals(candidate.toRealPath())
                     && s.applicationOverlay() && s.buildInput()),
-                    "active application overlay marked only with dependency evidence");
+                    "active application overlay marked only with dependency evidence; inventory=" + inventory.sources());
             ok(DevicetreeSourceExplorer.sourceText(inventory.sources().get(0)).contains("/dts-v1/"),
                     "real file content displayed read-only");
             ok(DevicetreeSourceExplorer.dependencyPaths(
