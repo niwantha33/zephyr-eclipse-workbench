@@ -2660,6 +2660,20 @@ public final class ConfigurationStudioView extends ViewPart {
                 page.layout(true, true);
             if (sourceFileContent != null && !sourceFileContent.isDisposed())
                 sourceFileContent.getParent().layout(true, true);
+            // A newly selected Eclipse part can have zero bounds until the
+            // SWT event loop processes the workbench's pending resize.
+            // Schedule one final layout on that normal UI cycle. Never pump
+            // readAndDispatch from a Selection callback (reentrant SWT).
+            if (sourceFileContent != null && !sourceFileContent.isDisposed()
+                    && sourceFileContent.getBounds().height == 0) {
+                hardwareDetails.getDisplay().asyncExec(() -> {
+                    if (hardwareDetails.isDisposed() || sourceFileContent.isDisposed()
+                            || hardwareDetails.getSelectionIndex() != 6) return;
+                    var shell = hardwareDetails.getShell();
+                    if (!shell.isDisposed()) shell.layout(true, true);
+                    sourceFileContent.getParent().layout(true, true);
+                });
+            }
         }
     }
 
