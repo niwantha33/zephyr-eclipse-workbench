@@ -467,7 +467,11 @@ public final class EditorSmoke implements IApplication {
                         "installed native source browser reveals exact read-only SoC DTSI content");
                 studioTabs.setSelection(1);
                 dock.setSelection(6);
+                dock.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
                 captureNativeStudioScreenshot("devicetree-dtsi-source-browser.png");
+                check(((org.eclipse.swt.custom.SashForm) dock.getParent()).getMaximizedControl() == dock
+                        && sourceContent.getBounds().height >= 80,
+                        "DTS/DTSI browser is actually visible, not clipped to an empty tab strip");
                 String screenshots = System.getenv("ZEW_SCREENSHOT_DIR");
                 if (screenshots != null && !screenshots.isBlank()) {
                     check(!java.util.Arrays.equals(
@@ -476,6 +480,8 @@ public final class EditorSmoke implements IApplication {
                             "SWT screenshot evidence actually reflects different Hardware views");
                 }
             } finally {
+                dock.setSelection(1);
+                dock.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
                 buildField.set(view, previousBuild);
                 refreshSources.invoke(view);
                 try (var cleanup = Files.walk(sourceRoot)) {
