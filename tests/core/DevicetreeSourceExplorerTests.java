@@ -25,7 +25,7 @@ public final class DevicetreeSourceExplorerTests {
                     "source-only view never treats an overlay as an active input");
             String dependencies = build.resolve("zephyr.dts.pre") + ": "
                     + boardFile.toString().replace(" ", "\\ ") + " \\\n "
-                    + socFile + " " + candidate + " " + boardFile.toString().replace(" ", "\\ ") + "\n";
+                    + socFile + " " + candidate.toString().replace(" ", "\\ ") + " " + boardFile.toString().replace(" ", "\\ ") + "\n";
             Files.writeString(build.resolve("zephyr.dts.d"), dependencies);
             var inventory = DevicetreeSourceExplorer.inspect(app, build.getParent());
             ok(inventory.sources().size() == 3, "multiple vendor files and overlay with deduplication");
