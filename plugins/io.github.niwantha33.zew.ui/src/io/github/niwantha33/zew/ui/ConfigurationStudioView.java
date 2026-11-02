@@ -2645,14 +2645,35 @@ public final class ConfigurationStudioView extends ViewPart {
                 || !(hardwareDetails.getParent() instanceof SashForm vertical)) return;
         boolean sourceTab = hardwareDetails.getSelectionIndex() == 6;
         vertical.setMaximizedControl(sourceTab ? hardwareDetails : null);
-        // A hidden TabItem's content starts with zero bounds. Explicitly lay
-        // out the newly selected pane after maximizing the parent SashForm.
+        // The selected TabItem can still have ZERO height when the enclosing
+        // Eclipse workbench has not yet painted it. Laying out only the inner
+        // SashForm preserves that zero-sized ancestor. Relayout from the real
+        // workbench shell so the Hardware tab is allocated before its children.
+        // Do not depend on screenshots, timers, or a later SWT paint to fix it.
+        if (sourceTab) {
+            var shell = hardwareDetails.getShell();
+            if (!shell.isDisposed()) shell.layout(true, true);
+        }
         vertical.layout(true);
         if (sourceTab && hardwareDetails.getSelection().length != 0) {
             if (hardwareDetails.getSelection()[0].getControl() instanceof Composite page)
                 page.layout(true, true);
             if (sourceFileContent != null && !sourceFileContent.isDisposed())
                 sourceFileContent.getParent().layout(true, true);
+            // A newly selected Eclipse part can have zero bounds until the
+            // SWT event loop processes the workbench's pending resize.
+            // Schedule one final layout on that normal UI cycle. Never pump
+            // readAndDispatch from a Selection callback (reentrant SWT).
+            if (sourceFileContent != null && !sourceFileContent.isDisposed()
+                    && sourceFileContent.getBounds().height == 0) {
+                hardwareDetails.getDisplay().asyncExec(() -> {
+                    if (hardwareDetails.isDisposed() || sourceFileContent.isDisposed()
+                            || hardwareDetails.getSelectionIndex() != 6) return;
+                    var shell = hardwareDetails.getShell();
+                    if (!shell.isDisposed()) shell.layout(true, true);
+                    sourceFileContent.getParent().layout(true, true);
+                });
+            }
         }
     }
 

@@ -76,6 +76,10 @@ jobs:
             -installIU org.eclipse.cdt.core,org.eclipse.cdt.ui,org.eclipse.cdt.debug.core,org.eclipse.cdt.dsf.gdb,org.eclipse.cdt.dsf.gdb.ui,org.eclipse.cdt.cmake.ui,org.eclipse.cdt.build.gcc.core
           xvfb-run -a python3 scripts/editor_smoke.py --native-workbench \
             --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
+          # Repeat with the exact same screenshot-free environment as the main
+          # publishing workflow. This caught a real UI failure invisible in PR CI.
+          ZEW_SCREENSHOT_DIR= xvfb-run -a python3 scripts/editor_smoke.py --native-workbench \
+            --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
       - name: Retain native Eclipse screenshots from the actual installed UI
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

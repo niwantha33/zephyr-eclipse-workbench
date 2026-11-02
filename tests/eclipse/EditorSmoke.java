@@ -468,7 +468,10 @@ public final class EditorSmoke implements IApplication {
                 studioTabs.setSelection(1);
                 dock.setSelection(6);
                 dock.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
-                captureNativeStudioScreenshot("devicetree-dtsi-source-browser.png");
+                // Process the same pending SWT resize/paint cycle as a user
+                // interacting with a live workbench. This must be independent
+                // of optional screenshot capture (absent on main publishing).
+                settleNativeStudioLayout();
                 var sourceDock = (org.eclipse.swt.custom.SashForm) dock.getParent();
                 check(sourceDock.getMaximizedControl() == dock
                         && dock.getSelectionIndex() == 6
@@ -478,7 +481,11 @@ public final class EditorSmoke implements IApplication {
                         + " (maximized=" + (sourceDock.getMaximizedControl() == dock)
                         + ", selected=" + dock.getSelectionIndex()
                         + ", visible=" + sourceContent.isVisible()
-                        + ", contentHeight=" + sourceContent.getBounds().height + ")");
+                        + ", contentHeight=" + sourceContent.getBounds().height
+                        + ", sourcePaneHeight=" + sourceContent.getParent().getBounds().height
+                        + ", tabHeight=" + dock.getBounds().height
+                        + ", verticalHeight=" + sourceDock.getBounds().height + ")");
+                captureNativeStudioScreenshot("devicetree-dtsi-source-browser.png");
                 String screenshots = System.getenv("ZEW_SCREENSHOT_DIR");
                 if (screenshots != null && !screenshots.isBlank()) {
                     check(!java.util.Arrays.equals(
@@ -510,23 +517,32 @@ public final class EditorSmoke implements IApplication {
     private static void captureNativeStudioScreenshot() throws Exception {
         captureNativeStudioScreenshot("configuration-studio-source-only.png");
     }
-    private static void captureNativeStudioScreenshot(String screenshotName) throws Exception {
-        String directory = System.getenv("ZEW_SCREENSHOT_DIR");
-        if (directory == null || directory.isBlank()) return;
+    /**
+     * A smoke check changes TabFolder selection from syncExec. SWT does not
+     * allocate all previously hidden tab contents until the workbench event
+     * queue receives its resize/paint events. Flush that UI cycle explicitly,
+     * regardless of screenshot configuration, before inspecting real bounds.
+     */
+    private static void settleNativeStudioLayout() {
         var window = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
-        if (window == null) throw new IllegalStateException("No active native Eclipse window to capture.");
+        if (window == null) throw new IllegalStateException("No active native Eclipse window to inspect.");
         var shell = window.getShell();
-        var screen = shell.getDisplay().getPrimaryMonitor().getBounds();
-        // A smoke test runs inside syncExec: selection changes have not yet
-        // entered the normal SWT paint loop. Flush pending paints before the
-        // native screenshot or every named screenshot captures the same frame.
         shell.layout(true, true);
         shell.redraw();
         shell.update();
         for (int flush = 0; flush < 128 && shell.getDisplay().readAndDispatch(); flush++) {
             shell.update();
         }
+        shell.layout(true, true);
         shell.update();
+    }
+    private static void captureNativeStudioScreenshot(String screenshotName) throws Exception {
+        String directory = System.getenv("ZEW_SCREENSHOT_DIR");
+        if (directory == null || directory.isBlank()) return;
+        settleNativeStudioLayout();
+        var window = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+        var shell = window.getShell();
+        var screen = shell.getDisplay().getPrimaryMonitor().getBounds();
         var area = shell.getBounds().intersection(screen);
         if (area.width < 400 || area.height < 200)
             throw new IllegalStateException("Workbench window is too small for screenshot evidence.");
