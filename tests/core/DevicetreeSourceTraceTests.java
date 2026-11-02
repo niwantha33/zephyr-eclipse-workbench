@@ -66,7 +66,8 @@ public final class DevicetreeSourceTraceTests {
                     "only actual build dependencies are marked active");
             ok(report.hits().stream().anyMatch(h -> !h.source().buildInput()
                     && h.source().applicationOverlay()), "inactive app overlay is candidate only");
-            ok(report.hits().stream().anyMatch(h -> h.source().path().equals(soc.toRealPath())
+            Path canonicalSoc = soc.toRealPath();
+            ok(report.hits().stream().anyMatch(h -> h.source().path().equals(canonicalSoc)
                     && h.sourceValue().equals("\"disabled\"") && h.line() == 4),
                     "actual source file and line with overridden value");
             ok(report.notice().contains("not a proven winning"), "no invented property provenance");
