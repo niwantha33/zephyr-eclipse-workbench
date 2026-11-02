@@ -64,6 +64,8 @@ import io.github.niwantha33.zew.core.PeripheralStartGuide;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.DevicetreeDependencyEvidence;
 import io.github.niwantha33.zew.core.DevicetreeSourceExplorer;
+import io.github.niwantha33.zew.core.DevicetreeSourceTrace;
+import io.github.niwantha33.zew.core.DevicetreeOverlayChanges;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains.Domain;
@@ -120,6 +122,15 @@ public final class ConfigurationStudioView extends ViewPart {
     private Text sourceFileContent;
     private Label sourceFileNotice;
     private DevicetreeSourceExplorer.Inventory sourceFileInventory;
+    private Table sourceTraceMatches;
+    private Text sourceTraceContent, sourceTraceComparison;
+    private Label sourceTraceNotice;
+    private TabFolder sourceTraceViews;
+    private Button sourceTraceSave;
+    private record StudioOverlayDraft(IProject project, String generatedDts, String overlayName,
+            String node, String property, String requested,
+            DevicetreeOverlayChanges.Preview preview) {}
+    private StudioOverlayDraft sourceTraceDraft;
     private Table hardwareParameters, gpioUsageTable;
     private Label gpioUsageSummary;
     private Button addGpioButton;
@@ -678,6 +689,8 @@ public final class ConfigurationStudioView extends ViewPart {
         configure.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         Button source = action(parameterActions, "Show declaration", this::revealParameterSource);
         source.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        action(parameterActions, "Trace DTS / overlay →", this::showSourceTrace)
+                .setToolTipText("Connect selected generated property with possible original DTS/DTSI and overlay declarations.");
         studioColumns.setWeights(new int[] {22, 45, 33});
 
         // Bottom evidence dock: propose changes in-memory; generated files
@@ -863,6 +876,56 @@ public final class ConfigurationStudioView extends ViewPart {
         sourceFileList.addListener(SWT.Selection, event -> displaySelectedSource());
         sourceSash.setWeights(new int[] {38, 62});
 
+
+
+        // Integrated, build-qualified node → source → overlay workflow. Exact
+        // original files are inspected read-only; only application-owned
+        // overlays can be saved after an explicit reviewed preview.
+        var tracePage = tab(hardwareDetails, "Node → Source → Overlay");
+        tracePage.setLayout(new GridLayout(1, false));
+        var traceActions = new Composite(tracePage, SWT.NONE);
+        traceActions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        traceActions.setLayout(new GridLayout(4, false));
+        action(traceActions, "Trace selected property", this::showSourceTrace);
+        action(traceActions, "Preview overlay change…", this::draftSourceTraceOverlay);
+        sourceTraceSave = action(traceActions, "Save reviewed overlay…", this::saveSourceTraceOverlay);
+        sourceTraceSave.setEnabled(false);
+        action(traceActions, "Open app.overlay", this::openOverlay);
+        action(traceActions, "Inspect selected binding", () -> inspectSelectedBinding(false));
+        action(traceActions, "Real configure + overlay", () -> validateRealDevicetree(true));
+        action(traceActions, "Start selected peripheral", () -> openStartGuide(null));
+        action(traceActions, "Refresh source inventory", this::refreshSourceBrowser);
+        sourceTraceNotice = new Label(tracePage, SWT.WRAP);
+        sourceTraceNotice.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        sourceTraceNotice.setText("Select a built peripheral and one of its properties, then Trace selected property.");
+        sourceTraceViews = new TabFolder(tracePage, SWT.NONE);
+        sourceTraceViews.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        var traceCandidatesPage = tab(sourceTraceViews, "Source declarations (read-only)");
+        traceCandidatesPage.setLayout(new GridLayout(1, false));
+        var traceSplit = new SashForm(traceCandidatesPage, SWT.HORIZONTAL);
+        traceSplit.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        sourceTraceMatches = new Table(traceSplit, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
+                | SWT.V_SCROLL | SWT.H_SCROLL);
+        sourceTraceMatches.setHeaderVisible(true);
+        sourceTraceMatches.setLinesVisible(true);
+        for (String caption : new String[] {"Source / line", "Evidence", "Declared value"}) {
+            var column = new TableColumn(sourceTraceMatches, SWT.LEFT);
+            column.setText(caption);
+        }
+        sourceTraceMatches.getColumn(0).setWidth(230);
+        sourceTraceMatches.getColumn(1).setWidth(245);
+        sourceTraceMatches.getColumn(2).setWidth(160);
+        sourceTraceContent = new Text(traceSplit, SWT.BORDER | SWT.READ_ONLY
+                | SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL);
+        sourceTraceContent.setText("No source declaration selected. Original vendor files remain read-only.");
+        sourceTraceMatches.addListener(SWT.Selection, event -> displaySourceTraceMatch());
+        traceSplit.setWeights(new int[] {45, 55});
+        var traceDifferencePage = tab(sourceTraceViews, "Built → proposed overlay");
+        traceDifferencePage.setLayout(new GridLayout(1, false));
+        sourceTraceComparison = new Text(traceDifferencePage, SWT.BORDER | SWT.READ_ONLY
+                | SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL);
+        sourceTraceComparison.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        sourceTraceComparison.setText("No proposed change. Built values are not changed until an actual Zephyr configure.");
 
         studioVertical.setWeights(new int[] {58, 42});
         // Browsing original DTS/DTSI requires usable space for the file tree and
@@ -2643,7 +2706,8 @@ public final class ConfigurationStudioView extends ViewPart {
     private void updateHardwareDetailsLayout() {
         if (hardwareDetails == null || hardwareDetails.isDisposed()
                 || !(hardwareDetails.getParent() instanceof SashForm vertical)) return;
-        boolean sourceTab = hardwareDetails.getSelectionIndex() == 6;
+        boolean sourceTab = hardwareDetails.getSelectionIndex() == 6
+                || hardwareDetails.getSelectionIndex() == 7;
         vertical.setMaximizedControl(sourceTab ? hardwareDetails : null);
         // The selected TabItem can still have ZERO height when the enclosing
         // Eclipse workbench has not yet painted it. Laying out only the inner
@@ -2660,6 +2724,8 @@ public final class ConfigurationStudioView extends ViewPart {
                 page.layout(true, true);
             if (sourceFileContent != null && !sourceFileContent.isDisposed())
                 sourceFileContent.getParent().layout(true, true);
+            if (sourceTraceViews != null && !sourceTraceViews.isDisposed())
+                sourceTraceViews.layout(true, true);
             // A newly selected Eclipse part can have zero bounds until the
             // SWT event loop processes the workbench's pending resize.
             // Schedule one final layout on that normal UI cycle. Never pump
@@ -2674,6 +2740,175 @@ public final class ConfigurationStudioView extends ViewPart {
                     sourceFileContent.getParent().layout(true, true);
                 });
             }
+        }
+    }
+
+    /** The selected generated property is the ONLY authoritative built value. */
+    private DevicetreeParameters.Property traceSelectedProperty() {
+        if (hardwareParameters == null || hardwareParameters.isDisposed()) return null;
+        if (hardwareParameters.getSelectionCount() == 1)
+            return (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
+        return hardwareParameters.getItemCount() > 0
+                ? (DevicetreeParameters.Property) hardwareParameters.getItem(0).getData() : null;
+    }
+
+    private void showSourceTrace() {
+        selectHardwareDetails(7);
+        refreshSourceTrace();
+    }
+
+    private void refreshSourceTrace() {
+        if (sourceTraceMatches == null || sourceTraceMatches.isDisposed()) return;
+        sourceTraceMatches.removeAll();
+        sourceTraceContent.setText("No declaration selected.");
+        sourceTraceSave.setEnabled(false);
+        sourceTraceDraft = null;
+        var property = traceSelectedProperty();
+        if (project == null || snapshot == null || snapshot.devicetree().isBlank()
+                || property == null) {
+            sourceTraceNotice.setText("Select an actual built node/property; a generated zephyr.dts is required.");
+            sourceTraceComparison.setText("Nothing to compare without an exact generated property.");
+            return;
+        }
+        try {
+            if (sourceFileInventory == null)
+                sourceFileInventory = DevicetreeSourceExplorer.inspect(
+                        project.getLocation().toFile().toPath(), inspectionBuild);
+            var report = DevicetreeSourceTrace.inspect(snapshot.devicetree(),
+                    sourceFileInventory, property.path(), property.name());
+            sourceTraceNotice.setText(property.path() + " / " + property.name()
+                    + " — " + report.hits().size() + " candidate declaration(s)"
+                    + (buildOutdated ? " | STALE BUILD: rebuild required" : ""));
+            sourceTraceComparison.setText("BUILT / GENERATED (read-only)"
+                    + "\nNode: " + report.node() + "\nProperty: " + report.property()
+                    + "\nValue: " + (report.builtPropertyPresent() ? report.builtValue() : "(absent)")
+                    + "\n\nPROPOSED SOURCE OVERLAY: none\n"
+                    + "\nThe generated value does not change until Zephyr has configured the exact build."
+                    + "\n\n" + report.notice());
+            for (var hit : report.hits()) {
+                var row = new TableItem(sourceTraceMatches, SWT.NONE);
+                row.setText(new String[] {
+                        hit.source().name() + ":" + hit.line(),
+                        hit.evidence(), hit.sourceValue()});
+                row.setData(hit);
+            }
+            if (sourceTraceMatches.getItemCount() > 0) {
+                sourceTraceMatches.setSelection(0);
+                displaySourceTraceMatch();
+            } else sourceTraceContent.setText(
+                    "No matching source property could be located safely.\n"
+                    + "This is NOT proof the peripheral is unavailable. Source may be generated "
+                    + "by macros, includes or syntax not handled by this conservative navigator.");
+            sourceTraceViews.setSelection(0);
+        } catch (Exception error) {
+            sourceTraceNotice.setText("Source trace unavailable: " + error.getMessage());
+            sourceTraceComparison.setText("Generated values remain read-only. No source changed.");
+        }
+    }
+
+    private void displaySourceTraceMatch() {
+        if (sourceTraceMatches == null || sourceTraceMatches.getSelectionCount() == 0) return;
+        var hit = (DevicetreeSourceTrace.Hit) sourceTraceMatches.getSelection()[0].getData();
+        try {
+            String prefix = "SOURCE: " + hit.source().path() + "\n"
+                    + "EVIDENCE: " + hit.evidence()
+                    + "\nCandidate declaration, NOT a proven winning override.\n\n";
+            String original = DevicetreeSourceExplorer.sourceText(hit.source());
+            sourceTraceContent.setText(prefix + original);
+            int offset = prefix.length();
+            for (int i = 1; i < hit.line(); i++) {
+                int end = original.indexOf('\n', offset - prefix.length());
+                if (end < 0) break;
+                offset = prefix.length() + end + 1;
+            }
+            int end = sourceTraceContent.getText().indexOf('\n', offset);
+            sourceTraceContent.setSelection(offset, end < 0
+                    ? sourceTraceContent.getCharCount() : end);
+            sourceTraceContent.showSelection();
+        } catch (Exception error) {
+            sourceTraceContent.setText("Source no longer readable: " + error.getMessage());
+        }
+    }
+
+    private void draftSourceTraceOverlay() {
+        var property = traceSelectedProperty();
+        if (project == null || snapshot == null || property == null || buildOutdated) {
+            MessageDialog.openInformation(getSite().getShell(), "Rebuild required",
+                    "Select a built property from the exact target and rebuild stale changes first.");
+            return;
+        }
+        var dialog = new InputDialog(getSite().getShell(), "Propose application overlay",
+                property.path() + " / " + property.name()
+                + "\nEffective generated value: " + property.displayValue()
+                + "\nConservative syntax check, not binding or runtime validation.",
+                property.value(), value -> {
+                    try { DevicetreeParameters.overlayRequest(property, value); return null; }
+                    catch (IllegalArgumentException invalid) { return invalid.getMessage(); }
+                });
+        if (dialog.open() != Window.OK) return;
+        try {
+            Path app = project.getLocation().toFile().toPath();
+            Path target = app.resolve(selectedOverlay).normalize();
+            var preview = DevicetreeOverlayChanges.preview(app, target,
+                    property, dialog.getValue());
+            sourceTraceDraft = new StudioOverlayDraft(project, snapshot.devicetree(),
+                    selectedOverlay, property.path(), property.name(), dialog.getValue(), preview);
+            sourceTraceComparison.setText("EXACT BUILT VALUE (unchanged)\n"
+                    + property.path() + " / " + property.name() + " = " + property.displayValue()
+                    + "\n\nPROPOSED APPLICATION OVERLAY (NOT BUILT)\n"
+                    + property.name() + " = " + dialog.getValue()
+                    + "\n\nTARGET: " + preview.file()
+                    + "\nPREVIEW - append only:\n\n" + preview.addition()
+                    + "\nExisting source bytes are retained. Saving requires confirmation, "
+                    + "performs atomic update with backup of existing files, and does NOT "
+                    + "prove overlay activation, binding acceptance, pinmux or live hardware."
+                    + "\nNext: Real configure + overlay, then Build & validate.");
+            sourceTraceViews.setSelection(1);
+            sourceTraceSave.setEnabled(preview.changed());
+            sourceTraceNotice.setText("UNSAVED DRAFT — compare built vs proposed; review before saving.");
+        } catch (Exception error) {
+            sourceTraceDraft = null;
+            sourceTraceSave.setEnabled(false);
+            MessageDialog.openError(getSite().getShell(), "Overlay proposal rejected",
+                    error.getMessage());
+        }
+    }
+
+    private void saveSourceTraceOverlay() {
+        var draft = sourceTraceDraft;
+        var property = traceSelectedProperty();
+        if (draft == null || project == null || snapshot == null || property == null
+                || !project.equals(draft.project())
+                || !snapshot.devicetree().equals(draft.generatedDts())
+                || buildOutdated || !selectedOverlay.equals(draft.overlayName())
+                || !property.path().equals(draft.node())
+                || !property.name().equals(draft.property())) {
+            sourceTraceSave.setEnabled(false);
+            sourceTraceDraft = null;
+            MessageDialog.openError(getSite().getShell(), "Stale overlay review",
+                    "Project, selected node, overlay, or generated build changed. Review again; nothing saved.");
+            return;
+        }
+        if (!MessageDialog.openConfirm(getSite().getShell(), "Save reviewed overlay source",
+                "ONLY this application source file will change:\n" + draft.preview().file()
+                + "\n\nAppend:\n" + draft.preview().addition()
+                + "\nNo Zephyr configure, driver validation, flash or hardware access has occurred."
+                + "\nConfirm this source addition?")) return;
+        try {
+            Path app = project.getLocation().toFile().toPath();
+            Path backup = DevicetreeOverlayChanges.commit(app, draft.preview());
+            project.refreshLocal(IResource.DEPTH_INFINITE, null);
+            sourceTraceDraft = null;
+            sourceTraceSave.setEnabled(false);
+            buildOutdated = true;
+            refreshSourceBrowser();
+            sourceTraceNotice.setText("SAVED SOURCE — build is now stale; run real configure and rebuild."
+                    + (backup == null ? "" : " Backup: " + backup));
+            sourceTraceComparison.append("\n\nSOURCE SAVED, NOT YET BUILT. "
+                    + "Rebuild/configure before reporting an effective result.");
+            status.setText("Application overlay saved with review. Generated values remain unchanged until rebuild.");
+        } catch (Exception error) {
+            MessageDialog.openError(getSite().getShell(), "Overlay not saved", error.getMessage());
         }
     }
 

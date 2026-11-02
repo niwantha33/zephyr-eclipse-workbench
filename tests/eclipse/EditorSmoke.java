@@ -173,14 +173,15 @@ public final class EditorSmoke implements IApplication {
                     && adcControllerInGroup && adcChannelInGroup,
                     "ADC peripheral-first tree retains controller and channel: " + groupedDescription);
             var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
-            check(dock.getItemCount() == 7
+            check(dock.getItemCount() == 8
                     && dock.getItem(5).getText().equals("Start peripheral")
                     && dock.getItem(0).getText().startsWith("Changes")
                     && dock.getItem(1).getText().startsWith("Validation")
                     && dock.getItem(2).getText().startsWith("Generated DTS")
                     && dock.getItem(3).getText().equals("GPIO Evidence")
                     && dock.getItem(4).getText().equals("GPIO Example C")
-                    && dock.getItem(6).getText().equals("DTS / DTSI Sources"),
+                    && dock.getItem(6).getText().equals("DTS / DTSI Sources")
+                    && dock.getItem(7).getText().equals("Node → Source → Overlay"),
                     "native Studio distinguishes GPIO evidence from runtime usage");
             var sourceList = (org.eclipse.swt.widgets.Table) studioField(view, type, "sourceFileList");
             var sourceContent = (org.eclipse.swt.widgets.Text) studioField(view, type, "sourceFileContent");
@@ -486,6 +487,19 @@ public final class EditorSmoke implements IApplication {
                         + ", tabHeight=" + dock.getBounds().height
                         + ", verticalHeight=" + sourceDock.getBounds().height + ")");
                 captureNativeStudioScreenshot("devicetree-dtsi-source-browser.png");
+                var traceButton = type.getDeclaredMethod("showSourceTrace");
+                traceButton.setAccessible(true);
+                traceButton.invoke(view);
+                settleNativeStudioLayout();
+                var traceTable = (org.eclipse.swt.widgets.Table) studioField(view, type, "sourceTraceMatches");
+                var traceSource = (org.eclipse.swt.widgets.Text) studioField(view, type, "sourceTraceContent");
+                var traceBuilt = (org.eclipse.swt.widgets.Text) studioField(view, type, "sourceTraceComparison");
+                check(dock.getSelectionIndex() == 7
+                        && !traceSource.getEditable() && !traceBuilt.getEditable()
+                        && traceBuilt.getText().contains("BUILT / GENERATED")
+                        && traceSource.isVisible(),
+                        "integrated native source trace is visible, built values read-only and source safe");
+                captureNativeStudioScreenshot("devicetree-integrated-source-trace.png");
                 String screenshots = System.getenv("ZEW_SCREENSHOT_DIR");
                 if (screenshots != null && !screenshots.isBlank()) {
                     check(!java.util.Arrays.equals(
