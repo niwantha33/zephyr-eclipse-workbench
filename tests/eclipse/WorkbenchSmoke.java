@@ -26,7 +26,7 @@ public final class WorkbenchSmoke implements IApplication {
                         try {
                             display.syncExec(() -> {
                                 try { SocRegistersSmoke.run(); }
-                                catch (Exception ex) { throw new IllegalStateException(ex); }
+                                catch (Throwable ex) { throw new IllegalStateException(ex); }
                             });
                             new EditorSmoke().start(context);
                         }

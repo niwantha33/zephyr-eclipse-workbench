@@ -469,9 +469,16 @@ public final class EditorSmoke implements IApplication {
                 dock.setSelection(6);
                 dock.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
                 captureNativeStudioScreenshot("devicetree-dtsi-source-browser.png");
-                check(((org.eclipse.swt.custom.SashForm) dock.getParent()).getMaximizedControl() == dock
+                var sourceDock = (org.eclipse.swt.custom.SashForm) dock.getParent();
+                check(sourceDock.getMaximizedControl() == dock
+                        && dock.getSelectionIndex() == 6
+                        && sourceContent.isVisible()
                         && sourceContent.getBounds().height >= 80,
-                        "DTS/DTSI browser is actually visible, not clipped to an empty tab strip");
+                        "DTS/DTSI browser is actually visible, not clipped to an empty tab strip"
+                        + " (maximized=" + (sourceDock.getMaximizedControl() == dock)
+                        + ", selected=" + dock.getSelectionIndex()
+                        + ", visible=" + sourceContent.isVisible()
+                        + ", contentHeight=" + sourceContent.getBounds().height + ")");
                 String screenshots = System.getenv("ZEW_SCREENSHOT_DIR");
                 if (screenshots != null && !screenshots.isBlank()) {
                     check(!java.util.Arrays.equals(

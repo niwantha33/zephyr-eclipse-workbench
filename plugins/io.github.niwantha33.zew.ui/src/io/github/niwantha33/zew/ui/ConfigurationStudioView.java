@@ -778,7 +778,7 @@ public final class ConfigurationStudioView extends ViewPart {
             nav.setSelection(0);
         }).setToolTipText("Navigate only real controller nodes from this exact generated DTS.");
         action(startBar, "Inspect generated DTS", () -> {
-            hardwareDetails.setSelection(2);
+            selectHardwareDetails(2);
             if (hardwareDevices.getSelectionCount() > 0) revealHardwareSource();
         });
         action(startBar, "Official Zephyr guide / sample", this::openStartGuideSample);
@@ -842,7 +842,10 @@ public final class ConfigurationStudioView extends ViewPart {
                 .setToolTipText("Only a project-owned overlay can be edited; vendor DTS/DTSI remain read-only.");
         action(sourceButtons, "Create / open app.overlay…", this::openOverlay);
         var sourceSash = new SashForm(sourceBrowserPage, SWT.HORIZONTAL);
-        sourceSash.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        // Keep the browser's source area usable on compact Eclipse workbenches.
+        GridData sourceSashSize = new GridData(SWT.FILL, SWT.FILL, true, true);
+        sourceSashSize.minimumHeight = 160;
+        sourceSash.setLayoutData(sourceSashSize);
         sourceFileList = new Table(sourceSash, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
                 | SWT.V_SCROLL | SWT.H_SCROLL);
         sourceFileList.setHeaderVisible(true);
@@ -865,9 +868,7 @@ public final class ConfigurationStudioView extends ViewPart {
         // Browsing original DTS/DTSI requires usable space for the file tree and
         // its read-only source. Maximise the evidence pane while this tab is open;
         // returning to another dock tab restores the interactive chip planner.
-        hardwareDetails.addListener(SWT.Selection, event ->
-                studioVertical.setMaximizedControl(hardwareDetails.getSelectionIndex() == 6
-                        ? hardwareDetails : null));
+        hardwareDetails.addListener(SWT.Selection, event -> updateHardwareDetailsLayout());
 
         // A fourteen-button four-row footer previously squeezed the evidence
         // dock to a tab strip at 1024x768. Keep every action but use one
@@ -897,7 +898,7 @@ public final class ConfigurationStudioView extends ViewPart {
         action(hardwareActions, "Real configure + saved overlay", () -> validateRealDevicetree(true))
                 .setToolTipText("Apply saved overlay additionally in disposable Zephyr configure; no firmware is flashed");
         action(hardwareActions, "Edit application overlay…", this::openOverlay);
-        action(hardwareActions, "GPIO example C", () -> hardwareDetails.setSelection(4));
+        action(hardwareActions, "GPIO example C", () -> selectHardwareDetails(4));
         action(hardwareActions, "Start ADC reading →", () -> openStartGuide("ADC"));
         action(hardwareActions, "Start selected peripheral →", () -> openStartGuide(null));
         addGpioButton = action(hardwareActions, "Add DTS GPIO…", this::prepareNewGpio);
@@ -1175,7 +1176,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (!java.util.Objects.equals(propertyName, selectedProperty)) return;
                     hardwareValidation.setText(report);
                     analysis.setText(report);
-                    if (tabs.getSelectionIndex() == 1) hardwareDetails.setSelection(1);
+                    if (tabs.getSelectionIndex() == 1) selectHardwareDetails(1);
                     status.setText("Selected-build peripheral observations shown in Hardware and Insights. "
                             + "No GPIO pin or driver causality was inferred.");
                 });
@@ -1348,7 +1349,7 @@ public final class ConfigurationStudioView extends ViewPart {
                                 + "Edit and save the selected application overlay deliberately, "
                                 + "then run 'Real configure + saved overlay'.\n\n"
                                 + observed.diff());
-                        hardwareDetails.setSelection(0);
+                        selectHardwareDetails(0);
                         status.setText("Reviewed source draft available in Changes / app.overlay. "
                                 + "Nothing saved. Copy only the proposed addition.");
                     } else {
@@ -1358,7 +1359,7 @@ public final class ConfigurationStudioView extends ViewPart {
                         hardwarePreview.setText("No verified source draft is available. "
                                 + "The selected Zephyr binding or property does not support the request.\n"
                                 + "No file was changed. Use the source editor and the real configure tool.");
-                        hardwareDetails.setSelection(1);
+                        selectHardwareDetails(1);
                         status.setText("Binding guidance unavailable; manual source review required.");
                     }
                 });
@@ -1480,7 +1481,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     verifiedGuidedPreflight = accepted ? exactEvidence : null;
                     hardwareValidation.setText(report);
                     analysis.setText(report);
-                    hardwareDetails.setSelection(1);
+                    selectHardwareDetails(1);
                     status.setText(accepted
                             ? "Exact unsaved value observed after real scratch CMake. "
                               + "Original source unchanged; review and save separately."
@@ -1641,7 +1642,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (!java.util.Objects.equals(propertyName, currentProperty)) return;
                     hardwareValidation.setText(report);
                     analysis.setText(report);
-                    if (tabs.getSelectionIndex() == 1) hardwareDetails.setSelection(1);
+                    if (tabs.getSelectionIndex() == 1) selectHardwareDetails(1);
                     status.setText("Binding evidence shown in Hardware / Validation and Insights; "
                             + "physical signals and runtime remain unverified.");
                 });
@@ -1751,7 +1752,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (!java.util.Objects.equals(expectedProperty, currentProperty)) return;
                     hardwareValidation.setText(report);
                     analysis.setText(report);
-                    if (tabs.getSelectionIndex() == 1) hardwareDetails.setSelection(1);
+                    if (tabs.getSelectionIndex() == 1) selectHardwareDetails(1);
                     status.setText("Real CMake configuration evidence available in Hardware / Validation "
                             + "and Insights; firmware and physical pins remain unverified.");
                 });
@@ -2032,7 +2033,7 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void openPeripheralParameters(Domain domain) {
         tabs.setSelection(1);
-        hardwareDetails.setSelection(0);
+        selectHardwareDetails(0);
         hardwareState.select(0);
         String name = domain.id().toUpperCase(java.util.Locale.ROOT);
         int kind = hardwareKind.indexOf(name);
@@ -2124,7 +2125,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     ? "Not allocated to any bank: the device-name lookup is unresolved."
                     : "Compiled GPIO controller: " + usage.controllerPath())
                 + "\nSource and Devicetree references are not live readings.");
-        hardwareDetails.setSelection(3);
+        selectHardwareDetails(3);
     }
 
     private void showHardwareParameters(DevicetreeHardware.Device device) {
@@ -2225,7 +2226,7 @@ public final class ConfigurationStudioView extends ViewPart {
             }
             final List<GpioSourceEvidence.Call> appCalls = sourceCalls;
             populateGpioUsageOverview(properties, appCalls, sourceScanNote);
-            hardwareDetails.setSelection(3);
+            selectHardwareDetails(3);
             var resolvedForBank = appCalls.stream()
                     .filter(call -> device.path().equals(call.controllerPath())).toList();
             var unresolvedCalls = appCalls.stream().filter(call -> !call.resolved()).toList();
@@ -2511,7 +2512,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "@@ append after " + preview.original().lines().count() + " existing lines @@\n"
                     + preview.updated().substring(preview.original().length()).lines().map(line -> "+" + line).collect(java.util.stream.Collectors.joining("\n")) + "\n";
             hardwarePreview.setText("PROPOSED SOURCE DIFF — NOT APPLIED\n\n" + diff);
-            hardwareDetails.setSelection(0);
+            selectHardwareDetails(0);
             hardwareValidation.setText("NEW GPIO REQUEST — NOT BUILT\n" + bank.bitLabel(bit) + " / " + name.getValue()
                     + "\nBinding, controller, package and runtime behaviour require a Zephyr build and hardware verification.");
             if (!MessageDialog.openConfirm(getSite().getShell(), "Save reviewed overlay change",
@@ -2547,7 +2548,7 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwarePreview.setText("PROPOSED SOURCE CHANGE (not applied)\n\n" + draft
                 + "\n\nNo package-pin mapping or binding semantics have been validated."
                 + "\nReview the active overlay and rebuild the exact target.");
-        hardwareDetails.setSelection(0);
+        selectHardwareDetails(0);
         hardwareValidation.setText("PROPOSED CHANGE - NOT BUILT\n" + property.path() + " / " + property.name()
                 + "\nSyntax shape inspected. A Zephyr build, binding check and physical pin"
                 + " verification are still required before the result can be trusted.");
@@ -2603,7 +2604,7 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private void revealHardwareLine(int number, String path) {
-        hardwareDetails.setSelection(2);
+        selectHardwareDetails(2);
         String source = tree.getText();
         int start = 0;
         for (int line = 1; line < number; line++) {
@@ -2627,6 +2628,33 @@ public final class ConfigurationStudioView extends ViewPart {
         } finally { clipboard.dispose(); }
     }
 
+
+    /**
+     * TabFolder#setSelection does not reliably notify SWT.Selection. Both user
+     * clicks and programmatic navigation must restore the pane split; otherwise
+     * the DTS browser can remain a clipped tab strip (or hide the chip planner).
+     */
+    private void selectHardwareDetails(int index) {
+        if (hardwareDetails == null || hardwareDetails.isDisposed()) return;
+        hardwareDetails.setSelection(index);
+        updateHardwareDetailsLayout();
+    }
+
+    private void updateHardwareDetailsLayout() {
+        if (hardwareDetails == null || hardwareDetails.isDisposed()
+                || !(hardwareDetails.getParent() instanceof SashForm vertical)) return;
+        boolean sourceTab = hardwareDetails.getSelectionIndex() == 6;
+        vertical.setMaximizedControl(sourceTab ? hardwareDetails : null);
+        // A hidden TabItem's content starts with zero bounds. Explicitly lay
+        // out the newly selected pane after maximizing the parent SashForm.
+        vertical.layout(true);
+        if (sourceTab && hardwareDetails.getSelection().length != 0) {
+            if (hardwareDetails.getSelection()[0].getControl() instanceof Composite page)
+                page.layout(true, true);
+            if (sourceFileContent != null && !sourceFileContent.isDisposed())
+                sourceFileContent.getParent().layout(true, true);
+        }
+    }
 
     private void refreshSourceBrowser() {
         if (sourceFileList == null || sourceFileList.isDisposed()) return;
@@ -3167,7 +3195,7 @@ public final class ConfigurationStudioView extends ViewPart {
             kind = "ADC";
         int index = startGuideCategory.indexOf(kind);
         if (index >= 0) startGuideCategory.select(index);
-        hardwareDetails.setSelection(5);
+        selectHardwareDetails(5);
         refreshStartGuide();
         status.setText("Read-only " + kind + " guide. Review Devicetree, Kconfig and application wiring.");
     }

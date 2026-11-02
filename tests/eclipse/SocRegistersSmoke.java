@@ -56,8 +56,22 @@ public final class SocRegistersSmoke {
             boardField.setAccessible(true);
             boardField.set(view, "lp_mspm0g3507/mspm0g3507");
             load.invoke(view, fixture.toString());
-            if (!((Label) statusField.get(view)).getText().contains("Rejected SVD model"))
-                throw new AssertionError("Wrong SoC SVD must be rejected for exact selected project");
+            // SVD parsing now runs asynchronously. Wait for the UI hand-off,
+            // not the immediate "Loading…" state, and verify fail-closed
+            // behaviour without discarding the previously inspected model.
+            long rejectionDeadline = System.nanoTime()
+                    + java.time.Duration.ofSeconds(15).toNanos();
+            var status = (Label) statusField.get(view);
+            while (status.getText().startsWith("Loading register definitions")
+                    && System.nanoTime() < rejectionDeadline) {
+                if (!tree.getDisplay().readAndDispatch()) Thread.sleep(10);
+            }
+            if (!status.getText().contains("Rejected SVD model")
+                    || !status.getText().contains("Previous definitions were kept")
+                    || tree.getItemCount() != 1
+                    || tree.getItem(0) != peripheral)
+                throw new AssertionError("Wrong-SoC SVD rejection must retain the previous model: "
+                        + status.getText());
             boardField.set(view, null);
             tree.setSelection(register);
             refresh.invoke(view);

@@ -563,9 +563,10 @@ public final class SocRegistersView extends ViewPart {
                         if (closed || tree.isDisposed() || request != discoveryGeneration) return;
                         if (!exactPackDeviceMapping && board != null && !board.isBlank()
                                 && !SvdPartCompatibility.matches(SvdAutoDiscovery.partFromBoard(board), loaded.name())) {
-                            status.setText("Register definitions are for " + loaded.name()
-                                    + ", not the selected " + SvdAutoDiscovery.partFromBoard(board)
-                                    + ". Previous definitions were kept.");
+                            status.setText("Rejected SVD model: register definitions are for "
+                                    + loaded.name() + ", not the selected "
+                                    + SvdAutoDiscovery.partFromBoard(board)
+                                    + ". Previous definitions were kept; debug session unchanged.");
                             return;
                         }
                         generation++; busy = false; device = loaded; svdPath = path;
