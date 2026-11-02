@@ -468,7 +468,9 @@ public final class EditorSmoke implements IApplication {
                 studioTabs.setSelection(1);
                 dock.setSelection(6);
                 dock.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
-                captureNativeStudioScreenshot("devicetree-dtsi-source-browser.png");
+                // Assert before screenshot capture. The screenshot helper
+                // deliberately pumps SWT paints, and used to hide a zero-height
+                // editor bug in PR CI while main (screenshots disabled) failed.
                 var sourceDock = (org.eclipse.swt.custom.SashForm) dock.getParent();
                 check(sourceDock.getMaximizedControl() == dock
                         && dock.getSelectionIndex() == 6
@@ -478,7 +480,11 @@ public final class EditorSmoke implements IApplication {
                         + " (maximized=" + (sourceDock.getMaximizedControl() == dock)
                         + ", selected=" + dock.getSelectionIndex()
                         + ", visible=" + sourceContent.isVisible()
-                        + ", contentHeight=" + sourceContent.getBounds().height + ")");
+                        + ", contentHeight=" + sourceContent.getBounds().height
+                        + ", sourcePaneHeight=" + sourceContent.getParent().getBounds().height
+                        + ", tabHeight=" + dock.getBounds().height
+                        + ", verticalHeight=" + sourceDock.getBounds().height + ")");
+                captureNativeStudioScreenshot("devicetree-dtsi-source-browser.png");
                 String screenshots = System.getenv("ZEW_SCREENSHOT_DIR");
                 if (screenshots != null && !screenshots.isBlank()) {
                     check(!java.util.Arrays.equals(
