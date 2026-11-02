@@ -712,38 +712,6 @@ public final class ConfigurationStudioView extends ViewPart {
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
 
-        // A native read-only browser for exact Zephyr DTS/DTSI build inputs.
-        var sourceBrowserPage = tab(hardwareDetails, "DTS / DTSI Sources");
-        sourceBrowserPage.setLayout(new GridLayout(1, false));
-        sourceFileNotice = new Label(sourceBrowserPage, SWT.WRAP);
-        sourceFileNotice.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        sourceFileNotice.setText("Build the selected target to discover its source dependency files.");
-        var sourceButtons = new Composite(sourceBrowserPage, SWT.NONE);
-        sourceButtons.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        sourceButtons.setLayout(new GridLayout(3, false));
-        action(sourceButtons, "Refresh sources", this::refreshSourceBrowser);
-        action(sourceButtons, "Edit selected application overlay…", this::editSelectedSourceOverlay)
-                .setToolTipText("Only a project-owned overlay can be edited; vendor DTS/DTSI remain read-only.");
-        action(sourceButtons, "Create / open app.overlay…", this::openOverlay);
-        var sourceSash = new SashForm(sourceBrowserPage, SWT.HORIZONTAL);
-        sourceSash.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        sourceFileList = new Table(sourceSash, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
-                | SWT.V_SCROLL | SWT.H_SCROLL);
-        sourceFileList.setHeaderVisible(true);
-        sourceFileList.setLinesVisible(true);
-        for (String caption : new String[] {"File", "Role", "Evidence"}) {
-            var column = new TableColumn(sourceFileList, SWT.LEFT);
-            column.setText(caption);
-        }
-        sourceFileList.getColumn(0).setWidth(225);
-        sourceFileList.getColumn(1).setWidth(180);
-        sourceFileList.getColumn(2).setWidth(220);
-        sourceFileContent = new Text(sourceSash, SWT.BORDER | SWT.MULTI
-                | SWT.READ_ONLY | SWT.H_SCROLL | SWT.V_SCROLL);
-        sourceFileContent.setText("Select a source file to inspect it without modifying upstream Zephyr files.");
-        sourceFileList.addListener(SWT.Selection, event -> displaySelectedSource());
-        sourceSash.setWeights(new int[] {38, 62});
-
         // Evidence across ALL GPIO controllers, not only the selected bank.
         // Unresolved C calls remain separate: no inferred physical/logical bank.
         var gpioUsagePage = tab(hardwareDetails, "GPIO Evidence");
@@ -859,6 +827,39 @@ public final class ConfigurationStudioView extends ViewPart {
         overlayLayout.heightHint = 45;
         startGuideOverlay.setLayoutData(overlayLayout);
         copyStartCode.setEnabled(false);
+
+        // A native read-only browser for exact Zephyr DTS/DTSI build inputs.
+        var sourceBrowserPage = tab(hardwareDetails, "DTS / DTSI Sources");
+        sourceBrowserPage.setLayout(new GridLayout(1, false));
+        sourceFileNotice = new Label(sourceBrowserPage, SWT.WRAP);
+        sourceFileNotice.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        sourceFileNotice.setText("Build the selected target to discover its source dependency files.");
+        var sourceButtons = new Composite(sourceBrowserPage, SWT.NONE);
+        sourceButtons.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        sourceButtons.setLayout(new GridLayout(3, false));
+        action(sourceButtons, "Refresh sources", this::refreshSourceBrowser);
+        action(sourceButtons, "Edit selected application overlay…", this::editSelectedSourceOverlay)
+                .setToolTipText("Only a project-owned overlay can be edited; vendor DTS/DTSI remain read-only.");
+        action(sourceButtons, "Create / open app.overlay…", this::openOverlay);
+        var sourceSash = new SashForm(sourceBrowserPage, SWT.HORIZONTAL);
+        sourceSash.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        sourceFileList = new Table(sourceSash, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
+                | SWT.V_SCROLL | SWT.H_SCROLL);
+        sourceFileList.setHeaderVisible(true);
+        sourceFileList.setLinesVisible(true);
+        for (String caption : new String[] {"File", "Role", "Evidence"}) {
+            var column = new TableColumn(sourceFileList, SWT.LEFT);
+            column.setText(caption);
+        }
+        sourceFileList.getColumn(0).setWidth(225);
+        sourceFileList.getColumn(1).setWidth(180);
+        sourceFileList.getColumn(2).setWidth(220);
+        sourceFileContent = new Text(sourceSash, SWT.BORDER | SWT.MULTI
+                | SWT.READ_ONLY | SWT.H_SCROLL | SWT.V_SCROLL);
+        sourceFileContent.setText("Select a source file to inspect it without modifying upstream Zephyr files.");
+        sourceFileList.addListener(SWT.Selection, event -> displaySelectedSource());
+        sourceSash.setWeights(new int[] {38, 62});
+
 
         studioVertical.setWeights(new int[] {78, 22});
 
