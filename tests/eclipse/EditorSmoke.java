@@ -173,14 +173,21 @@ public final class EditorSmoke implements IApplication {
                     && adcControllerInGroup && adcChannelInGroup,
                     "ADC peripheral-first tree retains controller and channel: " + groupedDescription);
             var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
-            check(dock.getItemCount() == 6
+            check(dock.getItemCount() == 7
                     && dock.getItem(5).getText().equals("Start peripheral")
                     && dock.getItem(0).getText().startsWith("Changes")
                     && dock.getItem(1).getText().startsWith("Validation")
                     && dock.getItem(2).getText().startsWith("Generated DTS")
                     && dock.getItem(3).getText().equals("GPIO Evidence")
-                    && dock.getItem(4).getText().equals("GPIO Example C"),
+                    && dock.getItem(4).getText().equals("GPIO Example C")
+                    && dock.getItem(6).getText().equals("DTS / DTSI Sources"),
                     "native Studio distinguishes GPIO evidence from runtime usage");
+            var sourceList = (org.eclipse.swt.widgets.Table) studioField(view, type, "sourceFileList");
+            var sourceContent = (org.eclipse.swt.widgets.Text) studioField(view, type, "sourceFileContent");
+            var sourceNotice = (org.eclipse.swt.widgets.Label) studioField(view, type, "sourceFileNotice");
+            check(sourceList.getColumnCount() == 3 && !sourceContent.getEditable()
+                    && !sourceNotice.getText().isBlank(),
+                    "native cross-vendor source browser is visible and vendor DTS/DTSI cannot be edited");
             var validation = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareValidation");
             check(validation.getText().contains("PHYSICAL PINOUT: NOT VERIFIED"),
                     "physical package map is never invented from pinmux cells");
@@ -425,6 +432,64 @@ public final class EditorSmoke implements IApplication {
             studioTabs.setSelection(1);
             dock.setSelection(1);
             captureNativeStudioScreenshot("visual-hardware-studio-built-fixture.png");
+
+            // Verify the installed SWT source browser with two real input files
+            // from a disposable, vendor-neutral build dependency fixture.
+            Path sourceRoot = Files.createTempDirectory("zew-ui-dts-source-");
+            var buildField = type.getDeclaredField("inspectionBuild");
+            buildField.setAccessible(true);
+            Object previousBuild = buildField.get(view);
+            var refreshSources = type.getDeclaredMethod("refreshSourceBrowser");
+            refreshSources.setAccessible(true);
+            try {
+                Path boardDts = sourceRoot.resolve("boards/fixture/board.dts");
+                Path socDtsi = sourceRoot.resolve("dts/vendor/soc.dtsi");
+                Path generated = sourceRoot.resolve("build/zephyr");
+                Files.createDirectories(boardDts.getParent());
+                Files.createDirectories(socDtsi.getParent());
+                Files.createDirectories(generated);
+                Files.writeString(boardDts, "/dts-v1/;\n/ { model = \"CI board source\"; };\n");
+                Files.writeString(socDtsi, "/ { soc { compatible = \"fixture,controller\"; }; };\n");
+                Files.writeString(generated.resolve("zephyr.dts.d"),
+                        generated.resolve("zephyr.dts.pre") + ": "
+                        + boardDts.toString().replace(" ", "\\ ") + " "
+                        + socDtsi.toString().replace(" ", "\\ ") + "\n");
+                buildField.set(view, sourceRoot.resolve("build"));
+                refreshSources.invoke(view);
+                check(sourceList.getItemCount() == 2
+                        && sourceList.getItem(0).getText(1).equals("Board / shield DTS")
+                        && sourceList.getItem(1).getText(1).equals("SoC / architecture DTSI"),
+                        "installed source browser lists actual board and SoC DTS/DTSI dependencies");
+                sourceList.setSelection(1);
+                sourceList.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+                check(sourceContent.getText().contains("fixture,controller")
+                        && !sourceContent.getEditable(),
+                        "installed native source browser reveals exact read-only SoC DTSI content");
+                studioTabs.setSelection(1);
+                dock.setSelection(6);
+                dock.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+                captureNativeStudioScreenshot("devicetree-dtsi-source-browser.png");
+                check(((org.eclipse.swt.custom.SashForm) dock.getParent()).getMaximizedControl() == dock
+                        && sourceContent.getBounds().height >= 80,
+                        "DTS/DTSI browser is actually visible, not clipped to an empty tab strip");
+                String screenshots = System.getenv("ZEW_SCREENSHOT_DIR");
+                if (screenshots != null && !screenshots.isBlank()) {
+                    check(!java.util.Arrays.equals(
+                                    Files.readAllBytes(Path.of(screenshots).resolve("devicetree-dtsi-source-browser.png")),
+                                    Files.readAllBytes(Path.of(screenshots).resolve("gpio-used-overview.png"))),
+                            "SWT screenshot evidence actually reflects different Hardware views");
+                }
+            } finally {
+                dock.setSelection(1);
+                dock.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+                buildField.set(view, previousBuild);
+                refreshSources.invoke(view);
+                try (var cleanup = Files.walk(sourceRoot)) {
+                    for (Path file : cleanup.sorted(java.util.Comparator.reverseOrder()).toList())
+                        Files.deleteIfExists(file);
+                }
+            }
+
         } finally {
             Files.deleteIfExists(gpioSource);
             snapshotField.set(view, original);
@@ -445,6 +510,16 @@ public final class EditorSmoke implements IApplication {
         if (window == null) throw new IllegalStateException("No active native Eclipse window to capture.");
         var shell = window.getShell();
         var screen = shell.getDisplay().getPrimaryMonitor().getBounds();
+        // A smoke test runs inside syncExec: selection changes have not yet
+        // entered the normal SWT paint loop. Flush pending paints before the
+        // native screenshot or every named screenshot captures the same frame.
+        shell.layout(true, true);
+        shell.redraw();
+        shell.update();
+        for (int flush = 0; flush < 128 && shell.getDisplay().readAndDispatch(); flush++) {
+            shell.update();
+        }
+        shell.update();
         var area = shell.getBounds().intersection(screen);
         if (area.width < 400 || area.height < 200)
             throw new IllegalStateException("Workbench window is too small for screenshot evidence.");

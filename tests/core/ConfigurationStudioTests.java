@@ -14,6 +14,7 @@ public final class ConfigurationStudioTests {
     private interface Throwing { void run() throws Exception; }
 
     public static void main(String[] args) throws Exception {
+        DevicetreeSourceExplorerTests.run();
         Path root = Files.createTempDirectory("zew-studio space ");
         try {
             var encode = java.util.Base64.getEncoder();

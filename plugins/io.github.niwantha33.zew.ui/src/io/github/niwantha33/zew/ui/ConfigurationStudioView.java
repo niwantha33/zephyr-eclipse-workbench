@@ -63,6 +63,7 @@ import io.github.niwantha33.zew.core.VendorFeatureCatalogue;
 import io.github.niwantha33.zew.core.PeripheralStartGuide;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.DevicetreeDependencyEvidence;
+import io.github.niwantha33.zew.core.DevicetreeSourceExplorer;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains.Domain;
@@ -115,6 +116,10 @@ public final class ConfigurationStudioView extends ViewPart {
     private final java.util.concurrent.atomic.AtomicInteger unsavedDraftGeneration =
             new java.util.concurrent.atomic.AtomicInteger();
     private TabFolder hardwareDetails;
+    private Table sourceFileList;
+    private Text sourceFileContent;
+    private Label sourceFileNotice;
+    private DevicetreeSourceExplorer.Inventory sourceFileInventory;
     private Table hardwareParameters, gpioUsageTable;
     private Label gpioUsageSummary;
     private Button addGpioButton;
@@ -706,6 +711,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.READ_ONLY);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
+
         // Evidence across ALL GPIO controllers, not only the selected bank.
         // Unresolved C calls remain separate: no inferred physical/logical bank.
         var gpioUsagePage = tab(hardwareDetails, "GPIO Evidence");
@@ -822,10 +828,61 @@ public final class ConfigurationStudioView extends ViewPart {
         startGuideOverlay.setLayoutData(overlayLayout);
         copyStartCode.setEnabled(false);
 
-        studioVertical.setWeights(new int[] {78, 22});
+        // A native read-only browser for exact Zephyr DTS/DTSI build inputs.
+        var sourceBrowserPage = tab(hardwareDetails, "DTS / DTSI Sources");
+        sourceBrowserPage.setLayout(new GridLayout(1, false));
+        sourceFileNotice = new Label(sourceBrowserPage, SWT.WRAP);
+        sourceFileNotice.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        sourceFileNotice.setText("Build the selected target to discover its source dependency files.");
+        var sourceButtons = new Composite(sourceBrowserPage, SWT.NONE);
+        sourceButtons.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        sourceButtons.setLayout(new GridLayout(3, false));
+        action(sourceButtons, "Refresh sources", this::refreshSourceBrowser);
+        action(sourceButtons, "Edit selected application overlay…", this::editSelectedSourceOverlay)
+                .setToolTipText("Only a project-owned overlay can be edited; vendor DTS/DTSI remain read-only.");
+        action(sourceButtons, "Create / open app.overlay…", this::openOverlay);
+        var sourceSash = new SashForm(sourceBrowserPage, SWT.HORIZONTAL);
+        sourceSash.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        sourceFileList = new Table(sourceSash, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
+                | SWT.V_SCROLL | SWT.H_SCROLL);
+        sourceFileList.setHeaderVisible(true);
+        sourceFileList.setLinesVisible(true);
+        for (String caption : new String[] {"File", "Role", "Evidence"}) {
+            var column = new TableColumn(sourceFileList, SWT.LEFT);
+            column.setText(caption);
+        }
+        sourceFileList.getColumn(0).setWidth(225);
+        sourceFileList.getColumn(1).setWidth(180);
+        sourceFileList.getColumn(2).setWidth(220);
+        sourceFileContent = new Text(sourceSash, SWT.BORDER | SWT.MULTI
+                | SWT.READ_ONLY | SWT.H_SCROLL | SWT.V_SCROLL);
+        sourceFileContent.setText("Select a source file to inspect it without modifying upstream Zephyr files.");
+        sourceFileList.addListener(SWT.Selection, event -> displaySelectedSource());
+        sourceSash.setWeights(new int[] {38, 62});
 
-        var hardwareActions = new Composite(hardware, SWT.NONE);
-        hardwareActions.setLayout(new GridLayout(4, false));
+
+        studioVertical.setWeights(new int[] {58, 42});
+        // Browsing original DTS/DTSI requires usable space for the file tree and
+        // its read-only source. Maximise the evidence pane while this tab is open;
+        // returning to another dock tab restores the interactive chip planner.
+        hardwareDetails.addListener(SWT.Selection, event ->
+                studioVertical.setMaximizedControl(hardwareDetails.getSelectionIndex() == 6
+                        ? hardwareDetails : null));
+
+        // A fourteen-button four-row footer previously squeezed the evidence
+        // dock to a tab strip at 1024x768. Keep every action but use one
+        // horizontally scrollable, keyboard-reachable toolbar.
+        var actionsScroll = new org.eclipse.swt.custom.ScrolledComposite(
+                hardware, SWT.H_SCROLL | SWT.BORDER);
+        GridData actionsSize = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        actionsSize.heightHint = 56;
+        actionsScroll.setLayoutData(actionsSize);
+        var hardwareActions = new Composite(actionsScroll, SWT.NONE);
+        GridLayout actionsRow = new GridLayout(14, false);
+        actionsRow.marginWidth = 2;
+        actionsRow.marginHeight = 2;
+        hardwareActions.setLayout(actionsRow);
+        actionsScroll.setContent(hardwareActions);
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
@@ -846,6 +903,7 @@ public final class ConfigurationStudioView extends ViewPart {
         addGpioButton = action(hardwareActions, "Add DTS GPIO…", this::prepareNewGpio);
         addGpioButton.setEnabled(false);
         addGpioButton.setToolTipText("Select an unreferenced logical index. Creates a reviewed source request, not an availability or live-state claim.");
+        hardwareActions.setSize(hardwareActions.computeSize(SWT.DEFAULT, SWT.DEFAULT));
 
         Composite reports = tab(tabs, "Insights");
         reports.setLayout(new GridLayout(1, false));
@@ -1819,6 +1877,7 @@ public final class ConfigurationStudioView extends ViewPart {
             describeSelected();
             help.setText("Open Zephyr > Configuration Studio with an application selected in Project Explorer.");
             tree.setText("");
+            refreshSourceBrowser();
             refreshHardware();
             analysis.setText("");
             return;
@@ -1864,6 +1923,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     ? "No resolved Devicetree is available. Select the board in Project settings "
                             + "and build to generate zephyr.dts. Existing overlays remain editable."
                     : snapshot.devicetree());
+            refreshSourceBrowser();
             refreshHardware();
             if (build == null) {
                 long requested = snapshot.options().stream().filter(Option::overridden).count();
@@ -2565,6 +2625,67 @@ public final class ConfigurationStudioView extends ViewPart {
         try {
             clipboard.setContents(new Object[] {device.path()}, new Transfer[] {TextTransfer.getInstance()});
         } finally { clipboard.dispose(); }
+    }
+
+
+    private void refreshSourceBrowser() {
+        if (sourceFileList == null || sourceFileList.isDisposed()) return;
+        sourceFileList.removeAll();
+        sourceFileInventory = null;
+        if (project == null) {
+            sourceFileNotice.setText("Select a Zephyr application to browse its DTS / DTSI inputs.");
+            sourceFileContent.setText("No source selected.");
+            return;
+        }
+        try {
+            Path app = project.getLocation().toFile().toPath();
+            sourceFileInventory = DevicetreeSourceExplorer.inspect(app, inspectionBuild);
+            sourceFileNotice.setText(sourceFileInventory.notice());
+            for (var source : sourceFileInventory.sources()) {
+                var row = new TableItem(sourceFileList, SWT.NONE);
+                row.setText(new String[] {source.name(), source.kind(), source.evidence()});
+                row.setData(source);
+            }
+            sourceFileContent.setText(sourceFileInventory.sources().isEmpty()
+                    ? "No evidenced DTS/DTSI sources found. Configure/build the selected target. "
+                            + "Do not assume a source file or overlay is active until verified."
+                    : "Select a file on the left. Build dependencies are read-only evidence from the selected build; "
+                            + "use Create / open app.overlay to configure an application override.");
+        } catch (Exception error) {
+            sourceFileNotice.setText("DTS/DTSI source discovery unavailable: " + error.getMessage());
+            sourceFileContent.setText("No source file is verified. Check the selected build and refresh.");
+        }
+        sourceFileNotice.getParent().layout(true, true);
+    }
+
+    private void displaySelectedSource() {
+        if (sourceFileList == null || sourceFileList.getSelectionCount() == 0) return;
+        var source = (DevicetreeSourceExplorer.Source) sourceFileList.getSelection()[0].getData();
+        try {
+            sourceFileContent.setText("PATH: " + source.path()
+                    + "\nEVIDENCE: " + source.evidence()
+                    + "\nROLE: " + source.kind()
+                    + "\nThe original is read-only here; an overlay must be configured and rebuilt to take effect.\n\n"
+                    + DevicetreeSourceExplorer.sourceText(source));
+            sourceFileContent.setSelection(0);
+        } catch (Exception error) {
+            sourceFileContent.setText("Unable to display source: " + error.getMessage());
+        }
+    }
+
+    private void editSelectedSourceOverlay() {
+        if (project == null || sourceFileList == null || sourceFileList.getSelectionCount() == 0) return;
+        var source = (DevicetreeSourceExplorer.Source) sourceFileList.getSelection()[0].getData();
+        try {
+            Path app = project.getLocation().toFile().toPath().toRealPath();
+            if (!source.applicationOverlay() || !source.path().startsWith(app))
+                throw new java.io.IOException("Only application-owned overlays may be edited. Vendor DTS/DTSI are read-only.");
+            Path relative = app.relativize(source.path());
+            selectedOverlay = relative.toString().replace('\\', '/');
+            openResource(selectedOverlay);
+        } catch (Exception error) {
+            MessageDialog.openError(getSite().getShell(), "Open application overlay", error.getMessage());
+        }
     }
 
     private void refreshHardware() {
