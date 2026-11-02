@@ -173,14 +173,21 @@ public final class EditorSmoke implements IApplication {
                     && adcControllerInGroup && adcChannelInGroup,
                     "ADC peripheral-first tree retains controller and channel: " + groupedDescription);
             var dock = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "hardwareDetails");
-            check(dock.getItemCount() == 6
+            check(dock.getItemCount() == 7
                     && dock.getItem(5).getText().equals("Start peripheral")
                     && dock.getItem(0).getText().startsWith("Changes")
                     && dock.getItem(1).getText().startsWith("Validation")
                     && dock.getItem(2).getText().startsWith("Generated DTS")
                     && dock.getItem(3).getText().equals("GPIO Evidence")
-                    && dock.getItem(4).getText().equals("GPIO Example C"),
+                    && dock.getItem(4).getText().equals("GPIO Example C")
+                    && dock.getItem(6).getText().equals("DTS / DTSI Sources"),
                     "native Studio distinguishes GPIO evidence from runtime usage");
+            var sourceList = (org.eclipse.swt.widgets.Table) studioField(view, type, "sourceFileList");
+            var sourceContent = (org.eclipse.swt.widgets.Text) studioField(view, type, "sourceFileContent");
+            var sourceNotice = (org.eclipse.swt.widgets.Label) studioField(view, type, "sourceFileNotice");
+            check(sourceList.getColumnCount() == 3 && !sourceContent.getEditable()
+                    && !sourceNotice.getText().isBlank(),
+                    "native cross-vendor source browser is visible and vendor DTS/DTSI cannot be edited");
             var validation = (org.eclipse.swt.widgets.Text) studioField(view, type, "hardwareValidation");
             check(validation.getText().contains("PHYSICAL PINOUT: NOT VERIFIED"),
                     "physical package map is never invented from pinmux cells");
