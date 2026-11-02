@@ -2625,7 +2625,6 @@ public final class ConfigurationStudioView extends ViewPart {
                 var row = new TableItem(sourceFileList, SWT.NONE);
                 row.setText(new String[] {source.name(), source.kind(), source.evidence()});
                 row.setData(source);
-                row.setToolTipText(source.path().toString());
             }
             sourceFileContent.setText(sourceFileInventory.sources().isEmpty()
                     ? "No evidenced DTS/DTSI sources found. Configure/build the selected target. "
