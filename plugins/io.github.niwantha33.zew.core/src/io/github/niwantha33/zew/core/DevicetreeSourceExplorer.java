@@ -78,7 +78,8 @@ public final class DevicetreeSourceExplorer {
     public static List<String> dependencyPaths(String makefile) throws IOException {
         if (makefile == null || makefile.length() > MAX_DEP_BYTES)
             throw new IOException("Devicetree dependencies are too large or missing.");
-        String flattened = makefile.replaceAll("\\\\\r?\n", " ");
+        String flattened = makefile.replace("" + (char) 92 + (char) 13 + (char) 10, " ")
+                .replace("" + (char) 92 + (char) 10, " ");
         int separator = -1;
         for (int i = 0; i < flattened.length() - 1; i++) {
             if (flattened.charAt(i) == ':' && Character.isWhitespace(flattened.charAt(i + 1))
