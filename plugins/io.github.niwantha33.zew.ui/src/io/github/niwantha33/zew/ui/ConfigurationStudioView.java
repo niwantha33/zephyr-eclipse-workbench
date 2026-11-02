@@ -861,10 +861,28 @@ public final class ConfigurationStudioView extends ViewPart {
         sourceSash.setWeights(new int[] {38, 62});
 
 
-        studioVertical.setWeights(new int[] {78, 22});
+        studioVertical.setWeights(new int[] {58, 42});
+        // Browsing original DTS/DTSI requires usable space for the file tree and
+        // its read-only source. Maximise the evidence pane while this tab is open;
+        // returning to another dock tab restores the interactive chip planner.
+        hardwareDetails.addListener(SWT.Selection, event ->
+                studioVertical.setMaximizedControl(hardwareDetails.getSelectionIndex() == 6
+                        ? hardwareDetails : null));
 
-        var hardwareActions = new Composite(hardware, SWT.NONE);
-        hardwareActions.setLayout(new GridLayout(4, false));
+        // A fourteen-button four-row footer previously squeezed the evidence
+        // dock to a tab strip at 1024x768. Keep every action but use one
+        // horizontally scrollable, keyboard-reachable toolbar.
+        var actionsScroll = new org.eclipse.swt.custom.ScrolledComposite(
+                hardware, SWT.H_SCROLL | SWT.BORDER);
+        GridData actionsSize = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        actionsSize.heightHint = 56;
+        actionsScroll.setLayoutData(actionsSize);
+        var hardwareActions = new Composite(actionsScroll, SWT.NONE);
+        GridLayout actionsRow = new GridLayout(14, false);
+        actionsRow.marginWidth = 2;
+        actionsRow.marginHeight = 2;
+        hardwareActions.setLayout(actionsRow);
+        actionsScroll.setContent(hardwareActions);
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
@@ -885,6 +903,7 @@ public final class ConfigurationStudioView extends ViewPart {
         addGpioButton = action(hardwareActions, "Add DTS GPIO…", this::prepareNewGpio);
         addGpioButton.setEnabled(false);
         addGpioButton.setToolTipText("Select an unreferenced logical index. Creates a reviewed source request, not an availability or live-state claim.");
+        hardwareActions.setSize(hardwareActions.computeSize(SWT.DEFAULT, SWT.DEFAULT));
 
         Composite reports = tab(tabs, "Insights");
         reports.setLayout(new GridLayout(1, false));
