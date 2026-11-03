@@ -297,6 +297,7 @@ def snapshot(application, frozen, record):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("snapshot", "verify", "verify-env", "plan"))
+    parser.add_argument("--plain-errors", action="store_true", help="Print user-facing errors instead of JSON")
     parser.add_argument("--application", required=True, type=Path)
     parser.add_argument("--workspace", required=True, type=Path)
     parser.add_argument("--python", required=True, type=Path)
@@ -360,5 +361,8 @@ if __name__ == "__main__":
         print(json.dumps(answer, sort_keys=True))
         sys.exit(0 if answer["status"] != "drift" else 2)
     except (VersionError, OSError, KeyError, TypeError) as error:
-        print(json.dumps({"status": "error", "message": str(error)}, sort_keys=True))
+        if "--plain-errors" in sys.argv:
+            print("ERROR: " + str(error))
+        else:
+            print(json.dumps({"status": "error", "message": str(error)}, sort_keys=True))
         sys.exit(2)

@@ -83,6 +83,30 @@ For a preview add `plan --candidate-workspace NEW_WEST_ROOT
 It returns a structured JSON difference report. It neither clones nor
 updates repositories, and does not change the application.
 
+## Choosing a candidate setup in Eclipse
+
+**Preview Upgrade Using Another Setup** is a read-only comparison, **not**
+an installer, automatic updater or migration command. It requires a
+completed, *separate* Workbench setup folder with a different West
+workspace. In particular, the current setup and its parent/symlink aliases
+are not valid candidate environments.
+
+If the user selects the same setup, the UI reports that a second setup is
+needed *before scheduling a background Job*. There is one informational
+message, not a misleading "Problem Occurred" failure and a second modal
+error. If no project lock exists, the UI first requests a snapshot. Errors
+from background version checks produce one Eclipse Job error and keep
+actionable details in the console.
+
+The initial managed first-build setup wizard currently provisions its
+reviewed **Zephyr 4.4.0** profile only. It does not install Zephyr 4.5 by
+simply choosing another directory. New-version automated installation is
+a separate missing feature tracked in issue #128. Until that feature
+exists, a 4.5 candidate must be installed as a **new, separately validated
+environment** by supported external Zephyr/West provisioning steps and
+registered as a ready Workbench setup. Do **not** mutate the 4.4 workspace
+or point the project at an arbitrary Git checkout.
+
 ## Intended complete upgrade flow — not yet implemented
 
 A later, separately reviewed setup manager must:

@@ -2,6 +2,8 @@
 """Offline, mocked West/Git tests. Does not claim a real 4.5 build."""
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -135,6 +137,33 @@ class ProjectVersionTests(unittest.TestCase):
         versions.snapshot(self.application, frozen, record)
         with self.assertRaisesRegex(versions.VersionError, "in-place update is forbidden"):
             versions.main(self.args("plan", "--candidate-workspace", str(self.workspace),
+                                    "--candidate-sdk", str(self.sdk)))
+
+    def test_cli_plain_errors_for_missing_snapshot(self):
+        result = subprocess.run([sys.executable, str(SOURCE),
+                                 *self.args("verify", "--plain-errors")],
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(2, result.returncode)
+        self.assertTrue(result.stdout.startswith("ERROR: No project lock found."), result.stdout)
+        self.assertNotIn('"status": "error"', result.stdout)
+
+    def test_cli_json_errors_remain_machine_readable(self):
+        result = subprocess.run([sys.executable, str(SOURCE),
+                                 *self.args("verify")],
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("error", json.loads(result.stdout)["status"])
+
+    def test_same_workspace_alias_is_rejected(self):
+        frozen, record = self.record()
+        versions.snapshot(self.application, frozen, record)
+        alias = self.root / "ws_alias"
+        try:
+            alias.symlink_to(self.workspace, target_is_directory=True)
+        except (NotImplementedError, OSError):
+            self.skipTest("This host disallows creation of directory symlinks")
+        with self.assertRaisesRegex(versions.VersionError, "in-place update is forbidden"):
+            versions.main(self.args("plan", "--candidate-workspace", str(alias),
                                     "--candidate-sdk", str(self.sdk)))
 
     def test_rejects_unsafe_west_paths(self):
