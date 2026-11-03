@@ -528,3 +528,23 @@ passing these prototype tests.
 - Added real-filesystem Java race and backup tests plus installed Eclipse UI
   smoke verifying an inert, unapproved save button. No auto-merge/release;
   **G0 remains OPEN**.
+
+## Project environment lock — development PR (2026-11-03)
+
+- Added an explicit native-West `manifest --freeze` snapshot plus the Zephyr
+  manifest-repository SHA, linked by a SHA-256 integrity check in the application's
+  `.zew` metadata. Records exact module SHAs and the selected host tool/SDK
+  identities without embedding local absolute setup paths.
+- Added native Eclipse menu commands for snapshot, verify and preview of an
+  already installed parallel setup. A new application's verified build attempts
+  the snapshot automatically; missing/unfrozen modules are **not** represented
+  as a reproducible lock.
+- A locked project's build refuses changed Zephyr/module/SDK/tool identities,
+  but permits normal application source edits. Full verification separately
+  reports changes in application files. The original lock is never overwritten.
+- Initial offline mocked tests cover integrity, drift, failure-safe behaviour
+  and in-place-upgrade rejection. Live 4.4→4.5 integration, archive retention,
+  candidate setup installer, GUI smoke and firmware regression acceptance are
+  **not yet verified or implemented**. Workbench p2 updates and Zephyr source
+  updates remain strictly separate. G0 remains OPEN.
+- See [Project Versions](docs/PROJECT_VERSIONS.md).
