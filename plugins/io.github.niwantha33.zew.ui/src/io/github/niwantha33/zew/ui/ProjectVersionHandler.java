@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.ui;
 
+import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -30,6 +32,34 @@ import io.github.niwantha33.zew.core.ProcessRunner;
 public final class ProjectVersionHandler extends AbstractHandler {
     private static final String SCRIPT = "tools/project_versions.py";
 
+    /**
+     * A trial target is another completed setup, not a different spelling of the
+     * project's existing West workspace. Resolve junctions and symlinks before
+     * scheduling work so a selection mistake never creates a failing Job.
+     */
+    static void requireSeparateWorkspace(Path current, Path candidate) throws IOException {
+        Path original = current.toRealPath();
+        Path selected = candidate.toRealPath();
+        if (original.startsWith(selected) || selected.startsWith(original)) {
+            throw new IOException("The selected setup uses the project's current West workspace. "
+                + "An upgrade comparison needs a separately installed Zephyr environment. "
+                + "Original: " + original + " | Selected: " + selected);
+        }
+    }
+
+    private static String friendlyResult(ProcessRunner.Result result, String action) throws IOException {
+        if (result.exitCode() == 0) return result.output();
+        if (result.output().contains("\\"status\\": \\"drift\\"")) {
+            throw new IOException("The installed Zephyr environment differs from the project's saved lock. "
+                + "See the detailed differences in the Zephyr Project Versions console.");
+        }
+        String detail = result.output().strip();
+        if (detail.startsWith("ERROR: ")) detail = detail.substring(7);
+        if (detail.isBlank() || detail.length() > 1400)
+            detail = "The " + action + " operation failed. See the Zephyr Project Versions console.";
+        throw new IOException(detail);
+    }
+
     static void operate(IProject project, String action, Path candidateRoot,
                         IProgressMonitor monitor, Consumer<String> log) throws Exception {
         Properties settings = ProjectContext.settings(project);
@@ -38,7 +68,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
         Path application = project.getLocation().toFile().toPath();
         Path workspace = Path.of(settings.getProperty("workspace"));
         var command = new ArrayList<String>(List.of(
-                settings.getProperty("python"), script.toString(), action,
+                settings.getProperty("python"), script.toString(), action, "--plain-errors",
                 "--application", application.toString(),
                 "--workspace", workspace.toString(),
                 "--python", settings.getProperty("python"),
@@ -53,6 +83,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
             // Only a completed environment is accepted, not an arbitrary Git
             // checkout or a guessed new-version SDK.
             Properties candidate = ProjectContext.load(candidateRoot);
+            requireSeparateWorkspace(workspace, Path.of(candidate.getProperty("workspace")));
             command.addAll(List.of("--candidate-workspace", candidate.getProperty("workspace"),
                     "--candidate-sdk", candidate.getProperty("tools.sdk"),
                     "--candidate-python", candidate.getProperty("python"),
@@ -62,7 +93,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
         }
         var result = new ProcessRunner().run(command, workspace, Duration.ofMinutes(5),
                 monitor::isCanceled, log, ProjectContext.environment(settings));
-        result.requireSuccess();
+        friendlyResult(result, action);
     }
 
     /** Prevent a locked application from silently compiling against a newer setup. */
@@ -104,12 +135,48 @@ public final class ProjectVersionHandler extends AbstractHandler {
         if (action.isEmpty()) return null;
         Path candidateRoot = null;
         if (action.equals("plan")) {
-            var picker = new DirectoryDialog(HandlerUtil.getActiveShell(event));
-            picker.setText("Choose the separate candidate Zephyr setup");
-            picker.setMessage("Select a completed setup for a newer Zephyr version. The existing project will not change.");
-            String selected = picker.open();
-            if (selected == null) return null;
-            candidateRoot = Path.of(selected).toAbsolutePath().normalize();
+            try {
+                Properties current = ProjectContext.settings(project);
+                Path originalRoot = Path.of(current.getProperty("zew.setupRoot")).toRealPath();
+                Path originalWorkspace = Path.of(current.getProperty("workspace")).toRealPath();
+                if (!Files.isRegularFile(project.getLocation().toFile().toPath()
+                        .resolve(".zew/project-lock.json"))) {
+                    MessageDialog.openInformation(HandlerUtil.getActiveShell(event),
+                        "Project snapshot required",
+                        "Create the project's .zew/project-lock.json first using Zephyr > "
+                        + "Snapshot Project Environment. The existing build and sources are unchanged.");
+                    return null;
+                }
+                var picker = new DirectoryDialog(HandlerUtil.getActiveShell(event));
+                picker.setText("Select another installed Zephyr setup (not the current one)");
+                picker.setMessage("Current setup: " + originalRoot
+                    + "\\nChoose a DIFFERENT completed Workbench setup folder, such as a separately "
+                    + "installed Zephyr 4.5 environment. This action compares versions; "
+                    + "it does not download or upgrade Zephyr.");
+                Path parent = originalRoot.getParent();
+                if (parent != null) picker.setFilterPath(parent.toString());
+                String selected = picker.open();
+                if (selected == null) return null;
+                candidateRoot = Path.of(selected).toAbsolutePath().normalize();
+                if (Files.isSameFile(originalRoot, candidateRoot)) {
+                    MessageDialog.openInformation(HandlerUtil.getActiveShell(event),
+                        "A second Zephyr setup is needed",
+                        "You selected the existing setup for this project. To compare 4.4 with 4.5, "
+                        + "install 4.5 in a separate folder first, then select that new setup here. "
+                        + "\\n\\nThe current managed installer is pinned to its tested release; "
+                        + "this preview does not install a new Zephyr version. "
+                        + "Your project and Zephyr 4.4 setup have not been changed.");
+                    return null;
+                }
+                Properties candidate = ProjectContext.load(candidateRoot);
+                requireSeparateWorkspace(originalWorkspace, Path.of(candidate.getProperty("workspace")));
+            } catch (Exception error) {
+                MessageDialog.openInformation(HandlerUtil.getActiveShell(event),
+                    "Cannot preview an upgrade",
+                    error.getMessage() + "\\n\\nSelect a different, completed Zephyr setup. "
+                    + "No source files or installed tools were changed.");
+                return null;
+            }
         }
         Path selectedCandidate = candidateRoot;
         var job = new Job("Zephyr " + action + " — " + project.getName()) {
@@ -126,14 +193,17 @@ public final class ProjectVersionHandler extends AbstractHandler {
                             : action.equals("verify") ? "No environment drift detected. Details are in the Zephyr Project Versions console."
                             : "Upgrade comparison is available in the Zephyr Project Versions console. No project or setup files were changed."));
                     return monitor.isCanceled() ? Status.CANCEL_STATUS : Status.OK_STATUS;
+                } catch (InterruptedIOException error) {
+                    return Status.CANCEL_STATUS;
                 } catch (InterruptedException error) {
                     Thread.currentThread().interrupt();
                     return Status.CANCEL_STATUS;
                 } catch (Exception error) {
-                    console.newMessageStream().println("Version operation failed: " + error.getMessage());
-                    Display.getDefault().asyncExec(() ->
-                        MessageDialog.openError(Display.getDefault().getActiveShell(),
-                            "Zephyr Project Versions", error.getMessage()));
+                    // A user Job with ERROR status already opens Eclipse's
+                    // problem report. Do NOT also open an SWT error dialog.
+                    try (var errorStream = console.newMessageStream()) {
+                        errorStream.println("Version operation failed: " + error.getMessage());
+                    }
                     return new Status(IStatus.ERROR, Activator.ID, error.getMessage(), error);
                 }
             }
