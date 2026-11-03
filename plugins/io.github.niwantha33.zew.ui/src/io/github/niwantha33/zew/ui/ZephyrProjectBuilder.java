@@ -109,10 +109,12 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
             var environment = ProjectContext.environment(settings);
             monitor.beginTask(clean ? "Clean Zephyr project" : "Prepare tools and build Zephyr project", IProgressMonitor.UNKNOWN);
-            stage[0] = "Prepare dependencies";
             if (!clean) {
+                stage[0] = "Preflight pinned project environment";
+                ProjectVersionHandler.verifyBeforeBuild(getProject(), monitor, stream::println);
+                stage[0] = "Prepare dependencies";
                 BoardTools.prepare(settings, environment, monitor, stream::println);
-                stage[0] = "Verify pinned project environment";
+                stage[0] = "Verify pinned environment after dependency preparation";
                 ProjectVersionHandler.verifyBeforeBuild(getProject(), monitor, stream::println);
             }
             if (clean && !Files.isRegularFile(buildDirectory.resolve("CMakeCache.txt"))) {
