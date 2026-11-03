@@ -688,11 +688,51 @@ public final class EditorSmoke implements IApplication {
                     var tabsField = cls.getDeclaredField("tabs");
                     tabsField.setAccessible(true);
                     var studioTabs = (org.eclipse.swt.widgets.TabFolder) tabsField.get(view);
-                    check(studioTabs.getItemCount() == 3
+                    check(studioTabs.getItemCount() == 4
                             && "Features".equals(studioTabs.getItem(0).getText())
                             && "Hardware".equals(studioTabs.getItem(1).getText())
-                            && "Insights".equals(studioTabs.getItem(2).getText()),
-                            "native Configuration Studio has feature, hardware and insight workspaces");
+                            && "Insights".equals(studioTabs.getItem(2).getText())
+                            && "Start here".equals(studioTabs.getItem(3).getText())
+                            && studioTabs.getSelectionIndex() == 3,
+                            "native Configuration Studio opens task-first Start here by default");
+                    var beginnerPage = (org.eclipse.swt.widgets.Composite)
+                            studioTabs.getItem(3).getControl();
+                    var simpleGoals = (org.eclipse.swt.widgets.Composite) beginnerPage.getChildren()[2];
+                    var goals = java.util.Arrays.stream(simpleGoals.getChildren())
+                            .filter(c -> c instanceof org.eclipse.swt.widgets.Button)
+                            .map(c -> (org.eclipse.swt.widgets.Button) c).toList();
+                    check(goals.size() == 6 && goals.stream().anyMatch(b ->
+                                    b.getText().equals("Read a voltage")),
+                            "beginners choose an understandable job rather than CONFIG symbols");
+                    var voltage = goals.stream().filter(b -> b.getText().equals("Read a voltage"))
+                            .findFirst().orElseThrow();
+                    voltage.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+                    var beginnerHeadline = (org.eclipse.swt.widgets.Label)
+                            studioField(view, cls, "beginnerHeadline");
+                    var beginnerNext = (org.eclipse.swt.widgets.Label)
+                            studioField(view, cls, "beginnerNext");
+                    var beginnerSteps = (org.eclipse.swt.widgets.Text)
+                            studioField(view, cls, "beginnerSteps");
+                    var expertMetrics = (org.eclipse.swt.widgets.Composite)
+                            studioField(view, cls, "expertMetrics");
+                    check(beginnerHeadline.getText().contains("Read a voltage")
+                            && beginnerNext.getText().contains("Build & validate")
+                            && beginnerSteps.getText().contains("No pins") == false
+                            && !beginnerSteps.getEditable()
+                            && !expertMetrics.getVisible(),
+                            "beginner mode explains missing build without exposing a sea of settings");
+                    captureNativeStudioScreenshot("beginner-first-configuration-studio.png");
+                    var actions = (org.eclipse.swt.widgets.Composite) beginnerPage.getChildren()[5];
+                    var findHardware = java.util.Arrays.stream(actions.getChildren())
+                            .filter(c -> c instanceof org.eclipse.swt.widgets.Button)
+                            .map(c -> (org.eclipse.swt.widgets.Button) c)
+                            .filter(b -> b.getText().equals("1. Find my hardware"))
+                            .findFirst().orElseThrow();
+                    findHardware.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+                    check(studioTabs.getSelectionIndex() == 1 && expertMetrics.getVisible(),
+                            "beginner hardware step opens real hardware navigator and restores advanced chrome");
+                    studioTabs.setSelection(3);
+                    studioTabs.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
                     var hardwareField = cls.getDeclaredField("hardwareDevices");
                     hardwareField.setAccessible(true);
                     var hw = (org.eclipse.swt.widgets.Tree) hardwareField.get(view);

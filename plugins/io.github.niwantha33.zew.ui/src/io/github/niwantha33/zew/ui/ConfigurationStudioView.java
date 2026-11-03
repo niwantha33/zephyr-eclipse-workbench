@@ -29,6 +29,7 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Combo;
+import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Menu;
@@ -65,6 +66,7 @@ import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.DevicetreeDependencyEvidence;
 import io.github.niwantha33.zew.core.DevicetreeSourceExplorer;
 import io.github.niwantha33.zew.core.DevicetreeSourceTrace;
+import io.github.niwantha33.zew.core.BeginnerHardwareGuide;
 import io.github.niwantha33.zew.core.DevicetreeOverlayChanges;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.ConfigurationStudioDomains;
@@ -117,6 +119,10 @@ public final class ConfigurationStudioView extends ViewPart {
     private Job unsavedDraftJob;
     private final java.util.concurrent.atomic.AtomicInteger unsavedDraftGeneration =
             new java.util.concurrent.atomic.AtomicInteger();
+    private Composite expertToolbar, expertMetrics;
+    private Label beginnerHeadline, beginnerNext;
+    private Text beginnerSteps, beginnerEvidence, beginnerGlossary;
+    private BeginnerHardwareGuide.Goal beginnerGoal = BeginnerHardwareGuide.GOALS.get(0);
     private TabFolder hardwareDetails;
     private Table sourceFileList;
     private Text sourceFileContent;
@@ -206,6 +212,7 @@ public final class ConfigurationStudioView extends ViewPart {
         buildButton.setToolTipText("Rebuild selected target to verify requested configuration values");
 
         var secondary = new Composite(outer, SWT.NONE);
+        expertToolbar = secondary;
         secondary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         secondary.setLayout(new GridLayout(5, false));
         action(secondary, "Open prj.conf", () -> openResource("prj.conf"))
@@ -220,6 +227,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 .setToolTipText("Copy CONFIG_<symbol> to the clipboard");
 
         Composite metrics = new Composite(outer, SWT.BORDER);
+        expertMetrics = metrics;
         metrics.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         metrics.setLayout(new GridLayout(4, true));
         totalMetric = metric(metrics, "AVAILABLE", "—");
@@ -985,10 +993,100 @@ public final class ConfigurationStudioView extends ViewPart {
         analysis = new Text(reports, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
         analysis.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
+
+        // A task-first landing page; the underlying evidence, driver, DTS,
+        // Kconfig and overlay checks still live in the existing advanced views.
+        // The first click is an intent ("read a voltage"), not a CONFIG_ symbol.
+        Composite beginner = tab(tabs, "Start here");
+        beginner.setLayout(new GridLayout(1, false));
+        Label beginnerTitle = new Label(beginner, SWT.NONE);
+        beginnerTitle.setFont(headingFont);
+        beginnerTitle.setText("WHAT DO YOU WANT YOUR BOARD TO DO?");
+        Label beginnerIntro = new Label(beginner, SWT.WRAP);
+        beginnerIntro.setText("Pick one small job. We will show the real hardware described by "
+                + "your board, explain what is missing, and lead you to the right setup."
+                + " You do not need to understand DTS or Kconfig first.");
+        beginnerIntro.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+        var simpleGoals = new Composite(beginner, SWT.NONE);
+        simpleGoals.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        simpleGoals.setLayout(new GridLayout(3, true));
+        for (var goal : BeginnerHardwareGuide.GOALS) {
+            Button choose = action(simpleGoals, goal.title(), () -> chooseBeginnerGoal(goal));
+            choose.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+            choose.setToolTipText(goal.plainEnglish()
+                    + "\nNo pins, sensors or supported drivers are assumed.");
+        }
+
+        beginnerHeadline = new Label(beginner, SWT.WRAP);
+        beginnerHeadline.setFont(metricFont);
+        beginnerHeadline.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        beginnerNext = new Label(beginner, SWT.WRAP);
+        beginnerNext.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        var simpleActions = new Composite(beginner, SWT.NONE);
+        simpleActions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        simpleActions.setLayout(new GridLayout(4, true));
+        action(simpleActions, "1. Find my hardware", this::showBeginnerHardware)
+                .setToolTipText("Only nodes evidenced by the selected generated Zephyr DTS.");
+        action(simpleActions, "2. Help me set it up", this::setupBeginnerHardware)
+                .setToolTipText("Guidance checks actual peripheral and binding evidence, not guessed pins.");
+        action(simpleActions, "3. Build & check", this::build)
+                .setToolTipText("Run the real Zephyr build to check configuration requests.");
+        action(simpleActions, "Advanced settings", () -> {
+            tabs.setSelection(0);
+            updateBeginnerChrome();
+        });
+        for (Control item : simpleActions.getChildren())
+            item.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+        beginnerSteps = new Text(beginner, SWT.BORDER | SWT.MULTI | SWT.WRAP | SWT.READ_ONLY
+                | SWT.V_SCROLL);
+        beginnerSteps.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        beginnerSteps.setText("Pick a job to begin.");
+
+        var more = new Composite(beginner, SWT.NONE);
+        more.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        more.setLayout(new GridLayout(2, false));
+        action(more, "Why DTS, overlays and Kconfig?", this::toggleBeginnerGlossary)
+                .setToolTipText("A plain-English explanation of the Zephyr configuration files.");
+        action(more, "Show build evidence", () -> {
+            if (beginnerEvidence != null && !beginnerEvidence.isDisposed())
+                MessageDialog.openInformation(getSite().getShell(), "Evidence from this board",
+                        beginnerEvidence.getText());
+        });
+        beginnerGlossary = new Text(beginner, SWT.BORDER | SWT.MULTI | SWT.WRAP
+                | SWT.READ_ONLY | SWT.V_SCROLL);
+        GridData glossarySize = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        glossarySize.heightHint = 160;
+        glossarySize.exclude = true;
+        beginnerGlossary.setLayoutData(glossarySize);
+        beginnerGlossary.setVisible(false);
+        beginnerGlossary.setText(
+                "Think of building something with blocks:\n\n"
+                + "DTSI — describes parts shared by a chip family. It is usually supplied by Zephyr.\n"
+                + "DTS — describes how your selected board uses those parts.\n"
+                + "OVERLAY — your project's request to change the board description "
+                + "without editing vendor files. It must be included in the build.\n"
+                + "KCONFIG — chooses which Zephyr software/driver features get compiled.\n"
+                + "C CODE — tells an enabled, correctly configured device what to do.\n\n"
+                + "BUILD — checks and combines the configuration. The generated zephyr.dts "
+                + "is what Devicetree finally says; it does not prove physical wiring.");
+        beginnerEvidence = new Text(beginner, SWT.READ_ONLY | SWT.MULTI);
+        beginnerEvidence.setVisible(false);
+        GridData evidenceSize = new GridData(SWT.FILL, SWT.CENTER, false, false);
+        evidenceSize.exclude = true;
+        beginnerEvidence.setLayoutData(evidenceSize);
+        beginnerEvidence.setText("No generated build evidence.");
+        tabs.addListener(SWT.Selection, event -> updateBeginnerChrome());
+
         status = new Label(outer, SWT.WRAP);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         status.setText("Select a Zephyr project to inspect it safely.");
         reload();
+        // For an ordinary Configuration Studio launch, start with the user's
+        // desired task. Explicit Hardware / Features navigation still wins.
+        tabs.setSelection(3);
+        updateBeginnerChrome();
     }
 
     private Label metric(Composite parent, String caption, String initial) {
@@ -1102,7 +1200,8 @@ public final class ConfigurationStudioView extends ViewPart {
         setPartName("Configuration — " + selected.getName());
         if (options != null && !options.isDisposed()) {
             reload();
-            tabs.setSelection(hardware ? 1 : 0);
+            tabs.setSelection(hardware ? 1 : 3);
+            updateBeginnerChrome();
         }
     }
 
@@ -1943,6 +2042,7 @@ public final class ConfigurationStudioView extends ViewPart {
             tree.setText("");
             refreshSourceBrowser();
             refreshHardware();
+            refreshBeginnerGuide();
             analysis.setText("");
             return;
         }
@@ -1989,6 +2089,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     : snapshot.devicetree());
             refreshSourceBrowser();
             refreshHardware();
+            refreshBeginnerGuide();
             if (build == null) {
                 long requested = snapshot.options().stream().filter(Option::overridden).count();
                 analysis.setText("Project: " + project.getName()
@@ -2017,14 +2118,82 @@ public final class ConfigurationStudioView extends ViewPart {
             help.setText("Configuration cannot be loaded: " + error.getMessage());
             tree.setText("");
             refreshHardware();
+            refreshBeginnerGuide();
             analysis.setText("Open Project settings or inspect the source file for configuration errors.");
             status.setText("Configuration unavailable. No source files were changed.");
         }
     }
 
 
+
+    private void chooseBeginnerGoal(BeginnerHardwareGuide.Goal goal) {
+        beginnerGoal = goal;
+        refreshBeginnerGuide();
+    }
+
+    private void refreshBeginnerGuide() {
+        if (beginnerHeadline == null || beginnerHeadline.isDisposed()) return;
+        var guide = BeginnerHardwareGuide.inspect(
+                snapshot == null ? "" : snapshot.devicetree(), buildOutdated, beginnerGoal);
+        beginnerHeadline.setText(beginnerGoal.title() + " — " + guide.headline());
+        beginnerNext.setText("NEXT: " + guide.nextAction());
+        beginnerSteps.setText("YOUR SMALL STEPS\n\n" + guide.steps()
+                + "\n\nYou only need the exact connections for YOUR board. "
+                + "The IDE will not invent GPIO pads, ADC channels, sensor addresses or pinmux.");
+        beginnerEvidence.setText(guide.evidence());
+        beginnerHeadline.getParent().layout(true, true);
+    }
+
+    private void showBeginnerHardware() {
+        if (hardwareKind == null || hardwareKind.isDisposed()) return;
+        hardwareSearch.setText("");
+        hardwareState.select(0);
+        int index = hardwareKind.indexOf(beginnerGoal.category());
+        if (index >= 0) hardwareKind.select(index);
+        refreshHardware();
+        tabs.setSelection(1);
+        updateBeginnerChrome();
+        status.setText("Showing actual " + beginnerGoal.category()
+                + " node descriptions from the last selected build. "
+                + "No physical connection or driver is assumed.");
+    }
+
+    private void setupBeginnerHardware() {
+        showBeginnerHardware();
+        openStartGuide(beginnerGoal.category());
+        status.setText("Guided " + beginnerGoal.category()
+                + " setup. Start with actual DTS evidence; inspect binding, channels and driver "
+                + "requirements before writing any code.");
+    }
+
+    private void toggleBeginnerGlossary() {
+        if (beginnerGlossary == null || beginnerGlossary.isDisposed()) return;
+        boolean visible = !beginnerGlossary.getVisible();
+        beginnerGlossary.setVisible(visible);
+        ((GridData) beginnerGlossary.getLayoutData()).exclude = !visible;
+        beginnerGlossary.getParent().layout(true, true);
+    }
+
+    private void updateBeginnerChrome() {
+        if (tabs == null || tabs.isDisposed()) return;
+        boolean advanced = tabs.getSelectionIndex() != 3;
+        setExpertVisibility(expertToolbar, advanced);
+        setExpertVisibility(expertMetrics, advanced);
+        tabs.getParent().layout(true, true);
+    }
+
+    private static void setExpertVisibility(Control control, boolean visible) {
+        if (control == null || control.isDisposed()) return;
+        if (control.getLayoutData() instanceof GridData data)
+            data.exclude = !visible;
+        control.setVisible(visible);
+    }
+
     private void focusSearch() {
-        if (tabs.getSelectionIndex() == 2) tabs.setSelection(0);
+        if (tabs.getSelectionIndex() >= 2) {
+            tabs.setSelection(0);
+            updateBeginnerChrome();
+        }
         Text target = tabs.getSelectionIndex() == 1 ? hardwareSearch : search;
         target.setFocus();
         target.selectAll();
