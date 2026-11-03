@@ -141,7 +141,7 @@ def get_manifest(workspace, python, git, preferred_origin=None):
         frozen = command([python, "-m", "west", "manifest", "--resolve"], workspace, 180) + "\n"
         origin = "west-resolve-all-sha"
     try:
-        payload = yaml.safe_load(frozen)
+        # YAML infers numeric-looking commit IDs as integers. All manifest\n        # scalars (especially 40-digit Git SHAs) must remain exact strings.\n        payload = yaml.load(frozen, Loader=yaml.BaseLoader)
         projects = payload["manifest"]["projects"]
     except (KeyError, TypeError, yaml.YAMLError) as error:
         raise VersionError("West returned an invalid resolved manifest") from error
