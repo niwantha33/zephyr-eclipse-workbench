@@ -43,6 +43,7 @@ class ProjectVersionTests(unittest.TestCase):
             self.tools[name] = tool
         self.heads = {"zephyr": ZEPHYR, "test": MODULE}
         self.dirty = False
+        self.fail_freeze = False
         self.frozen = ("manifest:\n  projects:\n"
                        "    - name: test\n"
                        "      path: modules/test\n"
@@ -56,6 +57,10 @@ class ProjectVersionTests(unittest.TestCase):
     def command(self, argv, cwd, timeout=120):
         parts = [str(x) for x in argv]
         if "manifest" in parts and "--freeze" in parts:
+            if self.fail_freeze:
+                raise versions.VersionError("Optional checkout missing")
+            return self.frozen.rstrip()
+        if "manifest" in parts and "--resolve" in parts:
             return self.frozen.rstrip()
         if "rev-parse" in parts:
             return self.heads.get(Path(parts[parts.index("-C") + 1]).name,
@@ -137,9 +142,20 @@ class ProjectVersionTests(unittest.TestCase):
         with self.assertRaisesRegex(versions.VersionError, "Unsafe West project path"):
             self.record()
 
-    def test_missing_module_fails_without_weak_lock(self):
+    def test_sparse_west_modules_can_still_be_pinned_by_source_sha(self):
         (self.workspace / "modules" / "test").rmdir()
-        with self.assertRaisesRegex(versions.VersionError, "Missing West module"):
+        self.fail_freeze = True
+        result = versions.main(self.args("snapshot"))
+        self.assertEqual("created", result["status"])
+        self.assertEqual(["test"], result["modules_not_installed"])
+        self.assertEqual("west-resolve-all-sha",
+                         versions.load_lock(self.application)["manifest_origin"])
+        self.assertEqual("match", versions.main(self.args("verify-env"))["status"])
+
+    def test_floating_revisions_cannot_be_called_pinned(self):
+        self.fail_freeze = True
+        self.frozen = self.frozen.replace(MODULE, "main")
+        with self.assertRaisesRegex(versions.VersionError, "floating branch"):
             versions.main(self.args("snapshot"))
         self.assertFalse((self.application / versions.LOCK).exists())
 
