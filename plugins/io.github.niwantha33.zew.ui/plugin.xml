@@ -144,6 +144,9 @@
     <command id="io.github.niwantha33.zew.debugExpressionProbe" name="Inspect GDB Symbol (Read-only)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.socRegisters" name="Show Debug Data and Hardware Register Explorer" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.faultAnalysis" name="Investigate Fatal Log" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.snapshotProject" name="Snapshot Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.verifyProject" name="Verify Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.trace" name="Capture RTOS Trace" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.rtosInvestigation" name="Review Saved RTOS Capture" categoryId="io.github.niwantha33.zew.commands"/>
@@ -173,6 +176,9 @@
     <handler commandId="io.github.niwantha33.zew.debugExpressionProbe" class="io.github.niwantha33.zew.ui.DebugExpressionProbeHandler"/>
     <handler commandId="io.github.niwantha33.zew.socRegisters" class="io.github.niwantha33.zew.ui.SocRegistersHandler"/>
     <handler commandId="io.github.niwantha33.zew.faultAnalysis" class="io.github.niwantha33.zew.ui.FaultAnalysisHandler"/>
+    <handler commandId="io.github.niwantha33.zew.snapshotProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
+    <handler commandId="io.github.niwantha33.zew.verifyProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
+    <handler commandId="io.github.niwantha33.zew.planProjectUpgrade" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.configurationStudio" class="io.github.niwantha33.zew.ui.ConfigurationStudioHandler"/>
     <handler commandId="org.eclipse.ui.project.buildProject" class="io.github.niwantha33.zew.ui.ZephyrBuildHandler">
       <activeWhen>
@@ -217,6 +223,9 @@
         <separator name="tools" visible="true"/>
         <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
         <separator name="build" visible="true"/>
+        <command commandId="io.github.niwantha33.zew.snapshotProject" label="Snapshot Project Environment..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.verifyProject" label="Verify Project Environment..." style="push"/>
+        <command commandId="io.github.niwantha33.zew.planProjectUpgrade" label="Preview Upgrade Using Another Setup..." style="push"/>
         <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio (Kconfig / Devicetree)..." style="push"/>
         <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
         <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
