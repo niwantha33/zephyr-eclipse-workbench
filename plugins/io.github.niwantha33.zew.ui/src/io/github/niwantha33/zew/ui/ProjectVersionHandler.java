@@ -54,7 +54,11 @@ public final class ProjectVersionHandler extends AbstractHandler {
             // checkout or a guessed new-version SDK.
             Properties candidate = ProjectContext.load(candidateRoot);
             command.addAll(List.of("--candidate-workspace", candidate.getProperty("workspace"),
-                    "--candidate-sdk", candidate.getProperty("tools.sdk")));
+                    "--candidate-sdk", candidate.getProperty("tools.sdk"),
+                    "--candidate-python", candidate.getProperty("python"),
+                    "--candidate-git", candidate.getProperty("tools.git"),
+                    "--candidate-cmake", candidate.getProperty("tools.cmake"),
+                    "--candidate-ninja", candidate.getProperty("tools.ninja")));
         }
         var result = new ProcessRunner().run(command, workspace, Duration.ofMinutes(5),
                 monitor::isCanceled, log, ProjectContext.environment(settings));
