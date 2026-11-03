@@ -122,13 +122,19 @@ def tool_info(executable, args, cwd):
             "executable_sha256": file_hash(exe)}
 
 
-def get_manifest(workspace, python, git):
+def get_manifest(workspace, python, git, preferred_origin=None):
     if not (workspace / ".west" / "config").is_file():
         raise VersionError("Select an initialized West workspace containing .west/config")
+    if preferred_origin not in (None, "west-freeze", "west-resolve-all-sha"):
+        raise VersionError("Unknown saved West manifest collection method")
     try:
+        if preferred_origin == "west-resolve-all-sha":
+            raise VersionError("Saved manifest used West's SHA-only resolver")
         frozen = command([python, "-m", "west", "manifest", "--freeze"], workspace, 180) + "\n"
         origin = "west-freeze"
     except VersionError:
+        if preferred_origin == "west-freeze":
+            raise
         # Optimized managed setups may intentionally omit *unused* modules.
         # Zephyr's own resolver is authoritative; do not resolve revisions
         # ourselves. Accept fallback only if ALL resolved revisions are SHAs.
@@ -174,8 +180,9 @@ def get_manifest(workspace, python, git):
     return frozen, sorted(resolved, key=lambda item: item["name"]), origin
 
 
-def system_record(workspace, python, git, sdk, cmake, ninja, board, application):
-    frozen, modules, origin = get_manifest(workspace, python, git)
+def system_record(workspace, python, git, sdk, cmake, ninja, board, application,
+                  preferred_origin=None):
+    frozen, modules, origin = get_manifest(workspace, python, git, preferred_origin)
     data = {
         "schema": SCHEMA,
         "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -323,7 +330,8 @@ def main(argv=None):
         if not frozen_path.is_file() or file_hash(frozen_path) != previous["west_manifest_sha256"]:
             raise VersionError("Frozen west manifest missing or changed")
         _, current = system_record(workspace, args.python, args.git, args.sdk.resolve(),
-                                   args.cmake, args.ninja, args.board, application)
+                                   args.cmake, args.ninja, args.board, application,
+                                   previous.get("manifest_origin"))
         changes = compare(previous, current)
         if args.action == "verify-env":
             changes = [item for item in changes if not item["item"].startswith("source:")]
@@ -331,8 +339,10 @@ def main(argv=None):
             changes.insert(0, {"item": "west-manifest", "before": previous["west_manifest_sha256"],
                                "after": current["west_manifest_sha256"]})
         return {"status": "match" if not changes else "drift", "differences": changes}
+    old = load_lock(application) if (application / LOCK).exists() else None
     frozen, record = system_record(workspace, args.python, args.git, args.sdk.resolve(),
-                                   args.cmake, args.ninja, args.board, application)
+                                   args.cmake, args.ninja, args.board, application,
+                                   old.get("manifest_origin") if old else None)
     return snapshot(application, frozen, record)
 
 
