@@ -34,12 +34,16 @@ to commit both files to the application's own source repository. The
 application itself must also be committed or archived: source hashes are
 *not* copies of those files.
 
-A lock is only created after native West resolves and freezes all projects,
-all referenced checkouts exist at the expected SHA, and all those source
-trees are clean. Incomplete modular setups (such as a starter intentionally
-missing optional West modules) produce a conspicuous "NOT created" console
-message, not a misleading partial lock and not a firmware build failure.
-Do not fetch unrelated proprietary blobs automatically.
+The helper first uses native West `manifest --freeze`. For a sparse
+managed setup intentionally omitting unused modules, it can fall back to
+native `manifest --resolve` **only when every resolved revision is already
+an exact 40-character SHA**. It records absent modules explicitly in
+`modules_not_installed` and verifies every installed module's SHA and clean
+checkout. A floating branch/tag, altered installed module or unresolvable
+import cannot create a project lock. No unrelated modules or proprietary
+blobs are fetched automatically, and failures do not invalidate an otherwise
+successful firmware build. An absent module's *source identity* is pinned,
+but its bytes were not verified locally. This is not an archival guarantee.
 
 The lock is never overwritten by a subsequent build. On each subsequent
 native build with a lock, the workbench checks the pinned environment
