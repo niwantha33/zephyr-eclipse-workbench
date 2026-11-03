@@ -109,8 +109,14 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
             var environment = ProjectContext.environment(settings);
             monitor.beginTask(clean ? "Clean Zephyr project" : "Prepare tools and build Zephyr project", IProgressMonitor.UNKNOWN);
-            stage[0] = "Prepare dependencies";
-            if (!clean) BoardTools.prepare(settings, environment, monitor, stream::println);
+            if (!clean) {
+                stage[0] = "Preflight pinned project environment";
+                ProjectVersionHandler.verifyBeforeBuild(getProject(), monitor, stream::println);
+                stage[0] = "Prepare dependencies";
+                BoardTools.prepare(settings, environment, monitor, stream::println);
+                stage[0] = "Verify pinned environment after dependency preparation";
+                ProjectVersionHandler.verifyBeforeBuild(getProject(), monitor, stream::println);
+            }
             if (clean && !Files.isRegularFile(buildDirectory.resolve("CMakeCache.txt"))) {
                 stream.println("No configured build exists for " + board + "; nothing to clean.");
                 return;
@@ -222,6 +228,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             if (!clean) {
                 Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
                 EditorIntegration.schedule(getProject());
+                ProjectVersionHandler.snapshotOnFirstBuild(getProject(), monitor, stream::println);
             }
             stream.println(clean ? "Clean completed." : "BUILD SUCCESS — configured firmware outputs verified.");
             getProject().refreshLocal(IResource.DEPTH_INFINITE, monitor);
