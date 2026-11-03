@@ -263,7 +263,7 @@ def snapshot(application, frozen, record):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("snapshot", "verify", "plan"))
+    parser.add_argument("action", choices=("snapshot", "verify", "verify-env", "plan"))
     parser.add_argument("--application", required=True, type=Path)
     parser.add_argument("--workspace", required=True, type=Path)
     parser.add_argument("--python", required=True, type=Path)
@@ -293,7 +293,7 @@ def main(argv=None):
         return {"status": "preview-only", "old": previous["zephyr"],
                 "candidate": new["zephyr"], "differences": compare(previous, new),
                 "next": "Copy the application, bind it to the new setup, and run a pristine trial build. No files were modified."}
-    if args.action == "verify":
+    if args.action in ("verify", "verify-env"):
         previous = load_lock(application)
         frozen_path = application / FROZEN
         if not frozen_path.is_file() or file_hash(frozen_path) != previous["west_manifest_sha256"]:
@@ -301,6 +301,8 @@ def main(argv=None):
         _, current = system_record(workspace, args.python, args.git, args.sdk.resolve(),
                                    args.cmake, args.ninja, args.board, application)
         changes = compare(previous, current)
+        if args.action == "verify-env":
+            changes = [item for item in changes if not item["item"].startswith("source:")]
         if previous["west_manifest_sha256"] != current["west_manifest_sha256"]:
             changes.insert(0, {"item": "west-manifest", "before": previous["west_manifest_sha256"],
                                "after": current["west_manifest_sha256"]})
