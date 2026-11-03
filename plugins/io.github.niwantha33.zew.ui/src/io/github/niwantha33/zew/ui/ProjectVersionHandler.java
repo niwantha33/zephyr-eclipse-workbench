@@ -49,7 +49,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
 
     private static String friendlyResult(ProcessRunner.Result result, String action) throws IOException {
         if (result.exitCode() == 0) return result.output();
-        if (result.output().contains("\\"status\\": \\"drift\\"")) {
+        if (result.output().contains("\"status\": \"drift\"")) {
             throw new IOException("The installed Zephyr environment differs from the project's saved lock. "
                 + "See the detailed differences in the Zephyr Project Versions console.");
         }
@@ -150,7 +150,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
                 var picker = new DirectoryDialog(HandlerUtil.getActiveShell(event));
                 picker.setText("Select another installed Zephyr setup (not the current one)");
                 picker.setMessage("Current setup: " + originalRoot
-                    + "\\nChoose a DIFFERENT completed Workbench setup folder, such as a separately "
+                    + "\nChoose a DIFFERENT completed Workbench setup folder, such as a separately "
                     + "installed Zephyr 4.5 environment. This action compares versions; "
                     + "it does not download or upgrade Zephyr.");
                 Path parent = originalRoot.getParent();
@@ -163,7 +163,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
                         "A second Zephyr setup is needed",
                         "You selected the existing setup for this project. To compare 4.4 with 4.5, "
                         + "install 4.5 in a separate folder first, then select that new setup here. "
-                        + "\\n\\nThe current managed installer is pinned to its tested release; "
+                        + "\n\nThe current managed installer is pinned to its tested release; "
                         + "this preview does not install a new Zephyr version. "
                         + "Your project and Zephyr 4.4 setup have not been changed.");
                     return null;
@@ -173,7 +173,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
             } catch (Exception error) {
                 MessageDialog.openInformation(HandlerUtil.getActiveShell(event),
                     "Cannot preview an upgrade",
-                    error.getMessage() + "\\n\\nSelect a different, completed Zephyr setup. "
+                    error.getMessage() + "\n\nSelect a different, completed Zephyr setup. "
                     + "No source files or installed tools were changed.");
                 return null;
             }
