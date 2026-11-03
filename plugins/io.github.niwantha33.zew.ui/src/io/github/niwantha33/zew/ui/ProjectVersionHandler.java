@@ -203,6 +203,9 @@ public final class ProjectVersionHandler extends AbstractHandler {
                     // problem report. Do NOT also open an SWT error dialog.
                     try (var errorStream = console.newMessageStream()) {
                         errorStream.println("Version operation failed: " + error.getMessage());
+                    } catch (IOException consoleError) {
+                        // Preserve the original version-operation error as the Job failure.
+                        error.addSuppressed(consoleError);
                     }
                     return new Status(IStatus.ERROR, Activator.ID, error.getMessage(), error);
                 }
