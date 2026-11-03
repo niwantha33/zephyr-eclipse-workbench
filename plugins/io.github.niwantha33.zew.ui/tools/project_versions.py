@@ -125,48 +125,66 @@ def tool_info(executable, args, cwd):
 def get_manifest(workspace, python, git):
     if not (workspace / ".west" / "config").is_file():
         raise VersionError("Select an initialized West workspace containing .west/config")
-    frozen = command([python, "-m", "west", "manifest", "--freeze"], workspace, 180) + "\n"
+    try:
+        frozen = command([python, "-m", "west", "manifest", "--freeze"], workspace, 180) + "\n"
+        origin = "west-freeze"
+    except VersionError:
+        # Optimized managed setups may intentionally omit *unused* modules.
+        # Zephyr's own resolver is authoritative; do not resolve revisions
+        # ourselves. Accept fallback only if ALL resolved revisions are SHAs.
+        frozen = command([python, "-m", "west", "manifest", "--resolve"], workspace, 180) + "\n"
+        origin = "west-resolve-all-sha"
     try:
         payload = yaml.safe_load(frozen)
         projects = payload["manifest"]["projects"]
     except (KeyError, TypeError, yaml.YAMLError) as error:
-        raise VersionError("West returned an invalid frozen manifest") from error
+        raise VersionError("West returned an invalid resolved manifest") from error
     if not isinstance(projects, list):
-        raise VersionError("Frozen manifest has no project list")
+        raise VersionError("Resolved manifest has no project list")
     resolved = []
     names = set()
     for project in projects:
         name = project["name"]
         revision = project["revision"]
         if not HEX40.fullmatch(str(revision)) or name in names:
-            raise VersionError("West did not pin a unique full SHA for " + str(name))
+            raise VersionError("West did not pin a unique full SHA for " + str(name)
+                               + "; a floating branch or tag cannot become a lock")
         names.add(name)
         relative = relative_path(str(project.get("path", name)))
         directory = workspace.joinpath(*relative.parts)
-        if not directory.is_dir():
-            raise VersionError("Missing West module " + str(name) +
-                               "; obtain all pinned modules in a separate, reviewed setup first")
-        actual = git_head(git, directory)
-        if actual != revision:
-            raise VersionError("Module " + name + " is at " + actual +
-                               ", but frozen manifest expects " + revision)
-        require_clean(git, directory)
+        present = directory.is_dir()
+        if present:
+            actual = git_head(git, directory)
+            if actual != revision:
+                raise VersionError("Module " + name + " is at " + actual +
+                                   ", but resolved manifest expects " + revision)
+            require_clean(git, directory)
+        url = project.get("url", "")
+        # Never copy access credentials into a lock committed to Git.
+        if isinstance(url, str) and "://" in url:
+            from urllib.parse import urlsplit
+            parsed = urlsplit(url)
+            if parsed.password is not None or (parsed.scheme in ("https", "http") and parsed.username):
+                raise VersionError("Manifest project " + name +
+                                   " includes credentials in its URL; use credential-free remotes")
         resolved.append({"name": name, "path": relative.as_posix(), "commit": revision,
-                         "url": project.get("url", "")})
+                         "url": url, "installed_at_snapshot": present})
     zephyr = workspace / "zephyr"
     require_clean(git, zephyr)
-    return frozen, sorted(resolved, key=lambda item: item["name"])
+    return frozen, sorted(resolved, key=lambda item: item["name"]), origin
 
 
 def system_record(workspace, python, git, sdk, cmake, ninja, board, application):
-    frozen, modules = get_manifest(workspace, python, git)
+    frozen, modules, origin = get_manifest(workspace, python, git)
     data = {
         "schema": SCHEMA,
         "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "zephyr": {"version": zephyr_version(workspace), "commit": git_head(git, workspace / "zephyr")},
         "board": board,
         "west_manifest_sha256": sha256(frozen.encode("utf-8")),
+        "manifest_origin": origin,
         "modules": modules,
+        "modules_not_installed": [p["name"] for p in modules if not p["installed_at_snapshot"]],
         "sdk": sdk_info(sdk),
         "tools": {
             "python": tool_info(python, ["--version"], workspace),
@@ -258,7 +276,7 @@ def snapshot(application, frozen, record):
         target_manifest.unlink(missing_ok=True)
         raise
     return {"status": "created", "lock": str(LOCK), "modules": len(record["modules"]),
-            "zephyr": record["zephyr"]}
+            "zephyr": record["zephyr"], "modules_not_installed": record["modules_not_installed"]}
 
 
 def main(argv=None):
