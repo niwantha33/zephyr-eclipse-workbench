@@ -107,7 +107,7 @@ class ProjectVersionTests(unittest.TestCase):
 
     def test_module_drift_is_rejected(self):
         self.heads["test"] = OTHER
-        with self.assertRaisesRegex(versions.VersionError, "frozen manifest expects"):
+        with self.assertRaisesRegex(versions.VersionError, "resolved manifest expects"):
             self.record()
 
     def test_dirty_module_is_rejected(self):
