@@ -548,3 +548,18 @@ passing these prototype tests.
   **not yet verified or implemented**. Workbench p2 updates and Zephyr source
   updates remain strictly separate. G0 remains OPEN.
 - See [Project Versions](docs/PROJECT_VERSIONS.md).
+
+## Project-version preview user-flow repair (2026-11-03, review PR)
+
+- The candidate setup picker previously defaulted to a context that allowed users
+  to select the current 4.4 setup. The backend safely rejected an in-place
+  comparison but surfaced error code 2 and two overlapping Eclipse error dialogs.
+- The picker now explains that preview requires a distinct, *already installed*
+  completed West environment, preflights the selected setup and canonical
+  workspace identity before scheduling a Job, and explains missing project locks.
+- User Jobs now report one error status instead of also displaying a separate
+  error dialog. Plain-text command failures improve Eclipse diagnostics while
+  retaining the backend's original JSON CLI contract for automated consumers.
+- CI cross-platform and Eclipse smoke verification are required; the automatic
+  4.5 installer and upgrade execution remain **not implemented** (issue #128).
+  These repairs do not imply G0 qualification or release approval.
