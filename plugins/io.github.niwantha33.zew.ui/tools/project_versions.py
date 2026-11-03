@@ -274,6 +274,10 @@ def main(argv=None):
     parser.add_argument("--board", required=True)
     parser.add_argument("--candidate-workspace", type=Path)
     parser.add_argument("--candidate-sdk", type=Path)
+    parser.add_argument("--candidate-python", type=Path)
+    parser.add_argument("--candidate-git", type=Path)
+    parser.add_argument("--candidate-cmake", type=Path)
+    parser.add_argument("--candidate-ninja", type=Path)
     args = parser.parse_args(argv)
     application = args.application.resolve()
     workspace = args.workspace.resolve()
@@ -288,8 +292,10 @@ def main(argv=None):
         candidate = args.candidate_workspace.resolve()
         if candidate == workspace or candidate.is_relative_to(workspace) or workspace.is_relative_to(candidate):
             raise VersionError("Upgrade trial requires a separate West workspace; in-place update is forbidden")
-        _, new = system_record(candidate, args.python, args.git, args.candidate_sdk.resolve(),
-                               args.cmake, args.ninja, args.board, application)
+        _, new = system_record(candidate, args.candidate_python or args.python,
+                               args.candidate_git or args.git, args.candidate_sdk.resolve(),
+                               args.candidate_cmake or args.cmake,
+                               args.candidate_ninja or args.ninja, args.board, application)
         return {"status": "preview-only", "old": previous["zephyr"],
                 "candidate": new["zephyr"], "differences": compare(previous, new),
                 "next": "Copy the application, bind it to the new setup, and run a pristine trial build. No files were modified."}
