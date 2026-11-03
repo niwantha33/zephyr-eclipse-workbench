@@ -234,10 +234,17 @@ def compare(old, new):
     prior = {item["name"]: item for item in old["modules"]}
     current = {item["name"]: item for item in new["modules"]}
     for name in sorted(prior.keys() | current.keys()):
-        before = prior.get(name, {}).get("commit")
-        after = current.get(name, {}).get("commit")
-        if before != after:
-            differences.append({"item": "module:" + name, "before": before, "after": after})
+        for field in ("commit", "path", "url", "installed_at_snapshot"):
+            before = prior.get(name, {}).get(field)
+            after = current.get(name, {}).get(field)
+            if before != after:
+                differences.append({"item": "module:" + name + ":" + field,
+                                    "before": before, "after": after})
+    before_sdk = old["sdk"].get("sdk_version_sha256")
+    after_sdk = new["sdk"].get("sdk_version_sha256")
+    if before_sdk != after_sdk:
+        differences.append({"item": "sdk.sdk_version_sha256",
+                            "before": before_sdk, "after": after_sdk})
     for name in sorted(old["tools"].keys() | new["tools"].keys()):
         before = old["tools"].get(name)
         after = new["tools"].get(name)
