@@ -61,6 +61,15 @@ public final class ProjectVersionHandler extends AbstractHandler {
         result.requireSuccess();
     }
 
+    /** Prevent a locked application from silently compiling against a newer setup. */
+    static void verifyBeforeBuild(IProject project, IProgressMonitor monitor,
+                                  Consumer<String> log) throws Exception {
+        if (!Files.exists(project.getLocation().toFile().toPath().resolve(".zew/project-lock.json")))
+            return;
+        operate(project, "verify-env", null, monitor, log);
+        log.accept("Project lock: matching original Zephyr, modules, SDK and host tools.");
+    }
+
     /** Called only after successful firmware verification; never overwrites an existing lock. */
     static void snapshotOnFirstBuild(IProject project, IProgressMonitor monitor,
                                      Consumer<String> log) {
