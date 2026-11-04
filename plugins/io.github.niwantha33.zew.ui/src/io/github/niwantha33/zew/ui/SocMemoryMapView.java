@@ -80,7 +80,7 @@ public final class SocMemoryMapView extends ViewPart {
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         summary.setText("Select a configured Zephyr project; no silicon address has been assumed.");
 
-        var split = new SashForm(parent, SWT.HORIZONTAL);
+        var split = new SashForm(parent, SWT.VERTICAL);
         split.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         var visualTabs = new TabFolder(split, SWT.NONE);
         var addressTab = new TabItem(visualTabs, SWT.NONE);
@@ -113,7 +113,7 @@ public final class SocMemoryMapView extends ViewPart {
         });
         treeTab.setControl(topology);
 
-        var right = new SashForm(split, SWT.VERTICAL);
+        var right = new SashForm(split, SWT.HORIZONTAL);
         regions = new Table(right, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
                 | SWT.V_SCROLL | SWT.H_SCROLL);
         regions.setHeaderVisible(true);
@@ -135,8 +135,8 @@ public final class SocMemoryMapView extends ViewPart {
         detail = outputTab(details, "Exact range + status");
         compiled = outputTab(details, "Generated zephyr.dts");
         origin = outputTab(details, "Possible source declarations");
-        right.setWeights(new int[] {54, 46});
-        split.setWeights(new int[] {49, 51});
+        right.setWeights(new int[] {52, 48});
+        split.setWeights(new int[] {55, 45});
         render();
     }
 
