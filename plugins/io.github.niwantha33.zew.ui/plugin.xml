@@ -148,6 +148,7 @@
     <command id="io.github.niwantha33.zew.debugExpressionProbe" name="Inspect GDB Symbol (Read-only)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.socRegisters" name="Show Debug Data and Hardware Register Explorer" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.faultAnalysis" name="Investigate Fatal Log" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.prepareParallelSources" name="Prepare Parallel Zephyr Release Sources" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.snapshotProject" name="Snapshot Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.verifyProject" name="Verify Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
@@ -180,6 +181,7 @@
     <handler commandId="io.github.niwantha33.zew.debugExpressionProbe" class="io.github.niwantha33.zew.ui.DebugExpressionProbeHandler"/>
     <handler commandId="io.github.niwantha33.zew.socRegisters" class="io.github.niwantha33.zew.ui.SocRegistersHandler"/>
     <handler commandId="io.github.niwantha33.zew.faultAnalysis" class="io.github.niwantha33.zew.ui.FaultAnalysisHandler"/>
+    <handler commandId="io.github.niwantha33.zew.prepareParallelSources" class="io.github.niwantha33.zew.ui.ParallelSourceSetupHandler"/>
     <handler commandId="io.github.niwantha33.zew.snapshotProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.verifyProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.planProjectUpgrade" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
@@ -227,6 +229,7 @@
         <separator name="tools" visible="true"/>
         <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
         <separator name="build" visible="true"/>
+        <command commandId="io.github.niwantha33.zew.prepareParallelSources" label="Prepare Separate Zephyr Release Sources (Stage 1)..." style="push"/>
         <command commandId="io.github.niwantha33.zew.snapshotProject" label="Snapshot Project Environment..." style="push"/>
         <command commandId="io.github.niwantha33.zew.verifyProject" label="Verify Project Environment..." style="push"/>
         <command commandId="io.github.niwantha33.zew.planProjectUpgrade" label="Preview Upgrade Using Another Setup..." style="push"/>
