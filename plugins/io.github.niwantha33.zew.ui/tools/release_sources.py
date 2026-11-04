@@ -40,13 +40,18 @@ def check_release(release):
     return ".".join(match.groups())
 
 
-def check_destination(destination, current):
+def check_destination(destination, current, original_setup=None):
     if not destination.is_absolute() or not current.is_absolute():
         raise VersionError("The new workspace and the original workspace need absolute paths")
     destination = destination.resolve()
     current = current.resolve()
-    if destination == current or destination.is_relative_to(current) or current.is_relative_to(destination):
-        raise VersionError("The candidate must be separate from the original West workspace")
+    protected = [current]
+    if original_setup is not None:
+        protected.append(original_setup.resolve())
+    for path in protected:
+        if destination == path or destination.is_relative_to(path) or path.is_relative_to(destination):
+            raise VersionError("The candidate must be separate from the original West workspace "
+                               "AND the managed setup folder")
     if destination.exists() or destination.is_symlink():
         raise VersionError("Candidate destination already exists; choose a NEW empty path. "
                            "No existing workspace is ever overwritten.")
@@ -117,12 +122,12 @@ def write_file_once(path, text):
         output.write(text)
 
 
-def install(release, destination, current, python, git, allow_network):
+def install(release, destination, current, python, git, allow_network, original_setup=None):
     check_release(release)
-    destination = check_destination(destination, current)
+    destination = check_destination(destination, current, original_setup)
     if not allow_network:
         raise VersionError("Installation needs explicit --allow-network permission")
-    if not python.is_file() or not git.is_file():
+    if python is None or git is None or not python.is_file() or not git.is_file():
         raise VersionError("Use the already-installed Workbench Python and Git executables")
     stage = Path(tempfile.mkdtemp(prefix=".zew-source-stage-", dir=destination.parent))
     print("Preparing isolated staging folder: " + str(stage), flush=True)
@@ -196,6 +201,7 @@ def main(argv=None):
     parser.add_argument("--release", default="")
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--original-workspace", type=Path)
+    parser.add_argument("--original-setup", type=Path)
     parser.add_argument("--application", type=Path)
     parser.add_argument("--python", type=Path)
     parser.add_argument("--git", type=Path)
@@ -205,14 +211,14 @@ def main(argv=None):
         if args.original_workspace is None:
             raise VersionError("Specify the original West workspace")
         version = check_release(args.release)
-        destination = check_destination(args.destination, args.original_workspace)
+        destination = check_destination(args.destination, args.original_workspace, args.original_setup)
         if args.action == "plan":
             return {"status": "plan-only", "release": args.release,
                     "destination": str(destination), "current": str(args.original_workspace.resolve()),
                     "upstream": OFFICIAL_SOURCE, "network_required": True, "source_only": True,
                     "next": "Explicitly approve download before installing in the new path."}
         return install(args.release, destination, args.original_workspace,
-                       args.python, args.git, args.allow_network)
+                       args.python, args.git, args.allow_network, args.original_setup)
     if not args.application or not args.python or not args.git:
         raise VersionError("Source comparison needs the project and existing Python/Git executables")
     return compare(args.application.resolve(), args.destination.resolve(), args.python, args.git)
