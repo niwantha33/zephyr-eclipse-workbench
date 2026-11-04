@@ -2,7 +2,9 @@
 package io.github.niwantha33.zew.ui;
 
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
@@ -19,8 +21,12 @@ import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.swt.widgets.Tree;
+import org.eclipse.swt.widgets.TreeColumn;
+import org.eclipse.swt.widgets.TreeItem;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.DevicetreeMemoryMap;
+import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeSourceExplorer;
 import io.github.niwantha33.zew.core.DevicetreeSourceTrace;
 
@@ -38,10 +44,12 @@ public final class SocMemoryMapView extends ViewPart {
     private DevicetreeMemoryMap.Report report = DevicetreeMemoryMap.inspect("");
     private List<DevicetreeMemoryMap.Region> shown = List.of();
     private DevicetreeMemoryMap.Region selected;
+    private DevicetreeHardware.Device selectedNode;
     private Label summary;
     private Combo filter;
     private ScrolledComposite scroll;
     private SocMemoryMapCanvas diagram;
+    private Tree topology;
     private Table regions;
     private Text detail, compiled, origin;
     private TabFolder details;
@@ -74,13 +82,36 @@ public final class SocMemoryMapView extends ViewPart {
 
         var split = new SashForm(parent, SWT.HORIZONTAL);
         split.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        scroll = new ScrolledComposite(split, SWT.H_SCROLL | SWT.V_SCROLL | SWT.BORDER);
+        var visualTabs = new TabFolder(split, SWT.NONE);
+        var addressTab = new TabItem(visualTabs, SWT.NONE);
+        addressTab.setText("Address map");
+        scroll = new ScrolledComposite(visualTabs, SWT.H_SCROLL | SWT.V_SCROLL | SWT.BORDER);
+        addressTab.setControl(scroll);
         scroll.setExpandHorizontal(true);
         scroll.setExpandVertical(false);
         diagram = new SocMemoryMapCanvas(scroll);
         scroll.setContent(diagram);
         scroll.setMinSize(SocMemoryMapCanvas.WIDTH, diagram.getSize().y);
         diagram.onSelection(this::selectRegion);
+
+        var treeTab = new TabItem(visualTabs, SWT.NONE);
+        treeTab.setText("Devicetree hierarchy");
+        topology = new Tree(visualTabs, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
+                | SWT.H_SCROLL | SWT.V_SCROLL);
+        topology.setHeaderVisible(true);
+        topology.setLinesVisible(true);
+        for (var headingText : new String[] {"Board / bus / device", "DTS status", "CPU address or bus address"}) {
+            var column = new TreeColumn(topology, SWT.LEFT);
+            column.setText(headingText);
+        }
+        topology.getColumn(0).setWidth(300);
+        topology.getColumn(1).setWidth(110);
+        topology.getColumn(2).setWidth(240);
+        topology.addListener(SWT.Selection, event -> {
+            if (topology.getSelectionCount() > 0)
+                selectNode((DevicetreeHardware.Device) topology.getSelection()[0].getData());
+        });
+        treeTab.setControl(topology);
 
         var right = new SashForm(split, SWT.VERTICAL);
         regions = new Table(right, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
@@ -136,6 +167,7 @@ public final class SocMemoryMapView extends ViewPart {
     private void render() {
         if (regions == null || regions.isDisposed()) return;
         report = DevicetreeMemoryMap.inspect(generated);
+        populateTopology();
         compiled.setText(generated.isBlank()
                 ? "No generated zephyr.dts. Build the selected board first."
                 : generated);
@@ -185,14 +217,67 @@ public final class SocMemoryMapView extends ViewPart {
                 + "generated DTS | " + report.unmappable() + " bus-relative or unresolved"
                 + " | " + report.omitted() + " not safely decoded"
                 + (stale ? " | STALE BUILD — rebuild before relying on this map." : "")
-                + "\nDiagram rows are NOT to scale. Only proven CPU addresses are placed "
-                + "on the CPU map; this is NOT a complete vendor silicon map.");
+                + "\nAddress map: ordered, not to scale. Hierarchy: all parsed DTS nodes, "
+                + "including buses and devices without a CPU address. This is not a complete vendor silicon map.");
         summary.getParent().layout(true, true);
+    }
+
+    private void populateTopology() {
+        topology.setRedraw(false);
+        try {
+            topology.removeAll();
+            if (generated.isBlank()) return;
+            Map<String, TreeItem> byPath = new HashMap<>();
+            Map<String, DevicetreeMemoryMap.Region> byNode = new HashMap<>();
+            for (var region : report.regions())
+                byNode.putIfAbsent(region.path(), region);
+            for (var node : DevicetreeHardware.inspect(generated)) {
+                String path = node.path();
+                int slash = path.lastIndexOf('/');
+                TreeItem parent = byPath.get(slash <= 0 ? "/" : path.substring(0, slash));
+                TreeItem item = parent == null ? new TreeItem(topology, SWT.NONE)
+                        : new TreeItem(parent, SWT.NONE);
+                var address = byNode.get(path);
+                String name = "/".equals(path) ? "Board / root" : node.name();
+                if (!node.label().isBlank()) name += "  ·  " + node.label();
+                item.setText(new String[] {name,
+                        node.status().isBlank() ? "default" : node.status(),
+                        address == null ? (node.reg().isBlank() ? "—" : "reg: see details")
+                                : address.cpuMapped() ? address.cpuHex() + "  ·  " + address.sizeLabel()
+                                        : "bus " + address.localHex() + "  ·  " + address.sizeLabel()});
+                item.setData(node);
+                byPath.put(path, item);
+            }
+            for (TreeItem root : topology.getItems()) root.setExpanded(true);
+        } finally { topology.setRedraw(true); }
+    }
+
+    private void selectNode(DevicetreeHardware.Device node) {
+        if (node == null) return;
+        selectedNode = node;
+        var mapped = report.regions().stream().filter(r -> r.path().equals(node.path()))
+                .findFirst().orElse(null);
+        if (mapped != null) {
+            selectRegion(mapped);
+            return;
+        }
+        selected = null;
+        diagram.selectRegion(null);
+        traceButton.setEnabled(false);
+        detail.setText("DEVICETREE NODE FROM GENERATED BUILD\nPath: " + node.path()
+                + "\nStatus: " + (node.status().isBlank() ? "default" : node.status())
+                + "\nCompatible: " + (node.compatible().isBlank() ? "not specified" : node.compatible())
+                + "\nBuilt DTS declaration line: " + node.line()
+                + "\n\nNo safely decoded CPU address exists for this node. A bus, pin, or device"
+                + " can be present without a CPU memory range. This is not a full silicon inventory.");
+        revealButton.setEnabled(true);
+        origin.setText("Select an address range to trace its original reg declaration.");
     }
 
     private void selectRegion(DevicetreeMemoryMap.Region r) {
         if (r == null || detail == null || detail.isDisposed()) return;
         selected = r;
+        selectedNode = null;
         diagram.selectRegion(r);
         for (TableItem row : regions.getItems()) if (row.getData() == r) {
             regions.setSelection(row);
@@ -222,11 +307,12 @@ public final class SocMemoryMapView extends ViewPart {
     }
 
     private void revealCompiled() {
-        if (selected == null) return;
+        if (selected == null && selectedNode == null) return;
         details.setSelection(1);
         int offset = 0;
         String text = compiled.getText();
-        for (int i = 1; i < selected.line(); i++) {
+        int line = selected != null ? selected.line() : selectedNode.line();
+        for (int i = 1; i < line; i++) {
             int next = text.indexOf('\n', offset);
             if (next < 0) return;
             offset = next + 1;

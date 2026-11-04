@@ -75,6 +75,8 @@ public final class SocMemoryMapCanvas extends Canvas {
         gc.drawString("TYPE       DEVICETREE NODE / REG-NAME", 225, 12, true);
         gc.drawString("END EXCLUSIVE", 736, 12, true);
         gc.drawString("Addresses ordered; row heights NOT proportional to memory size", 14, 31, true);
+        gc.setForeground(display.getSystemColor(SWT.COLOR_WIDGET_NORMAL_SHADOW));
+        gc.drawLine(14, HEADER_HEIGHT - 2, WIDTH - 14, HEADER_HEIGHT - 2);
         for (int i = 0; i < visibleRowCount(); i++) {
             int y = HEADER_HEIGHT + i * ROW_HEIGHT;
             if (y + ROW_HEIGHT < clip.y || y > clip.y + clip.height) continue;
@@ -85,6 +87,14 @@ public final class SocMemoryMapCanvas extends Canvas {
                     : i % 2 == 0 ? SWT.COLOR_WIDGET_LIGHT_SHADOW
                     : SWT.COLOR_WIDGET_BACKGROUND));
             gc.fillRectangle(0, y, WIDTH, ROW_HEIGHT - 2);
+            gc.setBackground(display.getSystemColor(item.cpuMapped() ? switch (item.kind()) {
+                case RAM -> SWT.COLOR_DARK_GREEN;
+                case FLASH, PARTITION -> SWT.COLOR_DARK_BLUE;
+                case PERIPHERAL -> SWT.COLOR_DARK_CYAN;
+                case RESERVED -> SWT.COLOR_DARK_MAGENTA;
+                case OTHER -> SWT.COLOR_DARK_GRAY;
+            } : SWT.COLOR_DARK_GRAY));
+            gc.fillRectangle(0, y, 5, ROW_HEIGHT - 2);
             gc.setForeground(display.getSystemColor(selected
                     ? SWT.COLOR_LIST_SELECTION_TEXT : SWT.COLOR_WIDGET_FOREGROUND));
             String start = item.cpuMapped() ? item.cpuHex() : "BUS " + item.localHex();

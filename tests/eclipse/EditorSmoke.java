@@ -845,6 +845,29 @@ public final class EditorSmoke implements IApplication {
                             && mapDetails.getText().contains("0x20008000"),
                             "RAM filter retains precise end-exclusive and selected-row evidence");
                     captureNativeStudioScreenshot("soc-memory-map-native.png");
+                    var topology = (org.eclipse.swt.widgets.Tree)
+                            studioField(mapPart, mapClass, "topology");
+                    check(topology.getItemCount() == 1
+                            && topology.getItem(0).getItemCount() == 2,
+                            "generated DTS hierarchy includes root, RAM and SoC bus");
+                    var socNode = java.util.Arrays.stream(topology.getItem(0).getItems())
+                            .filter(item -> item.getText(0).equals("soc"))
+                            .findFirst().orElseThrow();
+                    var uartNode = java.util.Arrays.stream(socNode.getItems())
+                            .filter(item -> item.getText(0).equals("uart@40000000"))
+                            .findFirst().orElseThrow();
+                    check(uartNode.getText(1).equals("disabled")
+                            && uartNode.getText(2).contains("0x40000000"),
+                            "disabled UART is visible under its real bus with decoded address");
+                    topology.setSelection(uartNode);
+                    topology.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    check(mapDetails.getText().contains("Node status: disabled")
+                            && mapDetails.getText().contains("/soc/uart@40000000"),
+                            "hierarchy selection opens the exact generated node evidence");
+                    var mapTabs = (org.eclipse.swt.widgets.TabFolder) topology.getParent();
+                    mapTabs.setSelection(1);
+                    captureNativeStudioScreenshot("devicetree-hierarchy-native.png");
                     windows[0].getActivePage().activate(view);
                 } catch (Throwable error) { studioFailure.set(error); }
             });
