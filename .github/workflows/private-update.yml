@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Standard GitHub-hosted Linux runners are free on PUBLIC repositories.
-# Keep the verified one-job publish; no intermediate Actions artifacts.
+# Build/test run with read-only contents; only the publishing job can write updates.
 # Do not use on a private repository with exhausted Actions minutes.
 name: Build and publish Zephyr Workbench p2 update
 on:
@@ -16,13 +16,16 @@ on:
       - '.github/workflows/private-update.yml'
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 concurrency:
   group: public-zephyr-updates-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  build_and_publish:
-    name: Verify and publish on public GitHub-hosted runner
+  build_and_verify:
+    name: Build and verify on read-only runner
+    outputs:
+      version: ${{ steps.reserve.outputs.version }}
+      site_sha256: ${{ steps.seal.outputs.sha256 }}
     if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
@@ -34,7 +37,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-          persist-credentials: true
+          persist-credentials: false
       - name: Validate local Java 21, Python, Maven and Git
         run: |
           set -euo pipefail
@@ -61,6 +64,7 @@ jobs:
       # from the immutable update channel, then force it for the whole reactor.
       # The publish job is serialized by the workflow concurrency group.
       - name: Derive strictly newer p2 qualifier
+        id: reserve
         shell: bash
         run: |
           set -euo pipefail
@@ -97,6 +101,8 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
               env.write(f"ZEW_RELEASE_QUALIFIER={qualifier}\n")
               env.write(f"ZEW_RELEASE_VERSION={target}\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"version={target}\n")
           print(f"Publishing candidate {target} (current channel: {previous})")
           PY
       - name: Build clean Tycho p2 update site
@@ -112,6 +118,7 @@ jobs:
           curl --fail --location --retry 3 \
             https://download.eclipse.org/eclipse/downloads/drops4/R-4.41-202608281142/eclipse-platform-4.41-linux-gtk-x86_64.tar.gz \
             -o "$RUNNER_TEMP/eclipse-platform.tar.gz"
+          (cd "$RUNNER_TEMP" && sha512sum --check "$GITHUB_WORKSPACE/scripts/eclipse-platform-4.41-linux.sha512")
           tar -xzf "$RUNNER_TEMP/eclipse-platform.tar.gz" -C "$RUNNER_TEMP/zew-eclipse"
           ECLIPSE="$RUNNER_TEMP/zew-eclipse/eclipse"
           LAUNCHERS=("$ECLIPSE"/plugins/org.eclipse.equinox.launcher_*.jar)
@@ -121,7 +128,55 @@ jobs:
             -installIU org.eclipse.cdt.core,org.eclipse.cdt.ui,org.eclipse.cdt.debug.core,org.eclipse.cdt.dsf.gdb,org.eclipse.cdt.dsf.gdb.ui,org.eclipse.cdt.cmake.ui,org.eclipse.cdt.build.gcc.core
           xvfb-run -a python3 scripts/editor_smoke.py --native-workbench \
             --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
-      - name: Publish release and channel as one fast-forward operation
+      - name: Seal verified p2 site
+        id: seal
+        shell: bash
+        run: |
+          set -euo pipefail
+          site_digest="$(python3 scripts/site_tree_digest.py releng/repository/target/repository)"
+          echo "sha256=$site_digest" >> "$GITHUB_OUTPUT"
+      - name: Transfer verified site to isolated publisher
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: zew-qualified-p2-site
+          path: releng/repository/target/repository/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 2
+
+  publish:
+    name: Publish exact qualified release (write token only at push)
+    needs: build_and_verify
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout exact approved commit without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Restore qualified p2 site
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: zew-qualified-p2-site
+          path: releng/repository/target/repository/
+      - name: Verify site after isolated transfer
+        env:
+          EXPECTED_SITE_SHA256: ${{ needs.build_and_verify.outputs.site_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EXPECTED_SITE_SHA256"
+          test "$(python3 scripts/site_tree_digest.py releng/repository/target/repository)" = "$EXPECTED_SITE_SHA256"
+          python3 scripts/verify_site.py
+      - name: Stage versioned release and recheck source and channel
+        env:
+          EXPECTED_RELEASE_VERSION: ${{ needs.build_and_verify.outputs.version }}
+        shell: bash
+        run: |
         shell: bash
         run: |
           set -euo pipefail
@@ -146,7 +201,7 @@ jobs:
           print(version)
           PY
           )"
-          if [ "$VERSION" != "$ZEW_RELEASE_VERSION" ]; then
+          if [ "$VERSION" != "$EXPECTED_RELEASE_VERSION" ]; then
             echo "Built feature version $VERSION does not match reserved $ZEW_RELEASE_VERSION" >&2
             exit 1
           fi
@@ -161,7 +216,6 @@ jobs:
           RELEASE_ROOT="$RUNNER_TEMP/zephyr-p2-updates"
           git worktree prune
           git worktree add --detach "$RELEASE_ROOT" refs/remotes/origin/updates
-          trap 'git worktree remove --force "$RELEASE_ROOT" >/dev/null 2>&1 || true' EXIT
           export RELEASE_ROOT VERSION
 
           python3 - <<'PY'
@@ -213,6 +267,30 @@ jobs:
           git -C "$RELEASE_ROOT" -c user.name=zephyr-p2-ci \
             -c user.email=zephyr-p2-ci@users.noreply.github.com \
             commit -m "updates: activate $VERSION"
-          git -C "$RELEASE_ROOT" push origin HEAD:updates
-          echo "Published private $VERSION with previous releases retained." >> "$GITHUB_STEP_SUMMARY"
+          echo "Qualified release candidate $VERSION is ready for privileged publication."
 
+      - name: Publish only the verified candidate with temporary authentication
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
+          ASKPASS="$RUNNER_TEMP/zew-git-askpass"
+          cat > "$ASKPASS" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf 'x-access-token' ;;
+            *Password*) printf '%s' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$ASKPASS"
+          trap 'rm -f "$ASKPASS"' EXIT
+          GIT_ASKPASS="$ASKPASS" git -C "$RUNNER_TEMP/zephyr-p2-updates" push "https://github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/updates
+          echo "Published the qualified release; previous immutable releases retained." >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove staging worktree
+        if: always()
+        shell: bash
+        run: |
+          git worktree remove --force "$RUNNER_TEMP/zephyr-p2-updates" 2>/dev/null || true
