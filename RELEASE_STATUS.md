@@ -563,3 +563,20 @@ passing these prototype tests.
 - CI cross-platform and Eclipse smoke verification are required; the automatic
   4.5 installer and upgrade execution remain **not implemented** (issue #128).
   These repairs do not imply G0 qualification or release approval.
+
+## Parallel Zephyr source preparation — Stage 1 (development 2026-11-04)
+
+- Added a separate, opt-in release source setup action for a selected application:
+  exact stable tag, destination that does not exist, explicit network confirmation.
+- Uses native West init/update and West frozen manifest semantics; records actual
+  tag SHA and module commits in source-only evidence without touching the 4.4
+  setup or application. Deliberately does **not** produce a .zew-ready setup.
+- Implements headless plan/install/compare, with Git source evidence validation;
+  no SDK compatibility, firmware-build, flash, debug or offline restoration claim.
+- Offline unit fixtures cover path/symlink safety, explicit user permission,
+  interrupted installs, digest tampering and comparing commits to project lock.
+- Next: version-specific SDK provisioner, independent migration trial, build
+  diagnostics, rollback and genuine five-year archive. See
+  docs/ZEPHYR_VERSION_MANAGER_ROADMAP.md and issue #128.
+- Exact PR-head CI and real Windows/Linux West 4.5 source checkout are still
+  needed; **G0 remains open**. Not a production release.
