@@ -7,7 +7,9 @@ Kconfig, parse devicetree semantics, infer inclusion, or authenticate firmware.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import stat
 from pathlib import Path
 
 SCHEMA_VERSION = "0.1.0"
@@ -45,20 +47,47 @@ class InputError(ValueError):
     pass
 
 
-def _digest(path: Path) -> tuple[str, int]:
-    before = path.stat()
+def _read_observed(path: Path, maximum: int, capture: bool = False) -> tuple[str, int, bytes | None]:
+    """Open first, reject symlinks, and verify the same regular inode remained stable.
+
+    File locks do not provide a portable coherent snapshot of concurrent builds.
+    Changes to identity, length, mtime or ctime therefore fail the observation.
+    """
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode):
+        raise InputError("Generated artifact is not a regular file")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     total = 0
-    sha = hashlib.sha256()
-    with path.open("rb") as handle:
-        while data := handle.read(64 * 1024):
-            total += len(data)
-            if total > MAX_ARTIFACT_BYTES:
-                raise InputError(f"Artifact exceeds {MAX_ARTIFACT_BYTES} byte limit")
-            sha.update(data)
-    after = path.stat()
-    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+    digest = hashlib.sha256()
+    content = bytearray() if capture else None
+    with os.fdopen(os.open(path, flags), "rb") as handle:
+        opened = os.fstat(handle.fileno())
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+            raise InputError("Generated artifact changed before opening")
+        for chunk in iter(lambda: handle.read(64 * 1024), b""):
+            total += len(chunk)
+            if total > maximum:
+                raise InputError("Artifact exceeds bounded observation limit")
+            digest.update(chunk)
+            if capture:
+                content.extend(chunk)
+        closed = os.fstat(handle.fileno())
+    after = path.lstat()
+
+    def identity(value):
+        return (value.st_dev, value.st_ino, value.st_size,
+                value.st_mtime_ns, value.st_ctime_ns)
+
+    if (identity(before) != identity(opened)
+            or identity(opened) != identity(closed)
+            or identity(closed) != identity(after)):
         raise InputError("Generated artifact changed during evidence collection; retry after build")
-    return sha.hexdigest(), total
+    return digest.hexdigest(), total, bytes(content) if capture else None
+
+
+def _digest(path: Path) -> tuple[str, int]:
+    checksum, size, _ = _read_observed(path, MAX_ARTIFACT_BYTES)
+    return checksum, size
 
 
 def _regular(root: Path, name: str) -> Path | None:
@@ -157,15 +186,7 @@ def collect(build: Path, images: list[str] | None = None) -> dict:
                 continue
             if kind in ("kconfig", "workbench_receipt"):
                 limit = MAX_CONFIG_BYTES if kind == "kconfig" else 256
-                before = path.stat()
-                with path.open("rb") as handle:
-                    snapshot = handle.read(limit + 1)
-                after = path.stat()
-                if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
-                    raise InputError("Generated evidence changed while collecting; retry after build")
-                if len(snapshot) > limit:
-                    raise InputError("Generated evidence exceeds its parsing limit: " + relative)
-                checksum, size = hashlib.sha256(snapshot).hexdigest(), len(snapshot)
+                checksum, size, snapshot = _read_observed(path, limit, capture=True)
                 if kind == "kconfig":
                     config_snapshot = snapshot
                 else:
