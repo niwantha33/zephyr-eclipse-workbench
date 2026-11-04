@@ -981,7 +981,7 @@ public final class ConfigurationStudioView extends ViewPart {
         addGpioButton.setToolTipText("Select an unreferenced logical index. Creates a reviewed source request, not an availability or live-state claim.");
         hardwareActions.setSize(hardwareActions.computeSize(SWT.DEFAULT, SWT.DEFAULT));
 
-        Composite reports = tab(tabs, "Evidence & Diagnostics");
+        Composite reports = tab(tabs, "Evidence && Diagnostics");
         reports.setLayout(new GridLayout(1, false));
         var evidenceActions = new Composite(reports, SWT.NONE);
         evidenceActions.setLayout(new GridLayout(3, false));
