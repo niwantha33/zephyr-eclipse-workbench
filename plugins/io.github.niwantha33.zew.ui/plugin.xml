@@ -223,34 +223,45 @@
     <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
       <menu id="io.github.niwantha33.zew.menu" label="Zephyr">
         <command commandId="io.github.niwantha33.zew.quickStart" label="Start Here — Create Zephyr Project..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.setup" label="Set Up Zephyr..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.tools" label="Install / Manage Zephyr Tools..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.debugTools" label="Manage Shared OpenOCD Debug Tools..." style="push"/>
-        <separator name="tools" visible="true"/>
-        <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
-        <separator name="build" visible="true"/>
-        <command commandId="io.github.niwantha33.zew.prepareParallelSources" label="Prepare Separate Zephyr Release Sources (Stage 1)..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.snapshotProject" label="Snapshot Project Environment..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.verifyProject" label="Verify Project Environment..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.planProjectUpgrade" label="Preview Upgrade Using Another Setup..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio (Kconfig / Devicetree)..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
-        <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
-        <command commandId="io.github.niwantha33.zew.rebuild" label="Pristine Rebuild" style="push"/>
-        <command commandId="io.github.niwantha33.zew.artifacts" label="Build and Show Firmware..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.cancel" label="Cancel Operation" style="push"/>
-        <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.flashDebug" label="Flash and Debug Application..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.debug" label="Debug Application..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.socRegisters" label="Show Debug Data / Hardware Register Explorer" style="push"/>
-        <command commandId="io.github.niwantha33.zew.debugExpressionProbe" label="Inspect GDB Symbol (Read-only)..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.faultAnalysis" label="Investigate Fatal Log…" style="push"/>
-        <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace (Preview)..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.rtosInvestigation" label="Review Saved RTOS Capture (Offline)..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.applicationConsole" label="Capture UART Application Console..." style="push"/>
-        <command commandId="io.github.niwantha33.zew.coredumpInvestigation" label="Investigate Saved Binary Core Dump (Offline)..." style="push"/>
+        <separator name="workflows" visible="true"/>
+        <menu id="io.github.niwantha33.zew.menu.gettingStarted" label="Getting Started">
+          <command commandId="io.github.niwantha33.zew.setup" label="Set Up Zephyr..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.tools" label="Install / Manage Zephyr Tools..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
+        </menu>
+        <menu id="io.github.niwantha33.zew.menu.versions" label="Project Environment &amp; Versions">
+          <command commandId="io.github.niwantha33.zew.prepareParallelSources" label="Prepare Separate Zephyr Release Sources (Stage 1)..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.snapshotProject" label="Snapshot Project Environment..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.verifyProject" label="Verify Project Environment..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.planProjectUpgrade" label="Preview Upgrade Using Another Setup..." style="push"/>
+        </menu>
+        <menu id="io.github.niwantha33.zew.menu.build" label="Configure &amp; Build">
+          <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio (Kconfig / Devicetree)..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
+          <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
+          <command commandId="io.github.niwantha33.zew.rebuild" label="Pristine Rebuild" style="push"/>
+          <command commandId="io.github.niwantha33.zew.artifacts" label="Build and Show Firmware..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.cancel" label="Cancel Operation" style="push"/>
+        </menu>
+        <menu id="io.github.niwantha33.zew.menu.runDebug" label="Run &amp; Debug">
+          <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.flashDebug" label="Flash and Debug Application..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.debug" label="Debug Application..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.debugTools" label="Manage Shared OpenOCD Debug Tools..." style="push"/>
+        </menu>
+        <menu id="io.github.niwantha33.zew.menu.diagnostics" label="Inspect &amp; Diagnose">
+          <command commandId="io.github.niwantha33.zew.socRegisters" label="Show Debug Data / Hardware Register Explorer" style="push"/>
+          <command commandId="io.github.niwantha33.zew.debugExpressionProbe" label="Inspect GDB Symbol (Read-only)..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.faultAnalysis" label="Investigate Fatal Log…" style="push"/>
+          <command commandId="io.github.niwantha33.zew.coredumpInvestigation" label="Investigate Saved Binary Core Dump (Offline)..." style="push"/>
+        </menu>
+        <menu id="io.github.niwantha33.zew.menu.capture" label="Capture &amp; Analyse">
+          <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace (Preview)..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.rtosInvestigation" label="Review Saved RTOS Capture (Offline)..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.applicationConsole" label="Capture UART Application Console..." style="push"/>
+        </menu>
         <separator name="updates" visible="true"/>
         <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check for Workbench Updates..." style="push"/>
         <command commandId="io.github.niwantha33.zew.updateConnection" label="Configure Workbench Updates..." style="push"/>

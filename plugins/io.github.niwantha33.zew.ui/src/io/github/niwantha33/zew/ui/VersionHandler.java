@@ -21,6 +21,7 @@ public final class VersionHandler extends AbstractHandler {
         String checked = preferences.getString("updates.lastSuccessfulCheck");
         String notes = preferences.getString("updates.lastReleaseNotes");
         String details = "Zephyr Eclipse Workbench\n\n"
+                + "Author: Niwantha Meepage\n\n"
                 + "Installed version: " + version.getMajor() + "." + version.getMinor() + "." + version.getMicro()
                 + "\nBuild ID: " + (version.getQualifier().isBlank() ? "Unqualified development build" : version.getQualifier())
                 + "\nFull version: " + version
