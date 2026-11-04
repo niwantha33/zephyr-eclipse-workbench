@@ -48,6 +48,33 @@ public final class RemoteDebugSmoke {
             Thread.sleep(50);
         }
     }
+    /**
+     * Eclipse's launch termination and workspace launch-resource updates can
+     * finish on different threads. Delete a test configuration only after the
+     * terminated session has been observed, using a workspace scheduling rule
+     * and a bounded retry. Never hide a real, persistent resource leak.
+     */
+    private static void deleteTestConfiguration(ILaunchConfiguration configuration) throws Exception {
+        org.eclipse.core.runtime.CoreException last = null;
+        var workspace = org.eclipse.core.resources.ResourcesPlugin.getWorkspace();
+        for (int attempt = 0; attempt < 5; attempt++) {
+            if (!configuration.exists()) return; // Already removed by Eclipse.
+            try {
+                workspace.run(monitor -> {
+                    if (configuration.exists()) configuration.delete();
+                }, workspace.getRoot(), org.eclipse.core.resources.IWorkspace.AVOID_UPDATE,
+                        new NullProgressMonitor());
+                if (!configuration.exists()) return;
+            } catch (org.eclipse.core.runtime.CoreException error) {
+                last = error;
+                if (!configuration.exists()) return;
+            }
+            Thread.sleep(100L * (attempt + 1));
+        }
+        throw new IllegalStateException(
+                "Test launch configuration still exists after bounded Eclipse workspace cleanup", last);
+    }
+
     public static void run(Path fixture) throws Exception {
         String port = System.getProperty("zew.remote.port", "");
         if (port.isBlank()) throw new AssertionError("Native smoke requires an owned GDB server");
@@ -181,7 +208,12 @@ public final class RemoteDebugSmoke {
             DebugPlugin.getDefault().getBreakpointManager().setEnabled(breakpointsWereEnabled);
             if (services != null) services.dispose();
             if (launch != null && launch.canTerminate()) launch.terminate();
-            configuration.delete();
+            deleteTestConfiguration(configuration);
+            // Debug launch/configuration lifecycle modifies the workspace
+            // after EditorSmoke's earlier save. Persist it before the next
+            // installed-Eclipse smoke process reopens this same test workspace.
+            org.eclipse.core.resources.ResourcesPlugin.getWorkspace()
+                    .save(true, new NullProgressMonitor());
         }
     }
 }
