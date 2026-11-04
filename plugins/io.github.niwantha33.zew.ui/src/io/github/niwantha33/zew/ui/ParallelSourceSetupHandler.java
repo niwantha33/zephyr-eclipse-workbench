@@ -52,12 +52,14 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
 
     static final class SourceDialog extends TitleAreaDialog {
         private final Path currentWorkspace;
+        private final Path originalSetup;
         private Text release;
         private Text destination;
 
-        SourceDialog(Shell shell, Path currentWorkspace) {
+        SourceDialog(Shell shell, Path currentWorkspace, Path originalSetup) {
             super(shell);
             this.currentWorkspace = currentWorkspace;
+            this.originalSetup = originalSetup;
             setHelpAvailable(false);
         }
 
@@ -79,10 +81,7 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
             new Label(grid, SWT.NONE).setText("New workspace folder");
             destination = new Text(grid, SWT.BORDER);
             destination.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            Path parentFolder = currentWorkspace.getParent();
-            destination.setText((parentFolder == null
-                    ? currentWorkspace.resolveSibling("zephyr-src-v4.5.0")
-                    : parentFolder.resolve("zephyr-src-v4.5.0")).toString());
+            destination.setText(originalSetup.resolveSibling("zephyr-src-v4.5.0").toString());
             Button browse = new Button(grid, SWT.PUSH);
             browse.setText("Parent...");
             browse.addListener(SWT.Selection, event -> {
@@ -127,8 +126,10 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                     Path current = currentWorkspace.toRealPath();
                     if (!Path.of(destination.getText().trim()).isAbsolute())
                         error = "Choose an absolute destination.";
-                    else if (proposed.startsWith(current) || current.startsWith(proposed))
-                        error = "The candidate cannot contain or be inside the current workspace.";
+                    else if (proposed.startsWith(current) || current.startsWith(proposed)
+                            || proposed.startsWith(originalSetup.toRealPath())
+                            || originalSetup.toRealPath().startsWith(proposed))
+                        error = "Keep the candidate outside the original setup and West workspace.";
                     else if (Files.exists(proposed))
                         error = "The candidate already exists. Choose a new folder.";
                     else if (proposed.getParent() == null || !Files.isDirectory(proposed.getParent()))
@@ -163,7 +164,8 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
         }
 
         Path currentWorkspace = Path.of(settings.getProperty("workspace"));
-        var dialog = new SourceDialog(HandlerUtil.getActiveShell(event), currentWorkspace);
+        Path originalSetup = Path.of(settings.getProperty("zew.setupRoot"));
+        var dialog = new SourceDialog(HandlerUtil.getActiveShell(event), currentWorkspace, originalSetup);
         if (dialog.open() != Window.OK) return null;
         String release = dialog.release();
         Path destination = dialog.destination();
@@ -185,6 +187,7 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                             Activator.getDefault().getBundle().getEntry(SCRIPT)).toURI());
                     var common = List.of("--destination", destination.toString(),
                             "--original-workspace", currentWorkspace.toString(),
+                            "--original-setup", originalSetup.toString(),
                             "--release", release, "--python", settings.getProperty("python"),
                             "--git", settings.getProperty("tools.git"));
                     var plan = new ArrayList<String>(List.of(settings.getProperty("python"),
