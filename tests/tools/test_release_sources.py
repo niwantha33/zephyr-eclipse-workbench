@@ -127,7 +127,7 @@ class ReleaseSourceTests(unittest.TestCase):
         self.target.mkdir()
         (self.target / ".zew").mkdir()
         (self.target / ".zew-source-ready").write_text("SOURCE_VERIFIED_ONLY\n")
-        (self.target / sources.SOURCE_FROZEN).write_text(self.manifest)
+        (self.target / sources.SOURCE_FROZEN).write_bytes(self.manifest.encode("utf-8"))
         (self.target / sources.SOURCE_LOCK).write_text(json.dumps(self.record))
         with patch.object(sources, "capture_sources", return_value=(self.manifest, self.record)):
             verified = sources.verify_candidate(self.target, self.python, self.git)
