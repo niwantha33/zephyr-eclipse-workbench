@@ -61,6 +61,14 @@ class ReleaseSourceTests(unittest.TestCase):
             with self.subTest(candidate=candidate), self.assertRaises(sources.VersionError):
                 sources.check_destination(candidate, self.current)
 
+    def test_reject_candidate_inside_entire_original_setup(self):
+        setup = self.current.parent
+        sibling_of_workspace = setup / "zephyr-src-v4.5.0"
+        with self.assertRaisesRegex(sources.VersionError, "managed setup folder"):
+            sources.check_destination(sibling_of_workspace, self.current, setup)
+        with self.assertRaisesRegex(sources.VersionError, "managed setup folder"):
+            sources.check_destination(self.parent, self.current, setup)
+
     def test_reject_existing_destination_without_mutations(self):
         self.target.mkdir()
         (self.target / "data.txt").write_text("original")
@@ -81,7 +89,8 @@ class ReleaseSourceTests(unittest.TestCase):
         command = [sys.executable, str(TOOLS / "release_sources.py"), "plan",
                    "--release", "v4.5.0",
                    "--destination", str(self.target),
-                   "--original-workspace", str(self.current)]
+                   "--original-workspace", str(self.current),
+                   "--original-setup", str(self.current.parent)]
         result = subprocess.run(command, capture_output=True, text=True, timeout=20, check=True)
         body = json.loads(result.stdout)
         self.assertEqual("plan-only", body["status"])
