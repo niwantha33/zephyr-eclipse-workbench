@@ -54,6 +54,8 @@ def _read_observed(path: Path, maximum: int, capture: bool = False) -> tuple[str
     Changes to identity, length, mtime or ctime therefore fail the observation.
     """
     before = path.lstat()
+    if stat.S_ISLNK(before.st_mode):
+        raise InputError("Symlinked artifact path rejected")
     if not stat.S_ISREG(before.st_mode):
         raise InputError("Generated artifact is not a regular file")
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
@@ -67,7 +69,9 @@ def _read_observed(path: Path, maximum: int, capture: bool = False) -> tuple[str
         for chunk in iter(lambda: handle.read(64 * 1024), b""):
             total += len(chunk)
             if total > maximum:
-                raise InputError("Artifact exceeds bounded observation limit")
+                if capture:
+                    raise InputError("Generated evidence exceeds its parsing limit")
+                raise InputError(f"Artifact exceeds {maximum} byte limit")
             digest.update(chunk)
             if capture:
                 content.extend(chunk)
@@ -75,6 +79,10 @@ def _read_observed(path: Path, maximum: int, capture: bool = False) -> tuple[str
     after = path.lstat()
 
     def identity(value):
+        # Windows path-stat and handle-stat can report different creation
+        # metadata; compare size + mtime there to retain existing semantics.
+        if os.name == "nt":
+            return (value.st_size, value.st_mtime_ns)
         return (value.st_dev, value.st_ino, value.st_size,
                 value.st_mtime_ns, value.st_ctime_ns)
 
