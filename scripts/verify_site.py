@@ -190,11 +190,14 @@ with zipfile.ZipFile(features[0]) as z:
         raise SystemExit('Feature does not reference the two original bundles.')
     if z.read('LICENSE').strip() != (root / 'LICENSE').read_bytes().strip():
         raise SystemExit('Feature licence missing or incorrect.')
-with zipfile.ZipFile(archive) as z:
-    if z.testzip() is not None or 'p2.index' not in z.namelist():
-        raise SystemExit('Invalid update-site ZIP.')
+# The isolated publisher transfers only the sealed site directory. The ZIP is
+# verified in the build job, or when an archive is explicitly supplied here.
+if args.site is None or args.archive is not None:
+    with zipfile.ZipFile(archive) as z:
+        if z.testzip() is not None or 'p2.index' not in z.namelist():
+            raise SystemExit('Invalid update-site ZIP.')
+    print('Update-site SHA-256:', hashlib.sha256(archive.read_bytes()).hexdigest())
 print('Verified p2 metadata and feature.')
-print('Update-site SHA-256:', hashlib.sha256(archive.read_bytes()).hexdigest())
 print('This checks packaging; it does not establish desktop installation or hardware support.')
 
 
