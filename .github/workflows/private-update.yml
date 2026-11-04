@@ -177,8 +177,6 @@ jobs:
           EXPECTED_RELEASE_VERSION: ${{ needs.build_and_verify.outputs.version }}
         shell: bash
         run: |
-        shell: bash
-        run: |
           set -euo pipefail
           SITE="$GITHUB_WORKSPACE/releng/repository/target/repository"
           VERSION="$(python3 - <<'PY'
