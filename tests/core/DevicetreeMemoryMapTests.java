@@ -149,6 +149,49 @@ public final class DevicetreeMemoryMapTests {
         check(r64.omitted()>0, "zero size-cells/identity regs do not become memory ranges");
         check(r.notice().contains("NOT the vendor's full silicon map"),
                 "honest scope marker: not full datasheet memory map");
+
+        String mappedPartitions = """
+                /dts-v1/;
+                / {
+                    #address-cells = <1>;
+                    #size-cells = <1>;
+                    soc {
+                        #address-cells = <1>;
+                        #size-cells = <1>;
+                        ranges;
+                        flash@0 {
+                            compatible = "soc-nv-flash";
+                            reg = <0x0 0x20000>;
+                            #address-cells = <1>;
+                            #size-cells = <1>;
+                            ranges = <0x0 0x0 0x20000>;
+                            partitions {
+                                #address-cells = <1>;
+                                #size-cells = <1>;
+                                ranges;
+                                partition@8000 {
+                                    compatible = "zephyr,mapped-partition";
+                                    label = "image-0";
+                                    reg = <0x8000 0xc000>;
+                                };
+                            };
+                        };
+                    };
+                };
+                """;
+        var mappedPart = DevicetreeMemoryMap.inspect(mappedPartitions);
+        var slot = one(mappedPart, "/soc/flash@0/partitions/partition@8000");
+        check(slot.kind() == DevicetreeMemoryMap.Kind.PARTITION
+                && slot.cpuMapped() && slot.cpuHex().equals("0x00008000")
+                && slot.sizeLabel().equals("48 KiB")
+                && slot.evidence().contains("ranges"),
+                "real TI/Zephyr mapped partitions use proven ranges and offset");
+        String withoutMappedRanges = mappedPartitions.replace(
+                "ranges = <0x0 0x0 0x20000>;", "");
+        var noRange = DevicetreeMemoryMap.inspect(withoutMappedRanges);
+        check(!one(noRange, "/soc/flash@0/partitions/partition@8000").cpuMapped(),
+                "mapped partitions without NVM ranges never claim a CPU address");
+
         System.out.println("PASS build-backed SoC memory map: " + checks);
     }
 }

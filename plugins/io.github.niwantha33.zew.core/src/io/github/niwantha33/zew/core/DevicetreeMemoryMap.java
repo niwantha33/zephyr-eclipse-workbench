@@ -120,16 +120,33 @@ public final class DevicetreeMemoryMap {
                 BigInteger cpu = null;
                 String evidence;
                 if (partition) {
-                    String flash = parent(parent);
-                    var base = result.stream()
-                            .filter(r -> r.path().equals(flash) && r.kind() == Kind.FLASH
-                                    && r.cpuMapped()).findFirst().orElse(null);
-                    if (base != null && local.add(size).compareTo(base.size()) <= 0) {
-                        cpu = base.cpuAddress().add(local);
-                        evidence = "CPU mapping derived from mapped flash base plus verified "
-                                + "fixed-partition offset; overlaps its containing flash by design.";
-                    } else evidence = "Partition reg is a flash-relative offset; no CPU mapping "
-                            + "proved from a single mapped containing flash device.";
+                    // Zephyr mapped-partition requires ranges all the way from
+                    // partition -> grouping -> NVM -> controller -> CPU. Do not
+                    // bypass a missing ranges mapping by adding a guessed base.
+                    boolean mapped = node.device().compatible().contains("zephyr,mapped-partition");
+                    if (mapped) {
+                        Address translated = translate(all, parent, local, size);
+                        if (translated != null) {
+                            cpu = translated.value();
+                            evidence = "Mapped partition offset translated through explicit "
+                                    + "Devicetree ranges to CPU address; nested in Flash.";
+                        } else evidence = "zephyr,mapped-partition offset only; missing/incomplete "
+                                    + "NVM or parent ranges mapping prevents a proven CPU address.";
+                    } else {
+                        // Classic fixed-partitions are offsets within the
+                        // containing flash, not standalone CPU address nodes.
+                        String flash = parent(parent);
+                        var base = result.stream()
+                                .filter(r -> r.path().equals(flash)
+                                        && r.kind() == Kind.FLASH && r.cpuMapped())
+                                .findFirst().orElse(null);
+                        if (base != null && local.add(size).compareTo(base.size()) <= 0) {
+                            cpu = base.cpuAddress().add(local);
+                            evidence = "CPU location derived from the single containing "
+                                    + "CPU-mapped flash block plus fixed-partition offset.";
+                        } else evidence = "Fixed partition is a flash-relative offset; "
+                                    + "its containing flash has no proven single CPU range.";
+                    }
                 } else {
                     Address translated = translate(all, parent, local, size);
                     if (translated != null) {
@@ -248,6 +265,7 @@ public final class DevicetreeMemoryMap {
     }
 
     private static boolean isPartition(Node node, Map<String, Node> all) {
+        if (node.device().compatible().contains("zephyr,mapped-partition")) return true;
         var p = all.get(parent(node.path()));
         return p != null && p.property("compatible") != null
                 && p.property("compatible").contains("\"fixed-partitions\"")
