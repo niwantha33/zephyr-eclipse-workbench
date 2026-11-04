@@ -213,8 +213,17 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                                 "--python", settings.getProperty("python"),
                                 "--git", settings.getProperty("tools.git")));
                         stream.println("Comparing candidate source SHAs to the application's saved lock...");
-                        runner.run(compare, runIn, Duration.ofMinutes(3), monitor::isCanceled,
-                                stream::println, ProjectContext.environment(settings)).requireSuccess();
+                        try {
+                            runner.run(compare, runIn, Duration.ofMinutes(3), monitor::isCanceled,
+                                    stream::println, ProjectContext.environment(settings)).requireSuccess();
+                        } catch (java.io.InterruptedIOException cancelled) {
+                            return Status.CANCEL_STATUS;
+                        } catch (java.io.IOException comparisonError) {
+                            // A valid source installation must not be marked failed
+                            // because an optional application's lock is unavailable.
+                            stream.println("Source checkout was prepared and verified; "
+                                    + "optional project comparison failed: " + comparisonError.getMessage());
+                        }
                     } else {
                         stream.println("Project comparison unavailable: no .zew/project-lock.json yet.");
                     }
