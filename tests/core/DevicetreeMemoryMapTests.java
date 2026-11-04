@@ -136,7 +136,9 @@ public final class DevicetreeMemoryMapTests {
                     id-bus {
                         #address-cells = <1>;
                         #size-cells = <0>;
-                        child@2 { reg = <0x2>; };
+                        child@2 {
+                            reg = <0x2>;
+                        };
                     };
                 };
                 """;

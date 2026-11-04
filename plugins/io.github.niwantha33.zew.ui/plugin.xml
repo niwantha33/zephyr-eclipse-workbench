@@ -126,6 +126,10 @@
     <view id="io.github.niwantha33.zew.ui.socRegisters" name="Zephyr Hardware Register Explorer"
           category="org.eclipse.debug.ui"
           class="io.github.niwantha33.zew.ui.SocRegistersView" restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.socMemoryMap"
+          name="Zephyr SoC Memory Map"
+          class="io.github.niwantha33.zew.ui.SocMemoryMapView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.configurationStudio"
           name="Zephyr Configuration Studio"
           class="io.github.niwantha33.zew.ui.ConfigurationStudioView"
