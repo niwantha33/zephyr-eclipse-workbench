@@ -38,6 +38,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationStudioTests'], chec
 subprocess.run([tool('java'), '-cp', str(out), 'GuidedOverlaySaveTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DevicetreeSourceTraceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'BeginnerHardwareGuideTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'DevicetreeMemoryMapTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'TargetOperationsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'EspressifFlashSafetyTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DebugServerDiagnosticsTests'], check=True, cwd=root, timeout=90)
