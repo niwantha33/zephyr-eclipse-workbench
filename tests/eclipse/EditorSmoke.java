@@ -107,7 +107,7 @@ public final class EditorSmoke implements IApplication {
         try {
             snapshotField.set(view, data);
             source.setText(dts);
-            var domains = (org.eclipse.swt.custom.CTabFolder) studioField(view, type, "peripheralTabs");
+            var domains = (org.eclipse.swt.widgets.List) studioField(view, type, "peripheralCategories");
             domains.setSelection(1);
             domains.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             search.setText("CONFIG_GPIO");
@@ -130,11 +130,10 @@ public final class EditorSmoke implements IApplication {
             hardware.setSelection(hardware.getItem(0).getItem(0).getItem(0));
             reveal.invoke(view);
             check(source.getSelectionText().contains("adc@4000 {"), "Reveal in source selects the exact generated DTS node line");
-            var adcPage = (org.eclipse.swt.widgets.Composite) domains.getItem(1).getControl();
-            var parametersAction = java.util.Arrays.stream(adcPage.getChildren())
-                    .filter(control -> control instanceof org.eclipse.swt.widgets.Button)
-                    .map(control -> (org.eclipse.swt.widgets.Button) control)
-                    .filter(button -> button.getText().startsWith("Parameters & pins")).findFirst().orElseThrow();
+            domains.select(1);
+            domains.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+            var parametersAction = (org.eclipse.swt.widgets.Button)
+                    studioField(view, type, "peripheralParameters");
             parametersAction.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
             var parameterTable = (org.eclipse.swt.widgets.Table) studioField(view, type, "hardwareParameters");
             var gain = java.util.Arrays.stream(parameterTable.getItems())
@@ -739,14 +738,13 @@ public final class EditorSmoke implements IApplication {
                     check(hw.getColumnCount() == 3
                             && "Device / hierarchy".equals(hw.getColumn(0).getText()),
                             "installed Hardware workspace has a compiled-Devicetree device inventory");
-                    var peripheralField = cls.getDeclaredField("peripheralTabs");
+                    var peripheralField = cls.getDeclaredField("peripheralCategories");
                     peripheralField.setAccessible(true);
-                    var peripheralTabs = (org.eclipse.swt.custom.CTabFolder) peripheralField.get(view);
-                    var names = java.util.Arrays.stream(peripheralTabs.getItems())
-                            .map(org.eclipse.swt.custom.CTabItem::getText).toList();
+                    var peripheralCategories = (org.eclipse.swt.widgets.List) peripheralField.get(view);
+                    var names = java.util.Arrays.asList(peripheralCategories.getItems());
                     check(names.containsAll(java.util.List.of(
                             "ADC", "GPIO", "I²C", "SPI", "UART", "CAN", "Debug", "RTOS", "Network", "More")),
-                            "native peripheral-specific navigation tabs are present");
+                            "native vertical peripheral categories are present");
                     var editorField = cls.getDeclaredField("inlineToggleEditor");
                     editorField.setAccessible(true);
                     var inlineEditor = (org.eclipse.swt.custom.TableEditor) editorField.get(view);
@@ -763,12 +761,15 @@ public final class EditorSmoke implements IApplication {
                     var listField = cls.getDeclaredField("options");
                     listField.setAccessible(true);
                     var featureTable = (org.eclipse.swt.widgets.Table) listField.get(view);
-                    check(featureTable.getColumnCount() == 4
+                    check(featureTable.getColumnCount() == 5
                             && featureTable.getMenu() != null
                             && featureTable.getItemCount() > 0,
                             "native configuration feature table supports a context menu");
-                    check(featureTable.getColumn(1).getText().contains("Enable / Disable"),
-                            "Enable and Disable appear in the SAME table value column");
+                    check(featureTable.getColumn(0).getText().equals("Kconfig symbol")
+                            && featureTable.getItem(0).getText(0).startsWith("CONFIG_")
+                            && featureTable.getColumn(1).getText().equals("Feature")
+                            && featureTable.getColumn(2).getText().contains("Enable / Disable"),
+                            "symbol comes first, followed by feature and editable value");
                     var overridesField = cls.getDeclaredField("changesMetric");
                     overridesField.setAccessible(true);
                     var overridesCount = (org.eclipse.swt.widgets.Label) overridesField.get(view);
