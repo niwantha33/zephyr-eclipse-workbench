@@ -56,6 +56,18 @@ jobs:
           mvn --batch-mode --no-transfer-progress "-DforceContextQualifier=${zew_test_qualifier}" verify
       - name: Verify packaged site
         run: python3 scripts/verify_site.py
+      # Reproduce the release publisher's transferred-site layout, where
+      # releng/repository/target contains no Maven ZIP.
+      - name: Regression check site verification without Maven ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(releng/repository/target/workbench-repository-*.zip)
+          test "${#archives[@]}" -eq 1
+          mv "${archives[0]}" "$RUNNER_TEMP/qualified-workbench-site.zip"
+          trap 'mv "$RUNNER_TEMP/qualified-workbench-site.zip" "${archives[0]}"' EXIT
+          python3 scripts/verify_site.py --site releng/repository/target/repository
       - name: Compile and exercise installed native Eclipse UI before merge
         env:
           ZEW_SCREENSHOT_DIR: ${{ github.workspace }}/release-smoke-screenshots
