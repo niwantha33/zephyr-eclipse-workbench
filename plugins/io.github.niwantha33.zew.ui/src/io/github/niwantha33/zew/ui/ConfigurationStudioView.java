@@ -955,6 +955,8 @@ public final class ConfigurationStudioView extends ViewPart {
         actionsRow.marginHeight = 2;
         hardwareActions.setLayout(actionsRow);
         actionsScroll.setContent(hardwareActions);
+        action(hardwareActions, "Draw SoC memory map", this::openSocMemoryMap)
+                .setToolTipText("Draw RAM, flash, partitions and peripheral reg ranges from the exact generated DTS.");
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
@@ -1049,6 +1051,7 @@ public final class ConfigurationStudioView extends ViewPart {
         more.setLayout(new GridLayout(2, false));
         action(more, "Why DTS, overlays and Kconfig?", this::toggleBeginnerGlossary)
                 .setToolTipText("A plain-English explanation of the Zephyr configuration files.");
+        action(more, "Draw SoC memory map", this::openSocMemoryMap);
         action(more, "Show build evidence", () -> {
             if (beginnerEvidence != null && !beginnerEvidence.isDisposed())
                 MessageDialog.openInformation(getSite().getShell(), "Evidence from this board",
@@ -2827,6 +2830,24 @@ public final class ConfigurationStudioView extends ViewPart {
         if (hardwareParameters.getSelectionCount() == 0) return;
         var property = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
         revealHardwareLine(property.line(), property.path() + " · " + property.name());
+    }
+
+    private void openSocMemoryMap() {
+        if (project == null || !project.isAccessible()) {
+            MessageDialog.openInformation(getSite().getShell(), "SoC Memory Map",
+                    "Select a Zephyr application project first. Build the board to obtain real reg ranges.");
+            return;
+        }
+        try {
+            var part = getSite().getPage().showView(SocMemoryMapView.ID);
+            if (part instanceof SocMemoryMapView map)
+                map.displayProject(project,
+                        snapshot == null ? "" : snapshot.devicetree(),
+                        inspectionBuild, buildOutdated);
+        } catch (org.eclipse.ui.PartInitException error) {
+            MessageDialog.openError(getSite().getShell(), "SoC memory map unavailable",
+                    error.getMessage());
+        }
     }
 
     private void revealHardwareSource() {

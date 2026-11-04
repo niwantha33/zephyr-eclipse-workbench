@@ -776,6 +776,76 @@ public final class EditorSmoke implements IApplication {
                             "live project override summary is populated");
                     verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw, fixture);
                     captureNativeStudioScreenshot();
+                    // The map is a real registered Eclipse ViewPart, not a
+                    // screenshot of a mock. Verify its decoded address rows
+                    // and canvas on the installed packaged feature.
+                    var mapPart = windows[0].getActivePage().showView(
+                            "io.github.niwantha33.zew.ui.socMemoryMap");
+                    var mapClass = mapPart.getClass();
+                    String memoryDts = """
+                            /dts-v1/;
+                            / {
+                                #address-cells = <1>;
+                                #size-cells = <1>;
+                                memory@20000000 {
+                                    compatible = "mmio-sram";
+                                    reg = <0x20000000 0x8000>;
+                                };
+                                soc {
+                                    #address-cells = <1>;
+                                    #size-cells = <1>;
+                                    ranges;
+                                    flash@0 {
+                                        compatible = "soc-nv-flash";
+                                        reg = <0x0 0x20000>;
+                                    };
+                                    uart@40000000 {
+                                        compatible = "ti,mspm0-uart";
+                                        reg = <0x40000000 0x1000>;
+                                        status = "disabled";
+                                    };
+                                };
+                            };
+                            """;
+                    mapClass.getMethod("displayProject", IProject.class,
+                            String.class, java.nio.file.Path.class, boolean.class)
+                            .invoke(mapPart, project, memoryDts, fixture.resolve(".zew-build/first"), false);
+                    var mapped = (org.eclipse.swt.widgets.Table)
+                            studioField(mapPart, mapClass, "regions");
+                    var visual = (org.eclipse.swt.widgets.Canvas)
+                            studioField(mapPart, mapClass, "diagram");
+                    var mapDetails = (org.eclipse.swt.widgets.Text)
+                            studioField(mapPart, mapClass, "detail");
+                    var mapSummary = (org.eclipse.swt.widgets.Label)
+                            studioField(mapPart, mapClass, "summary");
+                    check(mapped.getItemCount() == 3
+                            && visual.getSize().x >= 900
+                            && visual.getSize().y >= 150
+                            && !mapDetails.getEditable()
+                            && mapSummary.getText().contains("3 address region"),
+                            "installed SoC Memory Map renders real RAM/Flash/MMIO data, not decorative UI");
+                    check(java.util.Arrays.stream(mapped.getItems()).anyMatch(item ->
+                            item.getText(0).equals("RAM") && item.getText(1).equals("0x20000000")
+                                    && item.getText(2).equals("32 KiB"))
+                            && java.util.Arrays.stream(mapped.getItems()).anyMatch(item ->
+                            item.getText(0).equals("FLASH") && item.getText(1).equals("0x00000000")
+                                    && item.getText(2).equals("128 KiB"))
+                            && java.util.Arrays.stream(mapped.getItems()).anyMatch(item ->
+                            item.getText(0).equals("PERIPHERAL")
+                                    && item.getText(1).equals("0x40000000")),
+                            "all hex bases/sizes are backed by actual generated reg/ranges values");
+                    var mapFilter = (org.eclipse.swt.widgets.Combo)
+                            studioField(mapPart, mapClass, "filter");
+                    mapFilter.select(mapFilter.indexOf("RAM"));
+                    mapFilter.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    check(mapped.getItemCount() == 1
+                            && mapped.getItem(0).getText(0).equals("RAM")
+                            && mapDetails.getText().contains("End (exclusive)") == false
+                            && mapDetails.getText().contains("0x20008000"),
+                            "RAM filter retains precise end-exclusive and selected-row evidence");
+                    captureNativeStudioScreenshot("soc-memory-map-native.png");
+                    windows[0].getActivePage().activate(view);
                 } catch (Throwable error) { studioFailure.set(error); }
             });
             if (studioFailure.get() != null)
