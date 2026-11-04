@@ -430,7 +430,7 @@ public final class EditorSmoke implements IApplication {
             check(hardwareSearch.getText().isEmpty() && hardware.getItemCount() > 0,
                     "native search clear icon restores the filtered hardware hierarchy");
             var studioTabs = (org.eclipse.swt.widgets.TabFolder) studioField(view, type, "tabs");
-            studioTabs.setSelection(1);
+            studioTabs.setSelection(2);
             dock.setSelection(1);
             captureNativeStudioScreenshot("visual-hardware-studio-built-fixture.png");
 
@@ -466,7 +466,7 @@ public final class EditorSmoke implements IApplication {
                 check(sourceContent.getText().contains("fixture,controller")
                         && !sourceContent.getEditable(),
                         "installed native source browser reveals exact read-only SoC DTSI content");
-                studioTabs.setSelection(1);
+                studioTabs.setSelection(2);
                 dock.setSelection(6);
                 dock.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
                 // Process the same pending SWT resize/paint cycle as a user
@@ -689,14 +689,14 @@ public final class EditorSmoke implements IApplication {
                     tabsField.setAccessible(true);
                     var studioTabs = (org.eclipse.swt.widgets.TabFolder) tabsField.get(view);
                     check(studioTabs.getItemCount() == 4
-                            && "Features".equals(studioTabs.getItem(0).getText())
-                            && "Hardware".equals(studioTabs.getItem(1).getText())
-                            && "Insights".equals(studioTabs.getItem(2).getText())
-                            && "Start here".equals(studioTabs.getItem(3).getText())
-                            && studioTabs.getSelectionIndex() == 3,
+                            && "Start Here".equals(studioTabs.getItem(0).getText())
+                            && "Software · Kconfig".equals(studioTabs.getItem(1).getText())
+                            && "Hardware · Devicetree".equals(studioTabs.getItem(2).getText())
+                            && "Evidence & Diagnostics".equals(studioTabs.getItem(3).getText())
+                            && studioTabs.getSelectionIndex() == 0,
                             "native Configuration Studio opens task-first Start here by default");
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
-                            studioTabs.getItem(3).getControl();
+                            studioTabs.getItem(0).getControl();
                     var simpleGoals = (org.eclipse.swt.widgets.Composite) beginnerPage.getChildren()[2];
                     var goals = java.util.Arrays.stream(simpleGoals.getChildren())
                             .filter(c -> c instanceof org.eclipse.swt.widgets.Button)
@@ -729,9 +729,9 @@ public final class EditorSmoke implements IApplication {
                             .filter(b -> b.getText().equals("1. Find my hardware"))
                             .findFirst().orElseThrow();
                     findHardware.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
-                    check(studioTabs.getSelectionIndex() == 1 && expertMetrics.getVisible(),
+                    check(studioTabs.getSelectionIndex() == 2 && expertMetrics.getVisible(),
                             "beginner hardware step opens real hardware navigator and restores advanced chrome");
-                    studioTabs.setSelection(3);
+                    studioTabs.setSelection(0);
                     studioTabs.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
                     var hardwareField = cls.getDeclaredField("hardwareDevices");
                     hardwareField.setAccessible(true);
