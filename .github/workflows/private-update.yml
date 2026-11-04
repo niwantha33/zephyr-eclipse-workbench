@@ -109,6 +109,18 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress "-DforceContextQualifier=${ZEW_RELEASE_QUALIFIER}" clean verify
       - name: Verify packaged p2 site before publication
         run: python3 scripts/verify_site.py
+      # The publisher receives only the extracted p2 repository, never the
+      # Maven-created ZIP. Prove --site works when that ZIP is absent.
+      - name: Regression check extracted site with Maven ZIP removed
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(releng/repository/target/workbench-repository-*.zip)
+          test "${#archives[@]}" -eq 1
+          mv "${archives[0]}" "$RUNNER_TEMP/qualified-workbench-site.zip"
+          trap 'mv "$RUNNER_TEMP/qualified-workbench-site.zip" "${archives[0]}"' EXIT
+          python3 scripts/verify_site.py --site releng/repository/target/repository
       - name: Exercise native Eclipse import, export and CDT configuration selection
         run: |
           set -euo pipefail

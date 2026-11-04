@@ -15,9 +15,15 @@ parser.add_argument('--site', type=Path)
 parser.add_argument('--archive', type=Path)
 args = parser.parse_args()
 version = ET.parse(root / 'pom.xml').getroot().find('{http://maven.apache.org/POM/4.0.0}version').text
-archive = args.archive or root / 'releng/repository/target' / f'workbench-repository-{version}.zip'
+# An extracted site transferred between CI jobs has no Maven build ZIP.
+# Explicit --archive still enables archive verification, even with --site.
+archive = (args.archive if args.archive is not None else
+           None if args.site is not None else
+           root / 'releng/repository/target' / f'workbench-repository-{version}.zip')
 temporary = tempfile.TemporaryDirectory(prefix='zew-verify-site-')
 site = args.site or Path(temporary.name)
+if not site.is_dir() or site.is_symlink():
+    raise SystemExit('p2 site must be a regular directory, not a symlink.')
 if args.site is None:
     # Verify the distributable itself, avoiding stale exploded build output.
     with zipfile.ZipFile(archive) as z:
@@ -190,11 +196,18 @@ with zipfile.ZipFile(features[0]) as z:
         raise SystemExit('Feature does not reference the two original bundles.')
     if z.read('LICENSE').strip() != (root / 'LICENSE').read_bytes().strip():
         raise SystemExit('Feature licence missing or incorrect.')
-with zipfile.ZipFile(archive) as z:
-    if z.testzip() is not None or 'p2.index' not in z.namelist():
-        raise SystemExit('Invalid update-site ZIP.')
+if not (site / 'p2.index').is_file() or (site / 'p2.index').is_symlink():
+    raise SystemExit('Missing or unsafe p2.index in update site.')
+if archive is not None:
+    if not archive.is_file() or archive.is_symlink():
+        raise SystemExit('Required update-site ZIP is missing or unsafe: ' + str(archive))
+    with zipfile.ZipFile(archive) as z:
+        if z.testzip() is not None or 'p2.index' not in z.namelist():
+            raise SystemExit('Invalid update-site ZIP.')
+    print('Update-site SHA-256:', hashlib.sha256(archive.read_bytes()).hexdigest())
+else:
+    print('Verified extracted p2 site without a Maven archive.')
 print('Verified p2 metadata and feature.')
-print('Update-site SHA-256:', hashlib.sha256(archive.read_bytes()).hexdigest())
 print('This checks packaging; it does not establish desktop installation or hardware support.')
 
 
