@@ -44,7 +44,7 @@ The backend tools/release_sources.py offers:
 - install --allow-network — stage in a fresh folder, invoke official
   West init with the selected tag and West update. Verify Git tag commit,
   Zephyr VERSION and all modules through official West manifest --freeze.
-  Store .zew/source-lock.json and .zew/source-frozen.yml.
+  Store .zew/source-lock.json and .zew/source-frozen.yml. Read each checkout's\n  SDK_VERSION as a recommendation without claiming a compatible SDK is installed.
 - compare — check source evidence and report Zephyr/module SHA changes
   against the original application's project lock. No build is implied.
 
