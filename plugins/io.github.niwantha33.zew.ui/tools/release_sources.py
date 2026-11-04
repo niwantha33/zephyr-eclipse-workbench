@@ -78,6 +78,17 @@ def run(argv, cwd, seconds=1800, capture=False):
                            + " (" + detail[:500] + ")") from exc
 
 
+def sdk_recommendation(zephyr):
+    """Read the official exact checkout's recommendation; do not infer from a tag."""
+    file = zephyr / "SDK_VERSION"
+    if not file.is_file() or file.is_symlink():
+        return None
+    version = file.read_text(encoding="utf-8").strip()
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        raise VersionError("Invalid SDK_VERSION in candidate Zephyr checkout")
+    return version
+
+
 def capture_sources(workspace, python, git, release):
     frozen, modules, origin = get_manifest(workspace, python, git)
     if origin != "west-freeze" or any(not module["installed_at_snapshot"] for module in modules):
@@ -100,6 +111,7 @@ def capture_sources(workspace, python, git, release):
         "release": release,
         "zephyr_commit": head,
         "origin": OFFICIAL_SOURCE,
+        "recommended_sdk_version": sdk_recommendation(workspace / "zephyr"),
         "west_manifest_sha256": hashlib.sha256(encoded).hexdigest(),
         "modules": modules,
         "module_count": len(modules),
@@ -107,6 +119,7 @@ def capture_sources(workspace, python, git, release):
         "sdk_installed": False,
         "firmware_built": False,
         "limitations": [
+            "SDK_VERSION from source is a recommendation, not proof of an installed compatible toolchain.",
             "This is not a ready Workbench setup; it has no .zew-ready marker.",
             "No SDK/toolchain or Python dependency compatibility has been established.",
             "Git tag availability and transport do not guarantee a five-year offline archive.",
@@ -148,7 +161,9 @@ def install(release, destination, current, python, git, allow_network, original_
         stage.rename(destination)
         return {"status": "source-prepared", "destination": str(destination),
                 "release": release, "zephyr_commit": record["zephyr_commit"],
-                "modules": record["module_count"], "build_ready": False,
+                "modules": record["module_count"],
+                "recommended_sdk_version": record["recommended_sdk_version"],
+                "build_ready": False,
                 "next": "SDK compatibility and isolated trial builds are separate milestones."}
     except Exception:
         print("Candidate incomplete; original workspace unchanged. "
