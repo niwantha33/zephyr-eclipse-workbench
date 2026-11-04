@@ -21,7 +21,7 @@ public final class GitHubSvdProvisioner {
     private GitHubSvdProvisioner() {}
     private static final int MAX_SVD_SIZE = 32 * 1024 * 1024;
     // Pin a known Espressif release rather than mutable main.
-    private static final String REF = "be20aa1";
+    private static final String REF = "be20aa12560889d6125d144cdb48cf615ac17628";
     private static final Map<String, String> FILES = Map.ofEntries(
             Map.entry("esp32", "esp32.svd"),
             Map.entry("esp32s2", "esp32s2.svd"),
@@ -31,10 +31,35 @@ public final class GitHubSvdProvisioner {
             Map.entry("esp32c6", "esp32c6.svd"),
             Map.entry("esp32h2", "esp32h2.svd"),
             Map.entry("esp32p4", "esp32p4.svd"));
+    // Reviewed SHA-256 values of exact upstream Git blob bytes at REF.
+    // Source: https://github.com/espressif/svd/tree/be20aa12560889d6125d144cdb48cf615ac17628/svd
+    // A matching XML <name> alone is NOT trusted provenance.
+    private static final Map<String, String> SHA256 = Map.ofEntries(
+            Map.entry("esp32", "f80fb973c19896eb904c00efcead9242f0027deb0a297b7b427d6982172dfcac"),
+            Map.entry("esp32s2", "082b2ee12c2bf955ee330eb51a72b525962ea90d2174d0fa01d02d1cdd83a546"),
+            Map.entry("esp32s3", "d7629249eba2ad660a960530d124966e9274c8228341380dd4102f251e879e17"),
+            Map.entry("esp32c2", "966777659ac55db6ce5aff5b27198228ece570128fb3e5a8f4e0c56707f7c623"),
+            Map.entry("esp32c3", "9ef33dbff56d807996fd8edfa4aa4ad008b5a861c241d36280caa0dedbbca41a"),
+            Map.entry("esp32c6", "519b374c472483b170d6e5b479e48c07675c18af5bf2613c61eff888dc0fc8cd"),
+            Map.entry("esp32h2", "78b63a839a7968e178a61495a024857cb93f12c8b80c74fd70470c3e8671080a"),
+            Map.entry("esp32p4", "ef13fce373f783e17f64440c5ef945167c8fb40ea6ae4cc751d027993f5092da"));
+
+    public static boolean trusted(byte[] bytes, String part) throws Exception {
+        String expected = SHA256.get(part);
+        if (expected == null || bytes.length == 0 || bytes.length > MAX_SVD_SIZE) return false;
+        return MessageDigest.isEqual(MessageDigest.getInstance("SHA-256").digest(bytes),
+                HexFormat.of().parseHex(expected));
+    }
+
+    public static String pinnedSha256(String part) {
+        return SHA256.get(part);
+    }
+
     public record Downloaded(Path file, String sha256, String source) {}
 
     public static boolean supports(String board) {
-        return FILES.containsKey(SvdAutoDiscovery.partFromBoard(board));
+        String part = SvdAutoDiscovery.partFromBoard(board);
+        return FILES.containsKey(part) && SHA256.containsKey(part);
     }
     public static Downloaded download(String board, Path root) throws Exception {
         String part = SvdAutoDiscovery.partFromBoard(board);
@@ -45,9 +70,11 @@ public final class GitHubSvdProvisioner {
         Path destination = root.resolve(name);
         String source = "https://raw.githubusercontent.com/espressif/svd/" + REF + "/svd/" + name;
         if (Files.isRegularFile(destination) && !Files.isSymbolicLink(destination)
-                && Files.size(destination) <= MAX_SVD_SIZE
-                && exact(Files.readAllBytes(destination), part)) {
-            return new Downloaded(destination, hash(Files.readAllBytes(destination)), source);
+                && Files.size(destination) <= MAX_SVD_SIZE) {
+            byte[] cached = Files.readAllBytes(destination);
+            if (trusted(cached, part) && exact(cached, part))
+                return new Downloaded(destination, hash(cached), source);
+            // Forged or stale cache is never accepted, even if the XML part name matches.
         }
         Path temp = Files.createTempFile(root, "esp-svd-", ".tmp");
         try {
@@ -65,6 +92,8 @@ public final class GitHubSvdProvisioner {
                 content = in.readNBytes(MAX_SVD_SIZE + 1);
                 if (content.length > MAX_SVD_SIZE) throw new IOException("SVD exceeds size limit");
             }
+            if (!trusted(content, part))
+                throw new IOException("Downloaded official SVD has an unexpected SHA-256 for " + part);
             if (!exact(content, part))
                 throw new IOException("Downloaded SVD does not identify the exact SoC " + part);
             Files.write(temp, content);
