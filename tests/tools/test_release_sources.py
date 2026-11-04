@@ -47,8 +47,20 @@ class ReleaseSourceTests(unittest.TestCase):
             "kind": "zephyr-source-only",
             "status": "SOURCE_VERIFIED_ONLY",
             "sdk_installed": False,
+            "recommended_sdk_version": "1.0.1",
             "firmware_built": False
         }
+
+    def test_sdk_recommendation_is_read_from_exact_checkout(self):
+        zephyr = self.parent / "zephyr"
+        zephyr.mkdir()
+        (zephyr / "SDK_VERSION").write_bytes(b"1.0.1\n")
+        self.assertEqual("1.0.1", sources.sdk_recommendation(zephyr))
+        (zephyr / "SDK_VERSION").write_bytes(b"not-a-version")
+        with self.assertRaisesRegex(sources.VersionError, "Invalid SDK_VERSION"):
+            sources.sdk_recommendation(zephyr)
+        (zephyr / "SDK_VERSION").unlink()
+        self.assertIsNone(sources.sdk_recommendation(zephyr))
 
     def test_only_explicit_stable_release_is_accepted(self):
         self.assertEqual("4.5.0", sources.check_release("v4.5.0"))
