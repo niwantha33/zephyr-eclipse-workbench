@@ -85,6 +85,7 @@ import io.github.niwantha33.zew.core.ConfigurationStudioFiles.Snapshot;
  */
 public final class ConfigurationStudioView extends ViewPart {
     public static final String ID = Activator.ID + ".configurationStudio";
+    private static final int START_TAB = 0, SOFTWARE_TAB = 1, HARDWARE_TAB = 2, EVIDENCE_TAB = 3;
     private IProject project;
     private Snapshot snapshot;
     private Text search, help, tree, analysis, codeExample;
@@ -237,7 +238,8 @@ public final class ConfigurationStudioView extends ViewPart {
 
         tabs = new TabFolder(outer, SWT.NONE);
         tabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        Composite software = tab(tabs, "Features");
+        Composite beginner = tab(tabs, "Start Here");
+        Composite software = tab(tabs, "Software · Kconfig");
         software.setLayout(new GridLayout(1, false));
 
         // Real SWT peripheral tabs, independent of the source-editing view.
@@ -434,7 +436,7 @@ public final class ConfigurationStudioView extends ViewPart {
         // Native Visual Hardware Studio 2.0: three interactive panes, with a
         // separate evidence/overlay dock. No generated or user files are edited
         // by navigating this view.
-        Composite hardware = tab(tabs, "Hardware");
+        Composite hardware = tab(tabs, "Hardware · Devicetree");
         hardware.setLayout(new GridLayout(1, false));
         Label warning = new Label(hardware, SWT.WRAP);
         warning.setText("VISUAL HARDWARE STUDIO 2.0  /  Last generated build  ·  "
@@ -794,7 +796,7 @@ public final class ConfigurationStudioView extends ViewPart {
             hardwareSearch.setText("");
             hardwareState.select(0);
             refreshHardware();
-            tabs.setSelection(1);
+            tabs.setSelection(HARDWARE_TAB);
             var nav = (org.eclipse.swt.widgets.TabFolder) hardwarePeripheralTree.getParent().getParent();
             nav.setSelection(0);
         }).setToolTipText("Navigate only real controller nodes from this exact generated DTS.");
@@ -979,7 +981,7 @@ public final class ConfigurationStudioView extends ViewPart {
         addGpioButton.setToolTipText("Select an unreferenced logical index. Creates a reviewed source request, not an availability or live-state claim.");
         hardwareActions.setSize(hardwareActions.computeSize(SWT.DEFAULT, SWT.DEFAULT));
 
-        Composite reports = tab(tabs, "Insights");
+        Composite reports = tab(tabs, "Evidence & Diagnostics");
         reports.setLayout(new GridLayout(1, false));
         var evidenceActions = new Composite(reports, SWT.NONE);
         evidenceActions.setLayout(new GridLayout(3, false));
@@ -999,7 +1001,6 @@ public final class ConfigurationStudioView extends ViewPart {
         // A task-first landing page; the underlying evidence, driver, DTS,
         // Kconfig and overlay checks still live in the existing advanced views.
         // The first click is an intent ("read a voltage"), not a CONFIG_ symbol.
-        Composite beginner = tab(tabs, "Start here");
         beginner.setLayout(new GridLayout(1, false));
         Label beginnerTitle = new Label(beginner, SWT.NONE);
         beginnerTitle.setFont(headingFont);
@@ -1035,7 +1036,7 @@ public final class ConfigurationStudioView extends ViewPart {
         action(simpleActions, "3. Build & check", this::build)
                 .setToolTipText("Run the real Zephyr build to check configuration requests.");
         action(simpleActions, "Advanced settings", () -> {
-            tabs.setSelection(0);
+            tabs.setSelection(SOFTWARE_TAB);
             updateBeginnerChrome();
         });
         for (Control item : simpleActions.getChildren())
@@ -1088,7 +1089,7 @@ public final class ConfigurationStudioView extends ViewPart {
         reload();
         // For an ordinary Configuration Studio launch, start with the user's
         // desired task. Explicit Hardware / Features navigation still wins.
-        tabs.setSelection(3);
+        tabs.setSelection(START_TAB);
         updateBeginnerChrome();
     }
 
@@ -1203,7 +1204,7 @@ public final class ConfigurationStudioView extends ViewPart {
         setPartName("Configuration — " + selected.getName());
         if (options != null && !options.isDisposed()) {
             reload();
-            tabs.setSelection(hardware ? 1 : 3);
+            tabs.setSelection(hardware ? HARDWARE_TAB : START_TAB);
             updateBeginnerChrome();
         }
     }
@@ -1213,7 +1214,7 @@ public final class ConfigurationStudioView extends ViewPart {
         if (category == null || category.isDisposed()) return;
         selectDomain(ConfigurationStudioDomains.OVERVIEW);
         category.select(1);
-        tabs.setSelection(0);
+        tabs.setSelection(SOFTWARE_TAB);
         refreshOptions();
     }
 
@@ -1231,7 +1232,7 @@ public final class ConfigurationStudioView extends ViewPart {
         Path build = inspectionBuild;
         Path app = selectedProject.getLocation().toFile().toPath();
         String selectedNode = null;
-        if (tabs.getSelectionIndex() == 1 && hardwareDevices.getSelectionCount() > 0) {
+        if (tabs.getSelectionIndex() == HARDWARE_TAB && hardwareDevices.getSelectionCount() > 0) {
             var selected = (DevicetreeHardware.Device) hardwareDevices.getSelection()[0].getData();
             selectedNode = selected.path();
         }
@@ -1253,7 +1254,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (analysis.isDisposed() || generation != diagnosisGeneration.get() || project != selectedProject
                             || !java.util.Objects.equals(inspectionBuild, build)) return;
                     analysis.setText(report);
-                    tabs.setSelection(2);
+                    tabs.setSelection(EVIDENCE_TAB);
                     status.setText("Read-only diagnosis complete. Findings are scoped to the selected build.");
                 });
                 return Status.OK_STATUS;
@@ -1341,7 +1342,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (!java.util.Objects.equals(propertyName, selectedProperty)) return;
                     hardwareValidation.setText(report);
                     analysis.setText(report);
-                    if (tabs.getSelectionIndex() == 1) selectHardwareDetails(1);
+                    if (tabs.getSelectionIndex() == HARDWARE_TAB) selectHardwareDetails(1);
                     status.setText("Selected-build peripheral observations shown in Hardware and Insights. "
                             + "No GPIO pin or driver causality was inferred.");
                 });
@@ -1807,7 +1808,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (!java.util.Objects.equals(propertyName, currentProperty)) return;
                     hardwareValidation.setText(report);
                     analysis.setText(report);
-                    if (tabs.getSelectionIndex() == 1) selectHardwareDetails(1);
+                    if (tabs.getSelectionIndex() == HARDWARE_TAB) selectHardwareDetails(1);
                     status.setText("Binding evidence shown in Hardware / Validation and Insights; "
                             + "physical signals and runtime remain unverified.");
                 });
@@ -1917,7 +1918,7 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (!java.util.Objects.equals(expectedProperty, currentProperty)) return;
                     hardwareValidation.setText(report);
                     analysis.setText(report);
-                    if (tabs.getSelectionIndex() == 1) selectHardwareDetails(1);
+                    if (tabs.getSelectionIndex() == HARDWARE_TAB) selectHardwareDetails(1);
                     status.setText("Real CMake configuration evidence available in Hardware / Validation "
                             + "and Insights; firmware and physical pins remain unverified.");
                 });
@@ -1930,7 +1931,7 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void showEvidence(String text) {
         analysis.setText(text);
-        tabs.setSelection(2);
+        tabs.setSelection(EVIDENCE_TAB);
         status.setText("Offline configuration evidence; no target operation was performed.");
     }
 
@@ -2154,7 +2155,7 @@ public final class ConfigurationStudioView extends ViewPart {
         int index = hardwareKind.indexOf(beginnerGoal.category());
         if (index >= 0) hardwareKind.select(index);
         refreshHardware();
-        tabs.setSelection(1);
+        tabs.setSelection(HARDWARE_TAB);
         updateBeginnerChrome();
         status.setText("Showing actual " + beginnerGoal.category()
                 + " node descriptions from the last selected build. "
@@ -2179,7 +2180,7 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void updateBeginnerChrome() {
         if (tabs == null || tabs.isDisposed()) return;
-        boolean advanced = tabs.getSelectionIndex() != 3;
+        boolean advanced = tabs.getSelectionIndex() != START_TAB;
         setExpertVisibility(expertToolbar, advanced);
         setExpertVisibility(expertMetrics, advanced);
         tabs.getParent().layout(true, true);
@@ -2193,11 +2194,11 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private void focusSearch() {
-        if (tabs.getSelectionIndex() >= 2) {
-            tabs.setSelection(0);
+        if (tabs.getSelectionIndex() == START_TAB || tabs.getSelectionIndex() == EVIDENCE_TAB) {
+            tabs.setSelection(SOFTWARE_TAB);
             updateBeginnerChrome();
         }
-        Text target = tabs.getSelectionIndex() == 1 ? hardwareSearch : search;
+        Text target = tabs.getSelectionIndex() == HARDWARE_TAB ? hardwareSearch : search;
         target.setFocus();
         target.selectAll();
     }
@@ -2267,7 +2268,7 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private void openPeripheralParameters(Domain domain) {
-        tabs.setSelection(1);
+        tabs.setSelection(HARDWARE_TAB);
         selectHardwareDetails(0);
         hardwareState.select(0);
         String name = domain.id().toUpperCase(java.util.Locale.ROOT);
