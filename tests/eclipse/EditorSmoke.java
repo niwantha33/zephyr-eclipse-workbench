@@ -692,7 +692,7 @@ public final class EditorSmoke implements IApplication {
                             && "Start Here".equals(studioTabs.getItem(0).getText())
                             && "Software · Kconfig".equals(studioTabs.getItem(1).getText())
                             && "Hardware · Devicetree".equals(studioTabs.getItem(2).getText())
-                            && "Evidence & Diagnostics".equals(studioTabs.getItem(3).getText())
+                            && "Evidence && Diagnostics".equals(studioTabs.getItem(3).getText())
                             && studioTabs.getSelectionIndex() == 0,
                             "native Configuration Studio opens task-first Start here by default");
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
