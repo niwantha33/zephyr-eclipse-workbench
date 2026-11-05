@@ -127,7 +127,7 @@ public final class FocusedConfigurationModelTests {
                 && full.containsAll(java.util.List.of(
                         "ADC", "DAC", "GPIO", "UART", "I2C", "SPI", "I2S",
                         "PWM", "Timers", "DMA", "CAN", "USB", "RTC",
-                        "Watchdog", "Ethernet", "Pinctrl", "Other")),
+                        "Watchdog", "Ethernet", "Pinctrl", "Flash / Storage", "Other")),
                 "every categorized Zephyr peripheral has a task-focused workflow");
         for (String kind : full) {
             var plan = PeripheralWorkflow.forCategory(kind);
@@ -140,7 +140,8 @@ public final class FocusedConfigurationModelTests {
                     && plan.reviewHelp().length() > 40,
                     "no empty/decorative workflow for " + kind);
         }
-        check(PeripheralWorkflow.forCategory("I2C").connectionHelp().contains("pull-ups")
+        check(PeripheralWorkflow.forCategory("Flash / Storage").connectionHelp().contains("partition")
+                && PeripheralWorkflow.forCategory("I2C").connectionHelp().contains("pull-ups")
                 && PeripheralWorkflow.forCategory("SPI").connectionHelp().contains("chip-select")
                 && PeripheralWorkflow.forCategory("DMA").connectionHelp().contains("request")
                 && PeripheralWorkflow.forCategory("PWM").connectionHelp().contains("#pwm-cells")
@@ -150,7 +151,7 @@ public final class FocusedConfigurationModelTests {
             "gpio@100", "adc@200", "dac@300", "uart@400", "i2c@500", "spi@600",
             "i2s@700", "pwm@800", "timer@900", "dma@a00", "can@b00",
             "usb@c00", "rtc@d00", "watchdog@e00", "ethernet@f00",
-            "pinctrl@1000", "custom@1100"
+            "pinctrl@1000", "flash@1200", "custom@1100"
         };
         var allDts = new StringBuilder("/dts-v1/;\n/ {\n soc {\n");
         for (String node : nodeNames) allDts.append(node)
@@ -171,6 +172,21 @@ public final class FocusedConfigurationModelTests {
                 && extended.peripherals().stream().allMatch(
                         r -> r.state() != FocusedConfigurationModel.State.UNSUPPORTED),
                 "all hardware categories shown; DTS-only is never called configured/unsupported");
+        var serialFlash = new DevicetreeHardware.Device(
+                "/soc/spi@3000/serial-flash@0", "serial-flash@0", "",
+                "jedec,spi-nor", "okay", "<0>", 3);
+        var uart = new DevicetreeHardware.Device(
+                "/soc/serial@4000", "serial@4000", "", "ns16550", "okay", "", 4);
+        var spiBus = new DevicetreeHardware.Device(
+                "/soc/spi@3000", "spi@3000", "", "vendor,spi-controller", "okay", "", 5);
+        var ambiguousSerial = new DevicetreeHardware.Device(
+                "/soc/serial-flash@1", "serial-flash@1", "", "vendor,unknown", "", "", 6);
+        check(HardwarePeripheralIndex.category(serialFlash).equals("Flash / Storage")
+                && !HardwarePeripheralIndex.category(serialFlash).equals("UART")
+                && HardwarePeripheralIndex.category(uart).equals("UART")
+                && HardwarePeripheralIndex.category(spiBus).equals("SPI")
+                && HardwarePeripheralIndex.category(ambiguousSerial).equals("Other"),
+                "serial-flash is storage not UART; real serial controller and SPI bus retained");
         check(PeripheralWorkflow.overviewCategories(java.util.List.of()).equals(
                         FocusedConfigurationModel.COMMON)
                 && !PeripheralWorkflow.selectable(

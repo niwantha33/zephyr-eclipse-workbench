@@ -561,6 +561,10 @@ public final class EditorSmoke implements IApplication {
         var cls = view.getClass();
         cls.getMethod("displayProject", IProject.class).invoke(view, project);
         var tabs = (org.eclipse.swt.widgets.TabFolder) studioField(view, cls, "primary");
+        var initialInformation = (org.eclipse.swt.widgets.Label)
+                studioField(view, cls, "overviewInfo");
+        check(!initialInformation.getText().isBlank(),
+                "Configuration Studio opens with a useful explicit state, never a blank screen");
         check(tabs.getItemCount() == 3
                 && tabs.getItem(0).getText().equals("Overview")
                 && tabs.getItem(1).getText().equals("Hardware")
@@ -629,13 +633,14 @@ public final class EditorSmoke implements IApplication {
         var render = cls.getDeclaredMethod("render"); render.setAccessible(true);
         Object sample = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
                 "CI synthetic fixture", null, dts, config, new java.util.Properties(),
-                false, "CI FIXTURE: synthetic DTS; no physical hardware verified.", overview);
+                false, "CI FIXTURE: synthetic DTS; no physical hardware verified.", overview,
+                io.github.niwantha33.zew.core.DevicetreeHardware.inspect(dts));
         field.set(view, sample); render.invoke(view);
         settleNativeStudioLayout();
         var table = (org.eclipse.swt.widgets.Table) studioField(view, cls, "peripheralRows");
         var flash = (org.eclipse.swt.widgets.Label) studioField(view, cls, "capacityFlash");
         var ram = (org.eclipse.swt.widgets.Label) studioField(view, cls, "capacityRam");
-        check(table.getItemCount() == 6 && flash.getText().equals("128 KiB")
+        check(table.getItemCount() >= 7 && flash.getText().equals("128 KiB")
                 && ram.getText().equals("32 KiB")
                 && Arrays.stream(table.getItems()).anyMatch(t ->
                         t.getText(0).equals("ADC") && t.getText(1).startsWith("Configured"))
@@ -646,10 +651,14 @@ public final class EditorSmoke implements IApplication {
 
         tabs.setSelection(1);
         settleNativeStudioLayout();
-        var controller = (org.eclipse.swt.widgets.Combo) studioField(view, cls, "controllers");
+        var controller = (org.eclipse.swt.widgets.Table) studioField(view, cls, "hardwareNodes");
+        var searchBox = (org.eclipse.swt.widgets.Text) studioField(view, cls, "hardwareSearch");
         var texts = (org.eclipse.swt.widgets.Text[]) studioField(view, cls, "pageText");
-        check(controller.getItemCount() == 1 && controller.getText().contains("adc@4000"),
-                "guided ADC controller is the exact selected DTS node");
+        check(controller.getItemCount() == 1
+                && controller.getItem(0).getText(0).contains("adc@4000")
+                && controller.getSelectionCount() == 1,
+                "two-pane navigator selects the exact built ADC node");
+        awaitFocusedDetail(view, cls);
         var next = (org.eclipse.swt.widgets.Button) studioField(view, cls, "next");
         next.notifyListeners(org.eclipse.swt.SWT.Selection,
                 new org.eclipse.swt.widgets.Event());
@@ -664,10 +673,10 @@ public final class EditorSmoke implements IApplication {
         next.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
         settleNativeStudioLayout();
         var apply = (org.eclipse.swt.widgets.Button) studioField(view, cls, "validateApply");
-        check(texts[3].getText().contains("REVIEW PROPOSED CHANGES")
-                && texts[3].getText().contains("NONE proposed yet")
-                && apply.getEnabled(),
-                "review makes no unverified pin edit and offers guarded source validation");
+        check(texts[3].getText().contains("REVIEW — ADC")
+                && texts[3].getText().contains("No source change has been proposed")
+                && texts[3].getText().contains("No files will be written"),
+                "review never claims a diff or source write without a proposal");
         captureNativeStudioScreenshot("configuration-review-ci-fixture.png");
 
         // Cross-category navigation: real generated nodes for EVERY category
@@ -692,6 +701,11 @@ public final class EditorSmoke implements IApplication {
                     compatible = "test,spi";
                     status = "okay";
                     cs-gpios = <0x2 3 0>;
+                    serial-flash@0 {
+                        compatible = "jedec,spi-nor";
+                        reg = <0>;
+                        status = "okay";
+                    };
                 };
                 i2s@6500 {
                     compatible = "test,i2s";
@@ -749,15 +763,25 @@ public final class EditorSmoke implements IApplication {
         var allEvidence = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
                 "CI all-category fixture", null, extendedDts, config,
                 new java.util.Properties(), false,
-                "CI FIXTURE: synthetic test nodes, not actual peripheral hardware.", allOverview);
+                "CI FIXTURE: synthetic test nodes, not actual peripheral hardware.", allOverview,
+                io.github.niwantha33.zew.core.DevicetreeHardware.inspect(extendedDts));
         field.set(view, allEvidence);
         render.invoke(view);
         tabs.setSelection(0);
         settleNativeStudioLayout();
         var availableKinds = io.github.niwantha33.zew.core.PeripheralWorkflow.categories();
+        var overviewFilter = (org.eclipse.swt.widgets.Text)
+                studioField(view, cls, "overviewSearch");
+        overviewFilter.setText("DMA");
+        check(table.getItemCount() == 1
+                && table.getItem(0).getText(0).equals("DMA"),
+                "Overview keyword search shows only matching generated peripheral summary");
+        overviewFilter.setText("");
         check(table.getItemCount() == availableKinds.size()
                 && Arrays.stream(table.getItems()).anyMatch(t ->
                         t.getText(0).equals("DMA") && t.getText(1).equals("Setup incomplete"))
+                && Arrays.stream(table.getItems()).anyMatch(t ->
+                        t.getText(0).equals("Flash / Storage"))
                 && Arrays.stream(table.getItems()).anyMatch(t ->
                         t.getText(0).equals("Other")),
                 "all peripheral categories, including DMA and vendor-specific devices, have overview rows");
@@ -771,20 +795,29 @@ public final class EditorSmoke implements IApplication {
             kinds.select(kinds.indexOf(kind));
             kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
                     new org.eclipse.swt.widgets.Event());
+            awaitFocusedDetail(view, cls);
             check(controller.getItemCount() >= 1
+                    && controller.getSelectionCount() == 1
                     && texts[0].getText().contains("CONTROLLER")
                     && texts[1].getText().contains(
                             io.github.niwantha33.zew.core.PeripheralWorkflow
                                     .forCategory(kind).connectionTitle()
                                     .toUpperCase(java.util.Locale.ROOT))
-                    && texts[2].getText().contains("SETTINGS FOR " + kind)
+                    && texts[2].getText().contains("SETTINGS — " + kind)
                     && texts[3].getText().contains(
-                            "REVIEW PROPOSED CHANGES — " + kind),
+                            "REVIEW — " + kind),
                     "installed UI retains 4 tailored steps for " + kind);
         }
+        kinds.select(kinds.indexOf("ADC"));
+        kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
+                new org.eclipse.swt.widgets.Event());
         kinds.select(kinds.indexOf("SPI"));
         kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
                 new org.eclipse.swt.widgets.Event());
+        awaitFocusedDetail(view, cls);
+        check(texts[0].getText().contains("Exact generated node")
+                && !texts[0].getText().contains("ADC channel"),
+                "old ADC background result never replaces newly selected SPI details");
         next.notifyListeners(org.eclipse.swt.SWT.Selection,
                 new org.eclipse.swt.widgets.Event());
         check(texts[1].getText().contains("chip-select")
@@ -792,12 +825,52 @@ public final class EditorSmoke implements IApplication {
                 "SPI guidance is bus/chip-select specific, not recycled ADC instructions");
         settleNativeStudioLayout();
         captureNativeStudioScreenshot("configuration-spi-setup-ci-fixture.png");
+        var shell = win.getShell();
+        var originalBounds = shell.getBounds();
+        try {
+            // Geometry test of actual installed SWT controls; does not claim
+            // Windows 125/150 percent scaling (separate physical UI check).
+            for (int[] viewport : new int[][] {{1366, 768}, {1920, 1080}}) {
+                shell.setSize(viewport[0], viewport[1]);
+                settleNativeStudioLayout();
+                var searchControl = (org.eclipse.swt.widgets.Text)
+                        studioField(view, cls, "hardwareSearch");
+                check(searchControl.getBounds().width > 120
+                        && controller.getBounds().width > 120
+                        && next.getBounds().width > 60,
+                        "native hardware view is usable at "
+                            + viewport[0] + "x" + viewport[1]);
+            }
+        } finally {
+            shell.setBounds(originalBounds);
+            settleNativeStudioLayout();
+        }
+        kinds.select(kinds.indexOf("Flash / Storage"));
+        kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
+                new org.eclipse.swt.widgets.Event());
+        awaitFocusedDetail(view, cls);
+        check(controller.getItemCount() >= 1
+                && Arrays.stream(controller.getItems()).anyMatch(row ->
+                    row.getText(0).contains("serial-flash@0"))
+                && texts[1].getText().contains("storage"),
+                "SPI-NOR client appears under Storage, never under UART");
+        // Search is a selection filter: the right pane must follow it.
+        kinds.select(kinds.indexOf("SPI"));
+        kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
+                new org.eclipse.swt.widgets.Event());
+        searchBox.setText("absent-no-such-peripheral");
+        check(controller.getItemCount() == 0
+                && texts[0].getText().contains("Select an actual controller"),
+                "empty hardware search clears stale controller details");
+        searchBox.setText("");
+        awaitFocusedDetail(view, cls);
 
         var unknown = io.github.niwantha33.zew.core.FocusedConfigurationModel.inspect(
                 "lp_mspm0g3507/mspm0g3507", "CI missing-data fixture", "", "", false);
         Object missing = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
                 "CI missing-data fixture", null, "", "", new java.util.Properties(),
-                true, "CI FIXTURE: missing build data; no hardware validated.", unknown);
+                true, "CI FIXTURE: missing build data; no hardware validated.", unknown,
+                java.util.List.of());
         field.set(view, missing); render.invoke(view);
         tabs.setSelection(0);
         settleNativeStudioLayout();
@@ -806,6 +879,21 @@ public final class EditorSmoke implements IApplication {
                         t.getText(1).equals("Unknown")),
                 "missing build state never claims capacity or configured hardware");
         captureNativeStudioScreenshot("configuration-missing-data-ci-fixture.png");
+    }
+
+    private static void awaitFocusedDetail(Object view, Class<?> cls) throws Exception {
+        var status = (org.eclipse.swt.widgets.Label) studioField(view, cls, "guideState");
+        var display = org.eclipse.swt.widgets.Display.getCurrent();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
+        while (status.getText().startsWith("Loading exact")) {
+            if (System.nanoTime() >= deadline)
+                throw new AssertionError("Selected controller evidence remained loading after 20s: "
+                        + status.getText());
+            while (display.readAndDispatch()) { }
+            Thread.sleep(15);
+        }
+        check(!status.getText().contains("Loading exact"),
+                "async controller detail finishes for selected node");
     }
 
     private static void captureNativeStudioScreenshot(String screenshotName) throws Exception {
