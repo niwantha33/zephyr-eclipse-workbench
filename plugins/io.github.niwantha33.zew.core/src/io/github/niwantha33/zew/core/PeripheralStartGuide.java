@@ -138,7 +138,7 @@ public final class PeripheralStartGuide {
         var duplicatePhandles = new java.util.HashSet<Long>();
         for (var p : properties) if (p.name().equals("phandle")) {
             Long parsed = number(singleCell(p.value()));
-            if (parsed != null) {
+            if (parsed != null && parsed > 0) {
                 String previous = aliases.putIfAbsent(parsed, p.path());
                 if (previous != null && !previous.equals(p.path())) duplicatePhandles.add(parsed);
             }
@@ -162,7 +162,7 @@ public final class PeripheralStartGuide {
                 }
                 Long phandle = number(parts[0]);
                 Long id = number(parts[1]);
-                if (phandle == null || id == null) { ambiguous = true; break; }
+                if (phandle == null || phandle == 0 || id == null) { ambiguous = true; break; }
                 if (path.equals(aliases.get(phandle))) {
                     if (duplicatePhandles.contains(phandle)) { ambiguous = true; break; }
                     String input = Long.toString(id);
@@ -315,7 +315,9 @@ public final class PeripheralStartGuide {
             long value = literal.startsWith("0x") || literal.startsWith("0X")
                     ? Long.parseUnsignedLong(literal.substring(2), 16)
                     : Long.parseLong(literal);
-            return value > 0 && value <= 0xffff_ffffL ? value : null;
+            // Input/channel 0 is valid. Phandle 0 is separately rejected at
+            // its use sites; do not conflate channel IDs with phandle IDs.
+            return value >= 0 && value <= 0xffff_ffffL ? value : null;
         } catch (NumberFormatException invalid) { return null; }
     }
 }
