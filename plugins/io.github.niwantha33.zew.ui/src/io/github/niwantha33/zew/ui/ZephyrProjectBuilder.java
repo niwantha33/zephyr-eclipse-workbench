@@ -24,6 +24,7 @@ import org.eclipse.ui.console.MessageConsole;
 
 import io.github.niwantha33.zew.core.BuildHostRequirements;
 import io.github.niwantha33.zew.core.BuildArtifacts;
+import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 import io.github.niwantha33.zew.core.BuildRecovery;
 import io.github.niwantha33.zew.core.BuildFailureInvestigator;
 import io.github.niwantha33.zew.core.BuildFailureLogs;
@@ -256,6 +257,20 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 }
                 if (!clean) {
                     Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
+                    // Capture only AFTER the exact build and generated outputs
+                    // have passed their existing integrity/target checks.
+                    // A missing dependency file yields UNVERIFIED, never a
+                    // forged "current" snapshot; receipt failure does not
+                    // retroactively claim the firmware build failed.
+                    try {
+                        var receipt = ConfigurationEvidenceReceipt.capture(project,
+                                buildDirectory, board, configuration.id());
+                        stream.println("Configuration provenance: " + receipt.state()
+                                + " — " + receipt.detail());
+                    } catch (java.io.IOException receiptError) {
+                        stream.println("Configuration provenance UNVERIFIED: "
+                                + "could not capture input fingerprints; rebuild after inspection.");
+                    }
                     EditorIntegration.schedule(getProject());
                     ProjectVersionHandler.snapshotOnFirstBuild(getProject(), monitor, stream::println);
                 }
