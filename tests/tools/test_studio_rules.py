@@ -66,6 +66,28 @@ class StudioRulesTests(unittest.TestCase):
         with self.assertRaises(InputError):
             normalize([{"findings": [], "unserializable": set()}])
 
+    def test_semantic_inputs_preserved_deduplicated_and_conflicts_rejected(self):
+        first, second = self.report(), self.report()
+        first["images"] = [{"image": "app", "state": "evaluated", "freshness": "unverified",
+                             "inputs": [{"path": "/root/Kconfig", "sha256": "a" * 64}]}]
+        second["images"] = [{"image": "app", "state": "evaluated", "freshness": "unverified",
+                              "inputs": [{"path": "/root/driver/Kconfig", "sha256": "b" * 64}]}]
+        merged = normalize([first, second])
+        self.assertEqual(merged, normalize([second, first]))
+        self.assertEqual(len(merged["images"][0]["inputs"]), 2)
+        second["images"][0]["inputs"] = [{"path": "/root/Kconfig", "sha256": "b" * 64}]
+        with self.assertRaisesRegex(InputError, "Conflicting semantic"):
+            normalize([first, second])
+        for value in ([], "bad", None):
+            malformed = self.report()
+            malformed["images"] = [{"image": "app", "inputs": [{"path": "/root/Kconfig", "sha256": value}]}]
+            with self.assertRaises(InputError):
+                normalize([malformed])
+        bad = self.report()
+        bad["images"] = {}
+        with self.assertRaises(InputError):
+            normalize([bad])
+
     def test_empty_is_limited_coverage_not_pass(self):
         report = normalize([])
         self.assertEqual(report["status"], "no-findings-in-supplied-evidence")

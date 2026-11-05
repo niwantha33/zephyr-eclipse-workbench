@@ -39,10 +39,72 @@ def canonical_hash(report):
     return hashlib.sha256(_encoded(report, separators=(",", ":")).encode()).hexdigest()
 
 
+def _image_inputs(report):
+    """Retain semantic source closure through normalization, never just its digest.
+
+    Source hashes cannot be rechecked from the report digest alone. Inputs are
+    deduplicated per image, and contradictory observations fail closed.
+    """
+    rows = report.get("images", [])
+    if not isinstance(rows, list) or len(rows) > 256:
+        raise InputError("Report images must be a bounded array")
+    output = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise InputError("Report image must be an object")
+        inputs = row.get("inputs", [])
+        if not isinstance(inputs, list) or len(inputs) > 20000:
+            raise InputError("Image inputs must be a bounded array")
+        if not inputs:
+            continue
+        image = row.get("image")
+        state, freshness = row.get("state", "unavailable"), row.get("freshness", "unverified")
+        if not all(_text(value, 512, True) for value in (image, state, freshness)):
+            raise InputError("Invalid image input identity/state")
+        if image in output:
+            raise InputError("Ambiguous image input closure")
+        checked = {}
+        for source in inputs:
+            if not isinstance(source, dict):
+                raise InputError("Image input must be an object")
+            path, sha = source.get("path"), source.get("sha256")
+            if not _text(path, 4096, True) or not isinstance(sha, str) or not SHA.fullmatch(sha):
+                raise InputError("Image input needs a bounded path and exact SHA-256")
+            if path in checked and checked[path] != sha:
+                raise InputError("Contradictory image input hashes")
+            checked[path] = sha
+        output[image] = {"image": image, "state": state, "freshness": freshness,
+                         "inputs": [{"path": path, "sha256": sha} for path, sha in sorted(checked.items())]}
+    return output
+
+
+def _merge_image_inputs(existing, new):
+    for image, row in new.items():
+        if image not in existing:
+            existing[image] = row
+            continue
+        previous = existing[image]
+        known = {source["path"]: source["sha256"] for source in previous["inputs"]}
+        for source in row["inputs"]:
+            if source["path"] in known and known[source["path"]] != source["sha256"]:
+                raise InputError("Conflicting semantic source hashes across reports")
+            known[source["path"]] = source["sha256"]
+        if len(known) > 20000:
+            raise InputError("Merged image input closure exceeds the limit")
+        previous["inputs"] = [{"path": path, "sha256": sha} for path, sha in sorted(known.items())]
+        # A differing extraction state is not silently promoted to evaluated.
+        if previous["state"] != row["state"]:
+            previous["state"] = "unavailable"
+        states = (previous["freshness"], row["freshness"])
+        previous["freshness"] = "stale" if "stale" in states else "changed" if "changed" in states else "unverified"
+
+
 def normalize(reports):
     if not isinstance(reports, list) or len(reports) > 64:
         raise InputError("At most 64 diagnosis reports are allowed")
     results, sources, limitations = {}, [], set()
+    semantic_images = {}
+    freshness = "unverified"
     total = 0
     for report in reports:
         if not isinstance(report, dict):
@@ -63,12 +125,20 @@ def normalize(reports):
             if not _text(limit, 4096):
                 raise InputError("Invalid report limitation")
             limitations.add(limit)
+        input_images = _image_inputs(report)
+        _merge_image_inputs(semantic_images, input_images)
+        if any(row["freshness"] in ("stale", "changed") for row in input_images.values()):
+            freshness = "stale"
+        if report.get("freshness") in ("stale", "changed"):
+            freshness = "stale"
         findings = report.get("findings", [])
         if not isinstance(findings, list):
             raise InputError("Findings must be an array")
         for raw in findings:
             if not isinstance(raw, dict):
                 raise InputError("Finding must be an object")
+            if raw.get("freshness") in ("stale", "changed"):
+                freshness = "stale"
             rule = raw.get("rule_id")
             if not isinstance(rule, str) or not RULE_ID.fullmatch(rule):
                 raise InputError("Invalid deterministic rule identifier")
@@ -118,7 +188,8 @@ def normalize(reports):
                 raise InputError("Too many diagnosis findings")
     rows = [results[key] for key in sorted(results)]
     return {"schema_version": SCHEMA, "status": "observed-findings" if rows else "no-findings-in-supplied-evidence",
-            "freshness": "unverified", "findings": rows,
+            "freshness": freshness, "findings": rows,
+            "images": [semantic_images[key] for key in sorted(semantic_images)],
             "sources": sorted(sources, key=lambda x: x["sha256"]),
             "counts": {key: sum(row["severity"] == key for row in rows) for key in sorted(SEVERITIES)},
             "limitations": sorted(limitations | {"No findings does not prove a valid build or functioning hardware.",
