@@ -1092,7 +1092,19 @@ public final class EditorSmoke implements IApplication {
                 try {
                     var windows = org.eclipse.ui.PlatformUI.getWorkbench().getWorkbenchWindows();
                     check(windows.length > 0, "native Eclipse workbench window exists");
-                    var view = windows[0].getActivePage().showView(
+                    // Eclipse's rendering engine parks views from non-selected
+                    // perspectives in an offscreen "limbo" Shell at y=10000.
+                    // A view reference may report active/visible even though
+                    // its SWT controls are still in that shell. Start the
+                    // actual desktop smoke from a restored resource perspective.
+                    var page = windows[0].getActivePage();
+                    var resourcesPerspective = org.eclipse.ui.PlatformUI.getWorkbench()
+                            .getPerspectiveRegistry().findPerspectiveWithId("org.eclipse.ui.resourcePerspective");
+                    check(resourcesPerspective != null, "installed Eclipse has the resource perspective");
+                    page.setPerspective(resourcesPerspective);
+                    page.resetPerspective();
+                    settleNativeStudioLayout();
+                    var view = page.showView(
                             "io.github.niwantha33.zew.ui.configurationStudio");
                     view.getClass().getMethod("displayProject", IProject.class).invoke(view, project);
                     var snapshotField = view.getClass().getDeclaredField("snapshot");
