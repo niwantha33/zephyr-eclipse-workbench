@@ -17,8 +17,6 @@ import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
-import org.eclipse.swt.custom.CTabFolder;
-import org.eclipse.swt.custom.CTabItem;
 import org.eclipse.swt.custom.TableEditor;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
@@ -89,9 +87,10 @@ public final class ConfigurationStudioView extends ViewPart {
     private IProject project;
     private Snapshot snapshot;
     private Text search, help, tree, analysis, codeExample;
-    private CTabFolder peripheralTabs;
+    private org.eclipse.swt.widgets.List peripheralCategories;
+    private Text peripheralDescription;
+    private Button peripheralParameters;
     private Domain activeDomain = ConfigurationStudioDomains.OVERVIEW;
-    private final java.util.Map<Domain, Text> peripheralInfo = new java.util.LinkedHashMap<>();
     private TableEditor inlineToggleEditor;
     private Composite inlineToggle;
     private Table options;
@@ -242,38 +241,42 @@ public final class ConfigurationStudioView extends ViewPart {
         Composite software = tab(tabs, "Software · Kconfig");
         software.setLayout(new GridLayout(1, false));
 
-        // Real SWT peripheral tabs, independent of the source-editing view.
-        peripheralTabs = new CTabFolder(software, SWT.BORDER | SWT.FLAT);
-        GridData domainLayout = new GridData(SWT.FILL, SWT.TOP, true, false);
-        domainLayout.heightHint = 82;
-        peripheralTabs.setLayoutData(domainLayout);
-        peripheralTabs.setSimple(false);
-        for (Domain domain : ConfigurationStudioDomains.TABS) {
-            var tab = new CTabItem(peripheralTabs, SWT.NONE);
-            tab.setText(domain.title());
-            tab.setData(domain);
-            Composite body = new Composite(peripheralTabs, SWT.NONE);
-            body.setLayout(new GridLayout(1, false));
-            Text information = new Text(body, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
-            information.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-            information.setText(domain.description());
-            peripheralInfo.put(domain, information);
-            if (!domain.driverSymbol().isBlank()) {
-                action(body, "Parameters & pins →", () -> openPeripheralParameters(domain))
-                        .setToolTipText("Inspect this peripheral's actual controller/channel parameters and pin routes");
-            }
-            tab.setControl(body);
-        }
-        peripheralTabs.setSelection(0);
-        peripheralTabs.addListener(SWT.Selection, event -> {
-            Domain chosen = (Domain) peripheralTabs.getSelection().getData();
-            activeDomain = chosen == null ? ConfigurationStudioDomains.OVERVIEW : chosen;
+        var softwareSplit = new SashForm(software, SWT.HORIZONTAL);
+        softwareSplit.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        var domainPanel = new Composite(softwareSplit, SWT.NONE);
+        domainPanel.setLayout(new GridLayout(1, false));
+        var domainHeading = new Label(domainPanel, SWT.NONE);
+        domainHeading.setText("CATEGORIES");
+        domainHeading.setFont(metricFont);
+        peripheralCategories = new org.eclipse.swt.widgets.List(domainPanel,
+                SWT.BORDER | SWT.SINGLE | SWT.V_SCROLL);
+        peripheralCategories.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        for (Domain domain : ConfigurationStudioDomains.TABS)
+            peripheralCategories.add(domain.title());
+        peripheralCategories.select(0);
+        peripheralCategories.setToolTipText("Select a software area from the generated Kconfig snapshot.");
+        peripheralDescription = new Text(domainPanel, SWT.BORDER | SWT.MULTI | SWT.WRAP
+                | SWT.READ_ONLY | SWT.V_SCROLL);
+        GridData descriptionSize = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        descriptionSize.heightHint = 105;
+        peripheralDescription.setLayoutData(descriptionSize);
+        peripheralParameters = action(domainPanel, "Parameters & pins →",
+                () -> openPeripheralParameters(activeDomain));
+        peripheralParameters.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        peripheralParameters.setToolTipText("Inspect actual controller, channel and pin route evidence");
+        peripheralCategories.addListener(SWT.Selection, event -> {
+            int index = peripheralCategories.getSelectionIndex();
+            activeDomain = index < 0 ? ConfigurationStudioDomains.OVERVIEW
+                    : ConfigurationStudioDomains.TABS.get(index);
             if (category != null && !category.isDisposed()) category.select(0);
             refreshOptions();
             refreshPeripheralInfo();
         });
+        var softwareMain = new Composite(softwareSplit, SWT.NONE);
+        softwareMain.setLayout(new GridLayout(1, false));
+        softwareSplit.setWeights(new int[] {22, 78});
 
-        var shortcuts = new Composite(software, SWT.NONE);
+        var shortcuts = new Composite(softwareMain, SWT.NONE);
         shortcuts.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         shortcuts.setLayout(new GridLayout(4, false));
         shortcut(shortcuts, "All features", ConfigurationStudioPresentation.ALL);
@@ -281,7 +284,7 @@ public final class ConfigurationStudioView extends ViewPart {
         shortcut(shortcuts, "Needs review", ConfigurationStudioPresentation.REVIEW);
         shortcut(shortcuts, "RTOS & tracing", ConfigurationStudioPresentation.DEBUG);
 
-        var navigation = new Composite(software, SWT.NONE);
+        var navigation = new Composite(softwareMain, SWT.NONE);
         navigation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         navigation.setLayout(new GridLayout(2, false));
         category = new Combo(navigation, SWT.DROP_DOWN | SWT.READ_ONLY);
@@ -312,11 +315,11 @@ public final class ConfigurationStudioView extends ViewPart {
                     @Override public void run() { focusSearch(); }
                 });
 
-        overview = new Label(software, SWT.WRAP);
+        overview = new Label(softwareMain, SWT.WRAP);
         overview.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         overview.setText("Select a feature to inspect its definition and change its project request.");
 
-        var trail = new Composite(software, SWT.NONE);
+        var trail = new Composite(softwareMain, SWT.NONE);
         trail.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         trail.setLayout(new GridLayout(4, false));
         backButton = action(trail, "← Back", () -> navigateHistory(-1));
@@ -329,12 +332,12 @@ public final class ConfigurationStudioView extends ViewPart {
         navigationLocation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         action(trail, "Clear filters", this::clearFeatureFilters);
 
-        var sash = new SashForm(software, SWT.HORIZONTAL);
+        var sash = new SashForm(softwareMain, SWT.VERTICAL);
         sash.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         options = new Table(sash, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION | SWT.V_SCROLL);
         options.setHeaderVisible(true);
         options.setLinesVisible(true);
-        for (String header : new String[] {"Feature / Kconfig symbol", "Enable / Disable · Value", "Project request", "Review"}) {
+        for (String header : new String[] {"Kconfig symbol", "Feature", "Enable / Disable · Value", "Project request", "Review"}) {
             var column = new TableColumn(options, SWT.LEFT);
             column.setText(header);
         }
@@ -431,7 +434,7 @@ public final class ConfigurationStudioView extends ViewPart {
         removeButton.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         removeButton.setToolTipText("Remove from prj.conf; other fragments or defaults may still control the value");
 
-        sash.setWeights(new int[] {58, 42});
+        sash.setWeights(new int[] {62, 38});
 
         // Native Visual Hardware Studio 2.0: three interactive panes, with a
         // separate evidence/overlay dock. No generated or user files are edited
@@ -3316,7 +3319,8 @@ public final class ConfigurationStudioView extends ViewPart {
                     if (shown >= 750) continue;
                     TableItem row = new TableItem(options, SWT.NONE);
                     row.setText(new String[] {
-                            ConfigurationStudioPresentation.title(option.symbol()) + "  ·  CONFIG_" + option.symbol(),
+                            "CONFIG_" + option.symbol(),
+                            ConfigurationStudioPresentation.title(option.symbol()),
                             ConfigurationStudioPresentation.inlineValue(option),
                             ConfigurationStudioPresentation.requested(option),
                             ConfigurationStudioPresentation.review(option)
@@ -3343,24 +3347,15 @@ public final class ConfigurationStudioView extends ViewPart {
 
     private void selectDomain(Domain domain) {
         activeDomain = domain;
-        if (peripheralTabs != null && !peripheralTabs.isDisposed()) {
-            for (int i = 0; i < peripheralTabs.getItemCount(); i++) {
-                if (peripheralTabs.getItem(i).getData() == domain) {
-                    peripheralTabs.setSelection(i);
-                    break;
-                }
-            }
-        }
+        if (peripheralCategories != null && !peripheralCategories.isDisposed())
+            peripheralCategories.select(ConfigurationStudioDomains.TABS.indexOf(domain));
         refreshPeripheralInfo();
     }
 
     private void refreshPeripheralInfo() {
-        if (peripheralTabs == null || peripheralTabs.isDisposed()) return;
-        for (var entry : peripheralInfo.entrySet()) {
-            Text info = entry.getValue();
-            if (info != null && !info.isDisposed())
-                info.setText(ConfigurationStudioDomains.inspect(entry.getKey(), snapshot));
-        }
+        if (peripheralDescription == null || peripheralDescription.isDisposed()) return;
+        peripheralDescription.setText(ConfigurationStudioDomains.inspect(activeDomain, snapshot));
+        peripheralParameters.setEnabled(!activeDomain.driverSymbol().isBlank());
         if (codeExample != null && !codeExample.isDisposed())
             codeExample.setText(activeDomain.example().isBlank()
                     ? "A board-specific example is not available for this category yet.\n\n"
@@ -3370,12 +3365,12 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private void sizeColumns() {
-        if (options == null || options.isDisposed() || options.getColumnCount() != 4) return;
+        if (options == null || options.isDisposed() || options.getColumnCount() != 5) return;
         int width = options.getClientArea().width - 18;
         if (width <= 0) return;
-        int[] minimum = {170, 156, 98, 88};
-        double[] fractions = {0.40, 0.29, 0.17, 0.14};
-        for (int i = 0; i < 4; i++)
+        int[] minimum = {230, 145, 165, 120, 95};
+        double[] fractions = {0.30, 0.19, 0.22, 0.16, 0.13};
+        for (int i = 0; i < 5; i++)
             options.getColumn(i).setWidth(Math.max(minimum[i], (int) (width * fractions[i])));
     }
 
@@ -3408,7 +3403,7 @@ public final class ConfigurationStudioView extends ViewPart {
             removeButton.setEnabled(o != null && o.requested() != null);
             if (inlineToggle != null && !inlineToggle.isDisposed()) {
                 if (togglable && options.getSelectionCount() > 0) {
-                    inlineToggleEditor.setEditor(inlineToggle, options.getSelection()[0], 1);
+                    inlineToggleEditor.setEditor(inlineToggle, options.getSelection()[0], 2);
                     inlineToggle.setVisible(true);
                 } else inlineToggle.setVisible(false);
             }
