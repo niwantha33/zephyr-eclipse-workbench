@@ -1166,14 +1166,28 @@ public final class EditorSmoke implements IApplication {
                     var nativePage = windows[0].getActivePage();
                     var advancedRef = nativePage.getReference(view);
                     check(advancedRef != null, "advanced Studio has a real Eclipse part reference");
-                    nativePage.setPartState(advancedRef, org.eclipse.ui.IWorkbenchPage.STATE_MAXIMIZED);
+                    // An unopened resource perspective can park added views in
+                    // an invisible trim Shell (commonly at y=10000). Merely
+                    // calling activate() or MAXIMIZED leaves that parked SWT
+                    // hierarchy at zero size. Restore the stack first.
+                    int stateBefore = nativePage.getPartState(advancedRef);
+                    nativePage.setPartState(advancedRef, org.eclipse.ui.IWorkbenchPage.STATE_RESTORED);
                     nativePage.showView("io.github.niwantha33.zew.ui.configurationStudio",
                             null, org.eclipse.ui.IWorkbenchPage.VIEW_ACTIVATE);
+                    nativePage.setPartState(advancedRef, org.eclipse.ui.IWorkbenchPage.STATE_MAXIMIZED);
                     nativePage.activate(view);
                     settleNativeStudioLayout();
+                    var activeStudioShell = windows[0].getShell();
                     check(nativePage.isPartVisible(view),
-                            "expanded advanced Studio is genuinely visible in Eclipse"
-                            + " [state=" + nativePage.getPartState(advancedRef) + "]");
+                            "expanded advanced Studio is registered visible in Eclipse"
+                            + " [before=" + stateBefore + ", after="
+                            + nativePage.getPartState(advancedRef) + "]");
+                    check(studioTabs.getShell() == activeStudioShell
+                            && activeStudioShell.isVisible(),
+                            "advanced Studio control is attached to the displayed workbench shell"
+                            + " [tabShell=" + studioTabs.getShell().getBounds()
+                            + ", shell=" + activeStudioShell.getBounds()
+                            + ", tabs=" + swtBoundsChain(studioTabs) + "]");
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
                             studioTabs.getItem(0).getControl();
                     var beginnerBody = (org.eclipse.swt.widgets.Composite)
