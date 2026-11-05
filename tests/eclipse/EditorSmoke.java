@@ -1060,6 +1060,23 @@ public final class EditorSmoke implements IApplication {
                             && route.invoke(null, true, "prj.conf").toString().equals("PROJECT_OVERRIDES")
                             && route.invoke(null, true, "app.overlay").toString().equals("HARDWARE"),
                             "ordinary Zephyr menu ignores selected config file; explicit context popup deep-links");
+                    var routeEnum = java.util.Arrays.stream(handlerType.getDeclaredClasses())
+                            .filter(c -> c.getSimpleName().equals("Entry"))
+                            .findFirst().orElseThrow();
+                    var target = handlerType.getDeclaredMethod("targetViewId", routeEnum);
+                    var section = handlerType.getDeclaredMethod("initialSection", routeEnum);
+                    target.setAccessible(true);
+                    section.setAccessible(true);
+                    var menuEntry = route.invoke(null, false, "app.overlay");
+                    var overlayEntry = route.invoke(null, true, "app.overlay");
+                    var projectEntry = route.invoke(null, true, "prj.conf");
+                    check(target.invoke(null, menuEntry).equals("io.github.niwantha33.zew.ui.configurationHome")
+                            && target.invoke(null, overlayEntry).equals("io.github.niwantha33.zew.ui.configurationHome")
+                            && target.invoke(null, projectEntry).equals("io.github.niwantha33.zew.ui.configurationHome")
+                            && section.invoke(null, menuEntry).equals("overview")
+                            && section.invoke(null, overlayEntry).equals("hardware")
+                            && section.invoke(null, projectEntry).equals("system"),
+                            "menu and explicit file context all target ONE three-section Studio");
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
                             studioTabs.getItem(0).getControl();
                     var beginnerBody = (org.eclipse.swt.widgets.Composite)
