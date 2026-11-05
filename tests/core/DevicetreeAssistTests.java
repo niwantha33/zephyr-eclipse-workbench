@@ -38,6 +38,9 @@ public final class DevicetreeAssistTests {
         var snapshot = sample();
         var starter = DevicetreeAssist.suggest("", 0, snapshot);
         check(starter.suggestions().size() == 5, "Five simple starting actions");
+        String commentedOverlay = "/* Application hardware overlay. Validate against this board's bindings. */\n";
+        check(DevicetreeAssist.suggest(commentedOverlay, commentedOverlay.length(), snapshot)
+                .suggestions().size() == 5, "Starter actions after Configuration Studio header");
         check(starter.suggestions().stream().noneMatch(p -> p.replacement().contains("&adc")),
                 "No imaginary ADC or controller");
         var reference = DevicetreeAssist.suggest("&u", 2, snapshot);
