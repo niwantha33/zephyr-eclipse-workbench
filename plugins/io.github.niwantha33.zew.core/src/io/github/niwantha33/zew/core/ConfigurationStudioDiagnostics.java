@@ -17,11 +17,15 @@ public final class ConfigurationStudioDiagnostics {
     private ConfigurationStudioDiagnostics() {}
     public record Finding(String ruleId, String severity, String confidence, String symbol,
             String message, Path source, int line, String sourceSha, String nextAction) {}
-    public record Report(Path application, Path build, List<Finding> findings) {
+    public record Report(Path application, Path build, Path generatedConfig,
+            String generatedConfigSha, List<Finding> findings) {
         public Report { findings = List.copyOf(findings); }
         public String display() {
             var text = new StringBuilder("CONFIGURATION SOURCE DIAGNOSTICS\n")
                     .append("Selected build: ").append(build == null ? "unavailable" : build)
+                    .append("\nGenerated Kconfig: ").append(generatedConfig == null ? "unavailable" : generatedConfig)
+                    .append("\nGenerated Kconfig SHA-256: ")
+                    .append(generatedConfigSha.isEmpty() ? "unavailable" : generatedConfigSha)
                     .append("\nObserved request differences do not prove a Kconfig cause.")
                     .append("\nNo source or generated build was changed.\n");
             if (findings.isEmpty()) text.append("\nNo request/snapshot difference found. ")
@@ -50,7 +54,7 @@ public final class ConfigurationStudioDiagnostics {
             findings.add(new Finding("CS-KCONFIG-GENERATED-MISSING", "info", "unknown", "",
                     "The selected build has no generated Kconfig snapshot.",
                     null, 0, "", "Configure this exact board/profile; inspect the failed configure log if needed."));
-            return new Report(root, build, findings);
+            return new Report(root, build, generated, "", findings);
         }
         String configSha = digest(generated);
         var snapshot = ConfigurationStudioFiles.inspect(root, build, "selected build");
@@ -67,7 +71,7 @@ public final class ConfigurationStudioDiagnostics {
         if (!sourceSha.isEmpty() && !sourceSha.equals(digest(source))
                 || !configSha.equals(digest(generated)))
             throw new IOException("Source or generated configuration changed during diagnosis. Refresh and retry.");
-        return new Report(root, build, findings);
+        return new Report(root, build, generated, configSha, findings);
     }
 
     /** A source jump/marker may use the recorded line only while the bytes still match. */

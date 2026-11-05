@@ -19,6 +19,8 @@ public final class ConfigurationStudioDiagnosticsTests {
             Files.writeString(build.resolve("zephyr/.config"), "# CONFIG_ADC is not set\n");
             var report = ConfigurationStudioDiagnostics.inspect(app, build);
             check(report.findings().size() == 2, "Request observations include absent symbols");
+            check(report.generatedConfigSha().matches("[a-f0-9]{64}")
+                    && report.display().contains(report.generatedConfigSha()), "Generated snapshot provenance retained");
             check(report.findings().get(0).line() == 2, "Exact source line retained");
             check(report.findings().get(0).confidence().equals("derived"), "Shared confidence vocabulary");
             check(ConfigurationStudioDiagnostics.sourceMatches(report.findings().get(0)), "Matching source is navigable");
@@ -27,7 +29,7 @@ public final class ConfigurationStudioDiagnosticsTests {
             Files.writeString(source, "CONFIG_ADC=n\n");
             check(!ConfigurationStudioDiagnostics.sourceMatches(report.findings().get(0)), "Changed source line cannot navigate");
             check(ConfigurationStudioDiagnostics.inspect(app, build).findings().isEmpty(), "Matching request has no warning");
-            System.out.println("PASS native source diagnostics: 9 assertions");
+            System.out.println("PASS native source diagnostics: 10 assertions");
         } finally {
             try (var paths = Files.walk(app)) {
                 for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);

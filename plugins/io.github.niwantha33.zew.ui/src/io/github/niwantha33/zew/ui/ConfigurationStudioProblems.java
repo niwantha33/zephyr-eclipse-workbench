@@ -47,6 +47,9 @@ public final class ConfigurationStudioProblems {
                 marker.setAttribute(RULE_ID, finding.ruleId());
                 marker.setAttribute(SOURCE_SHA, finding.sourceSha());
                 marker.setAttribute("zew.confidence", finding.confidence());
+                marker.setAttribute("zew.generatedConfigSha256", report.generatedConfigSha());
+                marker.setAttribute("zew.generatedConfig", report.generatedConfig() == null
+                        ? "" : report.generatedConfig().toString());
                 marker.setAttribute("zew.build", report.build() == null ? "" : report.build().toString());
                 if (resource != project && currentSource) {
                     marker.setAttribute(IMarker.LINE_NUMBER, finding.line());
