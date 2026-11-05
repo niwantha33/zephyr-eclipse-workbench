@@ -13,6 +13,7 @@ import org.eclipse.cdt.core.model.*;
 import org.eclipse.core.resources.*;
 import org.eclipse.core.runtime.*;
 import org.eclipse.equinox.app.*;
+import org.eclipse.ui.PlatformUI;
 import io.github.niwantha33.zew.core.EditorSettings;
 
 /** Test-only bundle: exercise the installed plug-in through real CDT APIs. */
