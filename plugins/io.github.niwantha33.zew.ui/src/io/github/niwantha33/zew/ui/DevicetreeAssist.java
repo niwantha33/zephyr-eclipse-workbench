@@ -85,8 +85,8 @@ final class DevicetreeAssist {
             int start = insideQuote ? caret - typed.length() : caret - current.length();
             if (insideCells) {
                 String cellText = current.substring(current.indexOf('<') + 1);
-                int space = Math.max(cellText.lastIndexOf(' '), Math.max(cellText.lastIndexOf('\\t'),
-                        cellText.lastIndexOf('\\n')));
+                int space = Math.max(cellText.lastIndexOf(' '), Math.max(cellText.lastIndexOf('\t'),
+                        cellText.lastIndexOf('\n')));
                 typed = cellText.substring(space + 1).replace(">", "");
                 start = caret - typed.length();
             }
