@@ -377,7 +377,14 @@ public final class ConfigurationHomeView extends ViewPart {
         // reopening the view. Discovery from the Eclipse selection is cheap;
         // all build-file inspection runs in a background Job.
         if (project == null || !project.isAccessible()) {
-            var selection = getSite().getPage().getSelection();
+            // The Studio can be the active part while the selected project
+            // still belongs to Project Explorer. Retrieve that view's saved
+            // selection instead of relying on the active page selection.
+            var selection = getSite().getWorkbenchWindow().getSelectionService()
+                    .getSelection("org.eclipse.ui.navigator.ProjectExplorer");
+            if (!(selection instanceof org.eclipse.jface.viewers.IStructuredSelection)
+                    || ((org.eclipse.jface.viewers.IStructuredSelection) selection).size() != 1)
+                selection = getSite().getPage().getSelection();
             if (selection instanceof org.eclipse.jface.viewers.IStructuredSelection items
                     && items.size() == 1) {
                 var chosen = SelectedProject.fromObject(items.getFirstElement());
