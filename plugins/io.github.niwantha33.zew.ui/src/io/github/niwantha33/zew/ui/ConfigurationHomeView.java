@@ -283,6 +283,12 @@ public final class ConfigurationHomeView extends ViewPart {
         button(actions, "Project settings & profiles", () -> advanced("settings"));
         button(actions, "Inspect build evidence", () -> advanced("evidence"));
         button(actions, "Diagnose source requests", this::diagnoseSourceRequests);
+        button(actions, "Open Problems", () -> {
+            try { getSite().getPage().showView(org.eclipse.ui.IPageLayout.ID_PROBLEM_VIEW); }
+            catch (PartInitException unavailable) {
+                MessageDialog.openError(getSite().getShell(), "Problems", unavailable.getMessage());
+            }
+        });
         showSystemAdvanced = button(root, "Show advanced system settings", () -> {
             boolean visible = !systemAdvanced.getVisible();
             setPanelVisible(systemAdvanced, visible);
@@ -552,7 +558,10 @@ public final class ConfigurationHomeView extends ViewPart {
                 try {
                     var report = ConfigurationStudioDiagnostics.inspect(
                             selected.getLocation().toFile().toPath(), snapshot.build());
-                    message = report.display();
+                    if (monitor.isCanceled() || ticket != diagnosisGeneration.get()) return Status.CANCEL_STATUS;
+                    ConfigurationStudioProblems.replace(selected, report, monitor);
+                    message = report.display() + "\nSource observations are also available in Eclipse Problems. "
+                            + "Only matching source bytes receive navigable line markers.\n";
                 } catch (Exception error) {
                     return new Status(IStatus.ERROR, Activator.ID,
                             "Configuration diagnosis failed; refresh the selected build and retry.", error);
