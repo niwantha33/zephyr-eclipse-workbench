@@ -207,8 +207,8 @@ public final class DevicetreeEditor extends TextEditor {
                         if (region.getOffset() > 0 && viewer.getDocument().getChar(region.getOffset() - 1) == '&') {
                             var node = editor.snapshot.label(name);
                             if (node != null) return "Generated node: " + node.path()
-                                    + "\\nStatus: " + node.status() + "\\nCompatible: " + node.compatible()
-                                    + "\\nLast selected build; not a runtime hardware state.";
+                                    + "\nStatus: " + node.status() + "\nCompatible: " + node.compatible()
+                                    + "\nLast selected build; not a runtime hardware state.";
                         }
                         return null;
                     } catch (BadLocationException invalid) { return null; }
@@ -346,8 +346,8 @@ public final class DevicetreeEditor extends TextEditor {
             int line = Math.max(1, node.line());
             var context = overlayContext;
             if (context != null && context.verified()) {
-                var definition = Pattern.compile("(?m)^\\\\s*"
-                        + Pattern.quote(label) + "\\\\s*:\\\\s*[^\\\\s{]+\\\\s*\\\\{");
+                var definition = Pattern.compile("(?m)^\\s*"
+                        + Pattern.quote(label) + "\\s*:\\s*[^\\s{]+\\s*\\{");
                 for (Path candidate : context.sourceFiles()) {
                     if (!Files.isRegularFile(candidate) || Files.isSymbolicLink(candidate)
                             || Files.size(candidate) > 2_000_000) continue;
@@ -356,7 +356,7 @@ public final class DevicetreeEditor extends TextEditor {
                     if (!match.find()) continue;
                     source = candidate;
                     line = 1 + (int) sourceText.substring(0, match.start()).chars()
-                            .filter(ch -> ch == '\\n').count();
+                            .filter(ch -> ch == '\n').count();
                     break;
                 }
             }
