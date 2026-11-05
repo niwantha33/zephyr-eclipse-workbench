@@ -670,6 +670,129 @@ public final class EditorSmoke implements IApplication {
                 "review makes no unverified pin edit and offers guarded source validation");
         captureNativeStudioScreenshot("configuration-review-ci-fixture.png");
 
+        // Cross-category navigation: real generated nodes for EVERY category
+        // in the selected Zephyr hardware index. This is an explicitly
+        // synthetic DTS fixture, not physical hardware support evidence.
+        String addedNodes = """
+                dac@6100 {
+                    compatible = "test,dac";
+                    status = "okay";
+                };
+                uart@6200 {
+                    compatible = "test,uart";
+                    status = "okay";
+                    current-speed = <115200>;
+                };
+                i2c@6300 {
+                    compatible = "test,i2c";
+                    status = "okay";
+                    clock-frequency = <100000>;
+                };
+                spi@6400 {
+                    compatible = "test,spi";
+                    status = "okay";
+                    cs-gpios = <0x2 3 0>;
+                };
+                i2s@6500 {
+                    compatible = "test,i2s";
+                    status = "okay";
+                };
+                pwm@6600 {
+                    compatible = "test,pwm";
+                    status = "okay";
+                    #pwm-cells = <3>;
+                };
+                timer@6700 {
+                    compatible = "test,timer";
+                    status = "okay";
+                };
+                dma@6800 {
+                    compatible = "test,dma";
+                    status = "okay";
+                    #dma-cells = <2>;
+                };
+                can@6900 {
+                    compatible = "test,can";
+                    status = "okay";
+                };
+                usb@6a00 {
+                    compatible = "test,usb";
+                    status = "okay";
+                };
+                rtc@6b00 {
+                    compatible = "test,rtc";
+                    status = "okay";
+                };
+                watchdog@6c00 {
+                    compatible = "test,watchdog";
+                    status = "okay";
+                };
+                ethernet@6d00 {
+                    compatible = "test,ethernet";
+                    status = "okay";
+                };
+                pinctrl@6e00 {
+                    compatible = "test,pinctrl";
+                    status = "okay";
+                    pinmux = <0x10>;
+                };
+                custom@6f00 {
+                    compatible = "test,unique-device";
+                    status = "okay";
+                };
+                """;
+        String extendedDts = dts.replace("gpio@5000 {", addedNodes + "\n gpio@5000 {");
+        check(!extendedDts.equals(dts), "multi-peripheral fixture extends the real node tree");
+        var allOverview = io.github.niwantha33.zew.core.FocusedConfigurationModel.inspect(
+                "lp_mspm0g3507/mspm0g3507", "CI all-category fixture",
+                extendedDts, config, false);
+        var allEvidence = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
+                "CI all-category fixture", null, extendedDts, config,
+                new java.util.Properties(), false,
+                "CI FIXTURE: synthetic test nodes, not actual peripheral hardware.", allOverview);
+        field.set(view, allEvidence);
+        render.invoke(view);
+        tabs.setSelection(0);
+        settleNativeStudioLayout();
+        var availableKinds = io.github.niwantha33.zew.core.PeripheralWorkflow.categories();
+        check(table.getItemCount() == availableKinds.size()
+                && Arrays.stream(table.getItems()).anyMatch(t ->
+                        t.getText(0).equals("DMA") && t.getText(1).equals("Setup incomplete"))
+                && Arrays.stream(table.getItems()).anyMatch(t ->
+                        t.getText(0).equals("Other")),
+                "all peripheral categories, including DMA and vendor-specific devices, have overview rows");
+        captureNativeStudioScreenshot("configuration-all-peripherals-ci-fixture.png");
+        tabs.setSelection(1);
+        var kinds = (org.eclipse.swt.widgets.Combo) studioField(view, cls, "categories");
+        check(kinds.getItemCount() == availableKinds.size()
+                && Arrays.asList(kinds.getItems()).containsAll(availableKinds),
+                "Hardware selector contains EVERY Zephyr categorized peripheral family");
+        for (String kind : availableKinds) {
+            kinds.select(kinds.indexOf(kind));
+            kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
+                    new org.eclipse.swt.widgets.Event());
+            check(controller.getItemCount() >= 1
+                    && texts[0].getText().contains("CONTROLLER")
+                    && texts[1].getText().contains(
+                            io.github.niwantha33.zew.core.PeripheralWorkflow
+                                    .forCategory(kind).connectionTitle()
+                                    .toUpperCase(java.util.Locale.ROOT))
+                    && texts[2].getText().contains("SETTINGS FOR " + kind)
+                    && texts[3].getText().contains(
+                            "REVIEW PROPOSED CHANGES — " + kind),
+                    "installed UI retains 4 tailored steps for " + kind);
+        }
+        kinds.select(kinds.indexOf("SPI"));
+        kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
+                new org.eclipse.swt.widgets.Event());
+        next.notifyListeners(org.eclipse.swt.SWT.Selection,
+                new org.eclipse.swt.widgets.Event());
+        check(texts[1].getText().contains("chip-select")
+                && !texts[1].getText().contains("ADC_GAIN"),
+                "SPI guidance is bus/chip-select specific, not recycled ADC instructions");
+        settleNativeStudioLayout();
+        captureNativeStudioScreenshot("configuration-spi-setup-ci-fixture.png");
+
         var unknown = io.github.niwantha33.zew.core.FocusedConfigurationModel.inspect(
                 "lp_mspm0g3507/mspm0g3507", "CI missing-data fixture", "", "", false);
         Object missing = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
