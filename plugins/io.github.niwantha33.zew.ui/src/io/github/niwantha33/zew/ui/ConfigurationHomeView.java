@@ -118,29 +118,25 @@ public final class ConfigurationHomeView extends ViewPart {
     }
 
     private void overview(Composite root) {
-        new Label(root, SWT.NONE).setText("Your board at a glance");
+        new Label(root, SWT.NONE).setText("Selected board and configuration");
         overviewInfo = new Label(root, SWT.WRAP);
         overviewInfo.setLayoutData(fillWidth());
         var sizes = bar(root, 3);
         var f = new Composite(sizes, SWT.NONE);
-        f.setLayout(new GridLayout(1, false)); f.setLayoutData(fillWidth());
-        new Label(f, SWT.NONE).setText("FLASH CAPACITY");
+        f.setLayout(new GridLayout(1, false));
+        f.setLayoutData(fillWidth());
+        new Label(f, SWT.NONE).setText("FLASH CAPACITY — not usage");
         capacityFlash = new Label(f, SWT.NONE);
         var m = new Composite(sizes, SWT.NONE);
-        m.setLayout(new GridLayout(1, false)); m.setLayoutData(fillWidth());
-        new Label(m, SWT.NONE).setText("RAM CAPACITY");
+        m.setLayout(new GridLayout(1, false));
+        m.setLayoutData(fillWidth());
+        new Label(m, SWT.NONE).setText("RAM CAPACITY — not usage");
         capacityRam = new Label(m, SWT.NONE);
-        button(sizes, "View address map", this::memoryMap);
-        new Label(root, SWT.NONE).setText("Peripherals described by the selected generated build");
-        overviewSearch = new Text(root, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
-        overviewSearch.setLayoutData(fillWidth());
-        overviewSearch.setMessage("Find a peripheral or configuration issue...");
-        overviewSearch.addModifyListener(event -> populateOverviewRows());
-        peripheralRows = table(root, new String[]{"Peripheral", "Status", "Next action"},
-                new int[]{135, 165, 570}, true);
-        peripheralRows.addListener(SWT.DefaultSelection, e -> choosePeripheral());
-        button(root, "Configure selected peripheral", this::choosePeripheral);
-        new Label(root, SWT.NONE).setText("Issues requiring attention");
+        button(sizes, "View memory map", this::memoryMap);
+
+        // Place issues before the long hardware list so the next action is
+        // visible at 1366×768 without scrolling or reading raw DTS.
+        new Label(root, SWT.NONE).setText("Needs attention");
         issueRows = table(root, new String[]{"Issue", "Next action"},
                 new int[]{240, 630}, false);
         issueInfo = new Label(root, SWT.WRAP);
@@ -150,10 +146,21 @@ public final class ConfigurationHomeView extends ViewPart {
                 issueInfo.setText(((FocusedConfigurationModel.Issue)
                         issueRows.getSelection()[0].getData()).detail());
         });
-        button(root, "Review issue", this::reviewIssue);
+        button(root, "Review selected issue", this::reviewIssue);
+
+        new Label(root, SWT.NONE).setText("Peripherals in the selected build");
+        overviewSearch = new Text(root, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
+        overviewSearch.setLayoutData(fillWidth());
+        overviewSearch.setMessage("Find a peripheral or configuration issue...");
+        overviewSearch.addModifyListener(event -> populateOverviewRows());
+        peripheralRows = table(root, new String[]{"Peripheral", "Status", "Next action"},
+                new int[]{135, 165, 570}, true);
+        peripheralRows.addListener(SWT.DefaultSelection, e -> choosePeripheral());
+        button(root, "Open selected hardware", this::choosePeripheral);
         overviewInfo.setText("No generated build data. No chip/pin inference.");
-        capacityFlash.setText("Unknown"); capacityRam.setText("Unknown");
-        issueInfo.setText("Choose an issue for its evidence and next action.");
+        capacityFlash.setText("Unknown");
+        capacityRam.setText("Unknown");
+        issueInfo.setText("Choose an issue to review its evidence and next action.");
     }
 
     private void hardware(Composite root) {
@@ -308,6 +315,21 @@ public final class ConfigurationHomeView extends ViewPart {
             var col = new TableColumn(t, SWT.LEFT);
             col.setText(headings[i]); col.setWidth(widths[i]);
         }
+        // SWT tables need to adapt when Eclipse splits/resizes the editor.
+        // Fixed 870px column widths previously required horizontal scrolling
+        // even when the table was the only visible content.
+        t.addListener(SWT.Resize, event -> {
+            int available = t.getClientArea().width - 8;
+            if (available < 160) return;
+            int total = java.util.Arrays.stream(widths).sum();
+            int used = 0;
+            for (int i = 0; i < widths.length; i++) {
+                int width = i == widths.length - 1 ? Math.max(65, available - used)
+                        : Math.max(55, available * widths[i] / total);
+                t.getColumn(i).setWidth(width);
+                used += width;
+            }
+        });
         return t;
     }
 
@@ -374,8 +396,27 @@ public final class ConfigurationHomeView extends ViewPart {
                     String config = effective != null && Files.isRegularFile(effective)
                             && Files.size(effective) <= 2_000_000 ? Files.readString(effective) : "";
                     boolean stale = generated == null || !Files.isRegularFile(generated)
+                            || effective == null || !Files.isRegularFile(effective)
                             || newer(app.resolve("prj.conf"), effective)
-                            || newer(app.resolve("app.overlay"), generated);
+                            || newer(app.resolve("app.overlay"), generated)
+                            || newer(app.resolve("CMakeLists.txt"), generated);
+                    if (generated != null && Files.isRegularFile(generated)) {
+                        // Only build-reported DTS/DTSI/overlay paths are treated
+                        // as active input dependencies. A new file which was
+                        // never included is NOT silently called effective.
+                        var sources = io.github.niwantha33.zew.core.DevicetreeSourceExplorer
+                                .inspect(app, build);
+                        boolean hasDependencies = false;
+                        for (var source : sources.sources()) {
+                            if (!source.buildInput()) continue;
+                            hasDependencies = true;
+                            if (newer(source.path(), generated)) stale = true;
+                        }
+                        if (!hasDependencies)
+                            warning += (warning.isBlank() ? "" : "\n")
+                                    + "Build dependency list unavailable: include/source freshness "
+                                    + "cannot be proven. Inspect sources or rebuild this profile.";
+                    }
                     var summary = FocusedConfigurationModel.inspect(
                             board, profile, snapshot.devicetree(), config, stale);
                     var nodes = DevicetreeHardware.inspect(snapshot.devicetree());
@@ -433,10 +474,12 @@ public final class ConfigurationHomeView extends ViewPart {
         header.setText(project.getName() + "  •  " + found.board() + "  •  " + found.profile()
                 + "  •  Target qualifier: " + qualifier(found.board()));
         freshness.setText(switch (summary.freshness()) {
-            case NO_BUILD -> "Build data MISSING";
-            case STALE_SNAPSHOT -> "Build data STALE";
-            case CURRENT_SNAPSHOT -> "Last generated build available";
+            case NO_BUILD -> "Build data MISSING — configure/build required";
+            case STALE_SNAPSHOT -> "Build data OUT OF DATE — rebuild required";
+            case CURRENT_SNAPSHOT -> "Last generated build available (not runtime)";
         });
+        if (hasDirtyProjectEditor())
+            freshness.setText("Pending unsaved project edits — generated build not current");
         freshness.setForeground(freshness.getDisplay().getSystemColor(
                 summary.freshness() == FocusedConfigurationModel.Freshness.CURRENT_SNAPSHOT
                 ? SWT.COLOR_DARK_GREEN : summary.freshness()
@@ -787,7 +830,14 @@ public final class ConfigurationHomeView extends ViewPart {
     }
 
     @Override public void setFocus() {
-        if (primary != null && !primary.isDisposed()) primary.setFocus();
+        if (primary == null || primary.isDisposed()) return;
+        primary.setFocus();
+        // A user may have edited source while working in another Eclipse
+        // editor. Expose pending unsaved changes upon returning.
+        if (evidence != null && hasDirtyProjectEditor()) {
+            freshness.setForeground(freshness.getDisplay().getSystemColor(SWT.COLOR_DARK_YELLOW));
+            freshness.setText("Pending unsaved project edits — review/apply blocked");
+        }
     }
     @Override public void dispose() {
         generation.incrementAndGet();
