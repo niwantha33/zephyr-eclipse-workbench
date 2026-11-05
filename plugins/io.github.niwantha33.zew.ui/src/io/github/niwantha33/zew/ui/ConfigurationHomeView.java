@@ -32,6 +32,7 @@ import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
+import io.github.niwantha33.zew.core.ConfigurationFailureEvidence;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
@@ -268,8 +269,9 @@ public final class ConfigurationHomeView extends ViewPart {
         buildDetails = new Text(root, SWT.BORDER | SWT.READ_ONLY | SWT.MULTI
                 | SWT.WRAP | SWT.V_SCROLL);
         buildDetails.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        var actions = bar(root, 3);
+        var actions = bar(root, 4);
         button(actions, "Build & validate", () -> advanced("build"));
+        button(actions, "Review failed configure", this::openRecordedFailure);
         button(actions, "Project settings & profiles", () -> advanced("settings"));
         button(actions, "Inspect build evidence", () -> advanced("evidence"));
         showSystemAdvanced = button(root, "Show advanced system settings", () -> {
@@ -452,6 +454,29 @@ public final class ConfigurationHomeView extends ViewPart {
                             + receipt.detail() + " Tracked source inputs: " + receipt.sourceCount() + ".";
                     var summary = FocusedConfigurationModel.inspect(
                             board, profile, snapshot.devicetree(), config, freshnessState);
+                    // CS-02: a successful build is NOT a prerequisite for
+                    // diagnosis. Reuse retained Workbench failures and
+                    // source-only requested configuration, without claiming
+                    // a saved failure still applies to current sources.
+                    var failure = ConfigurationFailureEvidence.inspect(app, build);
+                    var combined = new java.util.ArrayList<FocusedConfigurationModel.Issue>();
+                    for (var finding : failure.findings()) {
+                        if (combined.size() >= 7) break;
+                        combined.add(new FocusedConfigurationModel.Issue(
+                                finding.title(), finding.explanation(),
+                                finding.nextAction(), ""));
+                    }
+                    for (var old : summary.issues()) {
+                        if (combined.size() >= 8) break;
+                        combined.add(old);
+                    }
+                    summary = new FocusedConfigurationModel.Overview(summary.freshness(),
+                            summary.board(), summary.profile(), summary.flash(), summary.ram(),
+                            summary.peripherals(), combined);
+                    warning += (warning.isBlank() ? "" : "\n")
+                            + "Configuration evidence: " + failure.mode()
+                            + ", requested settings: " + failure.requestedSymbols()
+                            + ", recorded failed attempt: " + failure.recordedFailure() + ".";
                     var nodes = DevicetreeHardware.inspect(snapshot.devicetree());
                     observed = new Evidence(board, profile, build, snapshot.devicetree(), config,
                             settings, stale, warning, summary, nodes);
@@ -603,8 +628,11 @@ public final class ConfigurationHomeView extends ViewPart {
         }
         var row = (FocusedConfigurationModel.Issue) issueRows.getSelection()[0].getData();
         issueInfo.setText(row.detail() + "\nNext: " + row.nextAction());
-        if (row.category().isBlank()) primary.setSelection(BUILD);
-        else selectCategory(row.category());
+        if (!row.category().isBlank()) selectCategory(row.category());
+        else if (row.title().startsWith("Recorded failed build")
+                || row.title().startsWith("Undefined Kconfig symbol"))
+            openRecordedFailure();
+        else primary.setSelection(BUILD);
     }
 
     private void selectCategory(String type) {
@@ -831,6 +859,22 @@ public final class ConfigurationHomeView extends ViewPart {
             return;
         }
         advanced("review");
+    }
+
+    private void openRecordedFailure() {
+        if (project == null || !project.isAccessible()) {
+            MessageDialog.openInformation(getSite().getShell(), "Select a project",
+                    "Select a Zephyr project to inspect its recorded failed configuration.");
+            return;
+        }
+        try {
+            var part = getSite().getPage().showView(BuildFailureInvestigationView.ID);
+            if (part instanceof BuildFailureInvestigationView history)
+                history.displayProject(project);
+        } catch (PartInitException e) {
+            MessageDialog.openError(getSite().getShell(), "Failed-build evidence",
+                    e.getMessage());
+        }
     }
 
     private void memoryMap() {
