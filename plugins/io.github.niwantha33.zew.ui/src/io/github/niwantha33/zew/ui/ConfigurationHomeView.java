@@ -379,7 +379,6 @@ public final class ConfigurationHomeView extends ViewPart {
                         case UNSUPPORTED -> SWT.COLOR_DARK_RED;
                         case UNKNOWN -> SWT.COLOR_DARK_GRAY;
                     }));
-            item.setToolTipText(row.explanation());
             item.setData(row);
         }
         issueRows.removeAll();
