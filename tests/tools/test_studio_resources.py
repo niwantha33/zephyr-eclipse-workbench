@@ -101,3 +101,54 @@ class ResourceInspectionTests(unittest.TestCase):
         report = resources.inspect(self.build, self.zephyr)
         self.assertEqual(report["status"], "partial-or-unavailable")
         self.assertEqual(report["images"][0]["reason"], "missing-generated-dts")
+
+class UpstreamResourceIntegrationTests(unittest.TestCase):
+    def test_actual_edtlib_decodes_cells_before_shared_line_diagnosis(self):
+        from pathlib import Path
+        import tempfile
+        try:
+            from devicetree import edtlib
+        except ImportError:
+            self.skipTest("Install upstream devicetree for typed-cell semantic integration")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bindings = root / "bindings"
+            bindings.mkdir()
+            (bindings / "test,gpio.yaml").write_text('''description: Synthetic test GPIO controller
+compatible: "test,gpio"
+properties:
+  gpio-controller:
+    type: boolean
+  "#gpio-cells":
+    type: int
+    required: true
+gpio-cells:
+  - pin
+  - flags
+''')
+            (bindings / "test,consumer.yaml").write_text('''description: Synthetic test consumer
+compatible: "test,consumer"
+properties:
+  gpios:
+    type: phandle-array
+    required: true
+''')
+            dts = root / "fixture.dts"
+            dts.write_text('''/dts-v1/;
+/ {
+    gpio0: gpio { compatible = "test,gpio"; gpio-controller; #gpio-cells = <2>; };
+    pins: pins { };
+    one { compatible = "test,consumer"; gpios = <&gpio0 2 0>; pinctrl-0 = <&pins>; pinctrl-names = "default"; };
+    two { compatible = "test,consumer"; gpios = <&gpio0 2 1>; };
+    three { compatible = "test,consumer"; gpios = <&gpio0 3 0>; };
+    disabled { status = "disabled";
+        child { compatible = "test,consumer"; gpios = <&gpio0 3 0>; };
+    };
+};
+''')
+            report = analyze_edt(edtlib.EDT(str(dts), [str(bindings)]))
+            self.assertEqual(len(report["findings"]), 1)
+            self.assertEqual(report["findings"][0]["pin"], 2)
+            self.assertEqual(report["findings"][0]["confidence"], "possible")
+            self.assertEqual(report["pinctrl_states"][0]["configuration_nodes"], ["/pins"])
+            self.assertEqual(len(report["gpio_lines"]), 2)
