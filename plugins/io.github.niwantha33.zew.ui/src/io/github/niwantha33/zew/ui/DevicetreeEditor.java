@@ -94,10 +94,10 @@ public final class DevicetreeEditor extends TextEditor {
         }
         shownDiagnostics.clear();
         shownDiagnostics.putAll(next);
+        // The annotation is the only visual diagnostic: do not overwrite the
+        // workbench status line with live guidance or hover-style messages.
         var status = getEditorSite().getActionBars().getStatusLineManager();
-        var firstError = findings.stream().filter(p -> "error".equals(p.severity())).findFirst();
-        status.setErrorMessage(firstError.isPresent()
-                ? "Devicetree: " + firstError.get().message() : null);
+        status.setErrorMessage(null);
         status.setMessage(null);
     }
 
