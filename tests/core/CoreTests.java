@@ -78,7 +78,11 @@ public final class CoreTests {
             var flood = runner.run(fixture("flood"), ROOT, Duration.ofSeconds(15), () -> false, line -> {});
             check(flood.exitCode() == 0 && flood.output().contains("line-9999"), "large merged output does not deadlock");
             var capture = runner.run(fixture("capture"), ROOT, Duration.ofSeconds(15), () -> false, line -> {});
-            check(capture.truncated() && capture.output().length() <= 2_000_000, "capture limit bounds memory");
+            check(capture.truncated() && capture.output().length() <= 2_000_000,
+                    "capture limit bounds memory [exit=" + capture.exitCode()
+                    + ", truncated=" + capture.truncated()
+                    + ", chars=" + capture.output().length()
+                    + ", trailing=" + capture.output().substring(Math.max(0, capture.output().length() - 64)) + "]");
             check(capture.requireSuccess() != null, "large successful build output remains successful");
             var commandsScanner = new BuildHostRequirements.CommandScanner();
             var oversizedCommands = runner.run(fixture("largecommands"), ROOT, Duration.ofSeconds(20),
