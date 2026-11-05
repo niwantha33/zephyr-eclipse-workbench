@@ -167,6 +167,17 @@ public final class PeripheralWorkflow {
                         "Cross-check assigned pads for conflicts across all active consumers.",
                         "pinmux", "bias-pull-up", "bias-pull-down",
                         "drive-strength", "input-enable", "output-enable"),
+                plan("Flash / Storage", "Storage controller & device",
+                        "Inspect the actual flash/NOR/NAND/SD controller or attached storage device, "
+                        + "parent bus, chip-select or interface mode and verified capacity. "
+                        + "A flash partition is a region within its parent, not a separate chip.",
+                        "Inspect size, erase/write block rules, bus clock, partitions and "
+                        + "write protection only where defined by its exact compatible/YAML binding.",
+                        "Check read/write protection, bootloader reservations and region overlap; "
+                        + "never claim free storage or perform an unreviewed erase.",
+                        "write-block-size", "erase-block-size", "size", "jedec-id",
+                        "spi-max-frequency", "wp-gpios", "hold-gpios",
+                        "partitions", "disk-name", "bus-width"),
                 plan("Other", "Binding-specific connections",
                         "Unclassified compatible-bearing nodes from the exact generated DTS. "
                         + "Inspect their real #*-cells, phandles, parent bus and binding; "
@@ -201,6 +212,12 @@ public final class PeripheralWorkflow {
     /** Structural DTS nodes are not unclassified user-configurable controllers. */
     public static boolean selectable(DevicetreeHardware.Device node, String category) {
         if (!HardwarePeripheralIndex.category(node).equals(category)) return false;
+        if ("Flash / Storage".equals(category)) {
+            // Actual storage components and controllers, not fixed-partition
+            // child nodes which should be inspected in the memory map.
+            return !node.name().startsWith("partition@")
+                    && !node.compatible().contains("fixed-partition");
+        }
         if (!"Other".equals(category)) return true;
         if (node.compatible().isBlank()) return false;
         // "Other" is for additional compatible-bearing devices, not RAM,
