@@ -88,14 +88,14 @@ public final class FocusedConfigurationModelTests {
                 && stale.flash().value().contains("stale"),
                 "stale configuration never represented as current");
         String parentDisabled = BUILT.replace("                    ranges;",
-                "                    ranges;\\n                    status = \\"disabled\\";");
+                "                    ranges;\n                    status = \"disabled\";");
         var inherited = FocusedConfigurationModel.inspect("board/target", "debug",
                 parentDisabled, "CONFIG_ADC=y", false);
         check(inherited.peripherals().stream().filter(r -> r.category().equals("ADC"))
                     .allMatch(r -> r.state() == FocusedConfigurationModel.State.DISABLED),
                 "disabled parent vetoes enabled child");
         var noConsumer = FocusedConfigurationModel.inspect("board/target", "debug",
-                BUILT.replace("io-channels = <0x22 0>;", "status = \\"okay\\";"),
+                BUILT.replace("io-channels = <0x22 0>;", "status = \"okay\";"),
                 "CONFIG_ADC=y", false);
         check(noConsumer.peripherals().stream().filter(r -> r.category().equals("ADC"))
                 .allMatch(r -> r.state() == FocusedConfigurationModel.State.SETUP_INCOMPLETE),
