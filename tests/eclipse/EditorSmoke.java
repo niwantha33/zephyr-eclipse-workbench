@@ -1108,6 +1108,27 @@ public final class EditorSmoke implements IApplication {
                             && canvas.getClientArea().height >= 300
                             && scroll.getContent() == beginnerBody,
                             "colourful configuration flow is actually laid out inside scrollable Start Here");
+                    check(scroll.getExpandVertical()
+                            && beginnerBody.getSize().y >= scroll.getMinHeight()
+                            && beginnerBody.getSize().y >= scroll.getClientArea().height
+                            && canvas.isVisible(),
+                            "Start Here content has a real height, not just a minimum scroll range");
+                    var contentPoint = canvas.toDisplay(10, 10);
+                    var viewportPoint = scroll.toControl(contentPoint);
+                    check(scroll.getClientArea().contains(viewportPoint),
+                            "Start Here diagram intersects the visible viewport on first open");
+                    var originalScrollSize = scroll.getSize();
+                    try {
+                        scroll.setSize(640, 240);
+                        scroll.setOrigin(0, scroll.getMinHeight());
+                        check(scroll.getOrigin().y > 0
+                                && beginnerBody.getSize().y >= scroll.getMinHeight(),
+                                "Start Here retains content height and scrolls in a small viewport");
+                    } finally {
+                        scroll.setOrigin(0, 0);
+                        scroll.setSize(originalScrollSize);
+                        settleNativeStudioLayout();
+                    }
                     check(((Integer) canvas.getClass().getMethod("blockCount").invoke(canvas)) == 8,
                             "eight visual blocks correspond to real workflow tools");
                     var flowBlock = java.util.Arrays.stream(canvas.getClass().getDeclaredClasses())
