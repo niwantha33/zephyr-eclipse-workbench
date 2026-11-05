@@ -170,7 +170,11 @@ public final class ConfigurationHomeView extends ViewPart {
         hardwareSearch = new Text(left, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL | SWT.BORDER);
         hardwareSearch.setLayoutData(fillWidth());
         hardwareSearch.setMessage("Search name, address or compatible");
-        hardwareSearch.addModifyListener(event -> controllersForCategory());
+        hardwareSearch.addModifyListener(event -> {
+            controllersForCategory();
+            step = 0;
+            renderGuide();
+        });
         new Label(left, SWT.NONE).setText("Type");
         categories = new Combo(left, SWT.READ_ONLY | SWT.DROP_DOWN);
         categories.setLayoutData(fillWidth());
