@@ -433,6 +433,9 @@ public final class ConfigurationHomeView extends ViewPart {
                     }
                     var snapshot = ConfigurationStudioFiles.inspect(app, build, profile);
                     Path effective = build == null ? null : build.resolve("zephyr/.config");
+                    String config = effective != null && Files.isRegularFile(effective)
+                            && Files.size(effective) <= 2_000_000
+                            ? Files.readString(effective) : "";
                     // Capture-time SHA-256 receipts are the authority for
                     // exact selected project/board/profile freshness. File
                     // timestamps and the existence of generated outputs alone
