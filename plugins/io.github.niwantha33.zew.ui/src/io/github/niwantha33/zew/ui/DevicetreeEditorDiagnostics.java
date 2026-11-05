@@ -112,7 +112,7 @@ final class DevicetreeEditorDiagnostics {
     }
 
     private static String resolvePath(String header, ArrayDeque<OpenNode> nodes) {
-        if (header.equals("/")) return "/";
+        if (header.equals("/") || header.isEmpty() && nodes.isEmpty()) return "/";
         Matcher ref = PATH_REF.matcher(header);
         if (ref.matches()) return ref.group(1);
         Matcher named = NAMED_NODE.matcher(header);
