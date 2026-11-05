@@ -114,6 +114,14 @@ config LEAK
         self.assertEqual(result["images"][0]["state"], "unavailable")
         self.assertEqual(result["findings"][0]["rule_id"], "CS-KCONFIG-UNKNOWN")
 
+    def test_input_budget_stops_before_hashing_excess_file(self):
+        with mock.patch.object(studio, "MAX_TOTAL", 1), \
+                mock.patch.object(studio, "_snapshot") as snapshot:
+            with self.assertRaises(studio.InputError):
+                studio._inputs(self.tree, self.zephyr, self.kroot, self.config,
+                               self.build / "build.ninja", self.zephyr / "scripts/kconfig/kconfiglib.py")
+        snapshot.assert_not_called()
+
     def test_unavailable_tool_does_not_fabricate_semantics(self):
         with mock.patch.object(studio.subprocess, "run", side_effect=OSError("private path")):
             result = studio.inspect(self.build, symbol="CHILD", ninja=self.ninja)

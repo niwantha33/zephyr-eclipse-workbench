@@ -22,9 +22,21 @@ CONFIDENCES = {"confirmed", "derived", "possible", "unknown"}
 SEVERITIES = {"error", "warning", "info"}
 
 
+def _encoded(report, **options):
+    try:
+        return json.dumps(report, sort_keys=True, ensure_ascii=True, allow_nan=False, **options)
+    except (TypeError, ValueError, RecursionError) as error:
+        raise InputError("Diagnosis report is not bounded JSON data") from error
+
+
+def _text(value, maximum, nonempty=False):
+    return (isinstance(value, str) and len(value) <= maximum
+            and (bool(value) or not nonempty)
+            and not any(ord(char) < 32 or ord(char) == 127 for char in value))
+
+
 def canonical_hash(report):
-    return hashlib.sha256(json.dumps(report, sort_keys=True, separators=(",", ":"),
-                                    ensure_ascii=True, allow_nan=False).encode()).hexdigest()
+    return hashlib.sha256(_encoded(report, separators=(",", ":")).encode()).hexdigest()
 
 
 def normalize(reports):
@@ -35,14 +47,20 @@ def normalize(reports):
     for report in reports:
         if not isinstance(report, dict):
             raise InputError("Diagnosis report must be an object")
-        encoded = json.dumps(report, sort_keys=True, allow_nan=False)
+        encoded = _encoded(report)
         total += len(encoded.encode())
         if total > MAX_REPORT_BYTES:
             raise InputError("Diagnosis reports exceed the bounded input size")
-        sources.append({"schema_version": report.get("schema_version", "unknown"),
-                        "sha256": canonical_hash(report), "status": report.get("status", "unknown")})
-        for limit in report.get("limitations", []):
-            if not isinstance(limit, str) or len(limit) > 4096:
+        schema, status = report.get("schema_version", "unknown"), report.get("status", "unknown")
+        if not _text(schema, 128, True) or not _text(status, 128, True):
+            raise InputError("Invalid report schema or status")
+        sources.append({"schema_version": schema,
+                        "sha256": canonical_hash(report), "status": status})
+        report_limits = report.get("limitations", [])
+        if not isinstance(report_limits, list) or len(report_limits) > 256:
+            raise InputError("Report limitations must be a bounded array")
+        for limit in report_limits:
+            if not _text(limit, 4096):
                 raise InputError("Invalid report limitation")
             limitations.add(limit)
         findings = report.get("findings", [])
@@ -55,10 +73,11 @@ def normalize(reports):
             if not isinstance(rule, str) or not RULE_ID.fullmatch(rule):
                 raise InputError("Invalid deterministic rule identifier")
             image, subject = raw.get("image", "unknown"), raw.get("symbol", raw.get("subject", "unknown"))
-            if not all(isinstance(value, str) and 0 < len(value) <= 512 for value in (image, subject)):
+            if not all(_text(value, 512, True) for value in (image, subject)):
                 raise InputError("Invalid finding image or subject")
             severity, confidence = raw.get("severity", "warning"), raw.get("confidence", "unknown")
-            if severity not in SEVERITIES or confidence not in CONFIDENCES:
+            if (not isinstance(severity, str) or not isinstance(confidence, str)
+                    or severity not in SEVERITIES or confidence not in CONFIDENCES):
                 raise InputError("Invalid finding severity or confidence")
             evidence = raw.get("evidence", [])
             if not isinstance(evidence, list) or len(evidence) > 100:
@@ -77,13 +96,15 @@ def normalize(reports):
                     if type(source["line"]) is not int or not 1 <= source["line"] <= 10_000_000:
                         raise InputError("Invalid evidence source line")
                     item["line"] = source["line"]
-                if "kind" in source and isinstance(source["kind"], str):
-                    item["kind"] = source["kind"][:100]
+                if "kind" in source:
+                    if not _text(source["kind"], 100, True):
+                        raise InputError("Invalid evidence kind")
+                    item["kind"] = source["kind"]
                 checked.append(item)
             if not checked:
                 confidence = "unknown"
             message, action = raw.get("message", ""), raw.get("next_action", "Inspect missing evidence.")
-            if not all(isinstance(value, str) and len(value) <= 8192 for value in (message, action)):
+            if not all(_text(value, 8192) for value in (message, action)):
                 raise InputError("Invalid finding text")
             identifier = f"{rule}:{image}:{subject}"
             finding = {"id": identifier, "rule_id": rule, "image": image, "subject": subject,

@@ -57,6 +57,27 @@ class StudioExtensionTests(unittest.TestCase):
             self.rule.clear()
             self.rule.update(original)
 
+    def test_malformed_observation_fields_and_kinds_fail_closed(self):
+        self.save()
+        for key, value in (("id", []), ("image", "app\nforged"), ("subject", {})):
+            original = self.observation[key]
+            self.observation[key] = value
+            with self.subTest(key=key), self.assertRaises(InputError):
+                evaluate([self.path], [self.observation], "4.4.0")
+            self.observation[key] = original
+        self.observation["evidence"][0]["kind"] = []
+        with self.assertRaises(InputError):
+            evaluate([self.path], [self.observation], "4.4.0")
+
+    def test_boolean_predicate_does_not_match_integer_fact(self):
+        self.rule["when"] = [{"field": "active", "equals": True}]
+        self.rule["fixtures"] = {"passing": {"active": False}, "failing": {"active": True}}
+        self.observation["facts"] = {"active": 1}
+        self.save()
+        self.assertFalse(evaluate([self.path], [self.observation], "4.4.0")["findings"])
+        self.observation["facts"] = {"active": True}
+        self.assertEqual(len(evaluate([self.path], [self.observation], "4.4.0")["findings"]), 1)
+
     def test_code_unknown_schema_duplicate_keys_and_symlinks_rejected(self):
         self.save()
         self.pack["rules"][0]["execute"] = "do not execute"

@@ -38,9 +38,17 @@ def _inputs(tree, zephyr, root, config, ninja_file, library_path):
         paths.add(path if path.is_absolute() else zephyr / path)
     if len(paths) > 20000:
         raise InputError("Too many Kconfig inputs")
-    result = [_snapshot(path) for path in sorted(paths)]
-    if sum(p["bytes"] for p in result) > MAX_TOTAL:
-        raise InputError("Kconfig input budget exceeded")
+    result, total = [], 0
+    for path in sorted(paths):
+        # Stop before hashing another large file once the cumulative budget
+        # would be exceeded. _snapshot still checks the read against races.
+        if path.stat().st_size > MAX_TOTAL - total:
+            raise InputError("Kconfig input budget exceeded")
+        entry = _snapshot(path)
+        total += entry["bytes"]
+        if total > MAX_TOTAL:
+            raise InputError("Kconfig input budget exceeded")
+        result.append(entry)
     return result
 
 

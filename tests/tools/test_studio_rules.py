@@ -45,6 +45,27 @@ class StudioRulesTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(InputError):
                 normalize([report])
 
+    def test_malformed_json_types_and_control_characters_fail_closed(self):
+        for key, value in (("confidence", []), ("severity", {}),
+                           ("image", "app\nforged"), ("symbol", "node\x1b[31m"),
+                           ("message", "message\x00hidden"), ("next_action", "action\x7f")):
+            report = self.report()
+            report["findings"][0][key] = value
+            with self.subTest(key=key), self.assertRaises(InputError):
+                normalize([report])
+        for key, value in (("limitations", "not-an-array"), ("limitations", {}),
+                           ("schema_version", []), ("status", {})):
+            report = self.report()
+            report[key] = value
+            with self.subTest(key=key), self.assertRaises(InputError):
+                normalize([report])
+        report = self.report()
+        report["findings"][0]["evidence"][0]["kind"] = []
+        with self.assertRaises(InputError):
+            normalize([report])
+        with self.assertRaises(InputError):
+            normalize([{"findings": [], "unserializable": set()}])
+
     def test_empty_is_limited_coverage_not_pass(self):
         report = normalize([])
         self.assertEqual(report["status"], "no-findings-in-supplied-evidence")

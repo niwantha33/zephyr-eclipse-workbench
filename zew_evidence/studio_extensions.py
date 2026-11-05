@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 
 from .collector import InputError, _read_observed
-from .studio_rules import RULE_ID, normalize
+from .studio_rules import RULE_ID, normalize, _text
 
 SCHEMA = "zew.studio-rulepack/1"
 VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
@@ -51,8 +51,9 @@ def _scalar(value):
 
 
 def _matches(conditions, facts):
-    return all(term["field"] in facts and facts[term["field"]] == term["equals"]
-               for term in conditions)
+    return all(term["field"] in facts
+               and type(facts[term["field"]]) is type(term["equals"])
+               and facts[term["field"]] == term["equals"] for term in conditions)
 
 
 def load(path: Path):
@@ -80,7 +81,9 @@ def load(path: Path):
                 raise InputError("Invalid rule text")
         if not rule["documentation"].startswith("https://"):
             raise InputError("Rule documentation must be an HTTPS reference; never fetched")
-        if rule["severity"] not in ("warning", "error", "info") or rule["confidence"] not in ("derived", "possible", "unknown"):
+        if (not isinstance(rule["severity"], str) or not isinstance(rule["confidence"], str)
+                or rule["severity"] not in ("warning", "error", "info")
+                or rule["confidence"] not in ("derived", "possible", "unknown")):
             raise InputError("Extension cannot assert confirmed root cause")
         terms = rule["when"]
         if not isinstance(terms, list) or not 1 <= len(terms) <= 16:
@@ -134,6 +137,8 @@ def evaluate(paths, observations, zephyr_version=None):
             for observation in observations:
                 if not isinstance(observation, dict) or set(observation) != {"id", "image", "subject", "facts", "evidence"}:
                     raise InputError("Invalid extension observation")
+                if not all(_text(observation[key], 512, True) for key in ("id", "image", "subject")):
+                    raise InputError("Invalid observation identity, image or subject")
                 facts = observation["facts"]
                 if not isinstance(facts, dict) or len(facts) > 64 or any(not isinstance(k, str) or not FIELD.fullmatch(k) or not _scalar(v) for k, v in facts.items()):
                     raise InputError("Invalid extracted fact map")
@@ -149,7 +154,9 @@ def evaluate(paths, observations, zephyr_version=None):
                 evidence = observation["evidence"]
                 if not isinstance(evidence, list) or len(evidence) > 99 or any(not isinstance(e, dict) for e in evidence):
                     raise InputError("Invalid extracted evidence")
-                if not set(rule["required_evidence"]).issubset({e.get("kind") for e in evidence}):
+                if any(not _text(e.get("kind"), 100, True) for e in evidence):
+                    raise InputError("Invalid extracted evidence kind")
+                if not set(rule["required_evidence"]).issubset({e["kind"] for e in evidence}):
                     reason = reason or "required-evidence-missing"
                 if reason:
                     skipped.append({"rule_id": rule["id"], "observation": observation["id"], "reason": reason})
