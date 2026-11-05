@@ -130,4 +130,8 @@ def collect_images(build: Path):
     if report["status"] != "discovered":
         return {"topology": report, "graph": None}
     graph = collect(build, declarations(report))
+    metadata = _regular(Path(build).absolute(), "domains.yaml")
+    if (metadata is None or _read_observed(metadata, MAX_DOMAINS_BYTES)[0]
+            != report["provenance"]["sha256"]):
+        raise InputError("Sysbuild topology changed during image collection")
     return {"topology": report, "graph": graph}

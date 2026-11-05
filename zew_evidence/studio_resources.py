@@ -101,6 +101,13 @@ def inspect(build: Path, zephyr: Path, images=None, bindings=None):
             row["reason"] = "selected-checkout-does-not-match-build"
             output.append(row)
             continue
+        # The generated snapshot must be self-contained. Otherwise dtlib could
+        # read an unrecorded arbitrary include/binary from this imported file.
+        # Conservatively reject even occurrences inside comments or strings.
+        if b"/include/" in snapshot or b"/incbin/" in snapshot:
+            row["reason"] = "external-parser-reads-not-permitted"
+            output.append(row)
+            continue
         existing = {n: m for n, m in sys.modules.items() if n == "devicetree" or n.startswith("devicetree.")}
         for name in existing:
             sys.modules.pop(name, None)

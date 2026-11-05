@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 import re
-import shutil
 import sys
 
 from .collector import InputError, _images, _read_observed, _regular
@@ -20,7 +19,7 @@ _TOOLS = (("cmake", ("CMAKE_COMMAND",)),
           ("ninja", ("CMAKE_MAKE_PROGRAM",)),
           ("c_compiler", ("CMAKE_C_COMPILER",)),
           ("python", ("PYTHON_EXECUTABLE", "Python3_EXECUTABLE", "Python_EXECUTABLE")))
-_VERSION = re.compile(r"[0-9]+(?:\.[0-9]+){0,3}(?:[-+][A-Za-z0-9_.-]+)?")
+_VERSION = re.compile(r"[0-9]{1,5}(?:\.[0-9]{1,5}){0,3}(?:[-+][A-Za-z0-9_.-]{1,64})?")
 
 
 def _cache(snapshot):
@@ -54,10 +53,10 @@ def _tool(values, keys, name):
         return {"state": "unknown", "reason": "invalid-configured-executable", "version": "unknown"}
     location = Path(value)
     if not location.is_absolute():
-        # Relative tool paths are interpreted by the original build, not by
-        # this inspection process. A basename may be looked up without execution.
-        found = shutil.which(value) if len(location.parts) == 1 else None
-        location = Path(found) if found else None
+        # Original CMake working directory/PATH may differ from this inspector.
+        # Neither current PATH lookup nor absence here proves tool availability.
+        return {"state": "unknown", "reason": "configured-relative-path-requires-original-environment",
+                "version": "unknown", "path_sha256": hashlib.sha256(value.encode("utf-8")).hexdigest()}
     try:
         exists = location is not None and location.is_file()
     except (OSError, ValueError):

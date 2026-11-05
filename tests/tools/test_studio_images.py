@@ -84,3 +84,23 @@ class ImageDiscoveryTests(unittest.TestCase):
             (self.root / "domains.yaml").write_text(text)
             with self.assertRaises(InputError):
                 inspect(self.root)
+
+    def test_topology_changed_during_collection_cannot_be_paired_with_graph(self):
+        from unittest import mock
+        from zew_evidence import studio_images as images
+        def changed(*args):
+            (self.root / "domains.yaml").write_text("{}")
+            return {"nodes": []}
+        with mock.patch.object(images, "collect", side_effect=changed):
+            with self.assertRaisesRegex(InputError, "topology changed"):
+                images.collect_images(self.root)
+
+    def test_topology_disappeared_during_collection_is_rejected(self):
+        from unittest import mock
+        from zew_evidence import studio_images as images
+        def removed(*args):
+            (self.root / "domains.yaml").unlink()
+            return {"nodes": []}
+        with mock.patch.object(images, "collect", side_effect=removed):
+            with self.assertRaisesRegex(InputError, "topology changed"):
+                images.collect_images(self.root)

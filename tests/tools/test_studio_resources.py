@@ -95,6 +95,16 @@ class ResourceInspectionTests(unittest.TestCase):
         (self.build / "CMakeCache.txt").write_text("ZEPHYR_BASE:PATH=/not-the-selected-tree\n")
         self.assertEqual(resources.inspect(self.build, self.zephyr)["images"][0]["reason"], "selected-checkout-does-not-match-build")
 
+    def test_external_parser_reads_are_rejected_before_upstream_import(self):
+        from unittest import mock
+        from zew_evidence import studio_resources as resources
+        for token in ('/include/ "unrecorded.dtsi"', '/incbin/("/private/secret")'):
+            self.dts.write_text(token)
+            with mock.patch.object(resources.importlib, "import_module", side_effect=AssertionError("must not import")):
+                row = resources.inspect(self.build, self.zephyr)["images"][0]
+            self.assertEqual(row["reason"], "external-parser-reads-not-permitted")
+            self.assertEqual(row["state"], "unknown")
+
     def test_missing_generated_tree_remains_unknown(self):
         from zew_evidence import studio_resources as resources
         self.dts.unlink()

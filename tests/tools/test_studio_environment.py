@@ -82,3 +82,14 @@ class EnvironmentPreflightTests(unittest.TestCase):
         self.assertEqual(image["tools"]["cmake"]["version_scope"], "recorded-cache-metadata-not-current-executable")
         self.assertEqual(image["tools"]["python"]["version_match"], "unknown")
         self.assertIn("CS12-RECORDED-VERSION-MISMATCH-CMAKE", {f["rule_id"] for f in image["findings"]})
+
+    def test_relative_configured_paths_are_unknown_not_confirmed_missing(self):
+        for value in ("ninja", "relative/tools/ninja"):
+            self.cache.write_text("CMAKE_MAKE_PROGRAM:FILEPATH=" + value + "\n")
+            image = inspect(self.root)["images"][0]
+            self.assertEqual(image["tools"]["ninja"]["state"], "unknown")
+            self.assertEqual(image["findings"], [])
+
+    def test_oversized_expected_version_is_rejected(self):
+        with self.assertRaises(InputError):
+            inspect(self.root, expected_versions={"ninja": "1." + "0" * 100000})
