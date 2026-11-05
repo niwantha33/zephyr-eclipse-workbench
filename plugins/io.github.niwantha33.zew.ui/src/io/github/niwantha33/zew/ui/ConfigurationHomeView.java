@@ -43,9 +43,18 @@ public final class ConfigurationHomeView extends ViewPart {
     public static final String ID = Activator.ID + ".configurationHome";
     private record Evidence(String board, String profile, Path build, String dts,
                             String config, Properties setup, boolean stale, String warning,
-                            FocusedConfigurationModel.Overview overview) {}
+                            FocusedConfigurationModel.Overview overview,
+                            List<DevicetreeHardware.Device> nodes) {
+        public Evidence { nodes = List.copyOf(nodes); }
+    }
+
+    private record Detail(Evidence snapshot, String category, String path,
+                          PeripheralStartGuide.Guide guide, String properties) {}
     private static final int OVERVIEW = 0, HARDWARE = 1, BUILD = 2;
     private final AtomicInteger generation = new AtomicInteger();
+    private final AtomicInteger detailGeneration = new AtomicInteger();
+    private Detail detail;
+    private Job detailJob;
     private IProject project;
     private Evidence evidence;
     private Job refreshJob;
@@ -328,8 +337,16 @@ public final class ConfigurationHomeView extends ViewPart {
             clear("Select an accessible Zephyr project in Project Explorer.");
             return;
         }
-        header.setText(selected.getName() + "  •  Reading build profile…");
-        freshness.setText("Reading selected build…");
+        // Do not leave a previous project's rows visible while a new build
+        // is being read; the selected project and requested inputs are separate
+        // from the last successful generated snapshot.
+        evidence = null;
+        detail = null;
+        detailGeneration.incrementAndGet();
+        if (detailJob != null) detailJob.cancel();
+        clear("Loading selected project and generated build…");
+        header.setText(selected.getName() + "  •  Reading board and profile…");
+        freshness.setText("Build evidence: loading…");
         var display = getSite().getShell().getDisplay();
         refreshJob = new Job("Read selected Zephyr Configuration Studio build") {
             @Override protected IStatus run(IProgressMonitor monitor) {
@@ -357,12 +374,18 @@ public final class ConfigurationHomeView extends ViewPart {
                             || newer(app.resolve("app.overlay"), generated);
                     var summary = FocusedConfigurationModel.inspect(
                             board, profile, snapshot.devicetree(), config, stale);
+                    var nodes = DevicetreeHardware.inspect(snapshot.devicetree());
                     observed = new Evidence(board, profile, build, snapshot.devicetree(), config,
-                            settings, stale, warning, summary);
+                            settings, stale, warning, summary, nodes);
                 } catch (Exception problem) {
+                    Activator plugin = Activator.getDefault();
+                    if (plugin != null) plugin.getLog().log(
+                            new Status(IStatus.ERROR, Activator.ID,
+                                    "Configuration Studio could not read the selected build", problem));
                     observed = new Evidence("Unknown", "Unknown", null, "", "",
-                            new Properties(), true, problem.getMessage(),
-                            FocusedConfigurationModel.inspect("Unknown", "Unknown", "", "", true));
+                            new Properties(), true, "Build inspection failed: " + problem.getMessage(),
+                            FocusedConfigurationModel.inspect("Unknown", "Unknown", "", "", true),
+                            List.of());
                 }
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 final Evidence result = observed;
@@ -385,7 +408,18 @@ public final class ConfigurationHomeView extends ViewPart {
         peripheralRows.removeAll(); issueRows.removeAll();
         capacityFlash.setText("Unknown"); capacityRam.setText("Unknown");
         buildDetails.setText(description);
+        if (hardwareNodes != null && !hardwareNodes.isDisposed()) hardwareNodes.removeAll();
+        controllerPath = "";
+        if (navigationEmpty != null && !navigationEmpty.isDisposed())
+            navigationEmpty.setText(description);
         guideState.setText(description);
+        if (editSupport != null && !editSupport.isDisposed())
+            editSupport.setText("Editing support: Unknown. Build to identify a controller and binding.");
+        if (pageText != null) for (Text page : pageText)
+            if (page != null && !page.isDisposed()) page.setText(description);
+        if (previous != null && !previous.isDisposed()) previous.setEnabled(false);
+        if (next != null && !next.isDisposed()) next.setEnabled(false);
+        if (validateApply != null && !validateApply.isDisposed()) validateApply.setEnabled(false);
     }
 
     private void render() {
@@ -508,7 +542,7 @@ public final class ConfigurationHomeView extends ViewPart {
         try {
             hardwareNodes.removeAll();
             var nodes = evidence == null ? List.<DevicetreeHardware.Device>of()
-                    : DevicetreeHardware.inspect(evidence.dts());
+                    : evidence.nodes();
             for (var node : nodes) {
                 if (!PeripheralWorkflow.selectable(node, category)) continue;
                 if (!filter.isBlank()
@@ -548,77 +582,173 @@ public final class ConfigurationHomeView extends ViewPart {
         }
     }
 
-    private PeripheralStartGuide.Guide guide() {
-        var d = evidence;
-        return PeripheralStartGuide.inspect(d == null ? "" : d.dts(), category,
-                controllerPath, d == null ? "" : d.config(), d == null || d.stale());
-    }
 
+    /**
+     * The selected page only displays cached, selected-build evidence. The
+     * expensive DTS parsing and input/consumer analysis run off the SWT
+     * thread. A generation + identity check prevents late results from an
+     * old selected peripheral from appearing against the new one.
+     */
     private void renderGuide() {
         if (stepHost == null || stepHost.isDisposed()) return;
-        var d = evidence;
+        var snapshot = evidence;
         var plan = PeripheralWorkflow.forCategory(category);
-        var g = guide();
-        var labels = plan.steps();
-        breadcrumb.setText("Hardware  /  " + category + "  /  " + labels.get(step)
-                + "  •  " + (step + 1) + " of 4");
-        guideState.setText(g.state() + "  •  " + g.explanation());
-
-        pageText[0].setText("CONTROLLER\n\n" + g.steps()
-                + "\n\nExact selected generated controller: "
-                + (controllerPath.isBlank() ? "(none)" : controllerPath)
-                + "\n\nAn enabled DTS controller does NOT prove driver compilation "
-                + "or active hardware at runtime.");
-
-        String details = PeripheralWorkflow.describeProperties(
-                d == null ? "" : d.dts(), controllerPath, category);
-        pageText[1].setText(plan.connectionTitle().toUpperCase(java.util.Locale.ROOT)
-                + "\n\n" + plan.connectionHelp()
-                + ("ADC".equals(category) ? "\n\n"
-                    + FocusedConfigurationModel.pinEvidence(g) : "")
-                + "\n\nOBSERVED VALUES IN THE SELECTED GENERATED DTS:\n"
-                + details + "\n\nPhysical pad/connector availability and "
-                + "resource ownership remain unverified unless the exact "
-                + "board, binding and package metadata establish them.");
-
-        pageText[2].setText("SETTINGS FOR " + category + "\n\n" + plan.settingsHelp()
-                + "\n\nOBSERVED CONFIGURATION (NOT EDITABLE HERE):\n"
-                + details
-                + "\n\nLast-build driver/Kconfig guidance:\n" + g.configExample()
-                + "\n\nOnly values allowed by the exact selected Zephyr binding "
-                + "can be proposed in the advanced source editor.");
-
-        pageText[3].setText("REVIEW PROPOSED CHANGES — " + category + "\n\n"
-                + "Selected controller: "
-                + (controllerPath.isBlank() ? "(none)" : controllerPath)
-                + "\n\nNew source changes: NONE proposed yet.\n\n"
-                + plan.reviewHelp() + "\n\n"
-                + "The existing binding-guided editor previews a real source diff, "
-                + "validates the exact proposal with scratch-only Zephyr CMake "
-                + "and requires explicit confirmation for an atomic, backed-up save."
-                + "\n\nNo pin, channel, clock or driver assignments are invented. "
-                + "After saving, rebuild the exact board/profile; last-build "
-                + "DTS/Kconfig remain stale until successful regeneration.");
-
+        breadcrumb.setText("Hardware  /  " + category + "  /  " + plan.steps().get(step));
         stepLayout.topControl = pages[step];
         stepHost.layout(true, true);
-        previous.setEnabled(step > 0);
-        next.setEnabled(step < 3);
+        previous.setEnabled(step > 0 && !controllerPath.isBlank());
+        boolean hasNode = snapshot != null && !controllerPath.isBlank();
+        next.setEnabled(hasNode && step < 3);
         boolean reviewing = step == 3;
         validateApply.setVisible(reviewing);
-        if (validateApply.getLayoutData() instanceof GridData layout)
-            layout.exclude = !reviewing;
+        if (validateApply.getLayoutData() instanceof GridData gd) gd.exclude = !reviewing;
         next.setVisible(!reviewing);
-        if (next.getLayoutData() instanceof GridData layout)
-            layout.exclude = reviewing;
+        if (next.getLayoutData() instanceof GridData gd) gd.exclude = reviewing;
         next.getParent().layout(true, true);
-        validateApply.setEnabled(reviewing && d != null && !d.stale()
-                && !controllerPath.isBlank());
-        // The official samples and binding inspection remain available for
-        // ALL selected categories. A generated C scaffold is still gated
-        // by the original verified ADC engine, never fabricated for others.
-        example.setEnabled(d != null && !d.dts().isBlank()
-                && !controllerPath.isBlank());
+        validateApply.setEnabled(hasNode && reviewing && !snapshot.stale()
+                && !hasDirtyProjectEditor());
+        example.setEnabled(hasNode);
+
+        if (!hasNode) {
+            guideState.setText(snapshot == null || snapshot.dts().isBlank()
+                    ? "Requires build information — no generated Devicetree."
+                    : "No " + category + " controller is selected in this build.");
+            editSupport.setText("Editing support: Unknown — select a verified controller.");
+            String message = "Select an actual controller in the left-hand list. "
+                    + "For missing build data, use Build & System. An absent node "
+                    + "does not prove the silicon lacks this peripheral.";
+            for (Text text : pageText) text.setText(message);
+            validateApply.setEnabled(false);
+            return;
+        }
+        var current = detail;
+        if (current == null || current.snapshot() != snapshot
+                || !current.path().equals(controllerPath)
+                || !current.category().equals(category)) {
+            guideState.setText("Loading exact " + category
+                    + " controller details from the selected build…");
+            editSupport.setText("Evidence loading. No file is modified by selection.");
+            for (Text text : pageText)
+                text.setText("Reading selected Devicetree and effective Kconfig off the UI thread…");
+            validateApply.setEnabled(false);
+            scheduleDetail(snapshot, category, controllerPath);
+            return;
+        }
+        showDetail(current, plan);
+    }
+
+    private void scheduleDetail(Evidence snapshot, String requestedCategory, String requestedPath) {
+        int ticket = detailGeneration.incrementAndGet();
+        if (detailJob != null) detailJob.cancel();
+        var ui = getSite().getShell().getDisplay();
+        detailJob = new Job("Inspect Zephyr peripheral " + requestedCategory) {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                Detail result;
+                try {
+                    var guide = PeripheralStartGuide.inspect(snapshot.dts(), requestedCategory,
+                            requestedPath, snapshot.config(), snapshot.stale());
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    var values = PeripheralWorkflow.describeProperties(
+                            snapshot.dts(), requestedPath, requestedCategory);
+                    result = new Detail(snapshot, requestedCategory, requestedPath, guide, values);
+                } catch (Exception failure) {
+                    Activator plugin = Activator.getDefault();
+                    if (plugin != null) plugin.getLog().log(new Status(IStatus.ERROR,
+                            Activator.ID, "Peripheral detail inspection failed", failure));
+                    var fallback = new PeripheralStartGuide.Guide(requestedCategory, requestedPath,
+                            PeripheralStartGuide.State.BUILD_REQUIRED,
+                            "Unable to inspect this controller: " + failure.getMessage(),
+                            "Inspect the exact selected source and try Refresh.", "", "", "", "", -1);
+                    result = new Detail(snapshot, requestedCategory, requestedPath,
+                            fallback, "Inspection failed; no values have been guessed.");
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                final Detail completed = result;
+                ui.asyncExec(() -> {
+                    if (ticket != detailGeneration.get()
+                            || stepHost == null || stepHost.isDisposed()
+                            || evidence != snapshot || !category.equals(requestedCategory)
+                            || !controllerPath.equals(requestedPath))
+                        return;
+                    detail = completed;
+                    renderGuide();
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        detailJob.setSystem(true);
+        detailJob.schedule();
+    }
+
+    private void showDetail(Detail selected, PeripheralWorkflow.Plan plan) {
+        var guide = selected.guide();
+        var snapshot = selected.snapshot();
+        String description = switch (guide.state()) {
+            case BUILD_REQUIRED -> "Requires build information";
+            case NOT_IN_DTS -> "Controller not found in generated Devicetree";
+            case DTS_DISABLED -> "Disabled in Devicetree (controller or parent)";
+            case SETUP_REQUIRED -> "Setup incomplete";
+            case ADC_WIRING_FOUND -> "ADC consumer/channel described in build";
+            case INSPECT_BINDING -> "Inspection required";
+        };
+        guideState.setText(description + "  •  " + selected.path()
+                + (snapshot.stale() ? "  •  OUT OF DATE — rebuild" : ""));
+        // A generic source editor is not an automatically supported form for
+        // an arbitrary binding, and a successful DTS scan isn't validation.
+        editSupport.setText("Editor support: Inspection first. Binding-checked source proposals "
+                + "are available in the advanced editor, where supported. No physical pins verified.");
+        pageText[0].setText("CONTROLLER\n\n" + guide.explanation()
+                + "\n\nExact generated node: " + selected.path()
+                + "\n\nNext: " + plan.connectionTitle()
+                + ". Enabling a DTS node does not prove driver or runtime usage.");
+        pageText[1].setText(plan.connectionTitle().toUpperCase(java.util.Locale.ROOT)
+                + "\n\n" + plan.connectionHelp()
+                + ("ADC".equals(selected.category()) ? "\n\n"
+                    + FocusedConfigurationModel.pinEvidence(guide) : "")
+                + "\n\nObserved values (last generated build):\n" + selected.properties()
+                + "\n\nPhysical pad/package mapping and conflicts require exact board metadata.");
+        pageText[2].setText("SETTINGS — " + selected.category()
+                + "\n\n" + plan.settingsHelp()
+                + "\n\nActual generated values (not proposed edits):\n"
+                + selected.properties()
+                + "\n\nDriver/Kconfig evidence:\n" + guide.configExample()
+                + "\n\nOnly exact binding-allowed values may be proposed in the advanced editor.");
+        pageText[3].setText("REVIEW — " + selected.category()
+                + "\n\nNo source change has been proposed on this page."
+                + "\nNo files will be written by selecting a controller or browsing its details."
+                + "\n\n" + plan.reviewHelp()
+                + "\n\nTo create an edit, use the verified source editor, review the actual file diff "
+                + "and run binding/schema and real configure checks independently. "
+                + "Only explicitly confirmed edits are written to the project-owned overlay."
+                + "\n\nAfter applying, rebuild this board/profile; old generated data remain stale."
+                + (snapshot.stale() ? "\n\nBLOCKED: current generated build is out of date." : ""));
+    }
+
+    /** Dirty in-memory source editors must never be overwritten by an apply flow. */
+    private boolean hasDirtyProjectEditor() {
+        if (project == null || getSite().getPage() == null) return false;
+        for (var editor : getSite().getPage().getDirtyEditors()) {
+            var input = editor.getEditorInput();
+            if (input instanceof org.eclipse.ui.IFileEditorInput file
+                    && project.equals(file.getFile().getProject()))
+                return true;
+        }
+        return false;
+    }
+
+    private void reviewSelected() {
+        if (evidence == null || controllerPath.isBlank() || evidence.stale()) {
+            MessageDialog.openInformation(getSite().getShell(), "Build required",
+                    "Select a verified controller and rebuild stale generated configuration before editing.");
+            return;
+        }
+        if (hasDirtyProjectEditor()) {
+            MessageDialog.openWarning(getSite().getShell(), "Unsaved project edits",
+                    "Save or discard unsaved project editors before proposing a change. "
+                    + "Nothing has been written.");
+            return;
+        }
+        advanced("review");
     }
 
     private void memoryMap() {
@@ -658,6 +788,8 @@ public final class ConfigurationHomeView extends ViewPart {
     @Override public void dispose() {
         generation.incrementAndGet();
         if (refreshJob != null) refreshJob.cancel();
+        detailGeneration.incrementAndGet();
+        if (detailJob != null) detailJob.cancel();
         super.dispose();
     }
 }
