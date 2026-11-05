@@ -140,7 +140,7 @@ public final class ConfigurationHomeView extends ViewPart {
         categories.select(1);
         categories.addListener(SWT.Selection, e -> {
             category = categories.getText(); controllerPath = ""; step = 0;
-            fillControllers(); renderGuide();
+            controllersForCategory(); renderGuide();
         });
         new Label(selection, SWT.NONE).setText("Built controller");
         controllers = new Combo(selection, SWT.READ_ONLY | SWT.DROP_DOWN);
