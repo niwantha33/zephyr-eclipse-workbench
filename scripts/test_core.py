@@ -22,6 +22,9 @@ def tool(name):
 
 sources = sorted((root / 'plugins/io.github.niwantha33.zew.core/src').rglob('*.java'))
 sources += sorted((root / 'tests/core').glob('*.java'))
+# Reuse the real editor's JFace-independent index and completion engine in CI.
+sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/DevicetreeIndex.java',
+            root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/DevicetreeAssist.java']
 subprocess.run([tool('javac'), '--release', '21', '--add-modules', 'jdk.httpserver', '-encoding', 'UTF-8', '-d', str(out), *map(str, sources)], check=True, cwd=root)
 subprocess.run([tool('java'), '-cp', str(out), 'CoreTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '--add-modules', 'jdk.httpserver', '-cp', str(out), 'UpdateTests'], check=True, cwd=root, timeout=90)
@@ -31,6 +34,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'ApplicationDiscoveryTests'], che
 
 
 subprocess.run([tool('java'), '-cp', str(out), 'EditorTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'io.github.niwantha33.zew.ui.DevicetreeAssistTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ProjectTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'BuildHostRequirementsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'BuildReliabilityTests'], check=True, cwd=root, timeout=90)
