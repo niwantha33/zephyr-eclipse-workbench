@@ -177,6 +177,10 @@ public final class FocusedConfigurationModelTests {
                         new DevicetreeHardware.Device("/soc", "soc", "", "", "", "", 1),
                         "Other"),
                 "missing build only lists common entrypoints; structural nodes do not invent peripherals");
+        var structuralOnly = PeripheralStartGuide.inspect(BUILT, "Other", "",
+                "CONFIG_ADC=y", false);
+        check(structuralOnly.state() == PeripheralStartGuide.State.NOT_IN_DTS,
+                "unclassified memory/flash nodes never become phantom Other peripherals");
         var spi = allNodes.stream().filter(d ->
                 PeripheralWorkflow.selectable(d, "SPI")).findFirst().orElseThrow();
         check(PeripheralWorkflow.describeProperties(allDts.toString(), spi.path(), "SPI")

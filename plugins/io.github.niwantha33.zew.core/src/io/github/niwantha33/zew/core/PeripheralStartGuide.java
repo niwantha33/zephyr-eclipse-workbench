@@ -70,9 +70,9 @@ public final class PeripheralStartGuide {
                         .findFirst().orElse(null);
             }
         }
-        if (selected == null || !selectedCategory.equals(HardwarePeripheralIndex.category(selected))) {
+        if (selected == null || !PeripheralWorkflow.selectable(selected, selectedCategory)) {
             selected = devices.stream()
-                    .filter(device -> selectedCategory.equals(HardwarePeripheralIndex.category(device)))
+                    .filter(device -> PeripheralWorkflow.selectable(device, selectedCategory))
                     .sorted(Comparator.comparing(DevicetreeHardware.Device::path))
                     .findFirst().orElse(null);
         }
