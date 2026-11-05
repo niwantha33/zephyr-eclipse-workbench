@@ -1140,6 +1140,12 @@ public final class EditorSmoke implements IApplication {
                             && section.invoke(null, overlayEntry).equals("hardware")
                             && section.invoke(null, projectEntry).equals("system"),
                             "menu and explicit file context all target ONE three-section Studio");
+                    // The three-section Studio and legacy advanced Studio may share an
+                    // Eclipse view stack. Menu/navigation checks above can select the
+                    // other part; an obscured SWT tab has a zero-sized viewport.
+                    // Activate the actual advanced view before asserting real bounds.
+                    windows[0].getActivePage().activate(view);
+                    settleNativeStudioLayout();
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
                             studioTabs.getItem(0).getControl();
                     var beginnerBody = (org.eclipse.swt.widgets.Composite)
