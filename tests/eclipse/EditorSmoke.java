@@ -472,11 +472,31 @@ public final class EditorSmoke implements IApplication {
                         + socDtsi.toString().replace(" ", "\\ ") + "\n");
                 buildField.set(view, sourceRoot.resolve("build"));
                 refreshSources.invoke(view);
-                check(sourceList.getItemCount() == 2
-                        && sourceList.getItem(0).getText(1).equals("Board / shield DTS")
-                        && sourceList.getItem(1).getText(1).equals("SoC / architecture DTSI"),
-                        "installed source browser lists actual board and SoC DTS/DTSI dependencies");
-                sourceList.setSelection(1);
+                // The browser may also include an existing app.overlay as a
+                // source-only candidate; it must not be counted as a build input.
+                // Verify the exact dependency-backed rows by identity rather
+                // than assuming there can only ever be two visible sources.
+                boolean foundBoardDts = false;
+                int socDtsiRow = -1;
+                var discoveredSources = new java.util.ArrayList<String>();
+                for (int row = 0; row < sourceList.getItemCount(); row++) {
+                    var entry = sourceList.getItem(row);
+                    discoveredSources.add(entry.getText(0) + " / " + entry.getText(1)
+                            + " / " + entry.getText(2));
+                    if (entry.getText(0).equals("board.dts")
+                            && entry.getText(1).equals("Board / shield DTS")
+                            && entry.getText(2).equals("Build dependency"))
+                        foundBoardDts = true;
+                    if (entry.getText(0).equals("soc.dtsi")
+                            && entry.getText(1).equals("SoC / architecture DTSI")
+                            && entry.getText(2).equals("Build dependency"))
+                        socDtsiRow = row;
+                }
+                check(foundBoardDts && socDtsiRow >= 0,
+                        "installed source browser lists exact board and SoC DTS/DTSI build dependencies"
+                        + " [rows=" + discoveredSources
+                        + ", notice=" + sourceNotice.getText() + "]");
+                sourceList.setSelection(socDtsiRow);
                 sourceList.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
                 check(sourceContent.getText().contains("fixture,controller")
                         && !sourceContent.getEditable(),
