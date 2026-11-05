@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
 import io.github.niwantha33.zew.core.PeripheralStartGuide;
+import io.github.niwantha33.zew.core.PeripheralWorkflow;
+import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
+import io.github.niwantha33.zew.core.DevicetreeHardware;
 import java.util.Arrays;
 
 public final class FocusedConfigurationModelTests {
@@ -115,6 +118,72 @@ public final class FocusedConfigurationModelTests {
         check(FocusedConfigurationModel.pinEvidence(guide).contains("Physical pad")
                 && FocusedConfigurationModel.pinEvidence(null).contains("Unknown"),
                 "logical ADC input cannot become a physical package pin");
+        // All recognized hardware families have dedicated, non-ADC-specific
+        // connection/settings/review guidance and are selectable in the UI.
+        var full = PeripheralWorkflow.categories();
+        check(full.size() == HardwarePeripheralIndex.FILTERS.size() - 1
+                && full.containsAll(HardwarePeripheralIndex.FILTERS.stream()
+                        .filter(k -> !HardwarePeripheralIndex.ALL.equals(k)).toList())
+                && full.containsAll(java.util.List.of(
+                        "ADC", "DAC", "GPIO", "UART", "I2C", "SPI", "I2S",
+                        "PWM", "Timers", "DMA", "CAN", "USB", "RTC",
+                        "Watchdog", "Ethernet", "Pinctrl", "Other")),
+                "every categorized Zephyr peripheral has a task-focused workflow");
+        for (String kind : full) {
+            var plan = PeripheralWorkflow.forCategory(kind);
+            check(plan.steps().size() == 4
+                    && plan.steps().get(0).equals("Controller")
+                    && plan.steps().get(3).equals("Review")
+                    && !plan.connectionTitle().isBlank()
+                    && plan.connectionHelp().length() > 50
+                    && plan.settingsHelp().length() > 50
+                    && plan.reviewHelp().length() > 40,
+                    "no empty/decorative workflow for " + kind);
+        }
+        check(PeripheralWorkflow.forCategory("I2C").connectionHelp().contains("pull-ups")
+                && PeripheralWorkflow.forCategory("SPI").connectionHelp().contains("chip-select")
+                && PeripheralWorkflow.forCategory("DMA").connectionHelp().contains("request")
+                && PeripheralWorkflow.forCategory("PWM").connectionHelp().contains("#pwm-cells")
+                && PeripheralWorkflow.forCategory("USB").connectionHelp().contains("VBUS"),
+                "peripheral-specific workflows do not recycle ADC wiring advice");
+        String[] nodeNames = {
+            "gpio@100", "adc@200", "dac@300", "uart@400", "i2c@500", "spi@600",
+            "i2s@700", "pwm@800", "timer@900", "dma@a00", "can@b00",
+            "usb@c00", "rtc@d00", "watchdog@e00", "ethernet@f00",
+            "pinctrl@1000", "custom@1100"
+        };
+        var allDts = new StringBuilder("/dts-v1/;\n/ {\n soc {\n");
+        for (String node : nodeNames) allDts.append(node)
+                .append(" {\ncompatible = \"test,")
+                .append(node.substring(0, node.indexOf('@')).replace("custom", "special"))
+                .append("\";\nstatus = \"okay\";\n};\n");
+        allDts.append("};\n};\n");
+        var allNodes = DevicetreeHardware.inspect(allDts.toString());
+        for (String kind : full) {
+            check(allNodes.stream().anyMatch(d -> PeripheralWorkflow.selectable(d, kind)),
+                    "real generated DTS node discoverable for " + kind);
+        }
+        var extended = FocusedConfigurationModel.inspect("board/target", "debug",
+                allDts.toString(), "", false);
+        check(extended.peripherals().size() == full.size()
+                && extended.peripherals().stream().noneMatch(
+                        r -> r.state() == FocusedConfigurationModel.State.CONFIGURED)
+                && extended.peripherals().stream().allMatch(
+                        r -> r.state() != FocusedConfigurationModel.State.UNSUPPORTED),
+                "all hardware categories shown; DTS-only is never called configured/unsupported");
+        check(PeripheralWorkflow.overviewCategories(java.util.List.of()).equals(
+                        FocusedConfigurationModel.COMMON)
+                && !PeripheralWorkflow.selectable(
+                        new DevicetreeHardware.Device("/soc", "soc", "", "", "", "", 1),
+                        "Other"),
+                "missing build only lists common entrypoints; structural nodes do not invent peripherals");
+        var spi = allNodes.stream().filter(d ->
+                PeripheralWorkflow.selectable(d, "SPI")).findFirst().orElseThrow();
+        check(PeripheralWorkflow.describeProperties(allDts.toString(), spi.path(), "SPI")
+                        .contains("status =")
+                && !PeripheralWorkflow.describeProperties("", spi.path(), "SPI")
+                        .contains("status ="),
+                "settings are generated-build observations, not templates masquerading as values");
         System.out.println("PASS focused three-section config: " + tests);
     }
 }
