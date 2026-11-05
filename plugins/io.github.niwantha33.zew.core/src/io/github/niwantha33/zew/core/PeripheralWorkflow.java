@@ -201,7 +201,17 @@ public final class PeripheralWorkflow {
     /** Structural DTS nodes are not unclassified user-configurable controllers. */
     public static boolean selectable(DevicetreeHardware.Device node, String category) {
         if (!HardwarePeripheralIndex.category(node).equals(category)) return false;
-        return !"Other".equals(category) || !node.compatible().isBlank();
+        if (!"Other".equals(category)) return true;
+        if (node.compatible().isBlank()) return false;
+        // "Other" is for additional compatible-bearing devices, not RAM,
+        // flash, partitions or structural application containers.
+        String name = node.name().toLowerCase(java.util.Locale.ROOT);
+        String compatible = node.compatible().toLowerCase(java.util.Locale.ROOT);
+        return !name.matches("(?:memory|sram|flash|partition|cpu|cpus|chosen|aliases)(?:@.*|[-_].*)?")
+                && !name.equals("zephyr,user")
+                && !compatible.contains("mmio-sram")
+                && !compatible.contains("soc-nv-flash")
+                && !compatible.contains("fixed-partition");
     }
 
     /** Compact overview: six common entries even with no build, plus ALL
