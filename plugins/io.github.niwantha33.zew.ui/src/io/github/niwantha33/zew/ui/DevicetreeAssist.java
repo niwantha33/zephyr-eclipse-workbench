@@ -23,6 +23,14 @@ final class DevicetreeAssist {
         // first-time users see the five starting actions on Ctrl+Space.
         String sourceOnly = document.replaceAll("(?s)/\\*.*?\\*/", "")
                 .replaceAll("(?m)//[^\\r\\n]*", "").trim();
+        // Replace only the invalid brace, never invent a peripheral.
+        Matcher bareRoot = Pattern.compile(
+                "(?s)^\\s*(?:/\\*.*?\\*/\\s*)*(\\{)").matcher(document);
+        if (bareRoot.find() && caret <= bareRoot.end(1)) {
+            return new Result(bareRoot.start(1), 1, List.of(
+                    new Suggestion("/ {", "Fix root syntax: / {",
+                            "An overlay root must use '/ {'. Use & then Ctrl+Space to select a real controller.")));
+        }
         if (sourceOnly.isEmpty()) {
             var start = new ArrayList<Suggestion>();
             start.add(new Suggestion("&", "Configure an existing controller…",
