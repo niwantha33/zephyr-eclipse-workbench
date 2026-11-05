@@ -279,7 +279,14 @@ public final class EditorSmoke implements IApplication {
                     && guideSteps.getText().contains("CONFIG_ADC")
                     && !copyCode.getEnabled()
                     && !guideCode.getText().contains("int main(void)"),
-                    "installed ADC starter locates real disabled controller but does not offer fake working code");
+                    "installed ADC starter locates real disabled controller but does not offer fake working code"
+                    + " [tab=" + guideTabs.getSelectionIndex()
+                    + ", state=" + guideStatus.getText()
+                    + ", steps=" + guideSteps.getText().substring(0, Math.min(650, guideSteps.getText().length()))
+                    + ", copy=" + copyCode.getEnabled()
+                    + ", generatedCode=" + guideCode.getText().substring(0, Math.min(160, guideCode.getText().length()))
+                    + ", selectedController=" + (hardwareDevices.getSelectionCount() == 1 ? hardwareDevices.getSelection()[0].getText() : "(none)")
+                    + "]");
             startGuideMethod.invoke(view, "I2C");
             check(guideStatus.getText().contains("NOT_IN_DTS")
                     && !copyCode.getEnabled()
