@@ -1052,7 +1052,7 @@ public final class EditorSmoke implements IApplication {
             Path editorPrefs = fixture.resolve(".zew/devicetree-editor.properties");
             Files.createDirectories(editorPrefs.getParent());
             try {
-                Files.writeString(editorPrefs, "completion=true\\nhover=true\\n".replace("\\\\n", "\\n"));
+                Files.writeString(editorPrefs, "completion=true\nhover=true\n");
                 org.eclipse.swt.widgets.Display.getDefault().syncExec(() -> {
                     check(silentConfiguration.getContentAssistant(null) != null
                             && silentConfiguration.getTextHover(null,
