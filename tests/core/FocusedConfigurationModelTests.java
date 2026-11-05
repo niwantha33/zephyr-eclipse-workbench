@@ -177,15 +177,15 @@ public final class FocusedConfigurationModelTests {
                 "jedec,spi-nor", "okay", "<0>", 3);
         var uart = new DevicetreeHardware.Device(
                 "/soc/serial@4000", "serial@4000", "", "ns16550", "okay", "", 4);
-        var spi = new DevicetreeHardware.Device(
+        var spiBus = new DevicetreeHardware.Device(
                 "/soc/spi@3000", "spi@3000", "", "vendor,spi-controller", "okay", "", 5);
-        var ambiguous = new DevicetreeHardware.Device(
+        var ambiguousSerial = new DevicetreeHardware.Device(
                 "/soc/serial-flash@1", "serial-flash@1", "", "vendor,unknown", "", "", 6);
         check(HardwarePeripheralIndex.category(serialFlash).equals("Flash / Storage")
                 && !HardwarePeripheralIndex.category(serialFlash).equals("UART")
                 && HardwarePeripheralIndex.category(uart).equals("UART")
-                && HardwarePeripheralIndex.category(spi).equals("SPI")
-                && HardwarePeripheralIndex.category(ambiguous).equals("Other"),
+                && HardwarePeripheralIndex.category(spiBus).equals("SPI")
+                && HardwarePeripheralIndex.category(ambiguousSerial).equals("Other"),
                 "serial-flash is storage not UART; real serial controller and SPI bus retained");
         check(PeripheralWorkflow.overviewCategories(java.util.List.of()).equals(
                         FocusedConfigurationModel.COMMON)
