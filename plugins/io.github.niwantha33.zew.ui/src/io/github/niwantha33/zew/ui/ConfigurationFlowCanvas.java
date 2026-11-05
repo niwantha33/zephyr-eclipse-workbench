@@ -1,0 +1,266 @@
+// SPDX-License-Identifier: Apache-2.0
+package io.github.niwantha33.zew.ui;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.Color;
+import org.eclipse.swt.graphics.Font;
+import org.eclipse.swt.graphics.FontData;
+import org.eclipse.swt.graphics.GC;
+import org.eclipse.swt.graphics.Rectangle;
+import org.eclipse.swt.widgets.Canvas;
+import org.eclipse.swt.widgets.Composite;
+
+/**
+ * Coloured, interactive orientation diagram for the Configuration Studio.
+ *
+ * Solid arrows represent the relevant Zephyr build inputs. The inspection
+ * shortcut to the memory map is dashed. The DTSpec defines nodes, properties,
+ * labels, includes and bus address semantics; app.overlay and Kconfig are
+ * Zephyr build facilities, not parent/child relationships in the Devicetree.
+ *
+ * All destinations are real existing Eclipse workbench actions. This canvas
+ * does not imply that a described device is wired, driver-ready or running.
+ */
+public final class ConfigurationFlowCanvas extends Canvas {
+    public enum Block {
+        SOC("SoC description", "*.dtsi  |  shared chip nodes",
+                "Read the chip's inherited Devicetree source. Vendor files stay read-only."),
+        BOARD("Board definition", "*.dts  |  chosen board",
+                "Inspect the selected board's DTS source. It includes the SoC description."),
+        OVERLAY("Your changes", "*.overlay  |  application",
+                "Open or create your application's optional overlay, with confirmation."),
+        GENERATED("Combined tree", "zephyr.dts  |  build result",
+                "Inspect the generated Devicetree from your actual selected build."),
+        MEMORY("Memory map", "RAM  |  Flash  |  registers",
+                "Draw the address ranges evidenced by the generated Devicetree."),
+        BINDING("Device bindings", "*.yaml  |  properties",
+                "Select a hardware node and inspect its real Zephyr YAML binding."),
+        KCONFIG("Driver options", "prj.conf  |  Kconfig",
+                "Inspect separate Zephyr software/driver choices, not a DTS child node."),
+        BUILD("Build & verify", "check the real result",
+                "Run the selected project's actual Zephyr build and validation.");
+
+        private final String title, subtitle, description;
+        Block(String title, String subtitle, String description) {
+            this.title = title;
+            this.subtitle = subtitle;
+            this.description = description;
+        }
+        public String title() { return title; }
+        public String subtitle() { return subtitle; }
+        public String description() { return description; }
+    }
+
+    private record Area(Block block, Rectangle box) {}
+    private static final int INSET = 19;
+    private static final int TOP = 30;
+    private static final int SECOND = 211;
+    private static final int HEIGHT = 104;
+    public static final int DIAGRAM_HEIGHT = 338;
+
+    private final Color[] palette;
+    private final Color surface, outline, arrow, white, muted;
+    private final Font headlineFont, detailFont;
+    private List<Area> areas = List.of();
+    private Consumer<Block> onOpen = ignored -> {};
+    private Block hover, focus = Block.SOC;
+
+    public ConfigurationFlowCanvas(Composite parent) {
+        super(parent, SWT.DOUBLE_BUFFERED | SWT.NO_BACKGROUND);
+        var display = getDisplay();
+        palette = new Color[] {
+                new Color(display, 37, 99, 235),   // SoC: blue
+                new Color(display, 13, 148, 136),  // board: teal
+                new Color(display, 124, 58, 237),  // application overlay: violet
+                new Color(display, 5, 150, 105),   // build-generated DTS: green
+                new Color(display, 194, 65, 12),   // memory map: orange
+                new Color(display, 180, 83, 9),    // bindings: ochre
+                new Color(display, 71, 85, 105),   // separate Kconfig: slate
+                new Color(display, 190, 24, 93)    // build: rose
+        };
+        surface = new Color(display, 247, 249, 253);
+        outline = new Color(display, 203, 213, 225);
+        arrow = new Color(display, 71, 85, 105);
+        muted = new Color(display, 71, 85, 105);
+        white = display.getSystemColor(SWT.COLOR_WHITE);
+        FontData base = parent.getFont().getFontData()[0];
+        headlineFont = new Font(display, new FontData(
+                base.getName(), Math.max(base.getHeight() + 1, 10), SWT.BOLD));
+        detailFont = new Font(display, new FontData(
+                base.getName(), Math.max(base.getHeight() - 1, 8), SWT.NORMAL));
+
+        setToolTipText("Click a coloured block to open its real project tool; "
+                + "use arrows to understand the workflow.");
+        addPaintListener(event -> paintFlow(event.gc));
+        addListener(SWT.MouseMove, event -> {
+            Block next = hitTest(event.x, event.y);
+            if (hover != next) {
+                hover = next;
+                setCursor(display.getSystemCursor(next == null
+                        ? SWT.CURSOR_ARROW : SWT.CURSOR_HAND));
+                setToolTipText(next == null
+                        ? "Solid arrows: build inputs. Dashed arrow: inspect memory map."
+                        : next.description());
+                redraw();
+            }
+        });
+        addListener(SWT.MouseExit, event -> {
+            hover = null;
+            setCursor(display.getSystemCursor(SWT.CURSOR_ARROW));
+            redraw();
+        });
+        addListener(SWT.MouseDown, event -> {
+            if (event.button != 1) return;
+            Block chosen = hitTest(event.x, event.y);
+            if (chosen != null) {
+                focus = chosen;
+                setFocus();
+                redraw();
+                onOpen.accept(chosen);
+            }
+        });
+        addListener(SWT.KeyDown, event -> {
+            if (event.keyCode == SWT.ARROW_LEFT || event.keyCode == SWT.ARROW_UP)
+                focus = Block.values()[(focus.ordinal() + Block.values().length - 1)
+                        % Block.values().length];
+            else if (event.keyCode == SWT.ARROW_RIGHT || event.keyCode == SWT.ARROW_DOWN)
+                focus = Block.values()[(focus.ordinal() + 1) % Block.values().length];
+            else if (event.keyCode == SWT.CR || event.keyCode == SWT.KEYPAD_CR
+                    || event.character == ' ') {
+                onOpen.accept(focus);
+                return;
+            } else return;
+            redraw();
+        });
+        addListener(SWT.Dispose, event -> {
+            for (Color color : palette) color.dispose();
+            surface.dispose();
+            outline.dispose();
+            arrow.dispose();
+            muted.dispose();
+            headlineFont.dispose();
+            detailFont.dispose();
+        });
+    }
+
+    public void onOpen(Consumer<Block> action) {
+        onOpen = action == null ? ignored -> {} : action;
+    }
+
+    public int blockCount() { return Block.values().length; }
+
+    public Block blockAt(int x, int y) { return hitTest(x, y); }
+
+    /** For native SWT tests; coordinates are the same as actual click hitboxes. */
+    public Rectangle boundsOf(Block block) {
+        return areas.stream().filter(a -> a.block() == block)
+                .map(a -> new Rectangle(a.box().x, a.box().y, a.box().width, a.box().height))
+                .findFirst().orElse(null);
+    }
+
+    private Block hitTest(int x, int y) {
+        for (Area area : areas)
+            if (area.box().contains(x, y)) return area.block();
+        return null;
+    }
+
+    private void paintFlow(GC gc) {
+        int canvasWidth = Math.max(getClientArea().width, 600);
+        gc.setAntialias(SWT.ON);
+        gc.setTextAntialias(SWT.ON);
+        gc.setBackground(surface);
+        gc.fillRectangle(getClientArea());
+        gc.setForeground(outline);
+        gc.drawRoundRectangle(1, 1, canvasWidth - 3, DIAGRAM_HEIGHT - 3, 22, 22);
+
+        final int gap = Math.max(20, canvasWidth / 34);
+        final int boxWidth = Math.max(112, (canvasWidth - 2 * INSET - 3 * gap) / 4);
+        Rectangle[] boxes = new Rectangle[Block.values().length];
+        for (int i = 0; i < 4; i++)
+            boxes[i] = new Rectangle(INSET + i * (boxWidth + gap),
+                    TOP, boxWidth, HEIGHT);
+        // Bottom cells align with the four upper columns.
+        for (int i = 4; i < 8; i++)
+            boxes[i] = new Rectangle(INSET + (i - 4) * (boxWidth + gap),
+                    SECOND, boxWidth, HEIGHT);
+
+        // Draw connectors FIRST so they cannot cover any clickable text.
+        gc.setForeground(arrow);
+        for (int i = 0; i < 3; i++)
+            drawArrow(gc, boxes[i].x + boxWidth + 3, TOP + HEIGHT / 2,
+                    boxes[i + 1].x - 6, TOP + HEIGHT / 2, false);
+        // A binding informs the board/DTS processing; it is not a child node.
+        drawArrow(gc, centerX(boxes[5]), SECOND - 8,
+                centerX(boxes[1]), TOP + HEIGHT + 9, false);
+        // Generated Devicetree is an input to the real build.
+        drawArrow(gc, centerX(boxes[3]), TOP + HEIGHT + 9,
+                centerX(boxes[7]), SECOND - 8, false);
+        // Kconfig software choices are an independent input to the build.
+        drawArrow(gc, boxes[6].x + boxWidth + 3, SECOND + HEIGHT / 2,
+                boxes[7].x - 6, SECOND + HEIGHT / 2, false);
+        // An inspection shortcut is NOT a configuration/build dependency.
+        drawArrow(gc, centerX(boxes[0]), TOP + HEIGHT + 9,
+                centerX(boxes[4]), SECOND - 8, true);
+
+        List<Area> fresh = new ArrayList<>();
+        for (Block b : Block.values()) {
+            Rectangle box = boxes[b.ordinal()];
+            fresh.add(new Area(b, box));
+            Color colour = palette[b.ordinal()];
+            gc.setBackground(colour);
+            gc.fillRoundRectangle(box.x, box.y, box.width, box.height, 19, 19);
+            if (hover == b || (isFocusControl() && focus == b)) {
+                gc.setLineWidth(3);
+                gc.setForeground(outline);
+                gc.drawRoundRectangle(box.x - 2, box.y - 2,
+                        box.width + 4, box.height + 4, 21, 21);
+                gc.setLineWidth(1);
+            }
+            gc.setForeground(white);
+            gc.setFont(headlineFont);
+            gc.drawText(fit(gc, b.title(), box.width - 21),
+                    box.x + 11, box.y + 22, true);
+            gc.setFont(detailFont);
+            gc.drawText(fit(gc, b.subtitle(), box.width - 21),
+                    box.x + 11, box.y + 51, true);
+            gc.drawText("Open  \u2192", box.x + 11, box.y + 79, true);
+        }
+        areas = List.copyOf(fresh);
+        gc.setFont(detailFont);
+        gc.setForeground(muted);
+        gc.drawText("SOLID ARROWS = CONFIGURATION INPUTS", INSET, 10, true);
+        gc.drawText("DASHED = INSPECTION ONLY", INSET,
+                DIAGRAM_HEIGHT - 18, true);
+    }
+
+    private static int centerX(Rectangle r) { return r.x + r.width / 2; }
+
+    private static String fit(GC gc, String input, int available) {
+        String text = input;
+        while (text.length() > 4 && gc.textExtent(text).x > available)
+            text = text.substring(0, text.length() - 2) + "\u2026";
+        return text;
+    }
+
+    private static void drawArrow(GC gc, int x1, int y1, int x2, int y2,
+                                  boolean dashed) {
+        gc.setLineStyle(dashed ? SWT.LINE_DASH : SWT.LINE_SOLID);
+        gc.setLineWidth(dashed ? 2 : 3);
+        gc.drawLine(x1, y1, x2, y2);
+        gc.setLineStyle(SWT.LINE_SOLID);
+        double theta = Math.atan2(y2 - y1, x2 - x1);
+        int length = 9;
+        double spread = 0.55;
+        int ax = x2 - (int) Math.round(length * Math.cos(theta - spread));
+        int ay = y2 - (int) Math.round(length * Math.sin(theta - spread));
+        int bx = x2 - (int) Math.round(length * Math.cos(theta + spread));
+        int by = y2 - (int) Math.round(length * Math.sin(theta + spread));
+        gc.drawLine(x2, y2, ax, ay);
+        gc.drawLine(x2, y2, bx, by);
+        gc.setLineWidth(1);
+    }
+}
