@@ -105,8 +105,16 @@ public final class EditorSmoke implements IApplication {
                 const struct device *unknown = device_get_binding("UNKNOWN_GPIO");
                 gpio_pin_configure(unknown, 12, GPIO_OUTPUT_ACTIVE);
                 """);
+        // This test injects a *synthetic generated* DTS. The workbench may
+        // have a stale flag from the unrelated real test application; do not
+        // let that flag override the controlled fixture's expected status.
+        // Production continues to fail closed on stale generated outputs.
+        var staleField = type.getDeclaredField("buildOutdated");
+        staleField.setAccessible(true);
+        boolean originalStale = staleField.getBoolean(view);
         try {
             snapshotField.set(view, data);
+            staleField.setBoolean(view, false);
             source.setText(dts);
             var domains = (org.eclipse.swt.widgets.List) studioField(view, type, "peripheralCategories");
             domains.setSelection(1);
@@ -528,6 +536,7 @@ public final class EditorSmoke implements IApplication {
         } finally {
             Files.deleteIfExists(gpioSource);
             snapshotField.set(view, original);
+            staleField.setBoolean(view, originalStale);
             clear.invoke(view);
             hardwareSearch.setText(""); hardwareState.select(0);
             source.setText(((io.github.niwantha33.zew.core.ConfigurationStudioFiles.Snapshot) original).devicetree());
