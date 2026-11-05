@@ -15,6 +15,7 @@ import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.StackLayout;
+import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
@@ -50,8 +51,11 @@ public final class ConfigurationHomeView extends ViewPart {
     private Job refreshJob;
     private TabFolder primary;
     private Label header, freshness, capacityFlash, capacityRam, overviewInfo, issueInfo;
-    private Table peripheralRows, issueRows;
-    private Combo categories, controllers;
+    private Table peripheralRows, issueRows, hardwareNodes;
+    private Text overviewSearch, hardwareSearch;
+    private Combo categories;
+    private Label navigationEmpty, editSupport;
+    private List<FocusedConfigurationModel.Row> overviewRows = List.of();
     private String category = "ADC", controllerPath = "";
     private Composite stepHost;
     private StackLayout stepLayout;
@@ -119,6 +123,10 @@ public final class ConfigurationHomeView extends ViewPart {
         capacityRam = new Label(m, SWT.NONE);
         button(sizes, "View address map", this::memoryMap);
         new Label(root, SWT.NONE).setText("Peripherals described by the selected generated build");
+        overviewSearch = new Text(root, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
+        overviewSearch.setLayoutData(fillWidth());
+        overviewSearch.setMessage("Find a peripheral or configuration issue...");
+        overviewSearch.addModifyListener(event -> populateOverviewRows());
         peripheralRows = table(root, new String[]{"Peripheral", "Status", "Next action"},
                 new int[]{135, 165, 570}, true);
         peripheralRows.addListener(SWT.DefaultSelection, e -> choosePeripheral());
@@ -140,62 +148,97 @@ public final class ConfigurationHomeView extends ViewPart {
     }
 
     private void hardware(Composite root) {
-        var selection = bar(root, 4);
-        new Label(selection, SWT.NONE).setText("Peripheral");
-        categories = new Combo(selection, SWT.READ_ONLY | SWT.DROP_DOWN);
-        // Every Zephyr peripheral index family, not an ADC-centred shortlist.
-        // Categories are navigation, NOT claims that every chip has the block.
+        // One navigable selection, one focused detail. Raw evidence and
+        // advanced editing are optional, never permanently visible.
+        var split = new SashForm(root, SWT.HORIZONTAL);
+        split.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        var left = new Composite(split, SWT.NONE);
+        var leftLayout = new GridLayout(1, false);
+        leftLayout.marginWidth = 4;
+        leftLayout.marginHeight = 4;
+        left.setLayout(leftLayout);
+        new Label(left, SWT.NONE).setText("Find hardware");
+        hardwareSearch = new Text(left, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL | SWT.BORDER);
+        hardwareSearch.setLayoutData(fillWidth());
+        hardwareSearch.setMessage("Search name, address or compatible");
+        hardwareSearch.addModifyListener(event -> controllersForCategory());
+        new Label(left, SWT.NONE).setText("Type");
+        categories = new Combo(left, SWT.READ_ONLY | SWT.DROP_DOWN);
+        categories.setLayoutData(fillWidth());
         categories.setItems(PeripheralWorkflow.categories().toArray(String[]::new));
-        categories.select(1);
-        categories.addListener(SWT.Selection, e -> {
-            category = categories.getText(); controllerPath = ""; step = 0;
-            controllersForCategory(); renderGuide();
+        categories.select(categories.indexOf(category));
+        categories.addListener(SWT.Selection, event -> {
+            category = categories.getText();
+            controllerPath = "";
+            step = 0;
+            controllersForCategory();
+            renderGuide();
         });
-        new Label(selection, SWT.NONE).setText("Built controller");
-        controllers = new Combo(selection, SWT.READ_ONLY | SWT.DROP_DOWN);
-        controllers.setLayoutData(fillWidth());
-        controllers.addListener(SWT.Selection, e -> {
-            controllerPath = (String) controllers.getData(
-                    Integer.toString(controllers.getSelectionIndex()));
-            step = 0; renderGuide();
+        hardwareNodes = table(left, new String[]{"Controller", "Status"},
+                new int[]{220, 125}, true);
+        hardwareNodes.addListener(SWT.Selection, event -> {
+            if (hardwareNodes.getSelectionCount() != 1) return;
+            var node = (DevicetreeHardware.Device) hardwareNodes.getSelection()[0].getData();
+            if (node == null) return;
+            controllerPath = node.path();
+            step = 0;
+            renderGuide();
         });
-        breadcrumb = new Label(root, SWT.WRAP);
+        navigationEmpty = new Label(left, SWT.WRAP);
+        navigationEmpty.setLayoutData(fillWidth());
+        navigationEmpty.setText("Build the selected board to discover its controllers.");
+
+        var right = new Composite(split, SWT.NONE);
+        var rightLayout = new GridLayout(1, false);
+        rightLayout.marginWidth = 12;
+        rightLayout.marginHeight = 4;
+        rightLayout.verticalSpacing = 9;
+        right.setLayout(rightLayout);
+        breadcrumb = new Label(right, SWT.WRAP);
         breadcrumb.setLayoutData(fillWidth());
-        guideState = new Label(root, SWT.WRAP);
+        guideState = new Label(right, SWT.WRAP);
         guideState.setLayoutData(fillWidth());
-        stepHost = new Composite(root, SWT.NONE);
+        editSupport = new Label(right, SWT.WRAP);
+        editSupport.setLayoutData(fillWidth());
+        stepHost = new Composite(right, SWT.NONE);
         stepHost.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        stepLayout = new StackLayout(); stepHost.setLayout(stepLayout);
-        pages = new Composite[4]; pageText = new Text[4];
-        for (int i = 0; i < 4; i++) {
+        stepLayout = new StackLayout();
+        stepHost.setLayout(stepLayout);
+        pages = new Composite[4];
+        pageText = new Text[4];
+        for (int i = 0; i < pages.length; i++) {
             pages[i] = new Composite(stepHost, SWT.NONE);
             pages[i].setLayout(new GridLayout(1, false));
             pageText[i] = new Text(pages[i], SWT.BORDER | SWT.READ_ONLY | SWT.MULTI
                     | SWT.WRAP | SWT.V_SCROLL);
             pageText[i].setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         }
-        var nav = bar(root, 3);
-        previous = button(nav, "Back", () -> { step = Math.max(0, step - 1); renderGuide(); });
-        next = button(nav, "Next", () -> { step = Math.min(3, step + 1); renderGuide(); });
-        validateApply = button(nav, "Preview / validate / apply…", () -> advanced("review"));
-        // Advanced viewers are available on demand; do not crowd every
-        // focused beginner step with five unrelated tool buttons.
-        showHardwareAdvanced = button(root, "Show advanced hardware tools", () -> {
+        var nav = bar(right, 3);
+        previous = button(nav, "Back", () -> {
+            step = Math.max(0, step - 1);
+            renderGuide();
+        });
+        next = button(nav, "Next: inspect details", () -> {
+            step = Math.min(3, step + 1);
+            renderGuide();
+        });
+        validateApply = button(nav, "Open verified review…", this::reviewSelected);
+        showHardwareAdvanced = button(right, "Show advanced tools", () -> {
             boolean visible = !hardwareAdvanced.getVisible();
             setPanelVisible(hardwareAdvanced, visible);
-            showHardwareAdvanced.setText(visible
-                    ? "Hide advanced hardware tools" : "Show advanced hardware tools");
-            root.layout(true, true);
+            showHardwareAdvanced.setText(visible ? "Hide advanced tools" : "Show advanced tools");
+            right.layout(true, true);
         });
-        var tools = bar(root, 5);
-        hardwareAdvanced = tools;
-        button(tools, "Chip & pins", () -> advanced("pins"));
-        button(tools, "Memory map", this::memoryMap);
-        button(tools, "Devicetree sources", () -> advanced("sources"));
-        button(tools, "Binding & evidence", () -> advanced("guide"));
-        example = button(tools, "Official samples / examples", () ->
-                advanced("Other".equals(category) ? "sources" : "guide"));
+        var advanced = bar(right, 2);
+        hardwareAdvanced = advanced;
+        button(advanced, "View pins", () -> advanced("pins"));
+        button(advanced, "View memory map", this::memoryMap);
+        button(advanced, "Inspect Devicetree sources", () -> advanced("sources"));
+        button(advanced, "Inspect bindings / Kconfig", () -> advanced("guide"));
+        example = button(advanced, "Examples and evidence", () -> advanced("guide"));
         setPanelVisible(hardwareAdvanced, false);
+        split.setWeights(new int[]{37, 63});
+        controllersForCategory();
         renderGuide();
     }
 
@@ -338,6 +381,7 @@ public final class ConfigurationHomeView extends ViewPart {
     private void clear(String description) {
         header.setText(description); freshness.setText("Build evidence: missing");
         overviewInfo.setText(description);
+        overviewRows = List.of();
         peripheralRows.removeAll(); issueRows.removeAll();
         capacityFlash.setText("Unknown"); capacityRam.setText("Unknown");
         buildDetails.setText(description);
@@ -367,20 +411,8 @@ public final class ConfigurationHomeView extends ViewPart {
         capacityFlash.setToolTipText(summary.flash().evidence());
         capacityRam.setText(summary.ram().value());
         capacityRam.setToolTipText(summary.ram().evidence());
-        peripheralRows.removeAll();
-        for (var row : summary.peripherals()) {
-            var item = new TableItem(peripheralRows, SWT.NONE);
-            item.setText(new String[]{row.category(),
-                    FocusedConfigurationModel.display(row.state()), row.nextAction()});
-            item.setForeground(1, peripheralRows.getDisplay().getSystemColor(
-                    switch (row.state()) {
-                        case CONFIGURED -> SWT.COLOR_DARK_GREEN;
-                        case DISABLED, SETUP_INCOMPLETE -> SWT.COLOR_DARK_YELLOW;
-                        case UNSUPPORTED -> SWT.COLOR_DARK_RED;
-                        case UNKNOWN -> SWT.COLOR_DARK_GRAY;
-                    }));
-            item.setData(row);
-        }
+        overviewRows = summary.peripherals();
+        populateOverviewRows();
         issueRows.removeAll();
         for (var issue : summary.issues()) {
             var item = new TableItem(issueRows, SWT.NONE);
@@ -413,6 +445,30 @@ public final class ConfigurationHomeView extends ViewPart {
                 ? board.substring(board.lastIndexOf('/') + 1) : "not specified";
     }
 
+    private void populateOverviewRows() {
+        if (peripheralRows == null || peripheralRows.isDisposed()) return;
+        String filter = overviewSearch == null ? ""
+                : overviewSearch.getText().trim().toLowerCase(java.util.Locale.ROOT);
+        peripheralRows.removeAll();
+        for (var row : overviewRows) {
+            if (!filter.isBlank() && !row.category().toLowerCase(java.util.Locale.ROOT).contains(filter)
+                    && !row.explanation().toLowerCase(java.util.Locale.ROOT).contains(filter)
+                    && !row.nextAction().toLowerCase(java.util.Locale.ROOT).contains(filter))
+                continue;
+            var item = new TableItem(peripheralRows, SWT.NONE);
+            item.setText(new String[]{row.category(),
+                    FocusedConfigurationModel.display(row.state()), row.nextAction()});
+            item.setForeground(1, peripheralRows.getDisplay().getSystemColor(
+                    switch (row.state()) {
+                        case CONFIGURED -> SWT.COLOR_DARK_GREEN;
+                        case DISABLED, SETUP_INCOMPLETE -> SWT.COLOR_DARK_YELLOW;
+                        case UNSUPPORTED -> SWT.COLOR_DARK_RED;
+                        case UNKNOWN -> SWT.COLOR_DARK_GRAY;
+                    }));
+            item.setData(row);
+        }
+    }
+
     private void choosePeripheral() {
         if (peripheralRows.getSelectionCount() != 1) {
             MessageDialog.openInformation(getSite().getShell(), "Choose a peripheral",
@@ -443,23 +499,53 @@ public final class ConfigurationHomeView extends ViewPart {
         primary.setSelection(HARDWARE); renderGuide();
     }
 
+    /** All selection state lives in one table; category and search only filter it. */
     private void controllersForCategory() {
-        controllers.removeAll();
-        var nodes = evidence == null ? List.<DevicetreeHardware.Device>of()
-                : DevicetreeHardware.inspect(evidence.dts());
-        int n = 0;
-        for (var node : nodes) {
-            if (!PeripheralWorkflow.selectable(node, category)) continue;
-            controllers.add(node.name() + "  •  " + node.path());
-            controllers.setData(Integer.toString(n++), node.path());
+        if (hardwareNodes == null || hardwareNodes.isDisposed()) return;
+        String previous = controllerPath;
+        String filter = hardwareSearch.getText().trim().toLowerCase(java.util.Locale.ROOT);
+        hardwareNodes.setRedraw(false);
+        try {
+            hardwareNodes.removeAll();
+            var nodes = evidence == null ? List.<DevicetreeHardware.Device>of()
+                    : DevicetreeHardware.inspect(evidence.dts());
+            for (var node : nodes) {
+                if (!PeripheralWorkflow.selectable(node, category)) continue;
+                if (!filter.isBlank()
+                        && !node.path().toLowerCase(java.util.Locale.ROOT).contains(filter)
+                        && !node.name().toLowerCase(java.util.Locale.ROOT).contains(filter)
+                        && !node.compatible().toLowerCase(java.util.Locale.ROOT).contains(filter))
+                    continue;
+                var item = new TableItem(hardwareNodes, SWT.NONE);
+                boolean enabled = io.github.niwantha33.zew.core.PeripheralCoverage
+                        .effectiveEnabled(node, nodes);
+                item.setText(new String[]{node.name(), enabled ? "DTS enabled" : "Disabled"});
+                item.setData(node);
+            }
+        } finally {
+            hardwareNodes.setRedraw(true);
         }
-        if (n > 0) {
-            int selected = 0;
-            for (int i = 0; i < n; i++) if (controllerPath.equals(
-                    controllers.getData(Integer.toString(i)))) { selected = i; break; }
-            controllers.select(selected);
-            controllerPath = (String) controllers.getData(Integer.toString(selected));
-        } else controllerPath = "";
+        TableItem target = null;
+        for (var row : hardwareNodes.getItems())
+            if (((DevicetreeHardware.Device) row.getData()).path().equals(previous)) {
+                target = row;
+                break;
+            }
+        if (target == null && hardwareNodes.getItemCount() > 0)
+            target = hardwareNodes.getItem(0);
+        if (target == null) {
+            controllerPath = "";
+            navigationEmpty.setText(evidence == null || evidence.dts().isBlank()
+                    ? "No generated build data. Build the selected target before selecting hardware."
+                    : "No " + category + " controller matches this filter in the selected build. "
+                        + "This does not prove silicon lacks it.");
+        } else {
+            controllerPath = ((DevicetreeHardware.Device) target.getData()).path();
+            hardwareNodes.setSelection(target);
+            hardwareNodes.showSelection();
+            navigationEmpty.setText(hardwareNodes.getItemCount()
+                    + " verified node(s) from generated DTS. Selection is build evidence, not runtime use.");
+        }
     }
 
     private PeripheralStartGuide.Guide guide() {
