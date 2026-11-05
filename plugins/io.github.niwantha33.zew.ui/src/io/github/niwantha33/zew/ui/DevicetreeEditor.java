@@ -78,8 +78,8 @@ public final class DevicetreeEditor extends TextEditor {
         IAnnotationModel model = getDocumentProvider().getAnnotationModel(getEditorInput());
         if (model == null) return;
         Map<Annotation, Position> next = new LinkedHashMap<>();
-        // No advisory hints or hover pop-ups. Real syntax errors remain
-        // underlined, but neither suggestions nor unverified guidance appear.
+        // Silence advisory hints. Keep actual errors visible as annotations,
+        // but do not create completions or show text/annotation hover popups.
         for (var problem : findings) {
             if (!"error".equals(problem.severity())) continue;
             Annotation annotation = new Annotation(
@@ -155,13 +155,60 @@ public final class DevicetreeEditor extends TextEditor {
     private static final class Configuration extends SourceViewerConfiguration {
         private final DevicetreeEditor editor;
         Configuration(DevicetreeEditor editor) { this.editor = editor; }
-        // Explicitly disable both auto-activated and Ctrl+Space completion.
-        // There is no proposal, context-info, or template popup in this editor.
+        // No auto completion, Ctrl+Space proposals, context information or
+        // pop-up hints. Typing and syntax colouring stay fully functional.
         @Override public org.eclipse.jface.text.contentassist.IContentAssistant getContentAssistant(
                 ISourceViewer sourceViewer) { return null; }
+        @Override public ITextHover getTextHover(ISourceViewer sourceViewer, String contentType) {
+            return null;
+        }
+        @Override public IAnnotationHover getAnnotationHover(ISourceViewer sourceViewer) {
+            return null;
+        }
+        @Override public IPresentationReconciler getPresentationReconciler(ISourceViewer sourceViewer) {
+            Color comment = Display.getDefault().getSystemColor(SWT.COLOR_DARK_GREEN);
+            Color literal = Display.getDefault().getSystemColor(SWT.COLOR_DARK_BLUE);
+            Color directive = Display.getDefault().getSystemColor(SWT.COLOR_DARK_MAGENTA);
+            var scanner = new RainbowBracketScanner();
+            var keyword = new Token(new TextAttribute(directive, null, SWT.BOLD));
+            var words = new WordRule(new IWordDetector() {
+                @Override public boolean isWordStart(char c) { return Character.isLetter(c) || c == '#' || c == '/'; }
+                @Override public boolean isWordPart(char c) {
+                    return Character.isLetterOrDigit(c) || c == '-' || c == ',' || c == '#' || c == '/';
+                }
+            });
+            for (String value : List.of("status", "compatible", "reg", "pinctrl-0",
+                    "/dts-v1/", "/delete-node/", "/delete-property/", "#include"))
+                words.addWord(value, keyword);
+            // Use SWT system colours so no resource cleanup is required.
+            int[] colours = {SWT.COLOR_DARK_MAGENTA, SWT.COLOR_DARK_CYAN,
+                    SWT.COLOR_DARK_BLUE, SWT.COLOR_DARK_GREEN,
+                    SWT.COLOR_DARK_RED, SWT.COLOR_DARK_YELLOW};
+            IToken[] bracketTokens = new IToken[colours.length];
+            for (int i = 0; i < colours.length; i++)
+                bracketTokens[i] = new Token(new TextAttribute(
+                        Display.getDefault().getSystemColor(colours[i]), null, SWT.BOLD));
+            IRule bracketRule = input -> {
+                int depth = scanner.bracketLevel(scanner.getTokenOffset());
+                if (depth < 0) return Token.UNDEFINED;
+                if (input.read() == ICharacterScanner.EOF) return Token.UNDEFINED;
+                return bracketTokens[depth % bracketTokens.length];
+            };
+            scanner.setRules(new IRule[] {
+                    new MultiLineRule("/*", "*/", new Token(new TextAttribute(comment))),
+                    new EndOfLineRule("//", new Token(new TextAttribute(comment))),
+                    new SingleLineRule("\"", "\"", new Token(new TextAttribute(literal)), '\\'),
+                    bracketRule,
+                    words
+            });
+            var repairer = new DefaultDamagerRepairer(scanner);
+            var reconciler = new PresentationReconciler();
+            reconciler.setDamager(repairer, IDocument.DEFAULT_CONTENT_TYPE);
+            reconciler.setRepairer(repairer, IDocument.DEFAULT_CONTENT_TYPE);
+            return reconciler;
+        }
 
     }
-
     /**
      * Bracket colours come from balanced nesting in the actual document, not
      * a guessed board/binding. A full lexical pass is necessary so repainting
