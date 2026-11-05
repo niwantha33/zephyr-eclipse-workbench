@@ -984,7 +984,7 @@ public final class EditorSmoke implements IApplication {
                     var annotations = editor.getDocumentProvider().getAnnotationModel(editor.getEditorInput());
                     if (annotations == null) return;
                     for (var iterator = annotations.getAnnotationIterator(); iterator.hasNext();) {
-                        var annotation = iterator.next();
+                        Object annotation = iterator.next();
                         if (annotation instanceof org.eclipse.jface.text.source.Annotation item
                                 && item.getText() != null
                                 && item.getText().contains("Bare '{'")) {
