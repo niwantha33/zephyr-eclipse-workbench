@@ -285,7 +285,7 @@ public final class EditorSmoke implements IApplication {
                     + ", steps=" + guideSteps.getText().substring(0, Math.min(650, guideSteps.getText().length()))
                     + ", copy=" + copyCode.getEnabled()
                     + ", generatedCode=" + guideCode.getText().substring(0, Math.min(160, guideCode.getText().length()))
-                    + ", selectedController=" + (hardwareDevices.getSelectionCount() == 1 ? hardwareDevices.getSelection()[0].getText() : "(none)")
+                    + ", selectedController=" + (hardware.getSelectionCount() == 1 ? hardware.getSelection()[0].getText() : "(none)")
                     + "]");
             startGuideMethod.invoke(view, "I2C");
             check(guideStatus.getText().contains("NOT_IN_DTS")
