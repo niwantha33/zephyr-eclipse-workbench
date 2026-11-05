@@ -43,6 +43,26 @@ final class DevicetreeAssist {
                     "Choose an existing I2C/SPI controller, then add a child only for your actual device."));
             start.add(new Suggestion("&", "Browse available controllers…",
                     "Type & then Ctrl+Space to inspect labels and status in the selected generated DTS."));
+            // Make the first completion useful without knowing the '&'
+            // syntax. Discover real labelled controllers from this board's
+            // selected generated DTS; keep the initial menu small. All
+            // remaining labels are available after '&' and Ctrl+Space.
+            int shown = 0;
+            var offered = new HashSet<String>();
+            for (var node : snapshot.nodes()) {
+                if (shown >= 16) break;
+                if (node.label().isBlank() || node.compatible().isBlank()
+                        || !offered.add(node.label())) continue;
+                start.add(new Suggestion("&" + node.label() + " {\n"
+                        + "    /* Complete properties from the selected binding. */\n"
+                        + "};\n",
+                        "Configure " + node.label() + " — " + node.compatible()
+                                + " [" + node.status() + "]",
+                        "Actual generated DTS: " + node.path() + ". This inserts a reference"
+                                + " but does NOT enable the node, select pins or prove driver/runtime activity."
+                                + " Ctrl+Space inside the block for property completion."));
+                shown++;
+            }
             return new Result(caret, 0, List.copyOf(start));
         }
         int pathStart = before.lastIndexOf("&{");
