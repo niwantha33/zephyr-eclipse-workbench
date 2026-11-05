@@ -79,9 +79,36 @@ def _source(filename: str, build: Path, roots: list[Path], budget: list[int] | N
                 budget[0] -= len(snapshot)
             return {"state": "source-observed", "confidence": "derived",
                     "root_index": index, "path": path.relative_to(root).as_posix(),
-                    "sha256": digest, "kind": "overlay" if path.suffix == ".overlay" else "source",
+                    "sha256": digest, "line_count": len(snapshot.splitlines()),
+                    "kind": "overlay" if path.suffix == ".overlay" else "source",
                     "freshness": "current-bytes-only; source-at-configure hash unavailable"}
     return {"state": "source-outside-selected-roots", "confidence": "unknown"}
+
+
+def _equivalent_property(left, right) -> tuple[bool, str]:
+    """Raw phandle bytes alone cannot identify the referenced node.
+
+    Use upstream public conversions where their full semantics are available.
+    Mixed reference/number values need binding-specific interpretation; do not
+    infer which numeric cell is a reference or inspect private parser markers.
+    """
+    if left.type != right.type or bytes(left.value) != bytes(right.value):
+        return False, "preprocessed-and-final-property-differ"
+    kind = left.type.name
+    try:
+        if kind == "PHANDLE":
+            equal = left.to_node().path == right.to_node().path
+        elif kind == "PHANDLES":
+            equal = [n.path for n in left.to_nodes()] == [n.path for n in right.to_nodes()]
+        elif kind == "PATH":
+            equal = left.to_path().path == right.to_path().path
+        elif kind in ("PHANDLES_AND_NUMS", "COMPOUND"):
+            return False, "mixed-reference-property-origin-needs-binding-semantics"
+        else:
+            equal = True
+    except Exception:
+        return False, "reference-property-origin-unavailable"
+    return equal, "equivalent-upstream-property" if equal else "preprocessed-and-final-reference-targets-differ"
 
 
 def inspect(build: Path, zephyr: Path, node: str, prop: str,
@@ -157,8 +184,12 @@ def inspect(build: Path, zephyr: Path, node: str, prop: str,
                 "value_sha256": hashlib.sha256(value).hexdigest(), "bytes": len(value)}
             if include_values:
                 row["final_property"]["value_hex"] = value.hex()
-            if pre_property is None or bytes(pre_property.value) != value:
+            if pre_property is None:
                 row["reason"] = "preprocessed-and-final-property-differ"
+                continue
+            equivalent, reason = _equivalent_property(pre_property, final_property)
+            if not equivalent:
+                row["reason"] = reason
                 continue
             filename, line = getattr(pre_property, "filename", None), getattr(pre_property, "lineno", None)
             if filename not in markers or not isinstance(line, int) or line < 1:
@@ -166,10 +197,12 @@ def inspect(build: Path, zephyr: Path, node: str, prop: str,
                 continue
             origin = dict(sources.get(filename) or _source(filename, directory, roots, budget))
             origin["line"] = line
+            if origin["state"] == "source-observed" and line > origin["line_count"]:
+                origin.update(state="source-line-outside-current-file", confidence="unknown")
             row["origin"] = origin
             if origin["state"] == "source-observed":
                 row.update(state="property-origin-observed", confidence="derived",
-                           reason="upstream-final-assignment-location-and-equal-property-bytes")
+                           reason="upstream-final-assignment-location-and-equivalent-property")
             else:
                 row["reason"] = "source-origin-not-verifiable"
         if (_checked_file(generated, MAX_DTS_BYTES)[1] != generated_sha
@@ -180,6 +213,7 @@ def inspect(build: Path, zephyr: Path, node: str, prop: str,
                        else "partial-or-unavailable", "images": rows,
             "limitations": ["CPP source participation does not prove any property's origin by itself.",
                             "Origins are upstream parser locations, not an assignment history.",
+                            "Mixed reference/number property origins require binding semantics and stay unknown.",
                             "Matching final and preprocessed bytes do not prove source freshness or a successful build.",
                             "Source hashes identify current files; configure-time source hashes require a separate receipt.",
                             "No driver, pin availability, runtime or hardware state is inferred."]}

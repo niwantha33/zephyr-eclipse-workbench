@@ -132,6 +132,41 @@ class StudioDevicetreeTests(unittest.TestCase):
         self.assertEqual([s["path"] for s in row["active_sources"]],
                          ["app.overlay", "board.dts", "unused.overlay"])
 
+    def test_equal_phandle_bytes_for_different_nodes_do_not_establish_origin(self):
+        self.real_library()
+        self.base.write_text('/dts-v1/; / { a:a {}; b:b {}; consumer { link = <&a>; }; };\n')
+        self.pre.write_text(f'# 1 "{self.base}"\n' + self.base.read_text())
+        self.final.write_text('/dts-v1/; / { a:a {}; b:b { phandle = <1>; }; consumer { link = <&b>; }; };\n')
+        row = dt.inspect(self.build, self.zephyr, "/consumer", "link", [self.sources])["images"][0]
+        self.assertEqual(row["reason"], "preprocessed-and-final-reference-targets-differ")
+        self.assertEqual(row["confidence"], "unknown")
+        self.assertIsNone(row["origin"])
+
+    def test_same_bytes_with_different_upstream_property_type_do_not_establish_origin(self):
+        self.real_library()
+        self.base.write_text('/dts-v1/; / { consumer { x = <1>; }; };\n')
+        self.pre.write_text(f'# 1 "{self.base}"\n' + self.base.read_text())
+        self.final.write_text('/dts-v1/; / { consumer { x = [00 00 00 01]; }; };\n')
+        row = dt.inspect(self.build, self.zephyr, "/consumer", "x", [self.sources])["images"][0]
+        self.assertEqual(row["reason"], "preprocessed-and-final-property-differ")
+        self.assertIsNone(row["origin"])
+
+    def test_impossible_source_line_is_unknown(self):
+        self.real_library()
+        self.pre.write_text(self.pre.read_text().replace(f'# 1 "{self.overlay}"', f'# 999 "{self.overlay}"'))
+        row = self.scan()["images"][0]
+        self.assertEqual(row["origin"]["state"], "source-line-outside-current-file")
+        self.assertEqual(row["confidence"], "unknown")
+
+    def test_mixed_reference_cells_do_not_receive_unproven_origin(self):
+        self.real_library()
+        self.base.write_text('/dts-v1/; / { a:a {}; consumer { gpios = <&a 1 0>; }; };\n')
+        self.pre.write_text(f'# 1 "{self.base}"\n' + self.base.read_text())
+        self.final.write_text(self.base.read_text())
+        row = dt.inspect(self.build, self.zephyr, "/consumer", "gpios", [self.sources])["images"][0]
+        self.assertEqual(row["reason"], "mixed-reference-property-origin-needs-binding-semantics")
+        self.assertIsNone(row["origin"])
+
 
 if __name__ == "__main__":
     unittest.main()
