@@ -92,6 +92,32 @@ config LEAK
         spec.loader.exec_module(module)
         self.assertEqual(inspect.getsource(module.causality).strip(), inspect.getsource(causality).strip())
 
+    def test_zephyr_three_field_kconfig_properties(self):
+        """Zephyr extends defaults/selects/implies with a source location."""
+        spec = importlib.util.spec_from_file_location(
+            "cs_zephyr_probe", ROOT / "plugins/io.github.niwantha33.zew.ui/scripts/kconfig_inspect.py")
+        native = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(native)
+        base = self.tree.syms["BASE"]
+        node = types.SimpleNamespace(filename="Kconfig", linenr=42, prompt=None)
+        child = types.SimpleNamespace(
+            direct_dep=base, rev_dep=self.tree.n, weak_rev_dep=self.tree.n,
+            defaults=[(base, self.tree.y, ("Kconfig", 42))],
+            nodes=[node], choice=None, str_value="n", user_value=None,
+            type=kconfiglib.BOOL, visibility=2)
+        tree = types.SimpleNamespace(syms={"CHILD": child, "BASE": base})
+        for inspector in (causality, native.causality):
+            graph = inspector(tree, kconfiglib, "CHILD")
+            expressions = {item["kind"] for row in graph["nodes"]
+                           if row["symbol"] == "CHILD" for item in row["expressions"]}
+            self.assertIn("default[0].value", expressions)
+            self.assertIn("default[0].condition", expressions)
+            self.assertIn("BASE", {row["symbol"] for row in graph["nodes"]})
+        # Standalone Kconfiglib uses pairs; Zephyr also carries location triples.
+        properties = [(base, self.tree.y), (base, self.tree.y, ("Kconfig", 42))]
+        self.assertEqual(native.reverse_dependencies(properties, kconfiglib),
+                         ["BASE if y", "BASE if y"])
+
     def test_failure_no_generated_input_and_no_write(self):
         self.config.unlink()
         original = self.kroot.read_bytes()
