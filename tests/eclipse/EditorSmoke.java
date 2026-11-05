@@ -537,6 +537,20 @@ public final class EditorSmoke implements IApplication {
      * queue receives its resize/paint events. Flush that UI cycle explicitly,
      * regardless of screenshot configuration, before inspecting real bounds.
      */
+    /** Trace actual SWT parent sizes to distinguish an unlaid-out view from a child layout bug. */
+    private static String swtBoundsChain(org.eclipse.swt.widgets.Control child) {
+        var chain = new StringBuilder();
+        org.eclipse.swt.widgets.Control current = child;
+        for (int depth = 0; current != null && depth < 12; depth++) {
+            if (depth != 0) chain.append(" <- ");
+            chain.append(current.getClass().getSimpleName())
+                    .append("[").append(current.getBounds())
+                    .append(";visible=").append(current.isVisible()).append("]");
+            current = current.getParent();
+        }
+        return chain.toString();
+    }
+
     private static void settleNativeStudioLayout() {
         var window = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
         if (window == null) throw new IllegalStateException("No active native Eclipse window to inspect.");
@@ -1181,7 +1195,9 @@ public final class EditorSmoke implements IApplication {
                             + ", scrollMinHeight=" + scroll.getMinHeight()
                             + ", scrollContentMatches=" + (scroll.getContent() == beginnerBody)
                             + ", tab=" + studioTabs.getSelectionIndex()
-                            + ", shell=" + org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell().getBounds() + "]");
+                            + ", shell=" + org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell().getBounds()
+                            + ", canvasParents=" + swtBoundsChain(canvas)
+                            + ", tabParents=" + swtBoundsChain(studioTabs) + "]");
                     check(scroll.getExpandVertical()
                             && beginnerBody.getSize().y >= scroll.getMinHeight()
                             && beginnerBody.getSize().y >= scroll.getClientArea().height
