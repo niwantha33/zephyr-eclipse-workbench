@@ -1144,11 +1144,22 @@ public final class EditorSmoke implements IApplication {
                     // Eclipse view stack. Menu/navigation checks above can select the
                     // other part; an obscured SWT tab has a zero-sized viewport.
                     // Activate the actual advanced view before asserting real bounds.
-                    windows[0].getActivePage().showView(
-                            "io.github.niwantha33.zew.ui.configurationStudio",
+                    // The legacy advanced view is a dockable side pane in the stock
+                    // resource perspective. A full-width 960px diagram cannot be
+                    // visibility-tested while its containing view stack is only
+                    // ~400px wide or minimized. Expand the actual workbench part,
+                    // not the SWT child widgets, before testing painted geometry.
+                    var nativePage = windows[0].getActivePage();
+                    var advancedRef = nativePage.getReference(view);
+                    check(advancedRef != null, "advanced Studio has a real Eclipse part reference");
+                    nativePage.setPartState(advancedRef, org.eclipse.ui.IWorkbenchPage.STATE_MAXIMIZED);
+                    nativePage.showView("io.github.niwantha33.zew.ui.configurationStudio",
                             null, org.eclipse.ui.IWorkbenchPage.VIEW_ACTIVATE);
-                    windows[0].getActivePage().activate(view);
+                    nativePage.activate(view);
                     settleNativeStudioLayout();
+                    check(nativePage.isPartVisible(view),
+                            "expanded advanced Studio is genuinely visible in Eclipse"
+                            + " [state=" + nativePage.getPartState(advancedRef) + "]");
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
                             studioTabs.getItem(0).getControl();
                     var beginnerBody = (org.eclipse.swt.widgets.Composite)
