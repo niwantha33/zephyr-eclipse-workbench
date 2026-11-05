@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.ui;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.function.Consumer;
 
 import org.eclipse.swt.SWT;
@@ -55,7 +53,6 @@ public final class ConfigurationFlowCanvas extends Canvas {
         public String description() { return description; }
     }
 
-    private record Area(Block block, Rectangle box) {}
     private static final int INSET = 19;
     private static final int TOP = 30;
     private static final int SECOND = 211;
@@ -65,7 +62,6 @@ public final class ConfigurationFlowCanvas extends Canvas {
     private final Color[] palette;
     private final Color surface, outline, arrow, white, muted;
     private final Font headlineFont, detailFont;
-    private List<Area> areas = List.of();
     private Consumer<Block> onOpen = ignored -> {};
     private Block hover, focus = Block.SOC;
 
@@ -155,17 +151,36 @@ public final class ConfigurationFlowCanvas extends Canvas {
 
     public Block blockAt(int x, int y) { return hitTest(x, y); }
 
-    /** For native SWT tests; coordinates are the same as actual click hitboxes. */
+    /** Compute clickable bounds before or after SWT Paint; no paint-event race. */
     public Rectangle boundsOf(Block block) {
-        return areas.stream().filter(a -> a.block() == block)
-                .map(a -> new Rectangle(a.box().x, a.box().y, a.box().width, a.box().height))
-                .findFirst().orElse(null);
+        Rectangle r = layoutBoxes()[block.ordinal()];
+        return new Rectangle(r.x, r.y, r.width, r.height);
     }
 
     private Block hitTest(int x, int y) {
-        for (Area area : areas)
-            if (area.box().contains(x, y)) return area.block();
+        var boxes = layoutBoxes();
+        for (Block block : Block.values())
+            if (boxes[block.ordinal()].contains(x, y)) return block;
         return null;
+    }
+
+    private Rectangle[] layoutBoxes() {
+        int width = Math.max(getClientArea().width, 600);
+        int gap = Math.max(20, width / 34);
+        int boxWidth = Math.max(112, (width - 2 * INSET - 3 * gap) / 4);
+        var boxes = new Rectangle[Block.values().length];
+        for (int i = 0; i < 4; i++)
+            boxes[i] = new Rectangle(INSET + i * (boxWidth + gap),
+                    TOP, boxWidth, HEIGHT);
+        boxes[Block.BINDING.ordinal()] =
+                new Rectangle(INSET, SECOND, boxWidth, HEIGHT);
+        boxes[Block.KCONFIG.ordinal()] =
+                new Rectangle(INSET + boxWidth + gap, SECOND, boxWidth, HEIGHT);
+        boxes[Block.BUILD.ordinal()] =
+                new Rectangle(INSET + 2 * (boxWidth + gap), SECOND, boxWidth, HEIGHT);
+        boxes[Block.MEMORY.ordinal()] =
+                new Rectangle(INSET + 3 * (boxWidth + gap), SECOND, boxWidth, HEIGHT);
+        return boxes;
     }
 
     private void paintFlow(GC gc) {
@@ -177,23 +192,8 @@ public final class ConfigurationFlowCanvas extends Canvas {
         gc.setForeground(outline);
         gc.drawRoundRectangle(1, 1, canvasWidth - 3, DIAGRAM_HEIGHT - 3, 22, 22);
 
-        final int gap = Math.max(20, canvasWidth / 34);
-        final int boxWidth = Math.max(112, (canvasWidth - 2 * INSET - 3 * gap) / 4);
-        Rectangle[] boxes = new Rectangle[Block.values().length];
-        for (int i = 0; i < 4; i++)
-            boxes[i] = new Rectangle(INSET + i * (boxWidth + gap),
-                    TOP, boxWidth, HEIGHT);
-        // The lower row separates documentation/driver configuration
-        // from the source-include chain. Only the memory view is reached
-        // directly from the generated DTS (inspection; not a build input).
-        boxes[Block.BINDING.ordinal()] =
-                new Rectangle(INSET, SECOND, boxWidth, HEIGHT);
-        boxes[Block.KCONFIG.ordinal()] =
-                new Rectangle(INSET + boxWidth + gap, SECOND, boxWidth, HEIGHT);
-        boxes[Block.BUILD.ordinal()] =
-                new Rectangle(INSET + 2 * (boxWidth + gap), SECOND, boxWidth, HEIGHT);
-        boxes[Block.MEMORY.ordinal()] =
-                new Rectangle(INSET + 3 * (boxWidth + gap), SECOND, boxWidth, HEIGHT);
+        Rectangle[] boxes = layoutBoxes();
+        final int boxWidth = boxes[Block.SOC.ordinal()].width;
 
         // Draw connectors FIRST so they cannot cover any clickable text.
         gc.setForeground(arrow);
@@ -216,10 +216,8 @@ public final class ConfigurationFlowCanvas extends Canvas {
         // resolves it during Zephyr processing. A binding is neither a
         // physical child node nor an included DTS file.
 
-        List<Area> fresh = new ArrayList<>();
         for (Block b : Block.values()) {
             Rectangle box = boxes[b.ordinal()];
-            fresh.add(new Area(b, box));
             Color colour = palette[b.ordinal()];
             gc.setBackground(colour);
             gc.fillRoundRectangle(box.x, box.y, box.width, box.height, 19, 19);
@@ -239,7 +237,6 @@ public final class ConfigurationFlowCanvas extends Canvas {
                     box.x + 11, box.y + 51, true);
             gc.drawText("Open  \u2192", box.x + 11, box.y + 79, true);
         }
-        areas = List.copyOf(fresh);
         gc.setFont(detailFont);
         gc.setForeground(muted);
         gc.drawText("SOLID ARROWS = CONFIGURATION INPUTS", INSET, 10, true);
