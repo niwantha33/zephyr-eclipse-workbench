@@ -142,6 +142,8 @@ def main(argv=None):
     # status; successful JSON emission is not release/hardware qualification.
     if report.get("status") in ("partial", "partial-or-unavailable", "metadata-unavailable", "refused"):
         return 1
+    if args.command == "studio-preflight" and any(row["state"] != "metadata-inspected" for row in report["images"]):
+        return 1
     if args.command == "studio-kconfig" and any(f["rule_id"] != "CS-KCONFIG-VALID" for f in report["findings"]):
         return 1
     if args.command in ("studio-diagnose", "studio-rules") and any(f["severity"] == "error" for f in report["findings"]):

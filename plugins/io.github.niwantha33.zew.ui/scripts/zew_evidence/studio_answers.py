@@ -20,6 +20,8 @@ MAX_TOTAL_BYTES = 128 * 1024 * 1024
 SHA = re.compile(r"[0-9a-f]{64}")
 IDENTIFIER = re.compile(r"[A-Za-z0-9_.:-]{1,300}")
 # These are fixed observations, not prose copied from target or repository data.
+SEMANTIC_RULES = {"CS-KCONFIG-UNDEFINED", "CS-KCONFIG-UNMET-DEPENDENCY",
+                  "CS-KCONFIG-INVISIBLE", "CS-KCONFIG-VALID"}
 TEMPLATES = {
     "CS-KCONFIG-UNDEFINED": "The selected evaluator reported no definition for this Kconfig symbol.",
     "CS-KCONFIG-UNMET-DEPENDENCY": "The selected evaluator reported that the direct dependency limits the requested tristate.",
@@ -88,6 +90,8 @@ def answer(report: dict, finding_id: str, roots: list[Path] | None = None,
     matching = [row for row in images if isinstance(row, dict) and row.get("image") == image]
     if len(matching) > 1:
         return _refuse("ambiguous-image-evidence", digest, finding_id)
+    if rule in SEMANTIC_RULES and (not matching or not matching[0].get("inputs")):
+        return _refuse("missing-semantic-input-closure", digest, finding_id)
     if matching:
         row = matching[0]
         if row.get("freshness") in ("stale", "changed"):
@@ -114,6 +118,8 @@ def answer(report: dict, finding_id: str, roots: list[Path] | None = None,
         if not isinstance(item, dict) or not isinstance(item.get("path"), str) \
                 or not isinstance(item.get("sha256"), str) or not SHA.fullmatch(item["sha256"]):
             return _refuse("invalid-source-citation", digest, finding_id)
+        if any(ord(char) < 32 or ord(char) == 127 for char in item["path"]):
+            return _refuse("invalid-source-path", digest, finding_id)
         source = Path(item["path"])
         if ".." in source.parts or not source.is_absolute():
             return _refuse("absolute-reviewed-source-path-required", digest, finding_id)
