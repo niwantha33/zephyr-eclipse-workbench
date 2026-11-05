@@ -954,6 +954,50 @@ public final class EditorSmoke implements IApplication {
         project.open(null); project.refreshLocal(IResource.DEPTH_INFINITE, null);
         var ui = Platform.getBundle("io.github.niwantha33.zew.ui");
         ui.start();
+
+        // This must use IDE.openEditor without an editor ID: Project Explorer's
+        // default file association is the actual acceptance path.
+        if (Boolean.getBoolean("zew.nativeFlow")) {
+            Path overlayPath = fixture.resolve("app.overlay");
+            Files.writeString(overlayPath,
+                    "/* Application hardware overlay. Validate against this board's bindings. */\n"
+                    + "{\n    soc {\n        adc:adc0@0 {\n        };\n    };\n};\n");
+            project.refreshLocal(IResource.DEPTH_INFINITE, null);
+            var opened = new java.util.concurrent.atomic.AtomicReference<org.eclipse.ui.texteditor.ITextEditor>();
+            org.eclipse.swt.widgets.Display.getDefault().syncExec(() -> {
+                try {
+                    var window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+                    var part = org.eclipse.ui.ide.IDE.openEditor(window.getActivePage(),
+                            project.getFile("app.overlay"), true);
+                    check(part.getClass().getName().equals(
+                            "io.github.niwantha33.zew.ui.DevicetreeEditor"),
+                            "Project Explorer opens installed native Devicetree editor by default");
+                    opened.set((org.eclipse.ui.texteditor.ITextEditor) part);
+                } catch (Exception e) { throw new IllegalStateException(e); }
+            });
+            boolean errorShown = false;
+            for (int attempt = 0; attempt < 50 && !errorShown; attempt++) {
+                var visible = new java.util.concurrent.atomic.AtomicBoolean();
+                org.eclipse.swt.widgets.Display.getDefault().syncExec(() -> {
+                    var editor = opened.get();
+                    var annotations = editor.getDocumentProvider().getAnnotationModel(editor.getEditorInput());
+                    if (annotations == null) return;
+                    for (var iterator = annotations.getAnnotationIterator(); iterator.hasNext();) {
+                        var annotation = iterator.next();
+                        if (annotation instanceof org.eclipse.jface.text.source.Annotation item
+                                && item.getText() != null
+                                && item.getText().contains("Bare '{'")) {
+                            visible.set(true);
+                            break;
+                        }
+                    }
+                });
+                errorShown = visible.get();
+                if (!errorShown) Thread.sleep(100);
+            }
+            check(errorShown, "Invalid root is underlined in the running Eclipse editor");
+        }
+
         // Test contributions from the actually installed p2 feature, not just
         // plugin.xml in the checkout.
         var registry = Platform.getExtensionRegistry();
