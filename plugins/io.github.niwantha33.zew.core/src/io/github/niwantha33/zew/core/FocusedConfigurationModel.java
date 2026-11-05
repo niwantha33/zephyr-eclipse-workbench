@@ -18,7 +18,7 @@ public final class FocusedConfigurationModel {
     private FocusedConfigurationModel() {}
 
     public enum State { CONFIGURED, DISABLED, SETUP_INCOMPLETE, UNSUPPORTED, UNKNOWN }
-    public enum Freshness { CURRENT_SNAPSHOT, STALE_SNAPSHOT, NO_BUILD }
+    public enum Freshness { CURRENT_SNAPSHOT, STALE_SNAPSHOT, UNVERIFIED_SNAPSHOT, NO_BUILD }
     public record Row(String category, State state, String controller, String explanation,
                       String nextAction) {}
     public record Issue(String title, String detail, String nextAction, String category) {}
@@ -38,10 +38,18 @@ public final class FocusedConfigurationModel {
 
     public static Overview inspect(String board, String profile, String builtDts,
                                    String generatedConfig, boolean stale) {
+        return inspect(board, profile, builtDts, generatedConfig,
+                stale ? Freshness.STALE_SNAPSHOT : Freshness.CURRENT_SNAPSHOT);
+    }
+
+    /** Use the verified receipt state; never silently promote an unverified
+     * or missing legacy build to a current configuration snapshot. */
+    public static Overview inspect(String board, String profile, String builtDts,
+                                   String generatedConfig, Freshness requestedFreshness) {
         String dts = builtDts == null ? "" : builtDts;
         String config = generatedConfig == null ? "" : generatedConfig;
-        Freshness freshness = dts.isBlank() ? Freshness.NO_BUILD
-                : stale ? Freshness.STALE_SNAPSHOT : Freshness.CURRENT_SNAPSHOT;
+        Freshness freshness = dts.isBlank() ? Freshness.NO_BUILD : requestedFreshness;
+        boolean stale = freshness == Freshness.STALE_SNAPSHOT;
         List<DevicetreeHardware.Device> devices = DevicetreeHardware.inspect(dts);
         List<Row> rows = new ArrayList<>();
         List<Issue> issues = new ArrayList<>();
@@ -60,10 +68,12 @@ public final class FocusedConfigurationModel {
             }
             var enabled = matches.stream()
                     .filter(d -> PeripheralCoverage.effectiveEnabled(d, devices)).toList();
-            if (freshness == Freshness.STALE_SNAPSHOT) {
+            if (freshness != Freshness.CURRENT_SNAPSHOT) {
                 rows.add(new Row(category, State.UNKNOWN, matches.get(0).path(),
-                        "Outdated build evidence; previous status is not current.",
-                        "Rebuild the selected board and profile."));
+                        freshness == Freshness.UNVERIFIED_SNAPSHOT
+                            ? "Generated build exists but input provenance is unverified."
+                            : "Outdated build evidence; previous status is not current.",
+                        "Rebuild the selected board and profile to capture verified inputs."));
                 continue;
             }
             if (enabled.isEmpty()) {
@@ -98,10 +108,15 @@ public final class FocusedConfigurationModel {
             issues.add(new Issue("Build data missing",
                     "No generated zephyr.dts for the selected board/profile.",
                     "Build & validate to discover real configuration evidence.", ""));
-        } else if (stale) {
-            issues.add(new Issue("Build data is stale",
-                    "Project source or overlay changed after the last generated output.",
+        } else if (freshness == Freshness.STALE_SNAPSHOT) {
+            issues.add(new Issue("Build data has changed",
+                    "A recorded configuration input or generated output no longer matches its build receipt.",
                     "Rebuild before treating last-build values as current.", ""));
+        } else if (freshness == Freshness.UNVERIFIED_SNAPSHOT) {
+            issues.add(new Issue("Build provenance unverified",
+                    "No complete source/output fingerprint receipt proves these generated outputs "
+                    + "match the current project and selected build.",
+                    "Rebuild this board/profile to capture a full tracked-input receipt.", ""));
         }
         for (Row row : rows) if (row.state() == State.SETUP_INCOMPLETE
                 || row.state() == State.DISABLED) {
@@ -114,8 +129,8 @@ public final class FocusedConfigurationModel {
         var memory = DevicetreeMemoryMap.inspect(dts).regions();
         return new Overview(freshness, board == null ? "Not selected" : board,
                 profile == null ? "default" : profile,
-                capacity("Flash", DevicetreeMemoryMap.Kind.FLASH, memory, stale),
-                capacity("RAM", DevicetreeMemoryMap.Kind.RAM, memory, stale), rows, issues);
+                capacity("Flash", DevicetreeMemoryMap.Kind.FLASH, memory, freshness),
+                capacity("RAM", DevicetreeMemoryMap.Kind.RAM, memory, freshness), rows, issues);
     }
 
     public static String display(State s) {
@@ -133,12 +148,16 @@ public final class FocusedConfigurationModel {
      * compact summary. Multiple banks/aliases require the full address view.
      */
     private static Capacity capacity(String kind, DevicetreeMemoryMap.Kind type,
-                                     List<DevicetreeMemoryMap.Region> regions, boolean stale) {
+                                     List<DevicetreeMemoryMap.Region> regions, Freshness freshness) {
+        if (freshness == Freshness.UNVERIFIED_SNAPSHOT)
+            return new Capacity(kind, "Unknown",
+                    "Unverified generated configuration; rebuild for trusted capacity evidence.");
         var candidates = regions.stream().filter(r -> r.kind() == type
                 && r.cpuMapped() && r.size().compareTo(BigInteger.ZERO) > 0).toList();
         if (candidates.size() == 1) {
             var c = candidates.get(0);
-            return new Capacity(kind, c.sizeLabel() + (stale ? " (stale)" : ""),
+            return new Capacity(kind, c.sizeLabel()
+                    + (freshness == Freshness.STALE_SNAPSHOT ? " (stale)" : ""),
                     "Last generated Devicetree " + c.path() + ", " + c.cpuHex()
                     + " to " + c.endHex() + " (end exclusive). This is capacity, not usage.");
         }

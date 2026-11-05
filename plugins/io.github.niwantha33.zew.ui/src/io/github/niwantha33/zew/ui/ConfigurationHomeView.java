@@ -31,6 +31,7 @@ import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
+import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
@@ -432,33 +433,22 @@ public final class ConfigurationHomeView extends ViewPart {
                     }
                     var snapshot = ConfigurationStudioFiles.inspect(app, build, profile);
                     Path effective = build == null ? null : build.resolve("zephyr/.config");
-                    Path generated = build == null ? null : build.resolve("zephyr/zephyr.dts");
-                    String config = effective != null && Files.isRegularFile(effective)
-                            && Files.size(effective) <= 2_000_000 ? Files.readString(effective) : "";
-                    boolean stale = generated == null || !Files.isRegularFile(generated)
-                            || effective == null || !Files.isRegularFile(effective)
-                            || newer(app.resolve("prj.conf"), effective)
-                            || newer(app.resolve("app.overlay"), generated)
-                            || newer(app.resolve("CMakeLists.txt"), generated);
-                    if (generated != null && Files.isRegularFile(generated)) {
-                        // Only build-reported DTS/DTSI/overlay paths are treated
-                        // as active input dependencies. A new file which was
-                        // never included is NOT silently called effective.
-                        var sources = io.github.niwantha33.zew.core.DevicetreeSourceExplorer
-                                .inspect(app, build);
-                        boolean hasDependencies = false;
-                        for (var source : sources.sources()) {
-                            if (!source.buildInput()) continue;
-                            hasDependencies = true;
-                            if (newer(source.path(), generated)) stale = true;
-                        }
-                        if (!hasDependencies)
-                            warning += (warning.isBlank() ? "" : "\n")
-                                    + "Build dependency list unavailable: include/source freshness "
-                                    + "cannot be proven. Inspect sources or rebuild this profile.";
-                    }
+                    // Capture-time SHA-256 receipts are the authority for
+                    // exact selected project/board/profile freshness. File
+                    // timestamps and the existence of generated outputs alone
+                    // are not proof that these inputs were built.
+                    var receipt = ConfigurationEvidenceReceipt.inspect(app, build, board, profile);
+                    var freshnessState = switch (receipt.state()) {
+                        case CURRENT -> FocusedConfigurationModel.Freshness.CURRENT_SNAPSHOT;
+                        case CHANGED -> FocusedConfigurationModel.Freshness.STALE_SNAPSHOT;
+                        case UNVERIFIED -> FocusedConfigurationModel.Freshness.UNVERIFIED_SNAPSHOT;
+                        case NO_BUILD -> FocusedConfigurationModel.Freshness.NO_BUILD;
+                    };
+                    boolean stale = freshnessState != FocusedConfigurationModel.Freshness.CURRENT_SNAPSHOT;
+                    warning += (warning.isBlank() ? "" : "\n")
+                            + receipt.detail() + " Tracked source inputs: " + receipt.sourceCount() + ".";
                     var summary = FocusedConfigurationModel.inspect(
-                            board, profile, snapshot.devicetree(), config, stale);
+                            board, profile, snapshot.devicetree(), config, freshnessState);
                     var nodes = DevicetreeHardware.inspect(snapshot.devicetree());
                     observed = new Evidence(board, profile, build, snapshot.devicetree(), config,
                             settings, stale, warning, summary, nodes);
@@ -515,8 +505,9 @@ public final class ConfigurationHomeView extends ViewPart {
                 + "  •  Target qualifier: " + qualifier(found.board()));
         freshness.setText(switch (summary.freshness()) {
             case NO_BUILD -> "Build data MISSING — configure/build required";
-            case STALE_SNAPSHOT -> "Build data OUT OF DATE — rebuild required";
-            case CURRENT_SNAPSHOT -> "Last generated build available (not runtime)";
+            case STALE_SNAPSHOT -> "Build inputs CHANGED — rebuild required";
+            case UNVERIFIED_SNAPSHOT -> "Build provenance UNVERIFIED — rebuild to capture";
+            case CURRENT_SNAPSHOT -> "Tracked build inputs MATCH (not runtime)";
         });
         if (hasDirtyProjectEditor())
             freshness.setText("Pending unsaved project edits — generated build not current");
@@ -524,6 +515,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 summary.freshness() == FocusedConfigurationModel.Freshness.CURRENT_SNAPSHOT
                 ? SWT.COLOR_DARK_GREEN : summary.freshness()
                 == FocusedConfigurationModel.Freshness.STALE_SNAPSHOT
+                || summary.freshness() == FocusedConfigurationModel.Freshness.UNVERIFIED_SNAPSHOT
                 ? SWT.COLOR_DARK_YELLOW : SWT.COLOR_DARK_RED));
         overviewInfo.setText("States describe generated configuration, NOT runtime use."
                 + " Capacities are not memory usage."
