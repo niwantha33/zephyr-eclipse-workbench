@@ -44,7 +44,7 @@ class StudioAnswerTests(unittest.TestCase):
         duplicate = copy.deepcopy(self.report)
         duplicate["findings"] *= 2
         self.assertEqual(answer(duplicate, self.ident, [self.root])["reason"], "missing-or-ambiguous-finding")
-        for field, value in (("rule_id", "DO-ANYTHING"), ("confidence", "possible")):
+        for field, value in (("rule_id", "DO-ANYTHING"), ("rule_id", {}), ("confidence", "possible")):
             report = copy.deepcopy(self.report)
             report["findings"][0][field] = value
             self.assertEqual(answer(report, self.ident, [self.root])["status"], "refused")

@@ -73,7 +73,7 @@ def answer(report: dict, finding_id: str, roots: list[Path] | None = None,
         return _refuse("missing-or-ambiguous-finding", digest, finding_id)
     finding = found[0]
     rule = finding.get("rule_id")
-    if rule not in TEMPLATES or finding.get("confidence") not in ("confirmed", "derived"):
+    if not isinstance(rule, str) or rule not in TEMPLATES or finding.get("confidence") not in ("confirmed", "derived"):
         return _refuse("unsupported-or-uncertain-observation", digest, finding_id)
     if report.get("freshness") in ("stale", "changed") or finding.get("freshness") in ("stale", "changed"):
         return _refuse("stale-recorded-evidence", digest, finding_id)

@@ -84,8 +84,10 @@ def render(report: dict, format: str = "markdown", max_findings: int = 100,
             raise InputError("Recorded graph has no root node")
         selected = nodes[:max_findings]
         identifiers = {n["symbol"]: f"n{index}" for index, n in enumerate(selected)}
-        selected_edges = [e for e in edges if isinstance(e, dict)
-                          and e.get("from") in identifiers and e.get("to") in identifiers]
+        if any(not isinstance(e, dict) or not isinstance(e.get("from"), str)
+               or not isinstance(e.get("to"), str) for e in edges):
+            raise InputError("Invalid expression graph edge")
+        selected_edges = [e for e in edges if e["from"] in identifiers and e["to"] in identifiers]
         selected_edges.sort(key=lambda edge: (edge["from"], str(edge.get("kind")), edge["to"]))
         truncated = len(nodes) > len(selected) or graph.get("coverage") == "truncated" or len(selected_edges) > 2000
         selected_edges = selected_edges[:2000]

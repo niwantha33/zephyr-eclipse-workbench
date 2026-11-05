@@ -73,6 +73,10 @@ class StudioVisualizationTests(unittest.TestCase):
         with self.assertRaisesRegex(InputError, "unambiguous"):
             render(graph, focus="GPIO")
         self.assertEqual(render(graph, focus="GPIO", image="boot")["image"], "boot")
+        broken = self.graph_report()
+        broken["images"][0]["graphs"][0]["edges"][0]["from"] = []
+        with self.assertRaisesRegex(InputError, "edge"):
+            render(broken, focus="GPIO")
         self.report["findings"] *= 2
         with self.assertRaisesRegex(InputError, "Duplicate"):
             render(self.report)
