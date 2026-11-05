@@ -96,6 +96,14 @@ def causality(conf, library, name, max_nodes=512):
     proof of assignment origin: loading .config loses fragment precedence.
     Cycles are represented by edges, never recursively expanded.
     """
+    if max_nodes < 1 or max_nodes > 4096:
+        raise ValueError("Kconfig graph limit must be between 1 and 4096")
+    def expression_text(expr):
+        def display(item):
+            if isinstance(item, library.Symbol) and item.is_constant and item.name not in ("y", "m", "n"):
+                return '"<redacted>"'
+            return library.standard_sc_expr_str(item)
+        return library.expr_str(expr, display)
     pending = [name]
     nodes, edges = {}, set()
     truncated = False
@@ -118,20 +126,20 @@ def causality(conf, library, name, max_nodes=512):
             if node.prompt:
                 relations.append((f"prompt[{index}]", node.prompt[1]))
         choice = symbol.choice
+        if choice is not None:
+            relations.append(("choice.depends", choice.direct_dep))
         nodes[current] = {
-            "symbol": current, "value": symbol.str_value,
-            "user_value": symbol.user_value,
+            "symbol": current, "value": symbol.str_value if symbol.type in (library.BOOL, library.TRISTATE) else "<redacted>",
+            "user_value": symbol.user_value if symbol.type in (library.BOOL, library.TRISTATE) else "<redacted>",
             "visibility": library.TRI_TO_STR[symbol.visibility],
             "definitions": sorted(f"{n.filename}:{n.linenr}" for n in symbol.nodes),
             "choice": None if choice is None else {
                 "name": choice.name, "value": choice.str_value,
                 "selection": choice.selection.name if choice.selection else None},
-            "expressions": [{"kind": kind, "expression": library.expr_str(expr),
+            "expressions": [{"kind": kind, "expression": expression_text(expr),
                              "value": library.TRI_TO_STR[library.expr_value(expr)]}
                             for kind, expr in relations],
         }
-        if choice is not None:
-            relations.append(("choice.depends", choice.direct_dep))
         for kind, expression in relations:
             for item in sorted(library.expr_items(expression),
                                key=lambda x: x.name or ""):
@@ -203,11 +211,21 @@ def inspect(build, ninja, name, graph_json=False):
                    for target, condition in symbol.selects]
         implies = [f"{target.name} if {kconfiglib.expr_str(condition)}"
                    for target, condition in symbol.implies]
+        graph = causality(conf, kconfiglib, name) if hasattr(kconfiglib, "Symbol") else None
+        if graph is not None:
+            lines = ["Transitive Kconfig expressions (" + graph["coverage"] + "):"]
+            for item in graph["nodes"]:
+                lines.append(item["symbol"] + "=" + str(item["value"]))
+                for expression in item["expressions"]:
+                    lines.append("  " + expression["kind"] + ": " + expression["expression"]
+                                 + " => " + expression["value"])
+            help_text = ("\n".join(lines)[:12000] + "\nSource-fragment precedence remains unknown.\n\n"
+                         + help_text[:5000])
         values_out = (
             name, kconfiglib.TYPE_TO_STR[symbol.type], symbol.str_value,
             visibility, assignable, dep, dep_state,
             " / ".join(prompts), "\n".join(definitions),
-            "\n".join(selects), "\n".join(implies), help_text[:5000],
+            "\n".join(selects), "\n".join(implies), help_text[:18000],
         )
         print("ZEW-KCONFIG-1")
         print("\t".join(field(value) for value in values_out))
