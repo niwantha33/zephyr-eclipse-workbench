@@ -62,8 +62,11 @@ public final class DevicetreeEditor extends TextEditor {
         // the actual immutable text in a debounced background Job.
         final String text = observedDocument.get();
         final DevicetreeIndex.Snapshot evidence = snapshot;
-        final boolean overlay = getEditorInput() instanceof IFileEditorInput input
-                && input.getFile().getName().toLowerCase(Locale.ROOT).endsWith(".overlay");
+        final Path editedFile = getEditorInput() instanceof IFileEditorInput fileInput
+                && fileInput.getFile().getLocation() != null
+                    ? fileInput.getFile().getLocation().toFile().toPath() : null;
+        final boolean overlay = editedFile != null
+                && editedFile.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".overlay");
         final long ticket = diagnosticGeneration.incrementAndGet();
         if (diagnosticJob != null) diagnosticJob.cancel();
         diagnosticJob = new Job("Inspect unsaved Devicetree syntax") {
@@ -71,11 +74,10 @@ public final class DevicetreeEditor extends TextEditor {
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 var findings = new ArrayList<>(DevicetreeEditorDiagnostics.inspect(text, evidence, overlay));
                 var context = overlayContext;
-                if (overlay && context != null && context.verified()
-                        && getEditorInput() instanceof IFileEditorInput input
-                        && !context.active(input.getFile().getLocation().toFile().toPath())) {
-                    findings.add(new DevicetreeEditorDiagnostics.Problem(0, Math.min(1, text.length()),
-                            "warning", context.explanation(input.getFile().getLocation().toFile().toPath())));
+                if (overlay && !text.isEmpty() && context != null && context.verified()
+                        && !context.active(editedFile)) {
+                    findings.add(new DevicetreeEditorDiagnostics.Problem(0, 1,
+                            "warning", context.explanation(editedFile)));
                 }
                 if (monitor.isCanceled() || ticket != diagnosticGeneration.get())
                     return Status.CANCEL_STATUS;
@@ -141,7 +143,12 @@ public final class DevicetreeEditor extends TextEditor {
                                 Activator.getDefault().getBundle().getEntry("scripts/dt_editor_index.py")).toURI());
                         var result = DevicetreeIndex.load(Path.of(settings.getProperty("python")),
                                 script, zephyr, application, build);
-                        var context = DevicetreeOverlaySupport.inspect(application, build, zephyr);
+                        DevicetreeOverlaySupport.Context context = null;
+                        try { context = DevicetreeOverlaySupport.inspect(application, build, zephyr); }
+                        catch (IOException ignored) {
+                            // Optional context failure must not discard a valid
+                            // upstream dtlib/edtlib snapshot and its errors.
+                        }
                         if (!monitor.isCanceled()) {
                             snapshot = result;
                             overlayContext = context;
