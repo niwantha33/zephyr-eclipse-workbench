@@ -599,3 +599,17 @@ passing these prototype tests.
   unverified. No hardware qualification claim.
 - No new release/gate approval; G0 remains open. See
   [Build failure investigator](docs/BUILD_FAILURE_INVESTIGATOR.md).
+
+
+## Automatic failed-log selection — development 2026-11-05
+
+- Remember the exact failed project/build in workspace preferences and restore
+  its saved report when the investigator is reopened without a project selection.
+- Add a primary Show latest failed build action; manual Import another log is
+  separate. Closed/missing projects never fall back to an arbitrary workspace
+  project, and explicitly selected project/profile lookup remains scoped.
+- Java 21 full core suite and Tycho/p2 package verification pass locally.
+  Installed native UI passes 35 checks, including actual view reopening without
+  a picker, closed-project handling and cross-project/profile isolation.
+- No automatic build retries, source edits or hardware claims. Exact-head CI
+  and real Windows hardware validation remain pending.
