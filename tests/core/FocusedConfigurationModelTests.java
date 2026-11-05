@@ -87,8 +87,8 @@ public final class FocusedConfigurationModelTests {
                     .allMatch(r -> r.state() == FocusedConfigurationModel.State.UNKNOWN)
                 && stale.flash().value().contains("stale"),
                 "stale configuration never represented as current");
-        String parentDisabled = BUILT.replace("                    ranges;",
-                "                    ranges;\n                    status = \"disabled\";");
+        String parentDisabled = BUILT.replace("ranges;",
+                "ranges;\n                    status = \"disabled\";");
         var inherited = FocusedConfigurationModel.inspect("board/target", "debug",
                 parentDisabled, "CONFIG_ADC=y", false);
         check(inherited.peripherals().stream().filter(r -> r.category().equals("ADC"))
