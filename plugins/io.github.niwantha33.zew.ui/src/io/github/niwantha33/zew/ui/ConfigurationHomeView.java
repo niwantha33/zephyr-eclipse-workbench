@@ -31,6 +31,7 @@ import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
+import io.github.niwantha33.zew.core.ConfigurationStudioDiagnostics;
 import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 import io.github.niwantha33.zew.core.ConfigurationFailureEvidence;
 import io.github.niwantha33.zew.core.KconfigTraceEvidence;
@@ -81,6 +82,8 @@ public final class ConfigurationHomeView extends ViewPart {
     private Text buildDetails, kconfigOriginSymbol, kconfigOriginResult;
     private final AtomicInteger originGeneration = new AtomicInteger();
     private Job originJob;
+    private Job diagnosisJob;
+    private final AtomicInteger diagnosisGeneration = new AtomicInteger();
 
     @Override public void createPartControl(Composite parent) {
         var shellLayout = new GridLayout(1, false);
@@ -151,7 +154,9 @@ public final class ConfigurationHomeView extends ViewPart {
                 issueInfo.setText(((FocusedConfigurationModel.Issue)
                         issueRows.getSelection()[0].getData()).detail());
         });
-        button(root, "Review selected issue", this::reviewIssue);
+        var issueActions = bar(root, 2);
+        button(issueActions, "Review selected issue", this::reviewIssue);
+        button(issueActions, "Diagnose source requests", this::diagnoseSourceRequests);
 
         new Label(root, SWT.NONE).setText("Peripherals in the selected build");
         overviewSearch = new Text(root, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
@@ -272,11 +277,12 @@ public final class ConfigurationHomeView extends ViewPart {
         buildDetails = new Text(root, SWT.BORDER | SWT.READ_ONLY | SWT.MULTI
                 | SWT.WRAP | SWT.V_SCROLL);
         buildDetails.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        var actions = bar(root, 4);
+        var actions = bar(root, 3);
         button(actions, "Build & validate", () -> advanced("build"));
         button(actions, "Review failed configure", this::openRecordedFailure);
         button(actions, "Project settings & profiles", () -> advanced("settings"));
         button(actions, "Inspect build evidence", () -> advanced("evidence"));
+        button(actions, "Diagnose source requests", this::diagnoseSourceRequests);
         showSystemAdvanced = button(root, "Show advanced system settings", () -> {
             boolean visible = !systemAdvanced.getVisible();
             setPanelVisible(systemAdvanced, visible);
@@ -520,6 +526,48 @@ public final class ConfigurationHomeView extends ViewPart {
             }
         };
         refreshJob.setSystem(true); refreshJob.schedule();
+    }
+
+    /** Existing three-section entrypoint; diagnosis never opens a competing studio. */
+    private void diagnoseSourceRequests() {
+        if (project == null || !project.isAccessible() || project.getLocation() == null) {
+            displayMissingProject();
+            return;
+        }
+        final IProject selected = project;
+        final Evidence snapshot = evidence;
+        if (snapshot == null) {
+            primary.setSelection(BUILD);
+            buildDetails.setText("Refresh the selected project first; source diagnosis does not require a successful build.");
+            return;
+        }
+        if (diagnosisJob != null) diagnosisJob.cancel();
+        int ticket = diagnosisGeneration.incrementAndGet();
+        var display = primary.getDisplay();
+        primary.setSelection(BUILD);
+        buildDetails.setText("Inspecting project-owned source requests and the selected generated snapshot…");
+        diagnosisJob = new Job("Diagnose selected Zephyr configuration source") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                String message;
+                try {
+                    var report = ConfigurationStudioDiagnostics.inspect(
+                            selected.getLocation().toFile().toPath(), snapshot.build());
+                    message = report.display();
+                } catch (Exception error) {
+                    return new Status(IStatus.ERROR, Activator.ID,
+                            "Configuration diagnosis failed; refresh the selected build and retry.", error);
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                final String result = message;
+                display.asyncExec(() -> {
+                    if (ticket == diagnosisGeneration.get() && project == selected && evidence == snapshot
+                            && buildDetails != null && !buildDetails.isDisposed()) buildDetails.setText(result);
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        diagnosisJob.setUser(true);
+        diagnosisJob.schedule();
     }
 
     private void clear(String description) {
@@ -981,6 +1029,8 @@ public final class ConfigurationHomeView extends ViewPart {
         if (detailJob != null) detailJob.cancel();
         originGeneration.incrementAndGet();
         if (originJob != null) originJob.cancel();
+        diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
         super.dispose();
     }
 }
