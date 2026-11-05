@@ -77,7 +77,8 @@ final class DevicetreeEditorDiagnostics {
                                 "This path is not in the last selected generated DTS. Rebuild or choose a verified path."));
                     }
                 }
-                if (applicationOverlay && nodes.size() > 0 && "/soc".equals(nodes.peek().path())
+                if (applicationOverlay && snapshot != null && snapshot.built()
+                        && nodes.size() > 0 && "/soc".equals(nodes.peek().path())
                         && path != null && !knownPaths.contains(path)
                         && NAMED_NODE.matcher(header).matches()) {
                     problems.add(new Problem(Math.max(0, i - header.length()), header.length(), "warning",
