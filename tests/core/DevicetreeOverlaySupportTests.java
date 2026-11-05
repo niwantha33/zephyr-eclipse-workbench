@@ -34,7 +34,7 @@ public final class DevicetreeOverlaySupportTests {
                     .resolve("soc.dtsi");
             Files.writeString(board, "/dts-v1/; / {};");
             Files.writeString(soc, "/ { soc {}; };");
-            Path selected = Files.writeString(app.resolve("boards/extra.overlay").getParent()
+            Path selected = Files.writeString(Files.createDirectories(app.resolve("boards"))
                     .resolve("extra.overlay"), "&uart0 { status = \"okay\"; };");
             Path conventional = Files.writeString(app.resolve("app.overlay"),
                     "&uart1 { status = \"disabled\"; };");
