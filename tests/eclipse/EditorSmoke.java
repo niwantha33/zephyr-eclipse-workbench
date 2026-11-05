@@ -1039,8 +1039,11 @@ public final class EditorSmoke implements IApplication {
                     && silentConfiguration.getTextHover(null, org.eclipse.jface.text.IDocument.DEFAULT_CONTENT_TYPE) == null
                     && silentConfiguration.getAnnotationHover(null) == null,
                     "installed native Devicetree editor disables proposals and hover hints");
-            check(silentConfiguration.getPresentationReconciler(null) != null,
-                    "Devicetree highlighting remains enabled when suggestions are disabled");
+            // JFace presentation setup asks SWT for theme colours; like the
+            // actual editor, invoke it only from the Eclipse display thread.
+            org.eclipse.swt.widgets.Display.getDefault().syncExec(() ->
+                    check(silentConfiguration.getPresentationReconciler(null) != null,
+                            "Devicetree highlighting remains enabled when suggestions are disabled"));
 
             // Brackets in strings/comments are never coloured; matching open
             // and close tokens keep their level even across partial repaints.
