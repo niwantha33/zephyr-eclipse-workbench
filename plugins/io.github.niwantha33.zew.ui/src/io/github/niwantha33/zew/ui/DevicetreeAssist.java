@@ -80,9 +80,17 @@ final class DevicetreeAssist {
                     .filter(p -> p.name().equals(name)).findFirst().orElse(null);
             String current = assignment.group(2);
             boolean insideQuote = current.stripLeading().startsWith("\"");
+            boolean insideCells = current.stripLeading().startsWith("<");
             String typed = insideQuote ? current.substring(current.indexOf('"') + 1).replace("\"", "") : current.strip();
             int start = insideQuote ? caret - typed.length() : caret - current.length();
-            List<Suggestion> choices = values(name, spec, snapshot, insideQuote, typed);
+            if (insideCells) {
+                String cellText = current.substring(current.indexOf('<') + 1);
+                int space = Math.max(cellText.lastIndexOf(' '), Math.max(cellText.lastIndexOf('\\t'),
+                        cellText.lastIndexOf('\\n')));
+                typed = cellText.substring(space + 1).replace(">", "");
+                start = caret - typed.length();
+            }
+            List<Suggestion> choices = values(name, spec, snapshot, insideQuote, insideCells, typed);
             return new Result(start, caret - start, choices);
         }
         if (insideString(before)) return new Result(caret, 0, List.of());
@@ -110,38 +118,61 @@ final class DevicetreeAssist {
     }
 
     private static List<Suggestion> values(String name, DevicetreeIndex.Property property,
-            DevicetreeIndex.Snapshot snapshot, boolean insideQuote, String prefix) {
+            DevicetreeIndex.Snapshot snapshot, boolean insideQuote, boolean insideCells, String prefix) {
         var result = new ArrayList<Suggestion>();
         if ("status".equals(name)) {
             for (String value : List.of("okay", "disabled", "reserved", "fail", "fail-sss"))
-                addValue(result, value, insideQuote, prefix, "Standard Devicetree status; not proof of an active driver.");
+                addString(result, value, insideQuote, prefix,
+                        "Standard Devicetree status; not proof of an active driver.");
         } else if ("compatible".equals(name)) {
             for (var compatible : snapshot.compatibles())
-                addValue(result, compatible.name(), insideQuote, prefix,
+                addString(result, compatible.name(), insideQuote, prefix,
                         "Binding " + compatible.description() + " (on-bus: " +
                         (compatible.bus().isBlank() ? "unspecified" : compatible.bus()) + "). Not driver evidence.");
         } else if (property != null) {
+            // Binding type, not a universal "<...>" or a universal string.
             for (var value : property.choices())
-                addValue(result, value, insideQuote, prefix, property.description() + " — binding enum");
+                addTyped(result, value, property.type(), insideQuote, insideCells, prefix,
+                        property.description() + " — binding enum");
             if (!property.constant().isBlank())
-                addValue(result, property.constant(), insideQuote, prefix, "Binding constant: " + property.source());
-            if (property.type().equals("boolean"))
-                result.add(new Suggestion("", "Remove '='; write property-name;",
-                        "Boolean Devicetree properties take no assigned value."));
+                addTyped(result, property.constant(), property.type(), insideQuote, insideCells, prefix,
+                        "Binding constant: " + property.source());
+            // Boolean properties are a bare "name;" with no '='. Do not
+            // offer a misleading replacement that leaves the '=' behind.
             if (property.type().startsWith("phandle") && !insideQuote)
-                for (var node : snapshot.nodes())
-                    if (!node.label().isBlank() && node.label().startsWith(prefix.replace("&", "")))
-                        result.add(new Suggestion("&" + node.label(), "&" + node.label() + " — " + node.status(),
-                                "Real phandle target: " + node.path()
-                                + ". Extra specifier cells must be supplied from provider binding."));
+                for (var node : snapshot.nodes()) {
+                    if (node.label().isBlank() || !("&" + node.label()).startsWith(prefix)) continue;
+                    if ("phandle-array".equals(property.type()) && !insideCells) continue;
+                    result.add(new Suggestion(insideCells ? "&" + node.label() : "<&" + node.label() + ">",
+                            "&" + node.label() + " — " + node.status(),
+                            "Real provider: " + node.path() + ". Additional specifier cells, if applicable,"
+                                    + " require the selected provider binding; not validated by this suggestion."));
+                }
         }
         result.sort(Comparator.comparing(Suggestion::label));
         return List.copyOf(result);
     }
-    private static void addValue(List<Suggestion> into, String value, boolean quoted, String prefix, String help) {
-        if (!value.startsWith(prefix)) return;
-        into.add(new Suggestion(quoted ? value : "\"" + value + "\"", value, help));
+
+    private static void addTyped(List<Suggestion> result, String value, String type,
+            boolean insideQuote, boolean insideCells, String prefix, String help) {
+        switch (type) {
+            case "string", "string-array" -> addString(result, value, insideQuote, prefix, help);
+            case "int", "array" -> {
+                // Only numeric scalars are safe without inspecting array shapes.
+                // A YAML list rendered as text is never a Devicetree cell literal.
+                if (value.matches("-?(?:0[xX][0-9a-fA-F]+|[0-9]+)") && value.startsWith(prefix))
+                    result.add(new Suggestion(insideCells ? value : "<" + value + ">",
+                            value, help + " — numeric cell, not a quoted string"));
+            }
+            default -> { /* Unknown shape: no fabricated value completion. */ }
+        }
     }
+    private static void addString(List<Suggestion> result, String value,
+            boolean insideQuote, String prefix, String help) {
+        if (!value.startsWith(prefix)) return;
+        result.add(new Suggestion(insideQuote ? value : "\"" + value + "\"", value, help));
+    }
+
     private static String enclosingNodePath(String before, DevicetreeIndex.Snapshot snapshot) {
         // Walk braces while ignoring comments and strings. Never reuse a parent's
         // binding for an unknown child node: better no suggestions than wrong ones.
