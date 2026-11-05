@@ -187,6 +187,11 @@ public final class ConfigurationStudioView extends ViewPart {
     private java.util.Properties inspectionSettings;
 
     @Override public void createPartControl(Composite parent) {
+        // A ViewPart receives an SWT parent, not a guaranteed fill layout.
+        // Without a layout the outer Composite retains its default zero size:
+        // every nested tab/ScrolledComposite is invisible even when Eclipse
+        // reports this part as active and maximized.
+        parent.setLayout(new org.eclipse.swt.layout.FillLayout());
         var outer = new Composite(parent, SWT.NONE);
         outer.setLayout(new GridLayout(1, false));
         var fontData = parent.getFont().getFontData()[0];

@@ -3,6 +3,7 @@ package io.github.niwantha33.zew.ui;
 
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.runtime.*;
 import org.eclipse.core.runtime.jobs.Job;
@@ -13,6 +14,7 @@ import org.eclipse.jface.text.rules.*;
 import org.eclipse.jface.text.source.*;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Color;
+import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.*;
 import org.eclipse.ui.editors.text.TextEditor;
@@ -26,6 +28,84 @@ public final class DevicetreeEditor extends TextEditor {
     private volatile DevicetreeIndex.Snapshot snapshot =
             DevicetreeIndex.empty("loading", "Indexing the selected Zephyr project…");
     private Job indexJob;
+    private Job diagnosticJob;
+    private final AtomicLong diagnosticGeneration = new AtomicLong();
+    private final Map<Annotation, Position> shownDiagnostics = new LinkedHashMap<>();
+    private IDocument observedDocument;
+    private volatile boolean disposed;
+
+    private final IDocumentListener diagnosticListener = new IDocumentListener() {
+        @Override public void documentAboutToBeChanged(DocumentEvent event) { }
+        @Override public void documentChanged(DocumentEvent event) { queueDiagnostics(); }
+    };
+
+    @Override public void createPartControl(Composite parent) {
+        super.createPartControl(parent);
+        observedDocument = getDocumentProvider().getDocument(getEditorInput());
+        if (observedDocument != null) observedDocument.addDocumentListener(diagnosticListener);
+        queueDiagnostics();
+    }
+
+    private void queueDiagnostics() {
+        if (disposed || observedDocument == null) return;
+        // Snapshot unsaved document text on the caller's UI thread; analyze
+        // the actual immutable text in a debounced background Job.
+        final String text = observedDocument.get();
+        final DevicetreeIndex.Snapshot evidence = snapshot;
+        final boolean overlay = getEditorInput() instanceof IFileEditorInput input
+                && input.getFile().getName().toLowerCase(Locale.ROOT).endsWith(".overlay");
+        final long ticket = diagnosticGeneration.incrementAndGet();
+        if (diagnosticJob != null) diagnosticJob.cancel();
+        diagnosticJob = new Job("Inspect unsaved Devicetree syntax") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                var findings = DevicetreeEditorDiagnostics.inspect(text, evidence, overlay);
+                if (monitor.isCanceled() || ticket != diagnosticGeneration.get())
+                    return Status.CANCEL_STATUS;
+                Display.getDefault().asyncExec(() -> {
+                    if (!disposed && ticket == diagnosticGeneration.get())
+                        showDiagnostics(findings);
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        diagnosticJob.setSystem(true);
+        diagnosticJob.setPriority(Job.DECORATE);
+        diagnosticJob.schedule(280);
+    }
+
+    private void showDiagnostics(List<DevicetreeEditorDiagnostics.Problem> findings) {
+        if (disposed) return;
+        IAnnotationModel model = getDocumentProvider().getAnnotationModel(getEditorInput());
+        if (model == null) return;
+        Map<Annotation, Position> next = new LinkedHashMap<>();
+        for (var problem : findings) {
+            String type = problem.severity().equals("error")
+                    ? "org.eclipse.ui.workbench.texteditor.error"
+                    : "org.eclipse.ui.workbench.texteditor.warning";
+            Annotation annotation = new Annotation(type, false, problem.message());
+            next.put(annotation, new Position(problem.offset(), problem.length()));
+        }
+        if (model instanceof IAnnotationModelExtension extension) {
+            extension.replaceAnnotations(shownDiagnostics.keySet().toArray(Annotation[]::new), next);
+        } else {
+            for (Annotation old : shownDiagnostics.keySet()) model.removeAnnotation(old);
+            next.forEach(model::addAnnotation);
+        }
+        shownDiagnostics.clear();
+        shownDiagnostics.putAll(next);
+        var status = getEditorSite().getActionBars().getStatusLineManager();
+        var firstError = findings.stream().filter(p -> "error".equals(p.severity())).findFirst();
+        if (firstError.isPresent()) {
+            status.setErrorMessage("Devicetree: " + firstError.get().message());
+        } else {
+            status.setErrorMessage(null);
+            status.setMessage(findings.isEmpty()
+                    ? "Devicetree editor hints are not a Zephyr build validation"
+                    : "Devicetree: " + findings.size() + " advisory finding(s). Hover the annotation for details.");
+        }
+    }
+
 
     public DevicetreeEditor() {
         setSourceViewerConfiguration(new Configuration(this));
@@ -46,7 +126,12 @@ public final class DevicetreeEditor extends TextEditor {
                                 Activator.getDefault().getBundle().getEntry("scripts/dt_editor_index.py")).toURI());
                         var result = DevicetreeIndex.load(Path.of(settings.getProperty("python")),
                                 script, zephyr, application, build);
-                        if (!monitor.isCanceled()) snapshot = result;
+                        if (!monitor.isCanceled()) {
+                            snapshot = result;
+                            Display.getDefault().asyncExec(() -> {
+                                if (!disposed) queueDiagnostics();
+                            });
+                        }
                         return Status.OK_STATUS;
                     } catch (Exception error) {
                         if (!monitor.isCanceled())
@@ -62,7 +147,12 @@ public final class DevicetreeEditor extends TextEditor {
         } else snapshot = DevicetreeIndex.empty("unavailable", "Select a workspace project and board");
     }
     @Override public void dispose() {
+        disposed = true;
+        diagnosticGeneration.incrementAndGet();
         if (indexJob != null) indexJob.cancel();
+        if (diagnosticJob != null) diagnosticJob.cancel();
+        if (observedDocument != null) observedDocument.removeDocumentListener(diagnosticListener);
+        shownDiagnostics.clear();
         super.dispose();
     }
     private DevicetreeIndex.Snapshot index() { return snapshot; }
