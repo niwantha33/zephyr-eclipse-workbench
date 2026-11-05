@@ -1016,7 +1016,9 @@ public final class ConfigurationStudioView extends ViewPart {
                 SWT.H_SCROLL | SWT.V_SCROLL | SWT.BORDER);
         beginnerScroll.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         beginnerScroll.setExpandHorizontal(true);
-        beginnerScroll.setExpandVertical(false);
+        // Both axes must be managed by ScrolledComposite: setMinSize alone
+        // does not size content on an axis whose expansion is disabled.
+        beginnerScroll.setExpandVertical(true);
         beginnerBody = new Composite(beginnerScroll, SWT.NONE);
         beginnerBody.setLayout(new GridLayout(1, false));
         beginnerScroll.setContent(beginnerBody);
