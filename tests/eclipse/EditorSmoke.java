@@ -694,6 +694,21 @@ public final class EditorSmoke implements IApplication {
                             && "Evidence && Diagnostics".equals(studioTabs.getItem(3).getText())
                             && studioTabs.getSelectionIndex() == 0,
                             "native Configuration Studio opens task-first Start here by default");
+                    // Real view activation calls setFocus; never allow it to
+                    // activate Software merely because prj.conf is selected.
+                    view.getClass().getMethod("setFocus").invoke(view);
+                    check(studioTabs.getSelectionIndex() == 0,
+                            "activating an existing Configuration Studio keeps its visual start page");
+                    var handlerType = view.getClass().getClassLoader()
+                            .loadClass("io.github.niwantha33.zew.ui.ConfigurationStudioHandler");
+                    var route = handlerType.getDeclaredMethod("navigationFor",
+                            boolean.class, String.class);
+                    route.setAccessible(true);
+                    check(route.invoke(null, false, "prj.conf").toString().equals("START")
+                            && route.invoke(null, false, "app.overlay").toString().equals("START")
+                            && route.invoke(null, true, "prj.conf").toString().equals("PROJECT_OVERRIDES")
+                            && route.invoke(null, true, "app.overlay").toString().equals("HARDWARE"),
+                            "ordinary Zephyr menu ignores selected config file; explicit context popup deep-links");
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
                             studioTabs.getItem(0).getControl();
                     var beginnerBody = (org.eclipse.swt.widgets.Composite)
@@ -814,7 +829,33 @@ public final class EditorSmoke implements IApplication {
                     check(!"—".equals(overridesCount.getText()),
                             "live project override summary is populated");
                     verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw, fixture);
-                    captureNativeStudioScreenshot();
+                    // Reproduce the user's screenshot: opening via a prj.conf
+                    // context used to switch to Kconfig with the overview still
+                    // hidden. A deliberate context link must restore chrome.
+                    cls.getMethod("focusProjectChanges").invoke(view);
+                    check(studioTabs.getSelectionIndex() == 1 && expertMetrics.getVisible(),
+                            "explicit prj.conf context shows Kconfig WITH its summary and edit toolbar");
+                    view.getClass().getMethod("setFocus").invoke(view);
+                    check(studioTabs.getSelectionIndex() == 1,
+                            "setFocus preserves deliberately selected Software view");
+                    var visualGuide = (org.eclipse.swt.widgets.Button)
+                            studioField(view, cls, "visualGuideButton");
+                    check(visualGuide.getVisible() && visualGuide.getEnabled(),
+                            "visual guide is always available above advanced Kconfig");
+                    visualGuide.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    settleNativeStudioLayout();
+                    check(studioTabs.getSelectionIndex() == 0
+                            && !expertMetrics.getVisible()
+                            && !((org.eclipse.swt.widgets.Composite)
+                                    studioField(view, cls, "expertToolbar")).getVisible()
+                            && ((org.eclipse.swt.widgets.Canvas)
+                                    studioField(view, cls, "beginnerFlow")).isVisible(),
+                            "Visual guide button restores colourful flow and hides advanced controls");
+                    view.getClass().getMethod("setFocus").invoke(view);
+                    check(studioTabs.getSelectionIndex() == 0,
+                            "native reactivation keeps visual flow after Kconfig deep link");
+                    captureNativeStudioScreenshot("visual-guide-after-kconfig-context.png");
                     // The map is a real registered Eclipse ViewPart, not a
                     // screenshot of a mock. Verify its decoded address rows
                     // and canvas on the installed packaged feature.

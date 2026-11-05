@@ -11,6 +11,21 @@ import org.eclipse.ui.handlers.HandlerUtil;
 
 /** The Zephyr menu and right-click project/config-file actions share one view. */
 public final class ConfigurationStudioHandler extends AbstractHandler {
+    /** Ordinary Zephyr menu launches always start with the visual guide.
+     * Resource-specific deep links require an explicit project/file popup.
+     * Merely having prj.conf selected in Project Explorer is not a deep link.
+     */
+    enum Entry { START, HARDWARE, PROJECT_OVERRIDES }
+
+    static Entry navigationFor(boolean explicitPopup, String resourcePath) {
+        if (!explicitPopup || resourcePath == null) return Entry.START;
+        if (io.github.niwantha33.zew.core.ConfigurationStudioResources.hardware(resourcePath))
+            return Entry.HARDWARE;
+        if (io.github.niwantha33.zew.core.ConfigurationStudioResources.projectSettings(resourcePath))
+            return Entry.PROJECT_OVERRIDES;
+        return Entry.START;
+    }
+
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
         var activeMenu = HandlerUtil.getActiveMenuSelection(event);
         var selection = activeMenu instanceof IStructuredSelection
@@ -23,16 +38,14 @@ public final class ConfigurationStudioHandler extends AbstractHandler {
                     "Select a Zephyr project or its prj.conf in Project Explorer.");
             return null;
         }
-        boolean devicetree = false;
-        boolean focusOverrides = false;
-        String overlayPath = null;
+        String relative = null;
         if (selection instanceof IStructuredSelection items && items.size() == 1
-                && items.getFirstElement() instanceof IFile file) {
-            String relative = file.getProjectRelativePath().toPortableString();
-            devicetree = io.github.niwantha33.zew.core.ConfigurationStudioResources.hardware(relative);
-            focusOverrides = io.github.niwantha33.zew.core.ConfigurationStudioResources.projectSettings(relative);
-            if (devicetree) overlayPath = relative;
-        }
+                && items.getFirstElement() instanceof IFile file)
+            relative = file.getProjectRelativePath().toPortableString();
+        Entry entry = navigationFor(activeMenu instanceof IStructuredSelection, relative);
+        boolean devicetree = entry == Entry.HARDWARE;
+        boolean focusOverrides = entry == Entry.PROJECT_OVERRIDES;
+        String overlayPath = devicetree ? relative : null;
         try {
             var page = HandlerUtil.getActiveWorkbenchWindowChecked(event).getActivePage();
             var view = (ConfigurationStudioView) page.showView(ConfigurationStudioView.ID);
