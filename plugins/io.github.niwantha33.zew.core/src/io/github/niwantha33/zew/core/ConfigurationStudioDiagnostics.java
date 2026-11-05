@@ -56,7 +56,7 @@ public final class ConfigurationStudioDiagnostics {
         var snapshot = ConfigurationStudioFiles.inspect(root, build, "selected build");
         for (var option : snapshot.options()) {
             if (!option.overridden() || Objects.equals(option.requested(), option.effective())) continue;
-            findings.add(new Finding("CS-KCONFIG-REQUEST-MISMATCH", "warning", "observed",
+            findings.add(new Finding("CS-KCONFIG-REQUEST-MISMATCH", "warning", "derived",
                     "CONFIG_" + option.symbol(), "CONFIG_" + option.symbol()
                     + (option.unresolved() ? " is requested but absent from the generated snapshot."
                             : " has different requested and generated values."),
