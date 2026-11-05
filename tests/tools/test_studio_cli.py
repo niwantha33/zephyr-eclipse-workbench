@@ -54,6 +54,7 @@ class StudioCliTests(unittest.TestCase):
             (child / "zephyr/.config").write_text("CONFIG_GPIO=y\n")
         (self.build / "domains.yaml").write_text("default: app\ndomains:\n  - name: app\n    build_dir: app\n  - name: mcuboot\n    build_dir: mcuboot\n")
         status, report = self.invoke("studio-preflight", "--build", self.build, "--auto-images")
+        self.assertEqual(status, 1)  # missing per-image CMake caches block preflight
         self.assertEqual({row["image"] for row in report["images"]}, {"app", "mcuboot"})
         status, report = self.invoke("studio-preflight", "--build", self.build, "--auto-images", "--image", "app=app")
         self.assertEqual(status, 2)
