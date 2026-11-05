@@ -1152,7 +1152,16 @@ public final class EditorSmoke implements IApplication {
                     check(canvas.getClientArea().width >= 900
                             && canvas.getClientArea().height >= 300
                             && scroll.getContent() == beginnerBody,
-                            "colourful configuration flow is actually laid out inside scrollable Start Here");
+                            "colourful configuration flow is actually laid out inside scrollable Start Here"
+                            + " [canvasArea=" + canvas.getClientArea()
+                            + ", canvasBounds=" + canvas.getBounds()
+                            + ", visible=" + canvas.isVisible()
+                            + ", bodySize=" + beginnerBody.getSize()
+                            + ", scrollArea=" + scroll.getClientArea()
+                            + ", scrollMin=" + scroll.getMinSize()
+                            + ", scrollContentMatches=" + (scroll.getContent() == beginnerBody)
+                            + ", tab=" + studioTabs.getSelectionIndex()
+                            + ", shell=" + org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell().getBounds() + "]");
                     check(scroll.getExpandVertical()
                             && beginnerBody.getSize().y >= scroll.getMinHeight()
                             && beginnerBody.getSize().y >= scroll.getClientArea().height
