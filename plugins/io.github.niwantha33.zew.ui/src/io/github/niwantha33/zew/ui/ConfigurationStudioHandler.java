@@ -48,9 +48,19 @@ public final class ConfigurationStudioHandler extends AbstractHandler {
         String overlayPath = devicetree ? relative : null;
         try {
             var page = HandlerUtil.getActiveWorkbenchWindowChecked(event).getActivePage();
-            var view = (ConfigurationStudioView) page.showView(ConfigurationStudioView.ID);
-            view.displayProject(project, devicetree, overlayPath);
-            if (focusOverrides) view.focusProjectChanges();
+            if (devicetree || focusOverrides) {
+                // Explicit right-click deep links preserve the original
+                // advanced editors, syntax validation and source ownership.
+                var advanced = (ConfigurationStudioView) page.showView(ConfigurationStudioView.ID);
+                advanced.displayProject(project, devicetree, overlayPath);
+                if (focusOverrides) advanced.focusProjectChanges();
+            } else {
+                // The ordinary Configuration Studio menu is ALWAYS the
+                // three-section task-first experience, regardless of what
+                // file happens to be selected in Project Explorer.
+                var home = (ConfigurationHomeView) page.showView(ConfigurationHomeView.ID);
+                home.displayProject(project);
+            }
         } catch (Exception error) {
             throw new ExecutionException("Could not open Zephyr Configuration Studio.", error);
         }
