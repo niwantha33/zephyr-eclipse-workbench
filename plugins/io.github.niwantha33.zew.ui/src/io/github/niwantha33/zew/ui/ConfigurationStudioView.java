@@ -1726,6 +1726,12 @@ public final class ConfigurationStudioView extends ViewPart {
      * Existing backup + atomic writer are reused without replacing studios.
      */
     private void saveVerifiedGuidedDraft() {
+        if (hasDirtySourceEditor()) {
+            MessageDialog.openInformation(getSite().getShell(), "Unsaved source edits",
+                    "Save or discard the selected project's unsaved source editors, then review "
+                    + "and validate the overlay again. No source was changed.");
+            return;
+        }
         ReviewedGuidedDraft draft = reviewedGuidedDraft;
         DevicetreeDraftConfigureInspector.Result evidence = verifiedGuidedPreflight;
         if (draft == null || evidence == null || !evidence.configured()
@@ -1778,6 +1784,11 @@ public final class ConfigurationStudioView extends ViewPart {
                     + "\n\nConfirm saving this exact source addition?";
             if (!MessageDialog.openConfirm(getSite().getShell(),
                     "Confirm backed-up guided overlay save", confirmation)) return;
+            // A modal confirmation runs a nested event loop. An editor may
+            // become dirty while the review is open; recheck before writing.
+            if (hasDirtySourceEditor())
+                throw new java.io.IOException("Project source became unsaved during confirmation. "
+                        + "Save or discard it and review again; no overlay was written.");
             // The existing writer rejects stale edits, symlinks and unsafe
             // paths again immediately before commit.
             var saved = GuidedOverlaySave.commit(app, draft.build(), review);
@@ -1797,6 +1808,15 @@ public final class ConfigurationStudioView extends ViewPart {
                     rejected.getMessage() == null ? "Review or source changed; no new edit accepted."
                             : rejected.getMessage());
         }
+    }
+
+    private boolean hasDirtySourceEditor() {
+        if (project == null || getSite().getPage() == null) return false;
+        for (var editor : getSite().getPage().getDirtyEditors()) {
+            var file = editor.getEditorInput().getAdapter(org.eclipse.core.resources.IFile.class);
+            if (file != null && project.equals(file.getProject())) return true;
+        }
+        return false;
     }
 
     /** Evaluate the selected built node with upstream edtlib in a background job. */

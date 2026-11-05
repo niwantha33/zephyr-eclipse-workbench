@@ -67,6 +67,12 @@ public final class GuidedOverlaySaveTests {
                     digest(node), digest(property), "unavailable-or-mismatched",
                     "staged", "identity-unknown", 4);
             rejects(() -> GuidedOverlaySave.review(app, build, overlay, request, wrongValue));
+            var missingScratch = new DevicetreeDraftConfigureInspector.Result(
+                    "configured", "real-zephyr-cmake-accepted", originalDtsSha,
+                    ZERO, oldSha, expectedSha, expectedSha,
+                    digest(node), digest(property), "exact-value-observed",
+                    "staged", "identity-verified", 4);
+            rejects(() -> GuidedOverlaySave.review(app, build, overlay, request, missingScratch));
             var tamper = new GuidedOverlaySave.Request(node, property,
                     originalDtsSha, oldSha, digest("other source"), expectedSha, block);
             rejects(() -> GuidedOverlaySave.review(app, build, overlay, tamper, evidence));
