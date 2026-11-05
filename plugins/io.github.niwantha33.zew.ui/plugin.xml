@@ -23,6 +23,9 @@
   <extension point="org.eclipse.core.resources.markers" id="buildProblem" name="Zephyr build diagnostic">
     <super type="org.eclipse.core.resources.problemmarker"/><persistent value="true"/>
   </extension>
+  <extension point="org.eclipse.core.resources.markers" id="studioProblem" name="Zephyr Configuration Studio observation">
+    <super type="org.eclipse.core.resources.problemmarker"/><persistent value="false"/>
+  </extension>
   <extension point="org.eclipse.ui.newWizards">
     <category id="io.github.niwantha33.zew.category" name="Zephyr"/>
     <wizard id="io.github.niwantha33.zew.newProject" name="Zephyr Project" category="io.github.niwantha33.zew.category" project="true" class="io.github.niwantha33.zew.ui.ZephyrProjectWizard"/>

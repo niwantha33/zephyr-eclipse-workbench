@@ -29,7 +29,7 @@ public final class GuidedOverlaySave {
             throws IOException {
         if (application == null || build == null || selectedOverlay == null
                 || request == null || preflight == null || !preflight.configured()
-                || !ZERO.equals(preflight.scratchSha()) && !validSha(preflight.scratchSha())
+                || !validSha(preflight.scratchSha()) || ZERO.equals(preflight.scratchSha())
                 || !validSha(request.originalDtsSha())
                 || !validSha(request.originalOverlaySha()) || !validSha(request.additionSha())
                 || !validSha(request.proposedSha())

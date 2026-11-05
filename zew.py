@@ -36,7 +36,14 @@ from zew_evidence.dt_draft_validation import preflight as preflight_draft
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="zew", description=__doc__)
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments and arguments[0].startswith("studio-"):
+        from zew_evidence.studio_cli import main as studio_main
+        return studio_main(arguments)
+    parser = argparse.ArgumentParser(prog="zew", description=__doc__,
+        epilog="Configuration Studio: studio-kconfig, studio-dt, studio-driver, studio-resources, "
+               "studio-images, studio-preflight, studio-compare, studio-diagnose, studio-answer, "
+               "studio-view, studio-rules. Run each command with --help.")
     parser.add_argument("--version", action="version", version="zew evidence prototype 0.1.1")
     subs = parser.add_subparsers(dest="command", required=True)
     for command in ("graph", "diagnose", "why", "bundle"):

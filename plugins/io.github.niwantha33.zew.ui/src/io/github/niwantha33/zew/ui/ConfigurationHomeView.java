@@ -31,6 +31,8 @@ import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
+import io.github.niwantha33.zew.core.ConfigurationStudioDiagnostics;
+import io.github.niwantha33.zew.core.StudioEvidenceInspector;
 import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 import io.github.niwantha33.zew.core.ConfigurationFailureEvidence;
 import io.github.niwantha33.zew.core.KconfigTraceEvidence;
@@ -81,6 +83,8 @@ public final class ConfigurationHomeView extends ViewPart {
     private Text buildDetails, kconfigOriginSymbol, kconfigOriginResult;
     private final AtomicInteger originGeneration = new AtomicInteger();
     private Job originJob;
+    private Job diagnosisJob;
+    private final AtomicInteger diagnosisGeneration = new AtomicInteger();
 
     @Override public void createPartControl(Composite parent) {
         var shellLayout = new GridLayout(1, false);
@@ -146,17 +150,21 @@ public final class ConfigurationHomeView extends ViewPart {
                 new int[]{240, 630}, false);
         issueInfo = new Label(root, SWT.WRAP);
         issueInfo.setLayoutData(fillWidth());
+        issueRows.addListener(SWT.DefaultSelection, event -> reviewIssue());
         issueRows.addListener(SWT.Selection, e -> {
             if (issueRows.getSelectionCount() == 1)
                 issueInfo.setText(((FocusedConfigurationModel.Issue)
                         issueRows.getSelection()[0].getData()).detail());
         });
-        button(root, "Review selected issue", this::reviewIssue);
+        var issueActions = bar(root, 2);
+        button(issueActions, "Review selected issue", this::reviewIssue);
+        button(issueActions, "Diagnose source requests", this::diagnoseSourceRequests);
 
         new Label(root, SWT.NONE).setText("Peripherals in the selected build");
         overviewSearch = new Text(root, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
         overviewSearch.setLayoutData(fillWidth());
         overviewSearch.setMessage("Find a peripheral or configuration issue...");
+        accessibleName(overviewSearch, "Find a peripheral or configuration issue");
         overviewSearch.addModifyListener(event -> populateOverviewRows());
         peripheralRows = table(root, new String[]{"Peripheral", "Status", "Next action"},
                 new int[]{135, 165, 570}, true);
@@ -182,6 +190,7 @@ public final class ConfigurationHomeView extends ViewPart {
         hardwareSearch = new Text(left, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL | SWT.BORDER);
         hardwareSearch.setLayoutData(fillWidth());
         hardwareSearch.setMessage("Search name, address or compatible");
+        accessibleName(hardwareSearch, "Find hardware by name, address or compatible");
         hardwareSearch.addModifyListener(event -> {
             controllersForCategory();
             step = 0;
@@ -190,6 +199,7 @@ public final class ConfigurationHomeView extends ViewPart {
         new Label(left, SWT.NONE).setText("Type");
         categories = new Combo(left, SWT.READ_ONLY | SWT.DROP_DOWN);
         categories.setLayoutData(fillWidth());
+        accessibleName(categories, "Hardware type");
         categories.setItems(PeripheralWorkflow.categories().toArray(String[]::new));
         categories.select(categories.indexOf(category));
         categories.addListener(SWT.Selection, event -> {
@@ -272,11 +282,18 @@ public final class ConfigurationHomeView extends ViewPart {
         buildDetails = new Text(root, SWT.BORDER | SWT.READ_ONLY | SWT.MULTI
                 | SWT.WRAP | SWT.V_SCROLL);
         buildDetails.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        var actions = bar(root, 4);
+        var actions = bar(root, 3);
         button(actions, "Build & validate", () -> advanced("build"));
         button(actions, "Review failed configure", this::openRecordedFailure);
         button(actions, "Project settings & profiles", () -> advanced("settings"));
         button(actions, "Inspect build evidence", () -> advanced("evidence"));
+        button(actions, "Diagnose source requests", this::diagnoseSourceRequests);
+        button(actions, "Open Problems", () -> {
+            try { getSite().getPage().showView(org.eclipse.ui.IPageLayout.ID_PROBLEM_VIEW); }
+            catch (PartInitException unavailable) {
+                MessageDialog.openError(getSite().getShell(), "Problems", unavailable.getMessage());
+            }
+        });
         showSystemAdvanced = button(root, "Show advanced system settings", () -> {
             boolean visible = !systemAdvanced.getVisible();
             setPanelVisible(systemAdvanced, visible);
@@ -291,11 +308,14 @@ public final class ConfigurationHomeView extends ViewPart {
         button(lower, "Kconfig & prj.conf", () -> advanced("software"));
         button(lower, "RTOS & tracing", () -> advanced("rtos"));
         button(lower, "Devicetree & bindings", () -> advanced("sources"));
+        button(lower, "Evaluate transitive Kconfig", this::evaluateTransitiveKconfig);
         new Label(systemAdvanced, SWT.NONE).setText("Zephyr Kconfig origin trace — optional, read-only");
         var origin = bar(systemAdvanced, 2);
         kconfigOriginSymbol = new Text(origin, SWT.BORDER | SWT.SEARCH);
         kconfigOriginSymbol.setLayoutData(fillWidth());
         kconfigOriginSymbol.setMessage("Exact CONFIG_ symbol, e.g. CONFIG_GPIO");
+        accessibleName(kconfigOriginSymbol, "Exact Kconfig symbol for recorded origin");
+        kconfigOriginSymbol.addListener(SWT.DefaultSelection, event -> explainKconfigOrigin());
         button(origin, "Explain recorded origin", this::explainKconfigOrigin);
         kconfigOriginResult = new Text(systemAdvanced,
                 SWT.READ_ONLY | SWT.MULTI | SWT.WRAP | SWT.V_SCROLL | SWT.BORDER);
@@ -323,15 +343,42 @@ public final class ConfigurationHomeView extends ViewPart {
     private static Button button(Composite parent, String title, Runnable action) {
         Button result = new Button(parent, SWT.PUSH);
         result.setText(title);
+        accessibleName(result, title);
         result.addListener(SWT.Selection, e -> action.run());
         return result;
     }
+    private static void accessibleName(org.eclipse.swt.widgets.Control control, String name) {
+        control.getAccessible().addAccessibleListener(new org.eclipse.swt.accessibility.AccessibleAdapter() {
+            @Override public void getName(org.eclipse.swt.accessibility.AccessibleEvent event) {
+                event.result = name;
+            }
+        });
+    }
+
+    private static void post(org.eclipse.swt.widgets.Display display, Runnable action) {
+        if (display.isDisposed()) return;
+        try { display.asyncExec(action); }
+        catch (org.eclipse.swt.SWTException closing) {
+            if (closing.code != SWT.ERROR_DEVICE_DISPOSED) throw closing;
+        }
+    }
+
+    private void cancelSourceLookups() {
+        originGeneration.incrementAndGet();
+        if (originJob != null) originJob.cancel();
+        diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
+        if (kconfigOriginResult != null && !kconfigOriginResult.isDisposed())
+            kconfigOriginResult.setText("No current origin result. Choose an exact symbol in the selected build.");
+    }
+
     private static Table table(Composite parent, String[] headings, int[] widths, boolean grow) {
         Table t = new Table(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL);
         var gd = new GridData(SWT.FILL, SWT.FILL, true, grow);
         if (!grow) gd.heightHint = 100;
         t.setLayoutData(gd);
         t.setHeaderVisible(true); t.setLinesVisible(true);
+        accessibleName(t, String.join(", ", headings));
         for (int i = 0; i < headings.length; i++) {
             var col = new TableColumn(t, SWT.LEFT);
             col.setText(headings[i]); col.setWidth(widths[i]);
@@ -355,6 +402,7 @@ public final class ConfigurationHomeView extends ViewPart {
     }
 
     public void displayMissingProject() {
+        cancelSourceLookups();
         project = null;
         evidence = null;
         detail = null;
@@ -417,6 +465,7 @@ public final class ConfigurationHomeView extends ViewPart {
             displayMissingProject();
             return;
         }
+        cancelSourceLookups();
         int ticket = generation.incrementAndGet();
         if (refreshJob != null) refreshJob.cancel();
         IProject selected = project;
@@ -451,6 +500,7 @@ public final class ConfigurationHomeView extends ViewPart {
                     } catch (Exception unavailable) {
                         warning = "Project environment: " + unavailable.getMessage();
                     }
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     var snapshot = ConfigurationStudioFiles.inspect(app, build, profile);
                     Path effective = build == null ? null : build.resolve("zephyr/.config");
                     String config = effective != null && Files.isRegularFile(effective)
@@ -470,6 +520,7 @@ public final class ConfigurationHomeView extends ViewPart {
                     boolean stale = freshnessState != FocusedConfigurationModel.Freshness.CURRENT_SNAPSHOT;
                     warning += (warning.isBlank() ? "" : "\n")
                             + receipt.detail() + " Tracked source inputs: " + receipt.sourceCount() + ".";
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     var summary = FocusedConfigurationModel.inspect(
                             board, profile, snapshot.devicetree(), config, freshnessState);
                     // CS-02: a successful build is NOT a prerequisite for
@@ -510,7 +561,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 }
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 final Evidence result = observed;
-                display.asyncExec(() -> {
+                post(display, () -> {
                     if (ticket == generation.get() && project == selected
                             && header != null && !header.isDisposed()) {
                         evidence = result; render();
@@ -520,6 +571,121 @@ public final class ConfigurationHomeView extends ViewPart {
             }
         };
         refreshJob.setSystem(true); refreshJob.schedule();
+    }
+
+    private void evaluateTransitiveKconfig() {
+        final IProject selected = project;
+        final Evidence snapshot = evidence;
+        if (selected == null || !selected.isAccessible() || snapshot == null || snapshot.build() == null) {
+            buildDetails.setText("Select a project and Refresh first. A configured Ninja build is needed for upstream Kconfig evaluation.");
+            return;
+        }
+        if (hasDirtyProjectEditor()) {
+            buildDetails.setText("Save or discard unsaved project source edits first. The evaluator reads saved prj.conf and the selected generated build.");
+            return;
+        }
+        if (diagnosisJob != null) diagnosisJob.cancel();
+        final int ticket = diagnosisGeneration.incrementAndGet();
+        final var display = primary.getDisplay();
+        primary.setSelection(BUILD);
+        buildDetails.setText("Evaluating saved source requests with this build's upstream Kconfiglib…");
+        diagnosisJob = new Job("Evaluate selected build transitive Kconfig evidence") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                String text;
+                var resources = new java.util.LinkedHashMap<String, java.io.InputStream>();
+                try {
+                    resources.put("studio.py", ConfigurationHomeView.class.getResourceAsStream("/scripts/studio.py"));
+                    var entries = Activator.getDefault().getBundle().findEntries("/scripts/zew_evidence", "*.py", false);
+                    if (entries != null) while (entries.hasMoreElements()) {
+                        var entry = entries.nextElement();
+                        String name = entry.getPath().substring(entry.getPath().lastIndexOf('/') + 1);
+                        resources.put("zew_evidence/" + name, entry.openStream());
+                    }
+                    text = StudioEvidenceInspector.kconfig(
+                            Path.of(snapshot.setup().getProperty("python", "")),
+                            Path.of(snapshot.setup().getProperty("tools.ninja", "")), snapshot.build(),
+                            selected.getLocation().toFile().toPath().resolve("prj.conf"),
+                            resources, ProjectContext.environment(snapshot.setup()), monitor::isCanceled).display();
+                } catch (Exception failure) {
+                    if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+                    text = monitor.isCanceled() ? "Kconfig evaluation cancelled. No source was changed."
+                            : "Kconfig evaluation unavailable. Check the selected environment, configured Ninja build "
+                                + "and packaged Studio CLI; refresh and retry. No dependency cause is inferred.";
+                    var plugin = Activator.getDefault();
+                    if (plugin != null && !monitor.isCanceled()) plugin.getLog().log(
+                            new Status(IStatus.WARNING, Activator.ID, "Studio upstream Kconfig evaluation unavailable", failure));
+                } finally {
+                    for (var stream : resources.values()) if (stream != null)
+                        try { stream.close(); } catch (java.io.IOException ignored) { }
+                }
+                final String result = text;
+                post(display, () -> {
+                    if (ticket == diagnosisGeneration.get() && project == selected && evidence == snapshot
+                            && buildDetails != null && !buildDetails.isDisposed()) buildDetails.setText(result);
+                });
+                return monitor.isCanceled() ? Status.CANCEL_STATUS : Status.OK_STATUS;
+            }
+        };
+        diagnosisJob.setUser(true);
+        diagnosisJob.schedule();
+    }
+
+    /** Existing three-section entrypoint; diagnosis never opens a competing studio. */
+    private void diagnoseSourceRequests() {
+        if (project == null || !project.isAccessible() || project.getLocation() == null) {
+            displayMissingProject();
+            return;
+        }
+        final IProject selected = project;
+        final Evidence snapshot = evidence;
+        if (snapshot == null) {
+            primary.setSelection(BUILD);
+            buildDetails.setText("Refresh the selected project first; source diagnosis does not require a successful build.");
+            return;
+        }
+        if (diagnosisJob != null) diagnosisJob.cancel();
+        int ticket = diagnosisGeneration.incrementAndGet();
+        var display = primary.getDisplay();
+        primary.setSelection(BUILD);
+        buildDetails.setText("Inspecting project-owned source requests and the selected generated snapshot…");
+        diagnosisJob = new Job("Diagnose selected Zephyr configuration source") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                String message;
+                try {
+                    var report = ConfigurationStudioDiagnostics.inspect(
+                            selected.getLocation().toFile().toPath(), snapshot.build());
+                    if (monitor.isCanceled() || ticket != diagnosisGeneration.get()) return Status.CANCEL_STATUS;
+                    ConfigurationStudioProblems.replace(selected, report, monitor);
+                    message = report.display() + "\nSource observations are also available in Eclipse Problems. "
+                            + "Only matching source bytes receive navigable line markers.\n";
+                } catch (Exception error) {
+                    post(display, () -> {
+                        if (ticket == diagnosisGeneration.get() && project == selected && evidence == snapshot
+                                && buildDetails != null && !buildDetails.isDisposed())
+                            buildDetails.setText("Configuration diagnosis failed. Source may have changed during inspection; "
+                                    + "refresh this board/profile and retry. See Error Log for details.");
+                    });
+                    return new Status(IStatus.ERROR, Activator.ID,
+                            "Configuration diagnosis failed; refresh the selected build and retry.", error);
+                }
+                if (monitor.isCanceled()) {
+                    post(display, () -> {
+                        if (ticket == diagnosisGeneration.get() && project == selected && evidence == snapshot
+                                && buildDetails != null && !buildDetails.isDisposed())
+                            buildDetails.setText("Configuration diagnosis cancelled. No source was changed.");
+                    });
+                    return Status.CANCEL_STATUS;
+                }
+                final String result = message;
+                post(display, () -> {
+                    if (ticket == diagnosisGeneration.get() && project == selected && evidence == snapshot
+                            && buildDetails != null && !buildDetails.isDisposed()) buildDetails.setText(result);
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        diagnosisJob.setUser(true);
+        diagnosisJob.schedule();
     }
 
     private void clear(String description) {
@@ -792,7 +958,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 }
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 final Detail completed = result;
-                ui.asyncExec(() -> {
+                post(ui, () -> {
                     if (ticket != detailGeneration.get()
                             || stepHost == null || stepHost.isDisposed()
                             || evidence != snapshot || !category.equals(requestedCategory)
@@ -902,7 +1068,7 @@ public final class ConfigurationHomeView extends ViewPart {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 var result = KconfigTraceEvidence.inspect(snapshot.build(), query);
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
-                ui.asyncExec(() -> {
+                post(ui, () -> {
                     if (ticket != originGeneration.get()
                             || evidence != snapshot || kconfigOriginResult.isDisposed())
                         return;
@@ -981,6 +1147,8 @@ public final class ConfigurationHomeView extends ViewPart {
         if (detailJob != null) detailJob.cancel();
         originGeneration.incrementAndGet();
         if (originJob != null) originJob.cancel();
+        diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
         super.dispose();
     }
 }

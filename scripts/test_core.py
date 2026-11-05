@@ -43,6 +43,8 @@ subprocess.run([tool('java'), '-cp', str(out), 'BuildReliabilityTests'], check=T
 subprocess.run([tool('java'), '-cp', str(out), 'BuildFailureInvestigatorTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'BuildFailureLogsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationStudioTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationStudioDiagnosticsTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'StudioEvidenceInspectorTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationEvidenceReceiptTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationFailureEvidenceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'KconfigTraceEvidenceTests'], check=True, cwd=root, timeout=90)

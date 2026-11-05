@@ -638,3 +638,41 @@ choices and limits. Full source-fragment precedence, trace generation, pristine
 build proof and native graph integration remain outstanding. CS-04–CS-18 are
 not implemented by this increment; their numbered acceptance criteria are not
 present in this checkout. No release or gate qualification is claimed.
+
+
+## Configuration Studio CS-04–CS-19 continuation (2026-11-05, development)
+
+This supersedes the earlier statement that no later CS increments exist. The
+recovered roadmap defines CS-01–CS-18; CS-19 is interpreted as final integration
+and qualification for the owner's requested continuation. It is not a newly
+claimed production gate. See [milestone acceptance](docs/CONFIGURATION_STUDIO_ROADMAP.md)
+for every implemented increment and the precise outstanding acceptance work.
+
+Implemented code now includes upstream Kconfig request diagnostics and native
+transitive evaluation, DT source/result locations, separated driver evidence
+stages, typed GPIO/pinctrl observations, deterministic finding normalization,
+dirty-source save guards, three-section source diagnosis, isolated sysbuild
+image discovery, environment checks, image-scoped comparison, hash-checked
+Problems markers, grounded explanation/refusal, job cancellation/accessibility
+improvements, bounded evidence views and versioned inert rule extensions.
+
+The eleven `studio-*` CLI commands are documented in
+[Configuration Studio CLI](docs/CONFIGURATION_STUDIO_CLI.md). The installed
+native advanced Kconfig action invokes the same headless evaluator. All 24
+required packaged Python modules are byte-identical to their headless source;
+CI tests and archive verification reject drift. Reports preserve semantic input
+closures through normalization so a grounded answer cannot omit a changed
+Kconfig source. No network, flash or automatic source editing is introduced.
+
+Validation on this Linux host: 540 Python tests ran, 536 passed and four skipped;
+all Java 21 core suites passed, including guided saving, native source diagnostics
+and actual Python subprocess transport. Current upstream dtlib fixtures and a
+real host compiler/linker fixture were exercised (not a physical Zephyr board).
+Tycho plug-in/feature/p2 packaging passed; archive verification checks all Studio
+resources against exact source. Packaging does not establish installed UI behavior.
+
+Full pristine Kconfig source-fragment precedence, authenticated driver-to-final-ELF
+causality, vendor/package pin ownership, general AI client integration and full
+native visual editing remain incomplete or unknown as detailed in the table.
+Native installed desktop acceptance, exact remote-head CI, Windows managed
+firmware and physical hardware checks remain unverified. **G0 remains OPEN.**

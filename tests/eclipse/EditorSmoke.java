@@ -605,6 +605,37 @@ public final class EditorSmoke implements IApplication {
      * These are screenshots of the REAL installed Eclipse SWT view, rendered
      * with explicitly marked CI fixture evidence — NOT physical hardware.
      */
+    private static void verifyStudioProblemMarkers() throws Exception {
+        IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject("zew-studio-marker-fixture");
+        project.create(null); project.open(null);
+        try {
+            Path app = project.getLocation().toFile().toPath();
+            Files.writeString(app.resolve("prj.conf"), "# recorded fixture\nCONFIG_ADC=y\n");
+            Path build = app.resolve("build"); Files.createDirectories(build.resolve("zephyr"));
+            Files.writeString(build.resolve("zephyr/.config"), "# CONFIG_ADC is not set\n");
+            project.refreshLocal(IResource.DEPTH_INFINITE, null);
+            IMarker unrelated = project.createMarker(IMarker.PROBLEM);
+            var report = io.github.niwantha33.zew.core.ConfigurationStudioDiagnostics.inspect(app, build);
+            var bundle = org.eclipse.core.runtime.Platform.getBundle("io.github.niwantha33.zew.ui");
+            var publisher = bundle.loadClass("io.github.niwantha33.zew.ui.ConfigurationStudioProblems");
+            var replace = publisher.getMethod("replace", IProject.class,
+                    io.github.niwantha33.zew.core.ConfigurationStudioDiagnostics.Report.class,
+                    org.eclipse.core.runtime.IProgressMonitor.class);
+            replace.invoke(null, project, report, new org.eclipse.core.runtime.NullProgressMonitor());
+            var markers = project.findMarkers("io.github.niwantha33.zew.ui.studioProblem", false, IResource.DEPTH_INFINITE);
+            check(markers.length == 1 && markers[0].getResource().equals(project.getFile("prj.conf"))
+                    && markers[0].getAttribute(IMarker.LINE_NUMBER, 0) == 2,
+                    "Studio Problems navigate only to the exact recorded source line");
+            check(unrelated.exists(), "Studio source diagnostics preserve unrelated Problems");
+            Files.writeString(app.resolve("prj.conf"), "CONFIG_ADC=n\n");
+            replace.invoke(null, project, report, new org.eclipse.core.runtime.NullProgressMonitor());
+            markers = project.findMarkers("io.github.niwantha33.zew.ui.studioProblem", false, IResource.DEPTH_INFINITE);
+            check(markers.length == 1 && markers[0].getResource().equals(project)
+                    && markers[0].getAttribute(IMarker.LINE_NUMBER, 0) == 0,
+                    "Changed source evidence cannot publish a guessed navigation line");
+        } finally { project.delete(true, true, null); }
+    }
+
     private static void verifyThreeSectionStudio(IProject project) throws Exception {
         var win = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
         var view = win.getActivePage().showView(
@@ -1433,6 +1464,7 @@ public final class EditorSmoke implements IApplication {
                             "live project override summary is populated");
                     verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw, fixture);
                     verifyThreeSectionStudio(project);
+                    verifyStudioProblemMarkers();
                     windows[0].getActivePage().activate(view);
                     // Reproduce the user's screenshot: opening via a prj.conf
                     // context used to switch to Kconfig with the overview still

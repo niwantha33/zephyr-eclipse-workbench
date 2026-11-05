@@ -8,6 +8,7 @@ import hashlib
 import xml.etree.ElementTree as ET
 import zipfile
 import json
+from sync_studio_resources import dependencies as studio_dependencies
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -38,6 +39,14 @@ for p in bundles:
         if not any(n.endswith('.class') for n in z.namelist()):
             raise SystemExit(f'No compiled classes: {p.name}')
         if '.ui_' in p.name:
+            for module in studio_dependencies():
+                resource = 'scripts/zew_evidence/' + module + '.py'
+                if z.read(resource) != (root / 'zew_evidence' / (module + '.py')).read_bytes():
+                    raise SystemExit('Installed Studio evaluator differs from headless source: ' + module)
+                compile(z.read(resource), resource, 'exec')
+            if z.read('scripts/studio.py') != (root / 'plugins/io.github.niwantha33.zew.ui/scripts/studio.py').read_bytes():
+                raise SystemExit('Installed Studio command entrypoint differs from source')
+            compile(z.read('scripts/studio.py'), 'scripts/studio.py', 'exec')
             if 'tools/inventory.py' not in z.namelist():
                 raise SystemExit('Tools inventory helper missing.')
             compile(z.read('tools/inventory.py'), 'tools/inventory.py', 'exec')

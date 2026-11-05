@@ -427,3 +427,11 @@ Exit 1: absent draft, failed/mismatched configuration or unverified
 identity. Exit 2: invalid input. As with `dt-configure`, this runs
 trusted CMake/project hooks outside a security sandbox. No firmware
 compile/flash or physical GPIO/pad correctness is established.
+# Configuration Studio continuation
+
+The read-only `studio-*` commands extend this CLI with upstream Kconfig
+causality, request diagnosis, Devicetree source evidence, driver stages,
+resources, sysbuild topology, environment checks, comparisons and grounded
+reports. See [Configuration Studio commands](CONFIGURATION_STUDIO_CLI.md) and
+[milestone acceptance](CONFIGURATION_STUDIO_ROADMAP.md). These increments do
+not promote the Phase-0 collector or release gates to complete.
