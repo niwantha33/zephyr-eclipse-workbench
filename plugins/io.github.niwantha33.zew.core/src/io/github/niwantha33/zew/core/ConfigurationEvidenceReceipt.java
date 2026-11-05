@@ -76,7 +76,20 @@ public final class ConfigurationEvidenceReceipt {
                 break;
             }
             try {
-                entries.add(new Entry('S', source, hash(source)));
+                String fingerprint = hash(source);
+                // An application/source edit AFTER the last generated output
+                // may have happened during a successful compilation. The
+                // hash would be fresh but NOT part of those generated outputs.
+                // Degrade the receipt rather than certifying a mixed snapshot.
+                Path target = source.toString().endsWith(".conf")
+                        || source.getFileName().toString().equals("Kconfig")
+                        ? root.resolve("zephyr/.config") : root.resolve("zephyr/zephyr.dts");
+                if (Files.getLastModifiedTime(source).compareTo(
+                        Files.getLastModifiedTime(target)) > 0) {
+                    complete = false;
+                    issue = "At least one input changed after the generated configuration output.";
+                }
+                entries.add(new Entry('S', source, fingerprint));
             } catch (IOException invalid) {
                 complete = false;
                 issue = "A selected source input could not be hashed safely.";
@@ -212,6 +225,8 @@ public final class ConfigurationEvidenceReceipt {
         if (!Files.isRegularFile(cache, LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(cache))
             return new InputSet(List.copyOf(found), false, "Missing selected-build CMakeCache.txt.");
+        if (Files.size(cache) > MAX_FILE_BYTES)
+            return new InputSet(List.copyOf(found), false, "Oversized CMake cache.");
         String cacheText = Files.readString(cache, StandardCharsets.UTF_8);
         if (cacheText.length() > MAX_FILE_BYTES)
             return new InputSet(List.copyOf(found), false, "Oversized CMake cache.");

@@ -123,6 +123,12 @@ public final class ConfigurationEvidenceReceiptTests {
         check(state(f, "example/qualifier", "debug") == State.NO_BUILD,
                 "missing generated DTS never presents a current build");
 
+        var lateSource = fixture();
+        Files.setLastModifiedTime(lateSource.conf(),
+                FileTime.from(Instant.now().plusSeconds(3600)));
+        check(capture(lateSource).state() == State.UNVERIFIED,
+                "source touched after generated .config must not be certified as current");
+
         var incomplete = fixture();
         Files.delete(incomplete.build().resolve("zephyr/zephyr.dts.d"));
         check(capture(incomplete).state() == State.UNVERIFIED
