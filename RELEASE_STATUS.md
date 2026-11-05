@@ -613,3 +613,15 @@ passing these prototype tests.
   a picker, closed-project handling and cross-project/profile isolation.
 - No automatic build retries, source edits or hardware claims. Exact-head CI
   and real Windows hardware validation remain pending.
+
+## Configuration Studio diagnostics CS-01–CS-03 (2026-11-05, development branches)
+
+**These are reviewed DEVELOPMENT PRs, not an approved installer or completed release train.** The repository G0 gate is still OPEN.
+
+- **CS-01, PR #155:** Build-local configuration evidence receipt after an explicitly successful managed firmware build; matches selected project/board/profile, generated `.config`, `zephyr.dts`, CMake cache, declared config files and recorded DTS dependency inputs by SHA-256. Native three-section view differentiates recorded-current, changed, unverified and no-build. Older builds without receipts remain unverified rather than silently current. The receipt does not establish *all* Kconfig origin inputs, driver inclusion, or runtime hardware state.
+- **CS-02, PR #156, stacked on #155:** Source-only/missing/partial generated-build findings, bounded reuse of historical failed-attempt logs and Zephyr's actual undefined-Kconfig diagnostics. Eclipse Overview provides actions to open the existing Build Failure Investigator. Historical errors are not claimed to be current. An isolated configure-only action and deeper dependency reasoning remain unimplemented.
+- **CS-03, PR #157, stacked on #156:** Read-only consumer of the selected build's upstream `zephyr/kconfig-trace.md` with exact-symbol matching, assigned/default/selected/implied origins, missing/stale states and safe string handling, surfaced under Build & System advanced tools. Trace generation and a proven pristine build are **not** implemented. It does not claim complete transitive Kconfig source causality.
+
+**Observed validation at authoring:** #155 Linux core (including 22 evidence-receipt assertions), Eclipse plug-in/p2 packaging, and installed SWT smoke passed. Its Windows firmware-matrix attempt failed while fetching an ESP32-S3 Xtensa compiler archive from an external host (HTTP 504); failed jobs were retried. #156 Linux core (including nine source-only/failed-build assertions) and packaging passed, while Windows qualification was still running. #157 exact-head CI was in progress. Do not infer the final status from this snapshot; use the PR's exact-head checks before any merge.
+
+**Not yet implemented:** CS-04 through CS-18; full Kconfig and Devicetree origin graphs, driver compilation causality, pinmux ownership/electrical qualification, complete graphical edit/apply and AI verification require separate accepted milestones. Never promote a missing source or unsigned/partial receipt to confirmed evidence.

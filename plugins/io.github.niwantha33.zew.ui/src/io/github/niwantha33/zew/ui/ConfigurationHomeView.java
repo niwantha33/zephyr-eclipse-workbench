@@ -33,6 +33,7 @@ import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 import io.github.niwantha33.zew.core.ConfigurationFailureEvidence;
+import io.github.niwantha33.zew.core.KconfigTraceEvidence;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
@@ -77,7 +78,9 @@ public final class ConfigurationHomeView extends ViewPart {
     private Button previous, next, validateApply, example;
     private Composite hardwareAdvanced, systemAdvanced;
     private Button showHardwareAdvanced, showSystemAdvanced;
-    private Text buildDetails;
+    private Text buildDetails, kconfigOriginSymbol, kconfigOriginResult;
+    private final AtomicInteger originGeneration = new AtomicInteger();
+    private Job originJob;
 
     @Override public void createPartControl(Composite parent) {
         var shellLayout = new GridLayout(1, false);
@@ -281,11 +284,26 @@ public final class ConfigurationHomeView extends ViewPart {
                     ? "Hide advanced system settings" : "Show advanced system settings");
             root.layout(true, true);
         });
-        var lower = bar(root, 3);
-        systemAdvanced = lower;
+        systemAdvanced = new Composite(root, SWT.NONE);
+        systemAdvanced.setLayoutData(fillWidth());
+        systemAdvanced.setLayout(new GridLayout(1, false));
+        var lower = bar(systemAdvanced, 3);
         button(lower, "Kconfig & prj.conf", () -> advanced("software"));
         button(lower, "RTOS & tracing", () -> advanced("rtos"));
         button(lower, "Devicetree & bindings", () -> advanced("sources"));
+        new Label(systemAdvanced, SWT.NONE).setText("Zephyr Kconfig origin trace — optional, read-only");
+        var origin = bar(systemAdvanced, 2);
+        kconfigOriginSymbol = new Text(origin, SWT.BORDER | SWT.SEARCH);
+        kconfigOriginSymbol.setLayoutData(fillWidth());
+        kconfigOriginSymbol.setMessage("Exact CONFIG_ symbol, e.g. CONFIG_GPIO");
+        button(origin, "Explain recorded origin", this::explainKconfigOrigin);
+        kconfigOriginResult = new Text(systemAdvanced,
+                SWT.READ_ONLY | SWT.MULTI | SWT.WRAP | SWT.V_SCROLL | SWT.BORDER);
+        var originSize = fillWidth();
+        originSize.heightHint = 82;
+        kconfigOriginResult.setLayoutData(originSize);
+        kconfigOriginResult.setText("No Kconfig origin requested. A clean Zephyr traceconfig "
+                + "report must be generated explicitly; an incremental trace cannot prove source origin.");
         setPanelVisible(systemAdvanced, false);
         buildDetails.setText("Select a project to inspect its exact build and Zephyr environment.");
     }
@@ -861,6 +879,44 @@ public final class ConfigurationHomeView extends ViewPart {
         advanced("review");
     }
 
+    private void explainKconfigOrigin() {
+        if (kconfigOriginResult == null || kconfigOriginResult.isDisposed()) return;
+        String query = kconfigOriginSymbol.getText().strip();
+        String name = query.startsWith("CONFIG_") ? query.substring(7) : query;
+        if (!name.matches("[A-Z0-9_]{1,160}")) {
+            kconfigOriginResult.setText("Enter one exact CONFIG_ symbol. "
+                    + "Unknown or misspelled names will not be guessed.");
+            return;
+        }
+        var snapshot = evidence;
+        if (snapshot == null || snapshot.build() == null) {
+            kconfigOriginResult.setText("No selected generated build. "
+                    + "Configure this board/profile before requesting a trace.");
+            return;
+        }
+        int ticket = originGeneration.incrementAndGet();
+        if (originJob != null) originJob.cancel();
+        kconfigOriginResult.setText("Reading the selected build's upstream traceconfig report…");
+        var ui = getSite().getShell().getDisplay();
+        originJob = new Job("Inspect recorded Zephyr Kconfig origin") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                var result = KconfigTraceEvidence.inspect(snapshot.build(), query);
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                ui.asyncExec(() -> {
+                    if (ticket != originGeneration.get()
+                            || evidence != snapshot || kconfigOriginResult.isDisposed())
+                        return;
+                    kconfigOriginResult.setText((snapshot.stale()
+                            ? "WARNING: selected build provenance is unverified or stale.\n" : "")
+                            + result.describe());
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        originJob.setSystem(true);
+        originJob.schedule();
+    }
+
     private void openRecordedFailure() {
         if (project == null || !project.isAccessible()) {
             MessageDialog.openInformation(getSite().getShell(), "Select a project",
@@ -923,6 +979,8 @@ public final class ConfigurationHomeView extends ViewPart {
         if (refreshJob != null) refreshJob.cancel();
         detailGeneration.incrementAndGet();
         if (detailJob != null) detailJob.cancel();
+        originGeneration.incrementAndGet();
+        if (originJob != null) originJob.cancel();
         super.dispose();
     }
 }
