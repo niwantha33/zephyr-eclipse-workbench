@@ -47,7 +47,7 @@ public final class DevicetreeOverlaySupportTests {
                     "no dependency file must not invent active overlays");
             Files.writeString(deps, generated.resolve("zephyr.dts.pre") + ": "
                     + board.toString().replace(" ", "\\ ") + " "
-                    + soc + " " + selected.toString().replace(" ", "\\ ") + "\n");
+                    + soc.toString().replace(" ", "\\ ") + " " + selected.toString().replace(" ", "\\ ") + "\n");
             var context = DevicetreeOverlaySupport.inspect(app, build, zephyr);
             ok(context.verified() && context.active(selected) && !context.active(conventional),
                     "actual dependency marks extra overlay active but not the unused app.overlay");
@@ -70,7 +70,7 @@ public final class DevicetreeOverlaySupportTests {
                     "build_info.yml include and binding metadata refreshes cached context");
             Files.writeString(deps, generated.resolve("zephyr.dts.pre") + ": "
                     + board.toString().replace(" ", "\\ ") + " "
-                    + soc + " " + conventional.toString().replace(" ", "\\ ") + "\n");
+                    + soc.toString().replace(" ", "\\ ") + " " + conventional.toString().replace(" ", "\\ ") + "\n");
             var changed = DevicetreeOverlaySupport.inspect(app, build, zephyr);
             ok(changed.active(conventional) && !changed.active(selected),
                     "editing dependency evidence invalidates the cached overlay set");
