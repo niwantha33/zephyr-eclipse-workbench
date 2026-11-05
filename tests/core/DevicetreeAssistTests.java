@@ -37,10 +37,20 @@ public final class DevicetreeAssistTests {
     public static void main(String[] args) {
         var snapshot = sample();
         var starter = DevicetreeAssist.suggest("", 0, snapshot);
-        check(starter.suggestions().size() == 5, "Five simple starting actions");
+        check(starter.suggestions().size() == 7, "Five simple starting actions and two real board controllers");
+        check(starter.suggestions().stream().anyMatch(p -> p.replacement().startsWith("&uart0 {")),
+                "First completion directly offers a verified UART controller");
+        check(starter.suggestions().stream().anyMatch(p -> p.replacement().startsWith("&gpio0 {")),
+                "First completion directly offers a verified GPIO controller");
+        String bareRoot = "/* Application hardware overlay */\n{";
+        var repair = DevicetreeAssist.suggest(bareRoot, bareRoot.length(), snapshot);
+        check(repair.start() == bareRoot.length() - 1 && repair.length() == 1
+                && repair.suggestions().stream().anyMatch(p -> p.replacement().equals("/ {")),
+                "Bare root offers a targeted one-character repair");
+
         String commentedOverlay = "/* Application hardware overlay. Validate against this board's bindings. */\n";
         check(DevicetreeAssist.suggest(commentedOverlay, commentedOverlay.length(), snapshot)
-                .suggestions().size() == 5, "Starter actions after Configuration Studio header");
+                .suggestions().size() == 7, "Starter actions and verified controllers after Configuration Studio header");
         check(starter.suggestions().stream().noneMatch(p -> p.replacement().contains("&adc")),
                 "No imaginary ADC or controller");
         var reference = DevicetreeAssist.suggest("&u", 2, snapshot);

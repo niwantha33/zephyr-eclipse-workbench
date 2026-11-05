@@ -19,6 +19,7 @@ import sys
 import tempfile
 import tarfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -47,7 +48,7 @@ def valid_cache(path, artifact):
 
 
 def fetch(artifact, cache):
-    """Reuse only complete verified artifacts. Retry failed downloads three times."""
+    """Reuse only complete verified artifacts; bound transient gateway retries."""
     url = urllib.parse.urlparse(artifact['url'])
     if url.scheme != 'https' or url.hostname not in ('files.pythonhosted.org', 'github.com') or url.username:
         raise ValueError('Unapproved package download origin')
@@ -58,9 +59,12 @@ def fetch(artifact, cache):
         log('Using verified cache: ' + target.name)
         return target
     temporary = target.with_name(target.name + '.partial')
-    for attempt in range(1, 4):
+    # A release CDN can temporarily answer 502/503/504 even while other
+    # dependencies download. Preserve the pinned URL, SHA-256 and size checks;
+    # retry only these transient gateway failures beyond the usual 3 attempts.
+    for attempt in range(1, 7):
         try:
-            log(f'Downloading {target.name} (attempt {attempt}/3)')
+            log(f'Downloading {target.name} (attempt {attempt})')
             request = urllib.request.Request(artifact['url'], headers={'User-Agent': 'Zephyr-Eclipse-Workbench-Setup'})
             count = 0
             with urllib.request.urlopen(request, timeout=30) as response, temporary.open('wb') as output:
@@ -81,10 +85,12 @@ def fetch(artifact, cache):
             return target
         except (OSError, ValueError, http.client.HTTPException) as error:
             temporary.unlink(missing_ok=True)
-            if attempt == 3:
+            gateway_failure = isinstance(error, urllib.error.HTTPError) and error.code in (502, 503, 504)
+            limit = 6 if gateway_failure else 3
+            if attempt >= limit:
                 raise
             log('Download failed; retrying: ' + str(error))
-            time.sleep(attempt)
+            time.sleep(min(attempt * attempt, 20))
 
 
 def validate_lock(lock):

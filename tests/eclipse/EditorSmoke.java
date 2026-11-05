@@ -13,6 +13,7 @@ import org.eclipse.cdt.core.model.*;
 import org.eclipse.core.resources.*;
 import org.eclipse.core.runtime.*;
 import org.eclipse.equinox.app.*;
+import org.eclipse.ui.PlatformUI;
 import io.github.niwantha33.zew.core.EditorSettings;
 
 /** Test-only bundle: exercise the installed plug-in through real CDT APIs. */
@@ -104,8 +105,16 @@ public final class EditorSmoke implements IApplication {
                 const struct device *unknown = device_get_binding("UNKNOWN_GPIO");
                 gpio_pin_configure(unknown, 12, GPIO_OUTPUT_ACTIVE);
                 """);
+        // This test injects a *synthetic generated* DTS. The workbench may
+        // have a stale flag from the unrelated real test application; do not
+        // let that flag override the controlled fixture's expected status.
+        // Production continues to fail closed on stale generated outputs.
+        var staleField = type.getDeclaredField("buildOutdated");
+        staleField.setAccessible(true);
+        boolean originalStale = staleField.getBoolean(view);
         try {
             snapshotField.set(view, data);
+            staleField.setBoolean(view, false);
             source.setText(dts);
             var domains = (org.eclipse.swt.widgets.List) studioField(view, type, "peripheralCategories");
             domains.setSelection(1);
@@ -278,7 +287,14 @@ public final class EditorSmoke implements IApplication {
                     && guideSteps.getText().contains("CONFIG_ADC")
                     && !copyCode.getEnabled()
                     && !guideCode.getText().contains("int main(void)"),
-                    "installed ADC starter locates real disabled controller but does not offer fake working code");
+                    "installed ADC starter locates real disabled controller but does not offer fake working code"
+                    + " [tab=" + guideTabs.getSelectionIndex()
+                    + ", state=" + guideStatus.getText()
+                    + ", steps=" + guideSteps.getText().substring(0, Math.min(650, guideSteps.getText().length()))
+                    + ", copy=" + copyCode.getEnabled()
+                    + ", generatedCode=" + guideCode.getText().substring(0, Math.min(160, guideCode.getText().length()))
+                    + ", selectedController=" + (hardware.getSelectionCount() == 1 ? hardware.getSelection()[0].getText() : "(none)")
+                    + "]");
             startGuideMethod.invoke(view, "I2C");
             check(guideStatus.getText().contains("NOT_IN_DTS")
                     && !copyCode.getEnabled()
@@ -456,11 +472,31 @@ public final class EditorSmoke implements IApplication {
                         + socDtsi.toString().replace(" ", "\\ ") + "\n");
                 buildField.set(view, sourceRoot.resolve("build"));
                 refreshSources.invoke(view);
-                check(sourceList.getItemCount() == 2
-                        && sourceList.getItem(0).getText(1).equals("Board / shield DTS")
-                        && sourceList.getItem(1).getText(1).equals("SoC / architecture DTSI"),
-                        "installed source browser lists actual board and SoC DTS/DTSI dependencies");
-                sourceList.setSelection(1);
+                // The browser may also include an existing app.overlay as a
+                // source-only candidate; it must not be counted as a build input.
+                // Verify the exact dependency-backed rows by identity rather
+                // than assuming there can only ever be two visible sources.
+                boolean foundBoardDts = false;
+                int socDtsiRow = -1;
+                var discoveredSources = new java.util.ArrayList<String>();
+                for (int row = 0; row < sourceList.getItemCount(); row++) {
+                    var entry = sourceList.getItem(row);
+                    discoveredSources.add(entry.getText(0) + " / " + entry.getText(1)
+                            + " / " + entry.getText(2));
+                    if (entry.getText(0).equals("board.dts")
+                            && entry.getText(1).equals("Board / shield DTS")
+                            && entry.getText(2).equals("Build dependency"))
+                        foundBoardDts = true;
+                    if (entry.getText(0).equals("soc.dtsi")
+                            && entry.getText(1).equals("SoC / architecture DTSI")
+                            && entry.getText(2).equals("Build dependency"))
+                        socDtsiRow = row;
+                }
+                check(foundBoardDts && socDtsiRow >= 0,
+                        "installed source browser lists exact board and SoC DTS/DTSI build dependencies"
+                        + " [rows=" + discoveredSources
+                        + ", notice=" + sourceNotice.getText() + "]");
+                sourceList.setSelection(socDtsiRow);
                 sourceList.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
                 check(sourceContent.getText().contains("fixture,controller")
                         && !sourceContent.getEditable(),
@@ -520,6 +556,7 @@ public final class EditorSmoke implements IApplication {
         } finally {
             Files.deleteIfExists(gpioSource);
             snapshotField.set(view, original);
+            staleField.setBoolean(view, originalStale);
             clear.invoke(view);
             hardwareSearch.setText(""); hardwareState.select(0);
             source.setText(((io.github.niwantha33.zew.core.ConfigurationStudioFiles.Snapshot) original).devicetree());
@@ -536,6 +573,20 @@ public final class EditorSmoke implements IApplication {
      * queue receives its resize/paint events. Flush that UI cycle explicitly,
      * regardless of screenshot configuration, before inspecting real bounds.
      */
+    /** Trace actual SWT parent sizes to distinguish an unlaid-out view from a child layout bug. */
+    private static String swtBoundsChain(org.eclipse.swt.widgets.Control child) {
+        var chain = new StringBuilder();
+        org.eclipse.swt.widgets.Control current = child;
+        for (int depth = 0; current != null && depth < 12; depth++) {
+            if (depth != 0) chain.append(" <- ");
+            chain.append(current.getClass().getSimpleName())
+                    .append("[").append(current.getBounds())
+                    .append(";visible=").append(current.isVisible()).append("]");
+            current = current.getParent();
+        }
+        return chain.toString();
+    }
+
     private static void settleNativeStudioLayout() {
         var window = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
         if (window == null) throw new IllegalStateException("No active native Eclipse window to inspect.");
@@ -954,6 +1005,50 @@ public final class EditorSmoke implements IApplication {
         project.open(null); project.refreshLocal(IResource.DEPTH_INFINITE, null);
         var ui = Platform.getBundle("io.github.niwantha33.zew.ui");
         ui.start();
+
+        // This must use IDE.openEditor without an editor ID: Project Explorer's
+        // default file association is the actual acceptance path.
+        if (Boolean.getBoolean("zew.nativeFlow")) {
+            Path overlayPath = fixture.resolve("app.overlay");
+            Files.writeString(overlayPath,
+                    "/* Application hardware overlay. Validate against this board's bindings. */\n"
+                    + "{\n    soc {\n        adc:adc0@0 {\n        };\n    };\n};\n");
+            project.refreshLocal(IResource.DEPTH_INFINITE, null);
+            var opened = new java.util.concurrent.atomic.AtomicReference<org.eclipse.ui.texteditor.ITextEditor>();
+            org.eclipse.swt.widgets.Display.getDefault().syncExec(() -> {
+                try {
+                    var window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+                    var part = org.eclipse.ui.ide.IDE.openEditor(window.getActivePage(),
+                            project.getFile("app.overlay"), true);
+                    check(part.getClass().getName().equals(
+                            "io.github.niwantha33.zew.ui.DevicetreeEditor"),
+                            "Project Explorer opens installed native Devicetree editor by default");
+                    opened.set((org.eclipse.ui.texteditor.ITextEditor) part);
+                } catch (Exception e) { throw new IllegalStateException(e); }
+            });
+            boolean errorShown = false;
+            for (int attempt = 0; attempt < 50 && !errorShown; attempt++) {
+                var visible = new java.util.concurrent.atomic.AtomicBoolean();
+                org.eclipse.swt.widgets.Display.getDefault().syncExec(() -> {
+                    var editor = opened.get();
+                    var annotations = editor.getDocumentProvider().getAnnotationModel(editor.getEditorInput());
+                    if (annotations == null) return;
+                    for (var iterator = annotations.getAnnotationIterator(); iterator.hasNext();) {
+                        Object annotation = iterator.next();
+                        if (annotation instanceof org.eclipse.jface.text.source.Annotation item
+                                && item.getText() != null
+                                && item.getText().contains("Bare '{'")) {
+                            visible.set(true);
+                            break;
+                        }
+                    }
+                });
+                errorShown = visible.get();
+                if (!errorShown) Thread.sleep(100);
+            }
+            check(errorShown, "Invalid root is underlined in the running Eclipse editor");
+        }
+
         // Test contributions from the actually installed p2 feature, not just
         // plugin.xml in the checkout.
         var registry = Platform.getExtensionRegistry();
@@ -1033,7 +1128,19 @@ public final class EditorSmoke implements IApplication {
                 try {
                     var windows = org.eclipse.ui.PlatformUI.getWorkbench().getWorkbenchWindows();
                     check(windows.length > 0, "native Eclipse workbench window exists");
-                    var view = windows[0].getActivePage().showView(
+                    // Eclipse's rendering engine parks views from non-selected
+                    // perspectives in an offscreen "limbo" Shell at y=10000.
+                    // A view reference may report active/visible even though
+                    // its SWT controls are still in that shell. Start the
+                    // actual desktop smoke from a restored resource perspective.
+                    var page = windows[0].getActivePage();
+                    var resourcesPerspective = org.eclipse.ui.PlatformUI.getWorkbench()
+                            .getPerspectiveRegistry().findPerspectiveWithId("org.eclipse.ui.resourcePerspective");
+                    check(resourcesPerspective != null, "installed Eclipse has the resource perspective");
+                    page.setPerspective(resourcesPerspective);
+                    page.resetPerspective();
+                    settleNativeStudioLayout();
+                    var view = page.showView(
                             "io.github.niwantha33.zew.ui.configurationStudio");
                     view.getClass().getMethod("displayProject", IProject.class).invoke(view, project);
                     var snapshotField = view.getClass().getDeclaredField("snapshot");
@@ -1095,6 +1202,40 @@ public final class EditorSmoke implements IApplication {
                             && section.invoke(null, overlayEntry).equals("hardware")
                             && section.invoke(null, projectEntry).equals("system"),
                             "menu and explicit file context all target ONE three-section Studio");
+                    // The three-section Studio and legacy advanced Studio may share an
+                    // Eclipse view stack. Menu/navigation checks above can select the
+                    // other part; an obscured SWT tab has a zero-sized viewport.
+                    // Activate the actual advanced view before asserting real bounds.
+                    // The legacy advanced view is a dockable side pane in the stock
+                    // resource perspective. A full-width 960px diagram cannot be
+                    // visibility-tested while its containing view stack is only
+                    // ~400px wide or minimized. Expand the actual workbench part,
+                    // not the SWT child widgets, before testing painted geometry.
+                    var nativePage = windows[0].getActivePage();
+                    var advancedRef = nativePage.getReference(view);
+                    check(advancedRef != null, "advanced Studio has a real Eclipse part reference");
+                    // An unopened resource perspective can park added views in
+                    // an invisible trim Shell (commonly at y=10000). Merely
+                    // calling activate() or MAXIMIZED leaves that parked SWT
+                    // hierarchy at zero size. Restore the stack first.
+                    int stateBefore = nativePage.getPartState(advancedRef);
+                    nativePage.setPartState(advancedRef, org.eclipse.ui.IWorkbenchPage.STATE_RESTORED);
+                    nativePage.showView("io.github.niwantha33.zew.ui.configurationStudio",
+                            null, org.eclipse.ui.IWorkbenchPage.VIEW_ACTIVATE);
+                    nativePage.setPartState(advancedRef, org.eclipse.ui.IWorkbenchPage.STATE_MAXIMIZED);
+                    nativePage.activate(view);
+                    settleNativeStudioLayout();
+                    var activeStudioShell = windows[0].getShell();
+                    check(nativePage.isPartVisible(view),
+                            "expanded advanced Studio is registered visible in Eclipse"
+                            + " [before=" + stateBefore + ", after="
+                            + nativePage.getPartState(advancedRef) + "]");
+                    check(studioTabs.getShell() == activeStudioShell
+                            && activeStudioShell.isVisible(),
+                            "advanced Studio control is attached to the displayed workbench shell"
+                            + " [tabShell=" + studioTabs.getShell().getBounds()
+                            + ", shell=" + activeStudioShell.getBounds()
+                            + ", tabs=" + swtBoundsChain(studioTabs) + "]");
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
                             studioTabs.getItem(0).getControl();
                     var beginnerBody = (org.eclipse.swt.widgets.Composite)
@@ -1107,7 +1248,18 @@ public final class EditorSmoke implements IApplication {
                     check(canvas.getClientArea().width >= 900
                             && canvas.getClientArea().height >= 300
                             && scroll.getContent() == beginnerBody,
-                            "colourful configuration flow is actually laid out inside scrollable Start Here");
+                            "colourful configuration flow is actually laid out inside scrollable Start Here"
+                            + " [canvasArea=" + canvas.getClientArea()
+                            + ", canvasBounds=" + canvas.getBounds()
+                            + ", visible=" + canvas.isVisible()
+                            + ", bodySize=" + beginnerBody.getSize()
+                            + ", scrollArea=" + scroll.getClientArea()
+                            + ", scrollMinHeight=" + scroll.getMinHeight()
+                            + ", scrollContentMatches=" + (scroll.getContent() == beginnerBody)
+                            + ", tab=" + studioTabs.getSelectionIndex()
+                            + ", shell=" + org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell().getBounds()
+                            + ", canvasParents=" + swtBoundsChain(canvas)
+                            + ", tabParents=" + swtBoundsChain(studioTabs) + "]");
                     check(scroll.getExpandVertical()
                             && beginnerBody.getSize().y >= scroll.getMinHeight()
                             && beginnerBody.getSize().y >= scroll.getClientArea().height

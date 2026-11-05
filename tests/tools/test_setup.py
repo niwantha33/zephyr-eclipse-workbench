@@ -310,6 +310,32 @@ if __name__ == '__main__':
 
 
 class DownloadRecoveryTests(unittest.TestCase):
+    def test_transient_sdk_gateway_timeout_retries_with_verified_hash(self):
+        import urllib.error
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = {'file': 'sdk.7z', 'size': 4,
+                        'sha256': hashlib.sha256(b'good').hexdigest(),
+                        'url': 'https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/sdk.7z'}
+            class Response:
+                url = artifact['url']
+                def __init__(self): self.sent = False
+                def __enter__(self): return self
+                def __exit__(self, *unused): pass
+                def read(self, size):
+                    if self.sent: return b''
+                    self.sent = True
+                    return b'good'
+            failure = urllib.error.HTTPError(artifact['url'], 504, 'Gateway Time-out', {}, None)
+            with patch.object(setup.urllib.request, 'urlopen',
+                              side_effect=[failure, failure, failure, Response()]) as request, \
+                 patch.object(setup.time, 'sleep') as pause:
+                result = setup.fetch(artifact, root)
+            self.assertEqual(request.call_count, 4)
+            self.assertEqual(pause.call_count, 3)
+            self.assertEqual(result.read_bytes(), b'good')
+            self.assertFalse((root / 'sdk.7z.partial').exists())
+
     def test_interrupted_download_retries_and_only_activates_verified_content(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
