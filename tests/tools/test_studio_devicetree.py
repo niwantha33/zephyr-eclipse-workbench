@@ -78,6 +78,12 @@ class StudioDevicetreeTests(unittest.TestCase):
         with self.assertRaises(InputError):
             dt.inspect(self.build, self.zephyr, "/soc/adc@1", "status", [link])
 
+    def test_source_hashing_has_global_io_budget(self):
+        budget = [1]
+        row = dt._source(str(self.overlay), self.build, [self.sources], budget)
+        self.assertEqual(row["state"], "source-io-budget-exceeded")
+        self.assertEqual(budget, [1])
+
     def test_upstream_override_is_exact_final_source_and_no_write(self):
         self.real_library()
         before = {p: p.read_bytes() for p in (self.pre, self.final, self.base, self.overlay)}

@@ -20,6 +20,7 @@ from .dt_binding_preview import (_build_checkout, _checked_file, MAX_DTS_BYTES,
                                  _NODE_PATH, _PROPERTY)
 
 MAX_SOURCES = 4096
+MAX_SOURCE_IO_BYTES = 32 * 1024 * 1024
 _LINE = re.compile(r'^\s*#(?:line\s+|\s+)([0-9]+)\s+"([^"\r\n]+)"(?:\s+[0-9 ]+)?\s*$')
 
 
@@ -56,7 +57,7 @@ def _safe_roots(roots: list[Path]) -> list[Path]:
     return result
 
 
-def _source(filename: str, build: Path, roots: list[Path]) -> dict:
+def _source(filename: str, build: Path, roots: list[Path], budget: list[int] | None = None) -> dict:
     # Relative CPP paths are relative to the build's working directory. Never
     # search roots by basename or treat a guessed path as an origin.
     path = Path(filename)
@@ -71,7 +72,11 @@ def _source(filename: str, build: Path, roots: list[Path]) -> dict:
                 return {"state": "source-missing", "confidence": "unknown"}
             if path.suffix.lower() not in (".dts", ".dtsi", ".overlay", ".h"):
                 return {"state": "unsupported-source-kind", "confidence": "unknown"}
-            _, digest = _checked_file(path, MAX_DTS_BYTES)
+            if budget is not None and path.stat().st_size > budget[0]:
+                return {"state": "source-io-budget-exceeded", "confidence": "unknown"}
+            snapshot, digest = _checked_file(path, MAX_DTS_BYTES)
+            if budget is not None:
+                budget[0] -= len(snapshot)
             return {"state": "source-observed", "confidence": "derived",
                     "root_index": index, "path": path.relative_to(root).as_posix(),
                     "sha256": digest, "kind": "overlay" if path.suffix == ".overlay" else "source",
@@ -88,8 +93,12 @@ def inspect(build: Path, zephyr: Path, node: str, prop: str,
     zephyr = Path(zephyr).absolute()
     if any(p.is_symlink() for p in (zephyr, *zephyr.parents)):
         raise InputError("Symlinked checkout rejected")
+    root = Path(build).absolute()
+    if any(p.is_symlink() for p in (root, *root.parents)) or not root.is_dir():
+        raise InputError("Build must be an existing non-symlink directory")
     rows = []
-    for image, directory in _images(Path(build).absolute(), images or []):
+    budget = [MAX_SOURCE_IO_BYTES]
+    for image, directory in _images(root, images or []):
         row = {"image": image, "state": "unavailable", "confidence": "unknown",
                "origin": None, "final_property": None, "active_sources": [],
                "provenance": {}, "reason": "selected-checkout-unverified"}
@@ -119,8 +128,9 @@ def inspect(build: Path, zephyr: Path, node: str, prop: str,
         if len(markers) > MAX_SOURCES:
             row["reason"] = "source-marker-limit-exceeded"
             continue
-        row["active_sources"] = [_source(name, directory, roots) for name in markers
-                                  if name.endswith((".dts", ".dtsi", ".overlay"))]
+        sources = {name: _source(name, directory, roots, budget) for name in markers
+                   if name.endswith((".dts", ".dtsi", ".overlay"))}
+        row["active_sources"] = list(sources.values())
         with _library(zephyr) as library, TemporaryDirectory(prefix="zew-dt-origin-") as temp:
             final_path, pre_path = Path(temp) / "final.dts", Path(temp) / "pre.dts"
             final_path.write_bytes(generated_bytes)
@@ -154,7 +164,7 @@ def inspect(build: Path, zephyr: Path, node: str, prop: str,
             if filename not in markers or not isinstance(line, int) or line < 1:
                 row["reason"] = "upstream-source-location-unavailable"
                 continue
-            origin = _source(filename, directory, roots)
+            origin = dict(sources.get(filename) or _source(filename, directory, roots, budget))
             origin["line"] = line
             row["origin"] = origin
             if origin["state"] == "source-observed":
