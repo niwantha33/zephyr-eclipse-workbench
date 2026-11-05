@@ -43,7 +43,7 @@ def _cache(snapshot):
     return values
 
 
-def _tool(values, keys):
+def _tool(values, keys, name):
     declarations = [values[key] for key in keys if values.get(key)]
     if not declarations:
         return {"state": "unknown", "reason": "not-recorded-in-cache", "version": "unknown"}
@@ -64,18 +64,28 @@ def _tool(values, keys):
         exists = False
     versions = [values[key + "_VERSION"] for key in keys if values.get(key + "_VERSION")]
     version = versions[0] if versions and len(set(versions)) == 1 and _VERSION.fullmatch(versions[0]) else "unknown"
+    if name == "cmake":
+        parts = [values.get("CMAKE_CACHE_" + component + "_VERSION", "")
+                 for component in ("MAJOR", "MINOR", "PATCH")]
+        if all(re.fullmatch(r"[0-9]{1,5}", part) for part in parts):
+            version = ".".join(parts)
     return {"state": "available" if exists else "missing",
             "reason": "configured-path-exists" if exists else "configured-executable-unavailable",
-            "version": version,
+            "version": version, "version_scope": "recorded-cache-metadata-not-current-executable",
             "path_sha256": hashlib.sha256(value.encode("utf-8")).hexdigest()}
 
 
-def inspect(build: Path, images=None, expected_board=None, expected_zephyr=None):
+def inspect(build: Path, images=None, expected_board=None, expected_zephyr=None, expected_versions=None):
     root = Path(build).absolute()
     if not root.is_dir() or any(p.is_symlink() for p in (root, *root.parents)):
         raise InputError("Build must be an existing non-symlink directory")
     if expected_board is not None and (not isinstance(expected_board, str) or not expected_board or len(expected_board) > 160):
         raise InputError("Expected board must be a bounded nonempty target name")
+    expected_versions = expected_versions or {}
+    if (not isinstance(expected_versions, dict)
+            or any(key not in dict(_TOOLS) or not isinstance(value, str)
+                   or not _VERSION.fullmatch(value) for key, value in expected_versions.items())):
+        raise InputError("Expected versions require known tool names and exact bounded version strings")
     output = []
     for image, directory in _images(root, images or []):
         path = _regular(directory, "CMakeCache.txt")
@@ -91,13 +101,23 @@ def inspect(build: Path, images=None, expected_board=None, expected_zephyr=None)
         values = _cache(snapshot)
         row["provenance"] = {"artifact": image + "/CMakeCache.txt", "sha256": checksum,
                              "method": "read-only typed CMake cache identities"}
-        row["tools"] = {name: _tool(values, keys) for name, keys in _TOOLS}
+        row["tools"] = {name: _tool(values, keys, name) for name, keys in _TOOLS}
         for name, tool in row["tools"].items():
             if tool["state"] == "missing":
                 row["findings"].append({"rule_id": "CS12-MISSING-" + name.upper(),
                     "severity": "error", "confidence": "confirmed",
                     "observation": "Recorded " + name + " executable is unavailable on this host",
                     "next_action": "Select the matching installed setup or restore the recorded tool; then reconfigure"})
+        for name, expected in sorted(expected_versions.items()):
+            tool = row["tools"][name]
+            known = tool["version"]
+            tool["expected_version"] = expected
+            tool["version_match"] = "unknown" if known == "unknown" else "matching" if known == expected else "mismatch"
+            if tool["version_match"] == "mismatch":
+                row["findings"].append({"rule_id": "CS12-RECORDED-VERSION-MISMATCH-" + name.upper(),
+                    "severity": "error", "confidence": "confirmed",
+                    "observation": "Recorded " + name + " version differs from explicitly required version",
+                    "next_action": "Use the matching tool environment and independently reconfigure; installed executable version remains unverified"})
         configured_board = values.get("BOARD")
         row["board"] = "unknown" if not configured_board else "recorded"
         if expected_board is not None:

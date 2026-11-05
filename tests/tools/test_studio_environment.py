@@ -68,3 +68,17 @@ class EnvironmentPreflightTests(unittest.TestCase):
         report = inspect(self.root, images=["boot=boot"], expected_board="boot-target")
         self.assertEqual([i["image"] for i in report["images"]], ["boot"])
         self.assertEqual(report["images"][0]["board"], "matching")
+
+    def test_recorded_cache_version_mismatch_does_not_invent_installed_version(self):
+        with self.cache.open("a") as stream:
+            stream.write("CMAKE_COMMAND:FILEPATH=" + str(self.tool) + "\n"
+                         "CMAKE_CACHE_MAJOR_VERSION:INTERNAL=3\n"
+                         "CMAKE_CACHE_MINOR_VERSION:INTERNAL=31\n"
+                         "CMAKE_CACHE_PATCH_VERSION:INTERNAL=10\n")
+        report = inspect(self.root, expected_versions={"cmake": "3.30.0", "python": "3.13.7"})
+        image = report["images"][0]
+        self.assertEqual(image["tools"]["cmake"]["version"], "3.31.10")
+        self.assertEqual(image["tools"]["cmake"]["version_match"], "mismatch")
+        self.assertEqual(image["tools"]["cmake"]["version_scope"], "recorded-cache-metadata-not-current-executable")
+        self.assertEqual(image["tools"]["python"]["version_match"], "unknown")
+        self.assertIn("CS12-RECORDED-VERSION-MISMATCH-CMAKE", {f["rule_id"] for f in image["findings"]})
