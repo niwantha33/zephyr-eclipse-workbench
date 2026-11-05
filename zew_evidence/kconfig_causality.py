@@ -31,7 +31,9 @@ def causality(conf, library, name, max_nodes=512):
         for attribute in ("direct_dep", "rev_dep", "weak_rev_dep"):
             expression = getattr(symbol, attribute)
             relations.append((attribute, expression))
-        for index, (value, condition) in enumerate(symbol.defaults):
+        for index, entry in enumerate(symbol.defaults):
+            # Zephyr adds a source-location third field; upstream may have two.
+            value, condition = entry[:2]
             relations.extend([(f"default[{index}].value", value),
                               (f"default[{index}].condition", condition)])
         for index, node in enumerate(symbol.nodes):
