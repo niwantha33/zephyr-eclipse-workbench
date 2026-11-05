@@ -55,3 +55,49 @@ class ResourceTests(unittest.TestCase):
         item.parent = item
         with self.assertRaises(InputError):
             analyze_edt(NS(nodes=[item]))
+
+class ResourceInspectionTests(unittest.TestCase):
+    def setUp(self):
+        from pathlib import Path
+        import tempfile
+        temp = tempfile.TemporaryDirectory(prefix="resource Ω ")
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.build, self.zephyr = self.root / "build", self.root / "checkout"
+        (self.build / "zephyr").mkdir(parents=True)
+        (self.zephyr / "dts/bindings").mkdir(parents=True)
+        library = self.zephyr / "scripts/dts/python-devicetree/src/devicetree"
+        library.mkdir(parents=True)
+        (library / "edtlib.py").write_text("# typed API fixture\n")
+        (self.build / "CMakeCache.txt").write_text("ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\n")
+        self.dts = self.build / "zephyr/zephyr.dts"
+        self.dts.write_text("/dts-v1/; / {};\n")
+
+    def test_selected_checkout_adapter_preserves_build_and_labels_snapshot(self):
+        from unittest import mock
+        from zew_evidence import studio_resources as resources
+        before = self.dts.read_bytes()
+        controller = node("/gpio")
+        with mock.patch.object(resources.importlib, "import_module", return_value=NS(EDT=lambda *a: NS(nodes=[controller]))):
+            report = resources.inspect(self.build, self.zephyr)
+        self.assertEqual(report["status"], "observed")
+        self.assertEqual(report["images"][0]["provenance"]["freshness"], "unverified-build-snapshot")
+        self.assertEqual(self.dts.read_bytes(), before)
+
+    def test_wrong_checkout_and_changed_artifact_discard_evidence(self):
+        from unittest import mock
+        from zew_evidence import studio_resources as resources
+        with mock.patch.object(resources.importlib, "import_module", return_value=NS(EDT=lambda *a: NS(nodes=[]))):
+            with mock.patch.object(resources, "_digest", return_value=("changed", 0)):
+                report = resources.inspect(self.build, self.zephyr)
+        self.assertEqual(report["images"][0]["reason"], "generated-dts-changed-during-inspection")
+        self.assertNotIn("gpio_lines", report["images"][0])
+        (self.build / "CMakeCache.txt").write_text("ZEPHYR_BASE:PATH=/not-the-selected-tree\n")
+        self.assertEqual(resources.inspect(self.build, self.zephyr)["images"][0]["reason"], "selected-checkout-does-not-match-build")
+
+    def test_missing_generated_tree_remains_unknown(self):
+        from zew_evidence import studio_resources as resources
+        self.dts.unlink()
+        report = resources.inspect(self.build, self.zephyr)
+        self.assertEqual(report["status"], "partial-or-unavailable")
+        self.assertEqual(report["images"][0]["reason"], "missing-generated-dts")
