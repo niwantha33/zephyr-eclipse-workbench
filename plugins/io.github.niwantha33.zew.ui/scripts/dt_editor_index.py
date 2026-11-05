@@ -40,7 +40,6 @@ def checked(path: Path, limit: int) -> bytes:
 
 
 def index(zephyr: Path, application: Path, build: Path):
-    print("ZEW-DTASSIST-1")
     dts = build / "zephyr" / "zephyr.dts"
     cache = build / "CMakeCache.txt"
     if not dts.is_file() or not cache.is_file():
@@ -49,7 +48,7 @@ def index(zephyr: Path, application: Path, build: Path):
     zephyr = zephyr.resolve(strict=True)
     data = checked(cache, MAX_CACHE).decode("utf-8")
     bases = re.findall(r"(?m)^ZEPHYR_BASE:[A-Z_]+=(.*)$", data)
-    if len(bases) != 1 or Path(bases[0]).resolve(strict=True) != zephyr:
+    if len(bases) != 1 or Path(bases[0]).resolve(strict=False) != zephyr:
         emit("S", "mismatch", "Build belongs to a different Zephyr checkout; no device suggestions")
         return
     checked(dts, MAX_DTS)
@@ -127,11 +126,11 @@ def main():
     parser.add_argument("--application", type=Path, required=True)
     parser.add_argument("--build", type=Path, required=True)
     args = parser.parse_args()
+    print("ZEW-DTASSIST-1")
     try:
         index(args.zephyr, args.application, args.build)
     except (OSError, ValueError, ImportError, Exception) as error:
         # Fail closed. Avoid exposing untrusted file text in protocol output.
-        print("ZEW-DTASSIST-1")
         emit("S", "unavailable", "Selected build could not be interpreted by edtlib: " +
              type(error).__name__)
 
