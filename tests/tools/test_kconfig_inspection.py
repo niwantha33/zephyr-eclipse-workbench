@@ -118,5 +118,60 @@ class KconfigInspectionTests(unittest.TestCase):
             probe.inspect(Path("."), Path("ninja"), "../../etc/passwd")
 
 
+class TransitiveCausalityTests(unittest.TestCase):
+    def test_upstream_nested_or_not_select_imply_default_and_choice(self):
+        import kconfiglib
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "Kconfig"
+            root.write_text('''mainmenu "Fixture"
+config LEAF
+    bool "Leaf"
+config ALT
+    bool "Alternative"
+config BLOCK
+    bool "Block"
+config MID
+    bool "Middle"
+    depends on LEAF || ALT
+config TARGET
+    bool "Target"
+    depends on MID && !BLOCK
+config SELECTOR
+    bool "Selector"
+    select TARGET
+config WEAK
+    bool "Weak"
+    imply TARGET
+config DEFAULTED
+    bool "Defaulted"
+    default TARGET if MID
+choice MODE
+    prompt "Mode"
+    depends on LEAF
+config FIRST
+    bool "First"
+config SECOND
+    bool "Second"
+endchoice
+''')
+            conf = kconfiglib.Kconfig(str(root), warn_to_stderr=False)
+            graph = probe.causality(conf, kconfiglib, "DEFAULTED")
+            names = {n["symbol"] for n in graph["nodes"]}
+            self.assertTrue({"DEFAULTED", "TARGET", "MID", "LEAF", "ALT", "BLOCK",
+                             "SELECTOR", "WEAK"}.issubset(names))
+            target = next(n for n in graph["nodes"] if n["symbol"] == "TARGET")
+            expression = target["expressions"][0]
+            self.assertEqual(expression["expression"], "MID && !BLOCK")
+            self.assertEqual(expression["value"], "n")
+            self.assertIn({"from": "TARGET", "kind": "rev_dep", "to": "SELECTOR"},
+                          graph["edges"])
+            self.assertEqual(graph, probe.causality(conf, kconfiglib, "DEFAULTED"))
+            self.assertEqual(probe.causality(conf, kconfiglib, "TARGET", 1)["coverage"],
+                             "truncated")
+            choice = probe.causality(conf, kconfiglib, "FIRST")
+            self.assertEqual(choice["nodes"][0]["choice"]["name"], "MODE")
+            self.assertIn("LEAF", {n["symbol"] for n in choice["nodes"]})
+
+
 if __name__ == "__main__":
     unittest.main()

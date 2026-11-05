@@ -625,3 +625,16 @@ passing these prototype tests.
 **Observed validation at authoring:** #155 Linux core (including 22 evidence-receipt assertions), Eclipse plug-in/p2 packaging, and installed SWT smoke passed. Its Windows firmware-matrix attempt failed while fetching an ESP32-S3 Xtensa compiler archive from an external host (HTTP 504); failed jobs were retried. #156 Linux core (including nine source-only/failed-build assertions) and packaging passed, while Windows qualification was still running. #157 exact-head CI was in progress. Do not infer the final status from this snapshot; use the PR's exact-head checks before any merge.
 
 **Not yet implemented:** CS-04 through CS-18; full Kconfig and Devicetree origin graphs, driver compilation causality, pinmux ownership/electrical qualification, complete graphical edit/apply and AI verification require separate accepted milestones. Never promote a missing source or unsigned/partial receipt to confirmed evidence.
+
+
+### CS-03 transitive expression increment (2026-11-05)
+
+The existing packaged Kconfiglib inspector now offers `--causality-json`:
+transitive direct/reverse/weak dependencies, defaults, prompt conditions and
+choice dependencies, preserving upstream evaluated expressions. Traversal is
+bounded and deterministic, with explicit truncation and inspection-input hashes.
+Real Kconfiglib fixtures exercise transitive OR/NOT, select, imply, defaults,
+choices and limits. Full source-fragment precedence, trace generation, pristine
+build proof and native graph integration remain outstanding. CS-04–CS-18 are
+not implemented by this increment; their numbered acceptance criteria are not
+present in this checkout. No release or gate qualification is claimed.
