@@ -18,7 +18,12 @@ final class DevicetreeAssist {
         caret = Math.min(Math.max(0, caret), document.length());
         String before = document.substring(0, caret);
         if (insideComment(before)) return new Result(caret, 0, List.of());
-        if (document.isBlank()) {
+        // Configuration Studio creates app.overlay with only an explanatory
+        // block comment. Treat that as empty at the end of the comment, so
+        // first-time users see the five starting actions on Ctrl+Space.
+        String sourceOnly = document.replaceAll("(?s)/\\*.*?\\*/", "")
+                .replaceAll("(?m)//[^\\r\\n]*", "").trim();
+        if (sourceOnly.isEmpty()) {
             var start = new ArrayList<Suggestion>();
             start.add(new Suggestion("&", "Configure an existing controller…",
                     "Type & then Ctrl+Space to choose a real board node; no hardware is invented."));
@@ -30,7 +35,7 @@ final class DevicetreeAssist {
                     "Choose an existing I2C/SPI controller, then add a child only for your actual device."));
             start.add(new Suggestion("&", "Browse available controllers…",
                     "Type & then Ctrl+Space to inspect labels and status in the selected generated DTS."));
-            return new Result(0, 0, List.copyOf(start));
+            return new Result(caret, 0, List.copyOf(start));
         }
         int pathStart = before.lastIndexOf("&{");
         if (pathStart >= 0 && before.indexOf('}', pathStart) < 0) {
