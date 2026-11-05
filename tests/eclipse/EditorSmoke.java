@@ -1158,7 +1158,7 @@ public final class EditorSmoke implements IApplication {
                             + ", visible=" + canvas.isVisible()
                             + ", bodySize=" + beginnerBody.getSize()
                             + ", scrollArea=" + scroll.getClientArea()
-                            + ", scrollMin=" + scroll.getMinSize()
+                            + ", scrollMinHeight=" + scroll.getMinHeight()
                             + ", scrollContentMatches=" + (scroll.getContent() == beginnerBody)
                             + ", tab=" + studioTabs.getSelectionIndex()
                             + ", shell=" + org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell().getBounds() + "]");
