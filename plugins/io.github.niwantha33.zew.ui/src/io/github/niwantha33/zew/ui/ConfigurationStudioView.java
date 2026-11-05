@@ -3780,7 +3780,7 @@ public final class ConfigurationStudioView extends ViewPart {
                 updateBeginnerChrome();
                 if ("rtos".equals(destination)) {
                     for (var domain : ConfigurationStudioDomains.TABS)
-                        if ("RTOS".equalsIgnoreCase(domain.name())) {
+                        if ("rtos".equalsIgnoreCase(domain.id())) {
                             selectDomain(domain);
                             break;
                         }
