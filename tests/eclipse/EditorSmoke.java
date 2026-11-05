@@ -1144,6 +1144,9 @@ public final class EditorSmoke implements IApplication {
                     // Eclipse view stack. Menu/navigation checks above can select the
                     // other part; an obscured SWT tab has a zero-sized viewport.
                     // Activate the actual advanced view before asserting real bounds.
+                    windows[0].getActivePage().showView(
+                            "io.github.niwantha33.zew.ui.configurationStudio",
+                            null, org.eclipse.ui.IWorkbenchPage.VIEW_ACTIVATE);
                     windows[0].getActivePage().activate(view);
                     settleNativeStudioLayout();
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
