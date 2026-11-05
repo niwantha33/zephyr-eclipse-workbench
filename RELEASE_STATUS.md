@@ -580,3 +580,22 @@ passing these prototype tests.
   docs/ZEPHYR_VERSION_MANAGER_ROADMAP.md and issue #128.
 - Exact PR-head CI and real Windows/Linux West 4.5 source checkout are still
   needed; **G0 remains open**. Not a production release.
+
+## Build failure investigation — development 2026-11-05
+
+- Existing managed builder now retains configure/compile logs outside pristine
+  output folders and surfaces bounded compiler/linker/CMake evidence in failures.
+- Read-only core CLI supports text/JSON with exact consumed-log SHA-256. Ninja
+  wrappers and the last progress source never establish a root cause.
+- Integrated a native Investigate Build Failure view and menu action, automatic
+  opening after captured failures, complete-log opening, saved-log import and an
+  explicit verbose single-job managed rebuild. Exact-build receipts separate
+  profiles and retain failed evidence through later success/pristine rebuilds.
+- Java 21 full core checks and Tycho/p2 packaging pass locally. The Python suite
+  contains 440 tests (4 skips); new Java investigator/storage suites pass 49
+  checks. The standard desktop/debug smoke is blocked by host ptrace restrictions;
+  the dedicated installed build-investigation view passes 12 native UI checks
+  against package 0.1.21.202611050611. Real Windows MSPM0 regression remains
+  unverified. No hardware qualification claim.
+- No new release/gate approval; G0 remains open. See
+  [Build failure investigator](docs/BUILD_FAILURE_INVESTIGATOR.md).

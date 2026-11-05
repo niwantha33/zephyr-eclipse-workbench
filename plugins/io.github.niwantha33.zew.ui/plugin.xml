@@ -118,6 +118,8 @@
   </extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.UpdateStartup"/></extension>
   <extension point="org.eclipse.ui.views">
+    <view id="io.github.niwantha33.zew.ui.buildFailureInvestigation" name="Zephyr Build Failure Investigation"
+          class="io.github.niwantha33.zew.ui.BuildFailureInvestigationView" restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.faultAnalysis" name="Zephyr Fault Investigation"
           category="org.eclipse.debug.ui" class="io.github.niwantha33.zew.ui.FaultAnalysisView" restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.debugExpressionProbe" name="Zephyr GDB Expression Probe"
@@ -149,6 +151,7 @@
     <page id="io.github.niwantha33.zew.preferences" name="Zephyr Workbench" class="io.github.niwantha33.zew.ui.WorkbenchPreferences"/>
   </extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="io.github.niwantha33.zew.investigateBuildFailure" name="Investigate Build Failure" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugExpressionProbe" name="Inspect GDB Symbol (Read-only)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.socRegisters" name="Show Debug Data and Hardware Register Explorer" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.faultAnalysis" name="Investigate Fatal Log" categoryId="io.github.niwantha33.zew.commands"/>
@@ -182,6 +185,7 @@
     <command id="io.github.niwantha33.zew.cancel" name="Cancel Operation" categoryId="io.github.niwantha33.zew.commands"/>
   </extension>
   <extension point="org.eclipse.ui.handlers">
+    <handler commandId="io.github.niwantha33.zew.investigateBuildFailure" class="io.github.niwantha33.zew.ui.BuildFailureInvestigationHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugExpressionProbe" class="io.github.niwantha33.zew.ui.DebugExpressionProbeHandler"/>
     <handler commandId="io.github.niwantha33.zew.socRegisters" class="io.github.niwantha33.zew.ui.SocRegistersHandler"/>
     <handler commandId="io.github.niwantha33.zew.faultAnalysis" class="io.github.niwantha33.zew.ui.FaultAnalysisHandler"/>
@@ -240,6 +244,7 @@
           <command commandId="io.github.niwantha33.zew.planProjectUpgrade" label="Preview Upgrade Using Another Setup..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.build" label="Configure &amp; Build">
+          <command commandId="io.github.niwantha33.zew.investigateBuildFailure" label="Investigate Build Failure…" style="push"/>
           <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio (Kconfig / Devicetree)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
           <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
@@ -256,6 +261,7 @@
           <command commandId="io.github.niwantha33.zew.debugTools" label="Manage Shared OpenOCD Debug Tools..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.diagnostics" label="Inspect &amp; Diagnose">
+          <command commandId="io.github.niwantha33.zew.investigateBuildFailure" label="Investigate Build Failure…" style="push"/>
           <command commandId="io.github.niwantha33.zew.socRegisters" label="Show Debug Data / Hardware Register Explorer" style="push"/>
           <command commandId="io.github.niwantha33.zew.debugExpressionProbe" label="Inspect GDB Symbol (Read-only)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.faultAnalysis" label="Investigate Fatal Log…" style="push"/>

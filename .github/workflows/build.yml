@@ -75,6 +75,8 @@ jobs:
             -destination "$ECLIPSE" -profile SDKProfile -roaming \
             -repository https://download.eclipse.org/eclipse/updates/4.41/R-4.41-202608281142/,https://download.eclipse.org/tools/cdt/releases/12.6/cdt-12.6.0/,https://download.eclipse.org/releases/2026-09/202609091000/ \
             -installIU org.eclipse.cdt.core,org.eclipse.cdt.ui,org.eclipse.cdt.debug.core,org.eclipse.cdt.dsf.gdb,org.eclipse.cdt.dsf.gdb.ui,org.eclipse.cdt.cmake.ui,org.eclipse.cdt.build.gcc.core
+          xvfb-run -a python3 scripts/build_failure_smoke.py \
+            --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
           xvfb-run -a python3 scripts/editor_smoke.py --native-workbench \
             --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
           # Repeat with the exact same screenshot-free environment as the main
