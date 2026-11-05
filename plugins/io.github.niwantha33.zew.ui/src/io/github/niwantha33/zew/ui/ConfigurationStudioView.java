@@ -3764,6 +3764,69 @@ public final class ConfigurationStudioView extends ViewPart {
         }
     }
 
+
+    /**
+     * Narrow, project-scoped navigation adapter for the task-first Studio.
+     * The existing binding-aware draft, scratch Zephyr configure and atomic
+     * reviewed source-save workflow remains the ONLY apply path.
+     */
+    public void openFocusedTool(String destination, String requestedCategory, String nodePath) {
+        if (tabs == null || tabs.isDisposed() || project == null) return;
+        switch (destination) {
+            case "build" -> { build(); return; }
+            case "settings" -> { openProjectSettings(); return; }
+            case "software", "rtos" -> {
+                tabs.setSelection(SOFTWARE_TAB);
+                updateBeginnerChrome();
+                if ("rtos".equals(destination)) {
+                    for (var domain : ConfigurationStudioDomains.TABS)
+                        if ("rtos".equalsIgnoreCase(domain.id())) {
+                            selectDomain(domain);
+                            break;
+                        }
+                }
+                return;
+            }
+            case "evidence" -> {
+                tabs.setSelection(EVIDENCE_TAB);
+                updateBeginnerChrome();
+                return;
+            }
+            default -> { }
+        }
+        tabs.setSelection(HARDWARE_TAB);
+        updateBeginnerChrome();
+        if (requestedCategory != null && hardwareKind != null
+                && hardwareKind.indexOf(requestedCategory) >= 0) {
+            hardwareKind.select(hardwareKind.indexOf(requestedCategory));
+            hardwareState.select(0);
+            hardwareSearch.setText("");
+            refreshHardware();
+        }
+        if (nodePath != null && !nodePath.isBlank() && hardwareDevices != null) {
+            for (var node : hardwareItems()) {
+                var device = (DevicetreeHardware.Device) node.getData();
+                if (device != null && device.path().equals(nodePath)) {
+                    hardwareDevices.setSelection(node);
+                    hardwareDevices.showSelection();
+                    describeHardware();
+                    break;
+                }
+            }
+        }
+        switch (destination) {
+            case "sources" -> selectHardwareDetails(6);
+            case "guide" -> openStartGuide(requestedCategory);
+            case "review" -> {
+                selectHardwareDetails(0);
+                // This asks for a binding-qualified proposed source diff;
+                // it never commits a file or guesses pinmux on entry.
+                prepareGuidedOverlay();
+            }
+            default -> selectHardwareDetails(1);
+        }
+    }
+
     private void openStartGuide(String overrideCategory) {
         if (startGuideCategory == null || startGuideCategory.isDisposed()) return;
         String kind = overrideCategory;
