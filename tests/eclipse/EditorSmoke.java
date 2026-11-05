@@ -571,6 +571,23 @@ public final class EditorSmoke implements IApplication {
                 && tabs.getItem(2).getText().equals("Build & System")
                 && tabs.getSelectionIndex() == 0,
                 "real installed Configuration Studio has EXACTLY three primary sections");
+        // The no-project launch must show a useful empty state, rather than
+        // dismissing the command or rendering the legacy blank Start Here.
+        cls.getMethod("displayMissingProject").invoke(view);
+        var noProjectHeader = (org.eclipse.swt.widgets.Label) studioField(view, cls, "header");
+        var noProjectMessage = (org.eclipse.swt.widgets.Label) studioField(view, cls, "overviewInfo");
+        var noProjectTable = (org.eclipse.swt.widgets.Table) studioField(view, cls, "peripheralRows");
+        check(noProjectHeader.getText().contains("No Zephyr project selected")
+                && noProjectMessage.getText().contains("Project Explorer")
+                && noProjectTable.getItemCount() == 0,
+                "no project opens a nonblank, actionable Eclipse Overview");
+        cls.getMethod("openSection", String.class).invoke(view, "hardware");
+        check(tabs.getSelectionIndex() == 1,
+                "overlay context opens Hardware in the same three-tab view");
+        cls.getMethod("openSection", String.class).invoke(view, "system");
+        check(tabs.getSelectionIndex() == 2,
+                "prj.conf context opens Build & System in the same three-tab view");
+        cls.getMethod("displayProject", IProject.class).invoke(view, project);
 
         // Cancel asynchronous project refresh before installing a controlled
         // fixture, to avoid a race between the smoke and actual files.
@@ -942,8 +959,9 @@ public final class EditorSmoke implements IApplication {
         var registry = Platform.getExtensionRegistry();
         var studioViews = Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.views"));
         check(studioViews.anyMatch(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui")
-                && "io.github.niwantha33.zew.ui.configurationStudio".equals(e.getAttribute("id"))),
-                "advanced Configuration Studio remains installed");
+                && "io.github.niwantha33.zew.ui.configurationStudio".equals(e.getAttribute("id"))
+                && "false".equals(e.getAttribute("restorable"))),
+                "legacy seven-tab Studio is available for explicit advanced use but not restored as landing");
         check(Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.views"))
                 .anyMatch(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui")
                         && "io.github.niwantha33.zew.ui.configurationHome".equals(e.getAttribute("id"))),
@@ -1060,6 +1078,23 @@ public final class EditorSmoke implements IApplication {
                             && route.invoke(null, true, "prj.conf").toString().equals("PROJECT_OVERRIDES")
                             && route.invoke(null, true, "app.overlay").toString().equals("HARDWARE"),
                             "ordinary Zephyr menu ignores selected config file; explicit context popup deep-links");
+                    var routeEnum = java.util.Arrays.stream(handlerType.getDeclaredClasses())
+                            .filter(c -> c.getSimpleName().equals("Entry"))
+                            .findFirst().orElseThrow();
+                    var target = handlerType.getDeclaredMethod("targetViewId", routeEnum);
+                    var section = handlerType.getDeclaredMethod("initialSection", routeEnum);
+                    target.setAccessible(true);
+                    section.setAccessible(true);
+                    var menuEntry = route.invoke(null, false, "app.overlay");
+                    var overlayEntry = route.invoke(null, true, "app.overlay");
+                    var projectEntry = route.invoke(null, true, "prj.conf");
+                    check(target.invoke(null, menuEntry).equals("io.github.niwantha33.zew.ui.configurationHome")
+                            && target.invoke(null, overlayEntry).equals("io.github.niwantha33.zew.ui.configurationHome")
+                            && target.invoke(null, projectEntry).equals("io.github.niwantha33.zew.ui.configurationHome")
+                            && section.invoke(null, menuEntry).equals("overview")
+                            && section.invoke(null, overlayEntry).equals("hardware")
+                            && section.invoke(null, projectEntry).equals("system"),
+                            "menu and explicit file context all target ONE three-section Studio");
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
                             studioTabs.getItem(0).getControl();
                     var beginnerBody = (org.eclipse.swt.widgets.Composite)

@@ -333,8 +333,25 @@ public final class ConfigurationHomeView extends ViewPart {
         return t;
     }
 
+    public void displayMissingProject() {
+        project = null;
+        evidence = null;
+        detail = null;
+        generation.incrementAndGet();
+        detailGeneration.incrementAndGet();
+        if (refreshJob != null) refreshJob.cancel();
+        if (detailJob != null) detailJob.cancel();
+        setPartName("Zephyr Configuration Studio");
+        clear("No Zephyr project selected. Select a project in Project Explorer, "
+                + "then choose Refresh here. No hardware data is available until "
+                + "the selected board/profile has generated a build.");
+    }
+
     public void displayProject(IProject selected) {
-        if (selected == null || !selected.isAccessible()) return;
+        if (selected == null || !selected.isAccessible()) {
+            displayMissingProject();
+            return;
+        }
         project = selected;
         setPartName("Configuration — " + selected.getName());
         primary.setSelection(OVERVIEW);
@@ -356,6 +373,29 @@ public final class ConfigurationHomeView extends ViewPart {
     /** All file/project IO is off the SWT event thread. */
     private void refresh() {
         if (header == null || header.isDisposed()) return;
+        // Refresh after choosing a project must work without closing and
+        // reopening the view. Discovery from the Eclipse selection is cheap;
+        // all build-file inspection runs in a background Job.
+        if (project == null || !project.isAccessible()) {
+            // The Studio can be the active part while the selected project
+            // still belongs to Project Explorer. Retrieve that view's saved
+            // selection instead of relying on the active page selection.
+            var selection = getSite().getWorkbenchWindow().getSelectionService()
+                    .getSelection("org.eclipse.ui.navigator.ProjectExplorer");
+            if (!(selection instanceof org.eclipse.jface.viewers.IStructuredSelection)
+                    || ((org.eclipse.jface.viewers.IStructuredSelection) selection).size() != 1)
+                selection = getSite().getPage().getSelection();
+            if (selection instanceof org.eclipse.jface.viewers.IStructuredSelection items
+                    && items.size() == 1) {
+                var chosen = SelectedProject.fromObject(items.getFirstElement());
+                if (chosen != null && ZephyrProjectLifecycle.canInspect(chosen)) {
+                    displayProject(chosen);
+                    return;
+                }
+            }
+            displayMissingProject();
+            return;
+        }
         int ticket = generation.incrementAndGet();
         if (refreshJob != null) refreshJob.cancel();
         IProject selected = project;

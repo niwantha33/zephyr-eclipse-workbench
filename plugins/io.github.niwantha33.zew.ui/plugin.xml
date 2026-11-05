@@ -139,7 +139,7 @@
     <view id="io.github.niwantha33.zew.ui.configurationStudio"
           name="Zephyr Advanced Configuration Studio"
           class="io.github.niwantha33.zew.ui.ConfigurationStudioView"
-          restorable="true"/>
+          restorable="false"/>
   </extension>
   <extension point="org.eclipse.ui.perspectiveExtensions">
     <perspectiveExtension targetID="org.eclipse.debug.ui.DebugPerspective">
@@ -245,7 +245,7 @@
         </menu>
         <menu id="io.github.niwantha33.zew.menu.build" label="Configure &amp; Build">
           <command commandId="io.github.niwantha33.zew.investigateBuildFailure" label="Investigate Build Failure…" style="push"/>
-          <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio (Kconfig / Devicetree)..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio..." style="push"/>
           <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
           <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
           <command commandId="io.github.niwantha33.zew.rebuild" label="Pristine Rebuild" style="push"/>
