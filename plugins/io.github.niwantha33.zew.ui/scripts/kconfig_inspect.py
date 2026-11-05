@@ -119,7 +119,9 @@ def causality(conf, library, name, max_nodes=512):
         for attribute in ("direct_dep", "rev_dep", "weak_rev_dep"):
             expression = getattr(symbol, attribute)
             relations.append((attribute, expression))
-        for index, (value, condition) in enumerate(symbol.defaults):
+        for index, entry in enumerate(symbol.defaults):
+            # Zephyr adds a source-location third field; upstream may have two.
+            value, condition = entry[:2]
             relations.extend([(f"default[{index}].value", value),
                               (f"default[{index}].condition", condition)])
         for index, node in enumerate(symbol.nodes):
@@ -153,6 +155,11 @@ def causality(conf, library, name, max_nodes=512):
             "assignment_origin": "unknown: .config does not preserve fragment precedence",
             "nodes": [nodes[key] for key in sorted(nodes)],
             "edges": [{"from": a, "kind": b, "to": c} for a, b, c in sorted(edges)]}
+
+
+def reverse_dependencies(properties, library):
+    """Render Kconfig selects/implies with optional upstream source locations."""
+    return [f"{entry[0].name} if {library.expr_str(entry[1])}" for entry in properties]
 
 
 def inspect(build, ninja, name, graph_json=False):
@@ -207,10 +214,8 @@ def inspect(build, ninja, name, graph_json=False):
         prompts = [node.prompt[0] for node in symbol.nodes if node.prompt]
         help_text = next((node.help.strip() for node in symbol.nodes if node.help), "")
         definitions = [f"{node.filename}:{node.linenr}" for node in symbol.nodes]
-        selects = [f"{target.name} if {kconfiglib.expr_str(condition)}"
-                   for target, condition in symbol.selects]
-        implies = [f"{target.name} if {kconfiglib.expr_str(condition)}"
-                   for target, condition in symbol.implies]
+        selects = reverse_dependencies(symbol.selects, kconfiglib)
+        implies = reverse_dependencies(symbol.implies, kconfiglib)
         graph = causality(conf, kconfiglib, name) if hasattr(kconfiglib, "Symbol") else None
         if graph is not None:
             lines = ["Transitive Kconfig expressions (" + graph["coverage"] + "):"]
