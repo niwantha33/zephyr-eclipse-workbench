@@ -45,9 +45,12 @@ public final class FocusedConfigurationModel {
         List<DevicetreeHardware.Device> devices = DevicetreeHardware.inspect(dts);
         List<Row> rows = new ArrayList<>();
         List<Issue> issues = new ArrayList<>();
-        for (String category : COMMON) {
+        // The common six remain visible for onboarding even on an empty build.
+        // Every OTHER supported index category appears when real built-DTS
+        // nodes exist, including vendor-specific compatible-bearing devices.
+        for (String category : PeripheralWorkflow.overviewCategories(devices)) {
             var matches = devices.stream()
-                    .filter(d -> category.equals(HardwarePeripheralIndex.category(d))).toList();
+                    .filter(d -> PeripheralWorkflow.selectable(d, category)).toList();
             if (matches.isEmpty()) {
                 String why = dts.isBlank() ? "No generated board description yet."
                         : "Not described by the selected built Devicetree; silicon support is unknown.";
@@ -71,8 +74,9 @@ public final class FocusedConfigurationModel {
                 continue;
             }
             var selected = enabled.get(0);
-            boolean driverRequested = config.lines().anyMatch(
-                    line -> line.equals("CONFIG_" + DRIVER.get(category) + "=y"));
+            String driverSymbol = DRIVER.get(category);
+            boolean driverRequested = driverSymbol != null && config.lines().anyMatch(
+                    line -> line.equals("CONFIG_" + driverSymbol + "=y"));
             var guide = PeripheralStartGuide.inspect(dts, category, selected.path(), config, stale);
             if (category.equals("ADC") && driverRequested
                     && guide.state() == PeripheralStartGuide.State.ADC_WIRING_FOUND) {
@@ -82,10 +86,12 @@ public final class FocusedConfigurationModel {
             } else {
                 rows.add(new Row(category, State.SETUP_INCOMPLETE, selected.path(),
                         category.equals("ADC") ? guide.explanation()
-                                : "Controller described and enabled in DTS. Driver, consumer and physical wiring not fully verified.",
-                        category.equals("ADC")
-                                ? "Open the ADC controller → pin/channel → settings → review guide."
-                                : "Open the matching peripheral guide and inspect its binding and board wiring."));
+                                : "Controller described and enabled in the selected generated DTS. "
+                                        + "Consumer, driver and physical connectivity are not all verified. "
+                                        + guide.explanation(),
+                        "Open " + category + " → "
+                                + PeripheralWorkflow.forCategory(category).connectionTitle()
+                                + " → settings → review with generated evidence."));
             }
         }
         if (freshness == Freshness.NO_BUILD) {
@@ -98,9 +104,13 @@ public final class FocusedConfigurationModel {
                     "Rebuild before treating last-build values as current.", ""));
         }
         for (Row row : rows) if (row.state() == State.SETUP_INCOMPLETE
-                || row.state() == State.DISABLED)
+                || row.state() == State.DISABLED) {
+            // Overview must stay compact even for an SoC with many blocks.
+            // Every peripheral remains available in Hardware.
+            if (issues.size() >= 8) break;
             issues.add(new Issue(row.category() + ": " + display(row.state()),
                     row.explanation(), row.nextAction(), row.category()));
+        }
         var memory = DevicetreeMemoryMap.inspect(dts).regions();
         return new Overview(freshness, board == null ? "Not selected" : board,
                 profile == null ? "default" : profile,
