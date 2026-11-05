@@ -38,6 +38,12 @@ public final class DevicetreeAssistTests {
         var snapshot = sample();
         var starter = DevicetreeAssist.suggest("", 0, snapshot);
         check(starter.suggestions().size() == 5, "Five simple starting actions");
+        String bareRoot = "/* Application hardware overlay */\n{";
+        var repair = DevicetreeAssist.suggest(bareRoot, bareRoot.length(), snapshot);
+        check(repair.start() == bareRoot.length() - 1 && repair.length() == 1
+                && repair.suggestions().stream().anyMatch(p -> p.replacement().equals("/ {")),
+                "Bare root offers a targeted one-character repair");
+
         String commentedOverlay = "/* Application hardware overlay. Validate against this board's bindings. */\n";
         check(DevicetreeAssist.suggest(commentedOverlay, commentedOverlay.length(), snapshot)
                 .suggestions().size() == 5, "Starter actions after Configuration Studio header");
