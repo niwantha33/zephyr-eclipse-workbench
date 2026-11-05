@@ -95,6 +95,9 @@ public final class DevicetreeOverlaySupport {
         var inventory = DevicetreeSourceExplorer.inspect(app, build);
         List<Path> sources = inventory.sources().stream().filter(DevicetreeSourceExplorer.Source::buildInput)
                 .map(DevicetreeSourceExplorer.Source::path).toList();
+        if (sources.isEmpty())
+            return empty("unverified",
+                    "Dependency file has no readable DTS inputs. Reconfigure this exact build before verifying overlays.", build);
         List<Path> overlays = inventory.sources().stream()
                 .filter(s -> s.buildInput() && s.path().getFileName().toString().endsWith(".overlay"))
                 .map(DevicetreeSourceExplorer.Source::path).toList();
@@ -117,6 +120,8 @@ public final class DevicetreeOverlaySupport {
             return new Metadata(List.of(), List.of(), "build_info.yml is missing; dependency evidence remains authoritative.");
         try {
             String text = bounded(file);
+            if (!text.contains("devicetree:"))
+                throw new IOException("Missing devicetree metadata section");
             List<Path> includes = new ArrayList<>(), bindings = new ArrayList<>();
             String key = "";
             int items = 0;
@@ -211,7 +216,8 @@ public final class DevicetreeOverlaySupport {
     }
     private static String signature(Path file) throws IOException {
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(file)) return "missing";
-        return Files.size(file) + ":" + Files.getLastModifiedTime(file).toMillis();
+        return Files.size(file) + ":" + Files.getLastModifiedTime(file)
+                .to(java.util.concurrent.TimeUnit.NANOSECONDS);
     }
     private static Context empty(String state, String message, Path build) {
         return new Context(state, message, build, null, List.of(), List.of(), List.of(), List.of());
