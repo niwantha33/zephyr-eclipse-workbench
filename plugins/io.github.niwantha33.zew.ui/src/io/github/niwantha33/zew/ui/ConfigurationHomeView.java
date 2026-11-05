@@ -32,6 +32,7 @@ import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.ConfigurationStudioDiagnostics;
+import io.github.niwantha33.zew.core.StudioEvidenceInspector;
 import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 import io.github.niwantha33.zew.core.ConfigurationFailureEvidence;
 import io.github.niwantha33.zew.core.KconfigTraceEvidence;
@@ -307,6 +308,7 @@ public final class ConfigurationHomeView extends ViewPart {
         button(lower, "Kconfig & prj.conf", () -> advanced("software"));
         button(lower, "RTOS & tracing", () -> advanced("rtos"));
         button(lower, "Devicetree & bindings", () -> advanced("sources"));
+        button(lower, "Evaluate transitive Kconfig", this::evaluateTransitiveKconfig);
         new Label(systemAdvanced, SWT.NONE).setText("Zephyr Kconfig origin trace — optional, read-only");
         var origin = bar(systemAdvanced, 2);
         kconfigOriginSymbol = new Text(origin, SWT.BORDER | SWT.SEARCH);
@@ -569,6 +571,63 @@ public final class ConfigurationHomeView extends ViewPart {
             }
         };
         refreshJob.setSystem(true); refreshJob.schedule();
+    }
+
+    private void evaluateTransitiveKconfig() {
+        final IProject selected = project;
+        final Evidence snapshot = evidence;
+        if (selected == null || !selected.isAccessible() || snapshot == null || snapshot.build() == null) {
+            buildDetails.setText("Select a project and Refresh first. A configured Ninja build is needed for upstream Kconfig evaluation.");
+            return;
+        }
+        if (hasDirtyProjectEditor()) {
+            buildDetails.setText("Save or discard unsaved project source edits first. The evaluator reads saved prj.conf and the selected generated build.");
+            return;
+        }
+        if (diagnosisJob != null) diagnosisJob.cancel();
+        final int ticket = diagnosisGeneration.incrementAndGet();
+        final var display = primary.getDisplay();
+        primary.setSelection(BUILD);
+        buildDetails.setText("Evaluating saved source requests with this build's upstream Kconfiglib…");
+        diagnosisJob = new Job("Evaluate selected build transitive Kconfig evidence") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                String text;
+                var resources = new java.util.LinkedHashMap<String, java.io.InputStream>();
+                try {
+                    resources.put("studio.py", ConfigurationHomeView.class.getResourceAsStream("/scripts/studio.py"));
+                    var entries = Activator.getDefault().getBundle().findEntries("/scripts/zew_evidence", "*.py", false);
+                    if (entries != null) while (entries.hasMoreElements()) {
+                        var entry = entries.nextElement();
+                        String name = entry.getPath().substring(entry.getPath().lastIndexOf('/') + 1);
+                        resources.put("zew_evidence/" + name, entry.openStream());
+                    }
+                    text = StudioEvidenceInspector.kconfig(
+                            Path.of(snapshot.setup().getProperty("python", "")),
+                            Path.of(snapshot.setup().getProperty("tools.ninja", "")), snapshot.build(),
+                            selected.getLocation().toFile().toPath().resolve("prj.conf"),
+                            resources, ProjectContext.environment(snapshot.setup()), monitor::isCanceled).display();
+                } catch (Exception failure) {
+                    if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+                    text = monitor.isCanceled() ? "Kconfig evaluation cancelled. No source was changed."
+                            : "Kconfig evaluation unavailable. Check the selected environment, configured Ninja build "
+                                + "and packaged Studio CLI; refresh and retry. No dependency cause is inferred.";
+                    var plugin = Activator.getDefault();
+                    if (plugin != null && !monitor.isCanceled()) plugin.getLog().log(
+                            new Status(IStatus.WARNING, Activator.ID, "Studio upstream Kconfig evaluation unavailable", failure));
+                } finally {
+                    for (var stream : resources.values()) if (stream != null)
+                        try { stream.close(); } catch (java.io.IOException ignored) { }
+                }
+                final String result = text;
+                post(display, () -> {
+                    if (ticket == diagnosisGeneration.get() && project == selected && evidence == snapshot
+                            && buildDetails != null && !buildDetails.isDisposed()) buildDetails.setText(result);
+                });
+                return monitor.isCanceled() ? Status.CANCEL_STATUS : Status.OK_STATUS;
+            }
+        };
+        diagnosisJob.setUser(true);
+        diagnosisJob.schedule();
     }
 
     /** Existing three-section entrypoint; diagnosis never opens a competing studio. */
