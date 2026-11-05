@@ -63,10 +63,16 @@ public final class ConfigurationHomeView extends ViewPart {
     private Label breadcrumb, guideState;
     private Text[] pageText;
     private Button previous, next, validateApply, example;
+    private Composite hardwareAdvanced, systemAdvanced;
+    private Button showHardwareAdvanced, showSystemAdvanced;
     private Text buildDetails;
 
     @Override public void createPartControl(Composite parent) {
-        parent.setLayout(new GridLayout(1, false));
+        var shellLayout = new GridLayout(1, false);
+        shellLayout.marginWidth = 14;
+        shellLayout.marginHeight = 12;
+        shellLayout.verticalSpacing = 10;
+        parent.setLayout(shellLayout);
         var heading = bar(parent, 3);
         var title = new Composite(heading, SWT.NONE);
         title.setLayoutData(fillWidth());
@@ -92,7 +98,11 @@ public final class ConfigurationHomeView extends ViewPart {
         var tab = new TabItem(primary, SWT.NONE);
         tab.setText(text);
         var content = new Composite(primary, SWT.NONE);
-        content.setLayout(new GridLayout(1, false));
+        var layout = new GridLayout(1, false);
+        layout.marginWidth = 14;
+        layout.marginHeight = 12;
+        layout.verticalSpacing = 10;
+        content.setLayout(layout);
         tab.setControl(content);
         return content;
     }
@@ -169,12 +179,23 @@ public final class ConfigurationHomeView extends ViewPart {
         previous = button(nav, "Back", () -> { step = Math.max(0, step - 1); renderGuide(); });
         next = button(nav, "Next", () -> { step = Math.min(3, step + 1); renderGuide(); });
         validateApply = button(nav, "Preview / validate / apply…", () -> advanced("review"));
+        // Advanced viewers are available on demand; do not crowd every
+        // focused beginner step with five unrelated tool buttons.
+        showHardwareAdvanced = button(root, "Show advanced hardware tools", () -> {
+            boolean visible = !hardwareAdvanced.getVisible();
+            setPanelVisible(hardwareAdvanced, visible);
+            showHardwareAdvanced.setText(visible
+                    ? "Hide advanced hardware tools" : "Show advanced hardware tools");
+            root.layout(true, true);
+        });
         var tools = bar(root, 5);
+        hardwareAdvanced = tools;
         button(tools, "Chip & pins", () -> advanced("pins"));
         button(tools, "Memory map", this::memoryMap);
         button(tools, "Devicetree sources", () -> advanced("sources"));
         button(tools, "Binding & evidence", () -> advanced("guide"));
         example = button(tools, "Verified C example", () -> advanced("guide"));
+        setPanelVisible(hardwareAdvanced, false);
         renderGuide();
     }
 
@@ -187,12 +208,26 @@ public final class ConfigurationHomeView extends ViewPart {
         button(actions, "Build & validate", () -> advanced("build"));
         button(actions, "Project settings & profiles", () -> advanced("settings"));
         button(actions, "Inspect build evidence", () -> advanced("evidence"));
-        new Label(root, SWT.NONE).setText("Advanced system settings");
+        showSystemAdvanced = button(root, "Show advanced system settings", () -> {
+            boolean visible = !systemAdvanced.getVisible();
+            setPanelVisible(systemAdvanced, visible);
+            showSystemAdvanced.setText(visible
+                    ? "Hide advanced system settings" : "Show advanced system settings");
+            root.layout(true, true);
+        });
         var lower = bar(root, 3);
+        systemAdvanced = lower;
         button(lower, "Kconfig & prj.conf", () -> advanced("software"));
         button(lower, "RTOS & tracing", () -> advanced("rtos"));
         button(lower, "Devicetree & bindings", () -> advanced("sources"));
+        setPanelVisible(systemAdvanced, false);
         buildDetails.setText("Select a project to inspect its exact build and Zephyr environment.");
+    }
+
+    private static void setPanelVisible(Composite panel, boolean visible) {
+        if (panel == null || panel.isDisposed()) return;
+        panel.setVisible(visible);
+        if (panel.getLayoutData() instanceof GridData data) data.exclude = !visible;
     }
 
     private static GridData fillWidth() { return new GridData(SWT.FILL, SWT.CENTER, true, false); }
@@ -320,6 +355,11 @@ public final class ConfigurationHomeView extends ViewPart {
             case STALE_SNAPSHOT -> "Build data STALE";
             case CURRENT_SNAPSHOT -> "Last generated build available";
         });
+        freshness.setForeground(freshness.getDisplay().getSystemColor(
+                summary.freshness() == FocusedConfigurationModel.Freshness.CURRENT_SNAPSHOT
+                ? SWT.COLOR_DARK_GREEN : summary.freshness()
+                == FocusedConfigurationModel.Freshness.STALE_SNAPSHOT
+                ? SWT.COLOR_DARK_YELLOW : SWT.COLOR_DARK_RED));
         overviewInfo.setText("States describe generated configuration, NOT runtime use."
                 + " Capacities are not memory usage."
                 + (found.warning().isBlank() ? "" : "\n" + found.warning()));
@@ -332,6 +372,14 @@ public final class ConfigurationHomeView extends ViewPart {
             var item = new TableItem(peripheralRows, SWT.NONE);
             item.setText(new String[]{row.category(),
                     FocusedConfigurationModel.display(row.state()), row.nextAction()});
+            item.setForeground(1, peripheralRows.getDisplay().getSystemColor(
+                    switch (row.state()) {
+                        case CONFIGURED -> SWT.COLOR_DARK_GREEN;
+                        case DISABLED, SETUP_INCOMPLETE -> SWT.COLOR_DARK_YELLOW;
+                        case UNSUPPORTED -> SWT.COLOR_DARK_RED;
+                        case UNKNOWN -> SWT.COLOR_DARK_GRAY;
+                    }));
+            item.setToolTipText(row.explanation());
             item.setData(row);
         }
         issueRows.removeAll();
@@ -478,8 +526,15 @@ public final class ConfigurationHomeView extends ViewPart {
         stepHost.layout(true, true);
         previous.setEnabled(step > 0);
         next.setEnabled(step < 3);
-        validateApply.setVisible(step == 3);
-        validateApply.setEnabled(step == 3 && d != null && !d.stale()
+        boolean reviewing = step == 3;
+        validateApply.setVisible(reviewing);
+        if (validateApply.getLayoutData() instanceof GridData layout)
+            layout.exclude = !reviewing;
+        next.setVisible(!reviewing);
+        if (next.getLayoutData() instanceof GridData layout)
+            layout.exclude = reviewing;
+        next.getParent().layout(true, true);
+        validateApply.setEnabled(reviewing && d != null && !d.stale()
                 && !controllerPath.isBlank());
         example.setEnabled(FocusedConfigurationModel.canOfferAdcCode(g,
                 d == null || d.stale(), d == null ? "" : d.config()));
