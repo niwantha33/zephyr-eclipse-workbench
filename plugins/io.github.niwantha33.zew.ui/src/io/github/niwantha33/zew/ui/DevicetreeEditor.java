@@ -2,6 +2,16 @@
 package io.github.niwantha33.zew.ui;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.util.regex.Pattern;
+import org.eclipse.core.filesystem.EFS;
+import org.eclipse.jface.text.contentassist.*;
+import org.eclipse.jface.text.hyperlink.*;
+import org.eclipse.ui.ide.IDE;
+import org.eclipse.ui.texteditor.ITextEditor;
+import io.github.niwantha33.zew.core.DevicetreeOverlaySupport;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import org.eclipse.core.resources.IFile;
@@ -27,6 +37,7 @@ public final class DevicetreeEditor extends TextEditor {
     private volatile DevicetreeIndex.Snapshot snapshot =
             DevicetreeIndex.empty("loading", "Indexing the selected Zephyr project…");
     private Job indexJob;
+    private volatile DevicetreeOverlaySupport.Context overlayContext;
     private Job diagnosticJob;
     private final AtomicLong diagnosticGeneration = new AtomicLong();
     private final Map<Annotation, Position> shownDiagnostics = new LinkedHashMap<>();
@@ -58,7 +69,14 @@ public final class DevicetreeEditor extends TextEditor {
         diagnosticJob = new Job("Inspect unsaved Devicetree syntax") {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
-                var findings = DevicetreeEditorDiagnostics.inspect(text, evidence, overlay);
+                var findings = new ArrayList<>(DevicetreeEditorDiagnostics.inspect(text, evidence, overlay));
+                var context = overlayContext;
+                if (overlay && context != null && context.verified()
+                        && getEditorInput() instanceof IFileEditorInput input
+                        && !context.active(input.getFile().getLocation().toFile().toPath())) {
+                    findings.add(new DevicetreeEditorDiagnostics.Problem(0, Math.min(1, text.length()),
+                            "warning", context.explanation(input.getFile().getLocation().toFile().toPath())));
+                }
                 if (monitor.isCanceled() || ticket != diagnosticGeneration.get())
                     return Status.CANCEL_STATUS;
                 Display.getDefault().asyncExec(() -> {
@@ -81,9 +99,11 @@ public final class DevicetreeEditor extends TextEditor {
         // Silence advisory hints. Keep actual errors visible as annotations,
         // but do not create completions or show text/annotation hover popups.
         for (var problem : findings) {
-            if (!"error".equals(problem.severity())) continue;
-            Annotation annotation = new Annotation(
-                    "org.eclipse.ui.workbench.texteditor.error", false, problem.message());
+            if (!"error".equals(problem.severity()) && !"warning".equals(problem.severity())) continue;
+            String type = "error".equals(problem.severity())
+                    ? "org.eclipse.ui.workbench.texteditor.error"
+                    : "org.eclipse.ui.workbench.texteditor.warning";
+            Annotation annotation = new Annotation(type, false, problem.message());
             next.put(annotation, new Position(problem.offset(), problem.length()));
         }
         if (model instanceof IAnnotationModelExtension extension) {
@@ -121,8 +141,10 @@ public final class DevicetreeEditor extends TextEditor {
                                 Activator.getDefault().getBundle().getEntry("scripts/dt_editor_index.py")).toURI());
                         var result = DevicetreeIndex.load(Path.of(settings.getProperty("python")),
                                 script, zephyr, application, build);
+                        var context = DevicetreeOverlaySupport.inspect(application, build, zephyr);
                         if (!monitor.isCanceled()) {
                             snapshot = result;
+                            overlayContext = context;
                             Display.getDefault().asyncExec(() -> {
                                 if (!disposed) queueDiagnostics();
                             });
@@ -157,13 +179,50 @@ public final class DevicetreeEditor extends TextEditor {
         Configuration(DevicetreeEditor editor) { this.editor = editor; }
         // No auto completion, Ctrl+Space proposals, context information or
         // pop-up hints. Typing and syntax colouring stay fully functional.
-        @Override public org.eclipse.jface.text.contentassist.IContentAssistant getContentAssistant(
-                ISourceViewer sourceViewer) { return null; }
+        @Override public IContentAssistant getContentAssistant(ISourceViewer sourceViewer) {
+            if (!editor.preference("completion")) return null;
+            var assistant = new ContentAssistant();
+            assistant.setContentAssistProcessor(new Processor(editor), IDocument.DEFAULT_CONTENT_TYPE);
+            // Completion is explicitly requested with Ctrl+Space; typing does
+            // not cause pop-ups even if a project opts into completion.
+            assistant.enableAutoActivation(false);
+            return assistant;
+        }
         @Override public ITextHover getTextHover(ISourceViewer sourceViewer, String contentType) {
-            return null;
+            if (!editor.preference("hover")) return null;
+            return new ITextHover() {
+                @Override public IRegion getHoverRegion(ITextViewer viewer, int offset) {
+                    try {
+                        var text = viewer.getDocument();
+                        int start = offset;
+                        while (start > 0 && word(text.getChar(start - 1))) start--;
+                        int end = offset;
+                        while (end < text.getLength() && word(text.getChar(end))) end++;
+                        return new Region(start, end - start);
+                    } catch (BadLocationException invalid) { return new Region(offset, 0); }
+                }
+                @Override public String getHoverInfo(ITextViewer viewer, IRegion region) {
+                    try {
+                        String name = viewer.getDocument().get(region.getOffset(), region.getLength());
+                        if (region.getOffset() > 0 && viewer.getDocument().getChar(region.getOffset() - 1) == '&') {
+                            var node = editor.snapshot.label(name);
+                            if (node != null) return "Generated node: " + node.path()
+                                    + "\\nStatus: " + node.status() + "\\nCompatible: " + node.compatible()
+                                    + "\\nLast selected build; not a runtime hardware state.";
+                        }
+                        return null;
+                    } catch (BadLocationException invalid) { return null; }
+                }
+            };
         }
         @Override public IAnnotationHover getAnnotationHover(ISourceViewer sourceViewer) {
-            return null;
+            return null; // No unsolicited annotation hints or hover pop-ups.
+        }
+        @Override public IHyperlinkDetector[] getHyperlinkDetectors(ISourceViewer sourceViewer) {
+            return new IHyperlinkDetector[] { new DefinitionLinks(editor) };
+        }
+        private static boolean word(char c) {
+            return Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == ',';
         }
         @Override public IPresentationReconciler getPresentationReconciler(ISourceViewer sourceViewer) {
             Color comment = Display.getDefault().getSystemColor(SWT.COLOR_DARK_GREEN);
@@ -209,6 +268,113 @@ public final class DevicetreeEditor extends TextEditor {
         }
 
     }
+
+    // Project-owned, explicit editor settings. Existing projects remain
+    // silent: both switches default to false and no global settings change.
+    private boolean preference(String name) {
+        if (!(getEditorInput() instanceof IFileEditorInput input)) return false;
+        Path prefs = input.getFile().getProject().getLocation().toFile().toPath()
+                .resolve(".zew/devicetree-editor.properties");
+        if (!Files.isRegularFile(prefs) || Files.isSymbolicLink(prefs)) return false;
+        try {
+            var properties = new Properties();
+            try (var reader = Files.newBufferedReader(prefs, StandardCharsets.UTF_8)) {
+                properties.load(reader);
+            }
+            return "true".equals(properties.getProperty(name, "false").strip());
+        } catch (Exception invalid) { return false; }
+    }
+
+    private static final class Processor implements IContentAssistProcessor {
+        private final DevicetreeEditor editor;
+        Processor(DevicetreeEditor editor) { this.editor = editor; }
+        @Override public ICompletionProposal[] computeCompletionProposals(ITextViewer viewer, int offset) {
+            var result = DevicetreeAssist.suggest(viewer.getDocument().get(), offset, editor.snapshot);
+            var proposals = new ArrayList<ICompletionProposal>();
+            for (var entry : result.suggestions())
+                proposals.add(new CompletionProposal(entry.replacement(), result.start(),
+                        result.length(), entry.replacement().length(), null,
+                        entry.label(), null, entry.help()));
+            return proposals.toArray(ICompletionProposal[]::new);
+        }
+        @Override public IContextInformation[] computeContextInformation(ITextViewer viewer, int offset) {
+            return new IContextInformation[0];
+        }
+        @Override public char[] getCompletionProposalAutoActivationCharacters() { return null; }
+        @Override public char[] getContextInformationAutoActivationCharacters() { return null; }
+        @Override public String getErrorMessage() { return null; }
+        @Override public IContextInformationValidator getContextInformationValidator() { return null; }
+    }
+
+    /** Ctrl+click from &label to its verified base/include declaration. */
+    private static final class DefinitionLinks implements IHyperlinkDetector {
+        private final DevicetreeEditor editor;
+        DefinitionLinks(DevicetreeEditor editor) { this.editor = editor; }
+        @Override public IHyperlink[] detectHyperlinks(ITextViewer viewer, IRegion region,
+                boolean canShowMultipleHyperlinks) {
+            var snapshot = editor.snapshot;
+            if (!snapshot.built()) return null;
+            try {
+                IDocument text = viewer.getDocument();
+                int offset = Math.max(0, Math.min(region.getOffset(), text.getLength()));
+                int start = offset;
+                while (start > 0 && Character.isLetterOrDigit(text.getChar(start - 1))
+                        || start > 0 && text.getChar(start - 1) == '_') start--;
+                int end = offset;
+                while (end < text.getLength() && (Character.isLetterOrDigit(text.getChar(end))
+                        || text.getChar(end) == '_')) end++;
+                if (start == 0 || start >= end || text.getChar(start - 1) != '&') return null;
+                String label = text.get(start, end - start);
+                var node = snapshot.label(label);
+                if (node == null) return null;
+                IRegion selected = new Region(start - 1, end - start + 1);
+                return new IHyperlink[] { new IHyperlink() {
+                    @Override public IRegion getHyperlinkRegion() { return selected; }
+                    @Override public String getTypeLabel() { return "Zephyr Devicetree"; }
+                    @Override public String getHyperlinkText() {
+                        return "Open built node declaration: " + node.path();
+                    }
+                    @Override public void open() { editor.openDefinition(label, node); }
+                }};
+            } catch (BadLocationException invalid) { return null; }
+        }
+    }
+
+    private void openDefinition(String label, DevicetreeIndex.Node node) {
+        try {
+            Path source = snapshot.dts();
+            int line = Math.max(1, node.line());
+            var context = overlayContext;
+            if (context != null && context.verified()) {
+                var definition = Pattern.compile("(?m)^\\\\s*"
+                        + Pattern.quote(label) + "\\\\s*:\\\\s*[^\\\\s{]+\\\\s*\\\\{");
+                for (Path candidate : context.sourceFiles()) {
+                    if (!Files.isRegularFile(candidate) || Files.isSymbolicLink(candidate)
+                            || Files.size(candidate) > 2_000_000) continue;
+                    String sourceText = Files.readString(candidate, StandardCharsets.UTF_8);
+                    var match = definition.matcher(sourceText);
+                    if (!match.find()) continue;
+                    source = candidate;
+                    line = 1 + (int) sourceText.substring(0, match.start()).chars()
+                            .filter(ch -> ch == '\\n').count();
+                    break;
+                }
+            }
+            if (source == null || !Files.isRegularFile(source)) return;
+            var part = IDE.openEditorOnFileStore(getSite().getPage(),
+                    EFS.getLocalFileSystem().getStore(source.toUri()));
+            if (part instanceof ITextEditor textEditor) {
+                var document = textEditor.getDocumentProvider()
+                        .getDocument(textEditor.getEditorInput());
+                if (document != null && document.getNumberOfLines() > 0)
+                    textEditor.selectAndReveal(document.getLineOffset(
+                            Math.min(Math.max(0, line - 1), document.getNumberOfLines() - 1)), 0);
+            }
+        } catch (Exception failure) {
+            // Broken/stale source data must never fabricate a destination.
+        }
+    }
+
     /**
      * Bracket colours come from balanced nesting in the actual document, not
      * a guessed board/binding. A full lexical pass is necessary so repainting
