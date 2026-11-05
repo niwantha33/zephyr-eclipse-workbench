@@ -32,6 +32,20 @@ final class DevicetreeAssist {
                     "Type & then Ctrl+Space to inspect labels and status in the selected generated DTS."));
             return new Result(0, 0, List.copyOf(start));
         }
+        int pathStart = before.lastIndexOf("&{");
+        if (pathStart >= 0 && before.indexOf('}', pathStart) < 0) {
+            int start = pathStart + 2;
+            String prefixPath = before.substring(start);
+            var paths = new ArrayList<Suggestion>();
+            var seen = new HashSet<String>();
+            for (var node : snapshot.nodes()) {
+                if (node.path().startsWith(prefixPath) && seen.add(node.path()))
+                    paths.add(new Suggestion(node.path(), node.path() + "  [" + node.status() + "]",
+                            "Exact generated node path; snapshot only, not runtime evidence."));
+            }
+            paths.sort(Comparator.comparing(Suggestion::label));
+            return new Result(start, caret - start, List.copyOf(paths));
+        }
         int tokenStart = caret;
         while (tokenStart > 0 && isWord(before.charAt(tokenStart - 1))) tokenStart--;
         String prefix = before.substring(tokenStart);
@@ -68,7 +82,7 @@ final class DevicetreeAssist {
         }
         if (insideString(before)) return new Result(caret, 0, List.of());
         var existing = new HashSet<String>();
-        Matcher present = Pattern.compile("(?m)([#A-Za-z][A-Za-z0-9,._+?#-]*)\\s*(?:=|;)").matcher(before);
+        Matcher present = Pattern.compile("(?m)([#A-Za-z][A-Za-z0-9,._+?#-]*)\\s*(?:=|;)").matcher(before.substring(Math.max(0, before.lastIndexOf('{') + 1)));
         while (present.find()) existing.add(present.group(1));
         var proposals = new ArrayList<Suggestion>();
         if (nodePath != null) for (var property : snapshot.properties(nodePath)) {
@@ -124,8 +138,9 @@ final class DevicetreeAssist {
         into.add(new Suggestion(quoted ? value : "\"" + value + "\"", value, help));
     }
     private static String enclosingNodePath(String before, DevicetreeIndex.Snapshot snapshot) {
-        // For an overlay, &label { is an override of an existing full DTS node.
-        int lastOpen = -1, depth = 0;
+        // Walk braces while ignoring comments and strings. Never reuse a parent's
+        // binding for an unknown child node: better no suggestions than wrong ones.
+        var opens = new ArrayDeque<Integer>();
         boolean quote = false, block = false, line = false, escape = false;
         for (int i = 0; i < before.length(); i++) {
             char c = before.charAt(i), n = i + 1 < before.length() ? before.charAt(i + 1) : 0;
@@ -135,21 +150,21 @@ final class DevicetreeAssist {
             if (c == '/' && n == '*') { block = true; i++; continue; }
             if (c == '/' && n == '/') { line = true; i++; continue; }
             if (c == '"') { quote = true; continue; }
-            if (c == '{') { depth++; lastOpen = i; }
-            if (c == '}') { depth = Math.max(0, depth - 1); if (depth == 0) lastOpen = -1; }
+            if (c == '{') opens.push(i);
+            else if (c == '}' && !opens.isEmpty()) opens.pop();
         }
-        if (lastOpen < 0) return null;
-        String header = before.substring(Math.max(0, before.lastIndexOf(';', lastOpen) + 1), lastOpen);
+        if (opens.isEmpty()) return null;
+        int opening = opens.peek();
+        int boundary = Math.max(before.lastIndexOf(';', opening - 1),
+                                before.lastIndexOf('{', opening - 1));
+        String header = before.substring(boundary + 1, opening).trim();
         Matcher label = REFERENCE_NODE.matcher(header + "{");
-        String result = null;
-        while (label.find()) {
+        if (label.matches()) {
             var node = snapshot.label(label.group(1));
-            result = node == null ? null : node.path();
+            return node == null ? null : node.path();
         }
-        if (result != null) return result;
         Matcher path = REFERENCE_PATH.matcher(header + "{");
-        while (path.find()) result = path.group(1);
-        return result;
+        return path.matches() ? path.group(1) : null;
     }
     private static boolean isWord(char c) {
         return Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == ',' || c == '.' || c == '#';
