@@ -44,6 +44,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'BuildFailureInvestigatorTests'],
 subprocess.run([tool('java'), '-cp', str(out), 'BuildFailureLogsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationStudioTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationEvidenceReceiptTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationFailureEvidenceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'GuidedOverlaySaveTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DevicetreeSourceTraceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'BeginnerHardwareGuideTests'], check=True, cwd=root, timeout=90)
