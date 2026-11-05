@@ -46,9 +46,10 @@ public final class BuildFailureInvestigationView extends ViewPart {
     @Override public void createPartControl(Composite parent) {
         parent.setLayout(new GridLayout(1, false));
         var controls = new Composite(parent, SWT.NONE);
-        controls.setLayout(new GridLayout(4, false));
+        controls.setLayout(new GridLayout(5, false));
         controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        button(controls, "Investigate saved log…", this::importLog);
+        button(controls, "Show latest failed build", this::displayLastFailure);
+        button(controls, "Import another log…", this::importLog);
         open = button(controls, "Open complete log", this::openLog);
         open.setEnabled(false);
         button(controls, "Copy report", this::copyReport);
@@ -57,7 +58,7 @@ public final class BuildFailureInvestigationView extends ViewPart {
         rebuild.setToolTipText("Run the managed build for this exact project, board and profile with verbose output and one build job.");
         context = new Label(parent, SWT.WRAP);
         context.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        context.setText("Select a Zephyr project and choose Investigate Build Failure, or import a saved build log.");
+        context.setText("Failed builds select their log automatically. Use Show latest failed build to reopen the last failure.");
         reportText = new Text(parent, SWT.MULTI | SWT.READ_ONLY | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
         reportText.setFont(JFaceResources.getTextFont());
         reportText.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -66,12 +67,38 @@ public final class BuildFailureInvestigationView extends ViewPart {
             + "If only Ninja's final failure message is available, use Rebuild with detailed output.\n"
             + "The last Building line is not evidence of which source failed.\n\n"
             + "Saved evidence describes a past attempt. Opening a report does not rebuild or change project settings.");
+        if (!Activator.getDefault().getPreferenceStore().getString(BuildFailureInvestigationHandler.LAST_PROJECT).isBlank())
+            displayLastFailure();
     }
     private Button button(Composite parent, String label, Runnable action) {
         var result = new Button(parent, SWT.PUSH);
         result.setText(label);
         result.addListener(SWT.Selection, event -> action.run());
         return result;
+    }
+    /** Restore only an explicitly recorded failed project/build, never guess a workspace project. */
+    public void displayLastFailure() {
+        clear();
+        var preferences = Activator.getDefault().getPreferenceStore();
+        String name = preferences.getString(BuildFailureInvestigationHandler.LAST_PROJECT);
+        String directory = preferences.getString(BuildFailureInvestigationHandler.LAST_BUILD);
+        if (name.isBlank() || directory.isBlank()) {
+            context.setText("No failed build has been recorded yet. Build your project; its next captured failure selects the log automatically.");
+            return;
+        }
+        try {
+            IProject recorded = org.eclipse.core.resources.ResourcesPlugin.getWorkspace().getRoot().getProject(name);
+            if (!recorded.isAccessible()) {
+                context.setText("The last failed project is closed or unavailable: " + name + ". Select your current project to investigate it.");
+                return;
+            }
+            project = recorded;
+            build = Path.of(directory).toAbsolutePath().normalize();
+            context.setText("Automatically finding the recorded failed build — " + name + " | " + build);
+            load(recorded, build, null);
+        } catch (Exception error) {
+            context.setText("The recorded failed build is unavailable: " + error.getMessage());
+        }
     }
     public void displayProject(IProject selected) {
         clear();
@@ -95,6 +122,7 @@ public final class BuildFailureInvestigationView extends ViewPart {
         project = selected;
         build = directory;
         log = source;
+        BuildFailureInvestigationHandler.rememberFailure(selected, directory);
         context.setText("Recorded failed attempt — " + selected.getName() + " | " + directory);
         reportText.setText("Recorded log: " + source + "\n\n" + report);
         open.setEnabled(Files.isRegularFile(source));

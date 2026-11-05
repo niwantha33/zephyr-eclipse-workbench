@@ -18,15 +18,24 @@ public final class BuildFailureInvestigationHandler extends AbstractHandler {
             IProject selected = SelectedProject.from(event);
             var view = (BuildFailureInvestigationView) HandlerUtil.getActiveWorkbenchWindowChecked(event)
                 .getActivePage().showView(BuildFailureInvestigationView.ID);
-            view.displayProject(selected);
+            if (selected == null) view.displayLastFailure();
+            else view.displayProject(selected);
         } catch (Exception error) { throw new ExecutionException("Could not open build failure investigation.", error); }
         return null;
+    }
+    static final String LAST_PROJECT = "buildFailure.lastProject";
+    static final String LAST_BUILD = "buildFailure.lastBuild";
+    static void rememberFailure(IProject project, Path build) {
+        var preferences = Activator.getDefault().getPreferenceStore();
+        preferences.setValue(LAST_PROJECT, project.getName());
+        preferences.setValue(LAST_BUILD, build.toAbsolutePath().normalize().toString());
     }
     static void showFailure(IProject project, Path build, Path log, String report) {
         if (!PlatformUI.isWorkbenchRunning()) return;
         var display = PlatformUI.getWorkbench().getDisplay();
         display.asyncExec(() -> {
             if (display.isDisposed() || !PlatformUI.isWorkbenchRunning()) return;
+            rememberFailure(project, build);
             var window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
             if (window == null || window.getActivePage() == null) return;
             try {

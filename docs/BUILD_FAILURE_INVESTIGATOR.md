@@ -34,9 +34,17 @@ No source/configuration repairs are made by this investigator.
    board, core and profile, with verbose output and one build job. This is a
    real build, so it runs the project's normal build hooks. It does not perform
    a pristine deletion or change stored configuration.
-5. **Investigate saved log…** analyses an explicitly selected UTF-8 log locally;
+5. **Import another log…** analyses an explicitly selected UTF-8 log locally;
    imported logs have no bound project, so their rebuild control stays disabled.
    **Copy report** copies the displayed findings and provenance.
+
+A failed build remembers its exact project and build directory in workspace
+preferences. Opening the investigator without a selected project (or reopening
+its view) automatically loads that recorded build's latest failed log.
+**Show latest failed build** repeats this lookup without any file picker. A
+closed/deleted project is reported unavailable; the tool never guesses another
+project. An explicitly selected project still scopes the lookup to its active
+build directory. Automatic lookup reads saved evidence and never starts a retry.
 
 Failures are indexed separately by exact build directory. A later successful
 build retains the previous failed attempt, labelled as recorded evidence rather
@@ -86,3 +94,8 @@ unchanged and separately required. Real Windows MSPM0 acceptance remains pending
 
 The detailed rebuild uses upstream West's documented verbosity and build-tool
 options: [Building, Flashing and Debugging](https://docs.zephyrproject.org/latest/develop/west/build-flash-debug.html).
+
+The automatic-selection follow-up passed 35 installed native UI checks against
+package 0.1.21.202611051119, including actual view reopening, missing history,
+closed project and cross-project/profile isolation. Java 21 core and p2 packaging
+also pass; Windows hardware behavior and exact PR-head CI remain separate gates.
