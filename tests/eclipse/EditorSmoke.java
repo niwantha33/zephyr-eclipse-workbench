@@ -696,7 +696,45 @@ public final class EditorSmoke implements IApplication {
                             "native Configuration Studio opens task-first Start here by default");
                     var beginnerPage = (org.eclipse.swt.widgets.Composite)
                             studioTabs.getItem(0).getControl();
-                    var simpleGoals = (org.eclipse.swt.widgets.Composite) beginnerPage.getChildren()[2];
+                    var beginnerBody = (org.eclipse.swt.widgets.Composite)
+                            studioField(view, cls, "beginnerBody");
+                    var scroll = (org.eclipse.swt.custom.ScrolledComposite)
+                            studioField(view, cls, "beginnerScroll");
+                    var canvas = (org.eclipse.swt.widgets.Canvas)
+                            studioField(view, cls, "beginnerFlow");
+                    settleNativeStudioLayout();
+                    check(canvas.getClientArea().width >= 900
+                            && canvas.getClientArea().height >= 300
+                            && scroll.getContent() == beginnerBody,
+                            "colourful configuration flow is actually laid out inside scrollable Start Here");
+                    check(((Integer) canvas.getClass().getMethod("blockCount").invoke(canvas)) == 8,
+                            "eight visual blocks correspond to real workflow tools");
+                    var flowBlock = java.util.Arrays.stream(canvas.getClass().getDeclaredClasses())
+                            .filter(c -> c.getSimpleName().equals("Block"))
+                            .findFirst().orElseThrow();
+                    var boundMethod = canvas.getClass().getMethod("boundsOf", flowBlock);
+                    for (Object block : flowBlock.getEnumConstants()) {
+                        var bounds = (org.eclipse.swt.graphics.Rectangle)
+                                boundMethod.invoke(canvas, block);
+                        check(bounds != null && bounds.width >= 100 && bounds.height >= 95,
+                                "visual flow has real clickable and non-overlapping size for " + block);
+                    }
+                    var softwareBlock = java.util.Arrays.stream(flowBlock.getEnumConstants())
+                            .filter(b -> b.toString().equals("KCONFIG")).findFirst().orElseThrow();
+                    var softwareBounds = (org.eclipse.swt.graphics.Rectangle)
+                            boundMethod.invoke(canvas, softwareBlock);
+                    var flowClick = new org.eclipse.swt.widgets.Event();
+                    flowClick.button = 1;
+                    flowClick.x = softwareBounds.x + softwareBounds.width / 2;
+                    flowClick.y = softwareBounds.y + softwareBounds.height / 2;
+                    canvas.notifyListeners(org.eclipse.swt.SWT.MouseDown, flowClick);
+                    check(studioTabs.getSelectionIndex() == 1,
+                            "clicking coloured Driver options block navigates to actual Kconfig editor");
+                    studioTabs.setSelection(0);
+                    studioTabs.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    settleNativeStudioLayout();
+                    var simpleGoals = (org.eclipse.swt.widgets.Composite) beginnerBody.getChildren()[5];
                     var goals = java.util.Arrays.stream(simpleGoals.getChildren())
                             .filter(c -> c instanceof org.eclipse.swt.widgets.Button)
                             .map(c -> (org.eclipse.swt.widgets.Button) c).toList();
@@ -721,7 +759,7 @@ public final class EditorSmoke implements IApplication {
                             && !expertMetrics.getVisible(),
                             "beginner mode explains missing build without exposing a sea of settings");
                     captureNativeStudioScreenshot("beginner-first-configuration-studio.png");
-                    var actions = (org.eclipse.swt.widgets.Composite) beginnerPage.getChildren()[5];
+                    var actions = (org.eclipse.swt.widgets.Composite) beginnerBody.getChildren()[8];
                     var findHardware = java.util.Arrays.stream(actions.getChildren())
                             .filter(c -> c instanceof org.eclipse.swt.widgets.Button)
                             .map(c -> (org.eclipse.swt.widgets.Button) c)
