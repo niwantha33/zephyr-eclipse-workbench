@@ -87,16 +87,21 @@ final class DevicetreeIndex {
         try {
             var command = List.of(python.toString(), script.toString(), "--zephyr", zephyr.toString(),
                     "--application", app.toString(), "--build", build.toString());
-            var process = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+            Path output = Files.createTempFile("zew-dt-index-", ".txt");
+            try {
+            var process = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .redirectOutput(output.toFile()).start();
             boolean finished = process.waitFor(25, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
                 return empty("unavailable", "Devicetree indexing timed out");
             }
-            byte[] data = process.getInputStream().readNBytes(3_000_001);
+            if (Files.size(output) > 3_000_000) return empty("unavailable", "Index too large");
+            byte[] data = Files.readAllBytes(output);
             if (process.exitValue() != 0 || data.length > 3_000_000)
                 return empty("unavailable", "Devicetree indexing failed");
             return parse(new String(data, StandardCharsets.UTF_8), build.resolve("zephyr/zephyr.dts"));
+            } finally { Files.deleteIfExists(output); }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return empty("unavailable", "Index cancelled");

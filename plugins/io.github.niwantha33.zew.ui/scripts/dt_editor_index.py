@@ -40,6 +40,7 @@ def checked(path: Path, limit: int) -> bytes:
 
 
 def index(zephyr: Path, application: Path, build: Path):
+    print("ZEW-DTASSIST-1")
     dts = build / "zephyr" / "zephyr.dts"
     cache = build / "CMakeCache.txt"
     if not dts.is_file() or not cache.is_file():
@@ -77,7 +78,6 @@ def index(zephyr: Path, application: Path, build: Path):
                for binding in bindings if binding.path}
     dt_nodes = {node.path: node for node in dt.node_iter()}
     ed_nodes = {node.path: node for node in edt.nodes}
-    print("ZEW-DTASSIST-1")
     emit("S", "built", "Selected generated zephyr.dts; changes since build are not included")
     count = 0
     for path, node in dt_nodes.items():
