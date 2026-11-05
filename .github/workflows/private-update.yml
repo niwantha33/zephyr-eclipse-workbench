@@ -56,7 +56,7 @@ jobs:
           mvn -version
           mvn -version | python3 -c 'import re,sys; s=sys.stdin.read(); m=re.search(r"Apache Maven (\d+)\.(\d+)\.", s); assert m and tuple(map(int,m.groups())) >= (3,9), s'
       - name: Install pinned test metadata dependencies
-        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3 west==1.5.0
+        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3 west==1.5.0 kconfiglib==14.1.0
       - name: Run all core and Python dependency regression tests
         run: python3 scripts/test_core.py
       # Tycho's plain qualifier can be identical on different main commits

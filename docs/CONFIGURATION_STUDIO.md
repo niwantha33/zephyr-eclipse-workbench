@@ -540,3 +540,21 @@ symlink/path escapes and non-atomic replacements. No GPIO package pad,
 driver inclusion, runtime usage or electrical safety is ever inferred.
 
 **G0 OPEN.** The guided workflow and local CI are not a production release.
+
+
+## Transitive Kconfig expression evidence (CS-03 development)
+
+The installed `scripts/kconfig_inspect.py` supports `--causality-json` with
+`--build`, `--ninja` and `--symbol` arguments. It recovers the selected Ninja
+build environment and uses that checkout's Kconfiglib. The deterministic graph
+traverses direct dependencies, reverse select/imply expressions, defaults,
+prompt conditions and choice dependencies. Each expression retains upstream
+operator semantics and evaluated tristate; a referenced symbol is not labelled
+a necessary fix merely because it occurs in an OR or negated expression.
+Cycles are deduplicated and the 512-node limit reports truncated coverage.
+Source definitions, choice selection and input-file SHA-256 are included.
+
+This CLI extension does not establish configuration fragment assignment
+precedence, generate Zephyr tracing, prove freshness, or provide an interactive
+native graph. Inputs are hashed at inspection time; receipt verification remains
+separate. It is a tested CS-03 increment, not completion of CS-03–CS-18.

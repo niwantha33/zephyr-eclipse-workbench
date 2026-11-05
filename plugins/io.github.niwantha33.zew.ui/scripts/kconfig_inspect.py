@@ -8,6 +8,8 @@ No Kconfig or prj.conf files are written, even when a symbol is unavailable.
 """
 import argparse
 import base64
+import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -87,7 +89,65 @@ def field(value):
     return base64.b64encode(str(value).encode("utf-8")).decode("ascii")
 
 
-def inspect(build, ninja, name):
+def causality(conf, library, name, max_nodes=512):
+    """Traverse upstream expressions; preserve AND/OR/NOT semantics verbatim.
+
+    Relationships describe evaluated configuration, not a proposed repair or
+    proof of assignment origin: loading .config loses fragment precedence.
+    Cycles are represented by edges, never recursively expanded.
+    """
+    pending = [name]
+    nodes, edges = {}, set()
+    truncated = False
+    while pending:
+        current = pending.pop(0)
+        if current in nodes:
+            continue
+        if len(nodes) >= max_nodes:
+            truncated = True
+            break
+        symbol = conf.syms[current]
+        relations = []
+        for attribute in ("direct_dep", "rev_dep", "weak_rev_dep"):
+            expression = getattr(symbol, attribute)
+            relations.append((attribute, expression))
+        for index, (value, condition) in enumerate(symbol.defaults):
+            relations.extend([(f"default[{index}].value", value),
+                              (f"default[{index}].condition", condition)])
+        for index, node in enumerate(symbol.nodes):
+            if node.prompt:
+                relations.append((f"prompt[{index}]", node.prompt[1]))
+        choice = symbol.choice
+        nodes[current] = {
+            "symbol": current, "value": symbol.str_value,
+            "user_value": symbol.user_value,
+            "visibility": library.TRI_TO_STR[symbol.visibility],
+            "definitions": sorted(f"{n.filename}:{n.linenr}" for n in symbol.nodes),
+            "choice": None if choice is None else {
+                "name": choice.name, "value": choice.str_value,
+                "selection": choice.selection.name if choice.selection else None},
+            "expressions": [{"kind": kind, "expression": library.expr_str(expr),
+                             "value": library.TRI_TO_STR[library.expr_value(expr)]}
+                            for kind, expr in relations],
+        }
+        if choice is not None:
+            relations.append(("choice.depends", choice.direct_dep))
+        for kind, expression in relations:
+            for item in sorted(library.expr_items(expression),
+                               key=lambda x: x.name or ""):
+                if isinstance(item, library.Symbol) and not item.is_constant and item.nodes:
+                    edges.add((current, kind, item.name))
+                    if item.name not in nodes and item.name not in pending:
+                        pending.append(item.name)
+        pending.sort()
+    return {"schema": "zew.kconfig-causality/1", "root": name,
+            "coverage": "truncated" if truncated else "reachable-expressions",
+            "assignment_origin": "unknown: .config does not preserve fragment precedence",
+            "nodes": [nodes[key] for key in sorted(nodes)],
+            "edges": [{"from": a, "kind": b, "to": c} for a, b, c in sorted(edges)]}
+
+
+def inspect(build, ninja, name, graph_json=False):
     if not _SYMBOL.fullmatch(name):
         raise ValueError("Invalid Kconfig symbol")
     dotconfig = build / "zephyr" / ".config"
@@ -102,6 +162,7 @@ def inspect(build, ninja, name):
     kconfiglib_path = zephyr / "scripts" / "kconfig"
     if not kconfiglib_path.is_dir():
         raise RuntimeError("Zephyr Kconfiglib not found at the selected build's source root")
+    old_path = sys.path[:]
     sys.path.insert(0, str(kconfiglib_path))
     import kconfiglib
 
@@ -116,6 +177,21 @@ def inspect(build, ninja, name):
         symbol = conf.syms.get(name)
         if symbol is None or not symbol.nodes:
             raise RuntimeError("Symbol was not defined in the selected build's Kconfig tree")
+        if graph_json:
+            graph = causality(conf, kconfiglib, name)
+            inputs = {dotconfig.resolve(), kroot.resolve()}
+            for filename in conf.kconfig_filenames:
+                path = Path(filename)
+                inputs.add((path if path.is_absolute() else zephyr / path).resolve())
+            graph["provenance"] = {
+                "method": "selected-build upstream kconfiglib evaluated expressions",
+                "freshness": "unverified: recorded inputs require build receipt verification",
+                "inputs": [{"path": str(path),
+                            "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                           for path in sorted(inputs)],
+            }
+            print(json.dumps(graph, sort_keys=True))
+            return
         dep = kconfiglib.expr_str(symbol.direct_dep)
         dep_state = kconfiglib.TRI_TO_STR[kconfiglib.expr_value(symbol.direct_dep)]
         visibility = kconfiglib.TRI_TO_STR[symbol.visibility]
@@ -136,6 +212,7 @@ def inspect(build, ninja, name):
         print("ZEW-KCONFIG-1")
         print("\t".join(field(value) for value in values_out))
     finally:
+        sys.path[:] = old_path
         os.environ.clear()
         os.environ.update(old_env)
 
@@ -145,9 +222,10 @@ def main():
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--ninja", type=Path, required=True)
     parser.add_argument("--symbol", required=True)
+    parser.add_argument("--causality-json", action="store_true")
     args = parser.parse_args()
     try:
-        inspect(args.build.resolve(), args.ninja.resolve(), args.symbol)
+        inspect(args.build.resolve(), args.ninja.resolve(), args.symbol, args.causality_json)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError, ImportError) as exc:
         print("ZEW-KCONFIG-UNAVAILABLE")
         print(str(exc).replace("\n", " ")[:500])
