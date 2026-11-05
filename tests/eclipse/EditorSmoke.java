@@ -792,7 +792,7 @@ public final class EditorSmoke implements IApplication {
                             io.github.niwantha33.zew.core.PeripheralWorkflow
                                     .forCategory(kind).connectionTitle()
                                     .toUpperCase(java.util.Locale.ROOT))
-                    && texts[2].getText().contains("SETTINGS FOR " + kind)
+                    && texts[2].getText().contains("SETTINGS — " + kind)
                     && texts[3].getText().contains(
                             "REVIEW — " + kind),
                     "installed UI retains 4 tailored steps for " + kind);
