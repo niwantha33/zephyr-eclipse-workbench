@@ -25,6 +25,8 @@ import org.eclipse.ui.console.MessageConsole;
 import io.github.niwantha33.zew.core.BuildHostRequirements;
 import io.github.niwantha33.zew.core.BuildArtifacts;
 import io.github.niwantha33.zew.core.BuildRecovery;
+import io.github.niwantha33.zew.core.BuildFailureInvestigator;
+import io.github.niwantha33.zew.core.BuildFailureLogs;
 import io.github.niwantha33.zew.core.KconfigFailure;
 import io.github.niwantha33.zew.core.BuildSession;
 import io.github.niwantha33.zew.core.ProcessRunner;
@@ -40,7 +42,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         } catch (Exception error) {
             throw new CoreException(new Status(IStatus.ERROR, Activator.ID, error.getMessage(), error));
         }
-        if (kind != AUTO_BUILD || sourceChanged()) run(false, "true".equals(arguments.get("zew.pristine")), monitor);
+        if (kind != AUTO_BUILD || sourceChanged()) run(false, "true".equals(arguments.get("zew.pristine")), "true".equals(arguments.get("zew.investigate")), arguments.get("zew.expectedBuild"), monitor);
         return new IProject[0];
     }
     private boolean sourceChanged() throws CoreException {
@@ -90,11 +92,11 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
     }
 
     @Override protected void clean(IProgressMonitor monitor) throws CoreException {
-        try { if (ZephyrProjectLifecycle.configure(getProject(), monitor)) run(true, false, monitor); }
+        try { if (ZephyrProjectLifecycle.configure(getProject(), monitor)) run(true, false, false, null, monitor); }
         catch (CoreException error) { throw error; }
         catch (Exception error) { throw new CoreException(new Status(IStatus.ERROR, Activator.ID, error.getMessage(), error)); }
     }
-    private void run(boolean clean, boolean pristine, IProgressMonitor monitor) throws CoreException {
+    private void run(boolean clean, boolean pristine, boolean investigate, String expectedBuild, IProgressMonitor monitor) throws CoreException {
         var console = new MessageConsole("Zephyr — " + getProject().getName(), null);
         ConsolePlugin.getDefault().getConsoleManager().addConsoles(new org.eclipse.ui.console.IConsole[] {console});
         ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
@@ -107,6 +109,8 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             String board = settings.getProperty("board");
             var configuration = io.github.niwantha33.zew.core.BuildConfiguration.fromId(settings.getProperty("zew.buildConfiguration"));
             Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
+            if (expectedBuild != null && !buildDirectory.toAbsolutePath().normalize().equals(Path.of(expectedBuild)))
+                throw new java.io.IOException("The build profile changed while investigation was queued. Select the current build and retry.");
             var environment = ProjectContext.environment(settings);
             monitor.beginTask(clean ? "Clean Zephyr project" : "Prepare tools and build Zephyr project", IProgressMonitor.UNKNOWN);
             if (!clean) {
@@ -162,75 +166,112 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             BuildDiagnostics.clear(getProject());
             var runner = new ProcessRunner();
             var kconfigFailure = new KconfigFailure();
-            var workspace = Path.of(paths.workspace());
-            java.util.function.Consumer<String> log = line -> {
-                stream.println(line);
-                BuildDiagnostics.accept(getProject(), buildDirectory, line);
-                kconfigFailure.accept(line);
-            };
-            if (!clean) {
-                // Resolve real build requirements from Zephyr's configured
-                // Ninja commands. CMakeCache alone contains harmless optional
-                // tools marked NOTFOUND, so it is not authoritative.
-                var configure = new ArrayList<>(command);
-                configure.add(4, "--cmake-only");
-                if (paths.freshConfiguration() || pristine) {
-                    stream.println(pristine ? "Explicit pristine rebuild; regenerating only this target build folder." : "Refreshing this managed target for a verified Windows short-path alias.");
-                    configure.add(5, "--pristine=always");
-                }
-                stream.println("Preflight: Zephyr configure-only; checking actual host tool dependencies.");
-                stage[0] = "Configure Zephyr";
+            var investigation = new BuildFailureInvestigator();
+            // Separate exact board/profile attempts; pristine rebuilds retain the evidence.
+            Path buildLog = BuildFailureLogs.create(project, buildDirectory);
+            stream.println("Complete build log: " + buildLog);
+            try (var savedLog = Files.newBufferedWriter(buildLog, StandardCharsets.UTF_8)) {
+                String identity = "Board: " + board + " | profile: " + configuration.label()
+                    + " | build: " + buildDirectory;
+                savedLog.write(identity);
+                savedLog.newLine();
+                investigation.accept(identity);
+                var workspace = Path.of(paths.workspace());
+                java.util.function.Consumer<String> log = line -> {
+                    stream.println(line);
+                    investigation.accept(line);
+                    try { savedLog.write(line); savedLog.newLine(); }
+                    catch (java.io.IOException error) { throw new java.io.UncheckedIOException(error); }
+                    BuildDiagnostics.accept(getProject(), buildDirectory, line);
+                    kconfigFailure.accept(line);
+                };
+                if (!clean) {
+                    // Resolve real build requirements from Zephyr's configured
+                    // Ninja commands. CMakeCache alone contains harmless optional
+                    // tools marked NOTFOUND, so it is not authoritative.
+                    var configure = new ArrayList<>(command);
+                    configure.add(4, "--cmake-only");
+                    if (paths.freshConfiguration() || pristine) {
+                        stream.println(pristine ? "Explicit pristine rebuild; regenerating only this target build folder." : "Refreshing this managed target for a verified Windows short-path alias.");
+                        configure.add(5, "--pristine=always");
+                    }
+                    stream.println("Preflight: Zephyr configure-only; checking actual host tool dependencies.");
+                    stage[0] = "Configure Zephyr";
+                    investigation.beginAttempt();
                 var configured = runner.run(configure, workspace, Duration.ofMinutes(15),
-                        monitor::isCanceled, log, environment);
-                if (configured.exitCode() != 0 && io.github.niwantha33.zew.core.DemoConfigurationCompatibility
-                        .migrate(project, configured.output())) {
-                    stream.println("Updated the original RTOS demo's obsolete CONFIG_DEBUG_INFO setting. Original saved in .zew/config-backup.");
-                    BuildDiagnostics.clear(getProject());
-                    configured = runner.run(configure, workspace, Duration.ofMinutes(15),
                             monitor::isCanceled, log, environment);
-                }
-                requireConfigured(configured, kconfigFailure, stream::println);
-                var inspectCommands = List.of(settings.getProperty("tools.ninja"), "-C", paths.build(), "-t", "commands");
-                var missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
-                var recovery = new BuildRecovery(Map.of("IMGTOOL", () ->
-                    BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "IMGTOOL"),
-                    "ESPTOOL", () -> BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "ESPTOOL")), 2);
-                while (!missing.isEmpty()) {
-                    stage[0] = "Recover required build tools";
-                    stream.println("Preparing mandatory host tools: " + missing);
-                    recovery.repair(missing);
-                    // Reconfigure after provisioning; no pristine deletion is needed.
-                    // Force CMake to discard only stale host-tool cache entries.
-                    configure.remove("-DZEPHYR_MODULES="); command.remove("-DZEPHYR_MODULES=");
-                    configure.remove("--pristine=always");
-                    var refresh = new ArrayList<>(configure);
-                    refresh.add("-UZEPHYR_MODULES");
-                    for (String tool : missing) refresh.add("-U" + tool);
-                    stage[0] = "Refresh target configuration";
+                    if (configured.exitCode() != 0 && io.github.niwantha33.zew.core.DemoConfigurationCompatibility
+                            .migrate(project, configured.output())) {
+                        stream.println("Updated the original RTOS demo's obsolete CONFIG_DEBUG_INFO setting. Original saved in .zew/config-backup.");
+                        BuildDiagnostics.clear(getProject());
+                        investigation.beginAttempt();
+                        configured = runner.run(configure, workspace, Duration.ofMinutes(15),
+                                monitor::isCanceled, log, environment);
+                    }
+                    requireConfigured(configured, kconfigFailure, stream::println);
+                    var inspectCommands = List.of(settings.getProperty("tools.ninja"), "-C", paths.build(), "-t", "commands");
+                    var missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
+                    var recovery = new BuildRecovery(Map.of("IMGTOOL", () ->
+                        BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "IMGTOOL"),
+                        "ESPTOOL", () -> BoardTools.prepareHostTool(settings, environment, monitor, stream::println, "ESPTOOL")), 2);
+                    while (!missing.isEmpty()) {
+                        stage[0] = "Recover required build tools";
+                        stream.println("Preparing mandatory host tools: " + missing);
+                        recovery.repair(missing);
+                        // Reconfigure after provisioning; no pristine deletion is needed.
+                        // Force CMake to discard only stale host-tool cache entries.
+                        configure.remove("-DZEPHYR_MODULES="); command.remove("-DZEPHYR_MODULES=");
+                        configure.remove("--pristine=always");
+                        var refresh = new ArrayList<>(configure);
+                        refresh.add("-UZEPHYR_MODULES");
+                        for (String tool : missing) refresh.add("-U" + tool);
+                        stage[0] = "Refresh target configuration";
+                        investigation.beginAttempt();
                     requireConfigured(runner.run(refresh, workspace, Duration.ofMinutes(15),
-                            monitor::isCanceled, log, environment), kconfigFailure, stream::println);
-                    missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
+                                monitor::isCanceled, log, environment), kconfigFailure, stream::println);
+                        missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
+                    }
+                    BuildArtifacts.verifyArchitecture(buildDirectory);
+                    stream.println("Preflight: generated build commands have no unresolved host tool placeholders.");
                 }
-                BuildArtifacts.verifyArchitecture(buildDirectory);
-                stream.println("Preflight: generated build commands have no unresolved host tool placeholders.");
+                stage[0] = clean ? "Clean" : "Compile and generate firmware";
+                // Preflight already supplied all CMake arguments. Repeating them
+                // here makes West configure twice on every build.
+                var compile = new ArrayList<>(clean ? command : List.of(settings.getProperty("python"), "-m", "west", "build",
+                    "--build-dir", WestCommands.cmakePath(paths.build())));
+                if (investigate && !clean) {
+                    compile.add(3, "-v");
+                    compile.add("-o=-j1");
+                    stream.println("Investigation build: verbose commands, one build job; same board, profile and build directory.");
+                }
+                investigation.beginAttempt();
+                var compiled = runner.run(compile, workspace, Duration.ofMinutes(30), monitor::isCanceled, log, environment);
+                if (compiled.exitCode() != 0) {
+                    throw new java.io.IOException("Build command exited with status " + compiled.exitCode());
+                }
+                stage[0] = "Verify configured firmware outputs";
+                if (!clean) {
+                    BuildArtifacts.verify(buildDirectory);
+                    configuration.verify(buildDirectory);
+                }
+                if (!clean) {
+                    Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
+                    EditorIntegration.schedule(getProject());
+                    ProjectVersionHandler.snapshotOnFirstBuild(getProject(), monitor, stream::println);
+                }
+                stream.println(clean ? "Clean completed." : "BUILD SUCCESS — configured firmware outputs verified.");
+            } catch (java.io.InterruptedIOException error) { throw error; }
+            catch (InterruptedException error) { throw error; }
+            catch (Exception error) {
+                String diagnosis = "Failure stage: " + stage[0] + "\n" + error.getMessage() + "\n\n"
+                    + investigation.summary() + "Complete build log: " + buildLog
+                    + "\nUse Rebuild with detailed output in Zephyr Build Failure Investigation to retry in this environment.";
+                stream.println(diagnosis);
+                try { BuildFailureLogs.failed(buildLog, diagnosis); }
+                catch (java.io.IOException receiptError) { error.addSuppressed(receiptError); }
+                BuildFailureInvestigationHandler.showFailure(getProject(), buildDirectory, buildLog, diagnosis);
+                throw new java.io.IOException(error.getMessage() + "\n" + diagnosis, error);
             }
-            stage[0] = clean ? "Clean" : "Compile and generate firmware";
-            // Preflight already supplied all CMake arguments. Repeating them
-            // here makes West configure twice on every build.
-            var compile = clean ? command : List.of(settings.getProperty("python"), "-m", "west", "build",
-                "--build-dir", WestCommands.cmakePath(paths.build()));
-            runner.run(compile, workspace, Duration.ofMinutes(30), monitor::isCanceled, log, environment).requireSuccess();
-            stage[0] = "Verify configured firmware outputs";
-            if (!clean) {
-                BuildArtifacts.verify(buildDirectory);
-                configuration.verify(buildDirectory);
-            }
-            if (!clean) {
-                Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
-                EditorIntegration.schedule(getProject());
-                ProjectVersionHandler.snapshotOnFirstBuild(getProject(), monitor, stream::println);
-            }
-            stream.println(clean ? "Clean completed." : "BUILD SUCCESS — configured firmware outputs verified.");
             getProject().refreshLocal(IResource.DEPTH_INFINITE, monitor);
             var output = getProject().getFolder(".zew-build"); if (output.exists()) output.setDerived(true, monitor);
         } catch (java.io.InterruptedIOException error) { throw new CoreException(Status.CANCEL_STATUS); }

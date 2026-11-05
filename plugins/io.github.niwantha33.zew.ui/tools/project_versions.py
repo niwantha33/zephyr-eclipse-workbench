@@ -78,6 +78,10 @@ def project_sources(application):
     files = {}
     for path in sorted(application.rglob("*")):
         relative = path.relative_to(application)
+        # Diagnostic attempts are local output, not application source. Match only
+        # this root-relative subtree and skip before file inspection/size/hash.
+        if relative.parts[:2] == (".zew", "local-build-logs"):
+            continue
         if any(component in EXCLUDED for component in relative.parts):
             continue
         if relative.as_posix() in (LOCK.as_posix(), FROZEN.as_posix()):

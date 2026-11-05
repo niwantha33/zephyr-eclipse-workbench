@@ -35,11 +35,20 @@ public final class ZephyrBuildHandler extends AbstractHandler {
             try { ProjectContext.settings(project); }
             catch (Exception incomplete) { return null; }
         }
-        Job job = new Job((pristine ? "Pristine Rebuild" : "Build") + " Zephyr — " + project.getName()) {
+        schedule(project, pristine, false);
+        return null;
+    }
+    static void schedule(IProject project, boolean pristine, boolean investigate) {
+        final String expectedBuild;
+        try {
+            expectedBuild = investigate ? ProjectContext.buildDirectory(project, ProjectContext.settings(project))
+                .toAbsolutePath().normalize().toString() : null;
+        } catch (Exception error) { throw new IllegalStateException("Could not identify the exact investigation build.", error); }
+        Job job = new Job((investigate ? "Investigate Build Failure" : pristine ? "Pristine Rebuild" : "Build") + " Zephyr — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 try {
                     project.build(IncrementalProjectBuilder.FULL_BUILD, Activator.ID + ".zephyrBuilder",
-                        pristine ? Map.of("zew.pristine", "true") : Map.of(), monitor);
+                        pristine ? Map.of("zew.pristine", "true") : investigate ? Map.of("zew.investigate", "true", "zew.expectedBuild", expectedBuild) : Map.of(), monitor);
                     return monitor.isCanceled() ? Status.CANCEL_STATUS : Status.OK_STATUS;
                 } catch (org.eclipse.core.runtime.CoreException ex) {
                     return ex.getStatus();
@@ -48,6 +57,5 @@ public final class ZephyrBuildHandler extends AbstractHandler {
         };
         job.setUser(true);
         job.schedule();
-        return null;
     }
 }

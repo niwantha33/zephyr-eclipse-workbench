@@ -107,6 +107,57 @@ class ProjectVersionTests(unittest.TestCase):
         self.assertEqual("match", versions.main(self.args("verify-env"))["status"])
         self.assertEqual("drift", versions.main(self.args("verify"))["status"])
 
+    def test_local_build_logs_do_not_change_source_snapshot_or_lock(self):
+        (self.application / "prj.conf").write_text("CONFIG_GPIO=y\n")
+        metadata = self.application / ".zew"
+        metadata.mkdir()
+        (metadata / "project.json").write_text('{"board":"qemu_x86/atom"}')
+        baseline = versions.project_sources(self.application)
+        frozen, record = self.record()
+        versions.snapshot(self.application, frozen, record)
+        logs = metadata / "local-build-logs" / "debug-attempt"
+        logs.mkdir(parents=True)
+        log = logs / "build.log"
+        log.write_text("compiler error\n")
+        receipt = logs / "build.log.failure.txt"
+        receipt.write_text("failure investigation\n")
+        self.assertEqual(baseline, versions.project_sources(self.application))
+        self.assertEqual("match", versions.main(self.args("verify"))["status"])
+        log.write_text("updated compiler error\n")
+        receipt.write_text("updated investigation\n")
+        self.assertEqual(baseline, versions.project_sources(self.application))
+        self.assertEqual("match", versions.main(self.args("verify"))["status"])
+
+        oversized = logs / "large.log"
+        with oversized.open("wb") as output:
+            output.truncate(versions.MAX_FILE_BYTES + 1)
+        original_stat = Path.stat
+        original_hash = versions.file_hash
+        def source_stat(path, *args, **kwargs):
+            self.assertFalse(path.is_relative_to(logs), "Diagnostic output must be skipped before stat")
+            return original_stat(path, *args, **kwargs)
+        def source_hash(path):
+            self.assertFalse(path.is_relative_to(logs), "Diagnostic output must be skipped before hashing")
+            return original_hash(path)
+        with patch.object(Path, "stat", source_stat), patch.object(versions, "file_hash", source_hash):
+            self.assertEqual(baseline, versions.project_sources(self.application))
+
+    def test_log_exclusion_keeps_configuration_and_similarly_named_sources(self):
+        tracked = ("prj.conf", ".zew/project.json", ".zew/local-build-logs-source/helper.c",
+                   "src/.zew/local-build-logs/helper.c", "local-build-logs/helper.c")
+        for relative in tracked:
+            source = self.application / relative
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("original source")
+        baseline = versions.project_sources(self.application)
+        for relative in tracked:
+            self.assertIn(relative, baseline)
+            source = self.application / relative
+            source.write_text("changed source")
+            changed = versions.project_sources(self.application)
+            self.assertNotEqual(baseline[relative], changed[relative], relative)
+            source.write_text("original source")
+
     def test_module_drift_is_rejected(self):
         self.heads["test"] = OTHER
         with self.assertRaisesRegex(versions.VersionError, "resolved manifest expects"):
