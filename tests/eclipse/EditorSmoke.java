@@ -561,6 +561,10 @@ public final class EditorSmoke implements IApplication {
         var cls = view.getClass();
         cls.getMethod("displayProject", IProject.class).invoke(view, project);
         var tabs = (org.eclipse.swt.widgets.TabFolder) studioField(view, cls, "primary");
+        var initialInformation = (org.eclipse.swt.widgets.Label)
+                studioField(view, cls, "overviewInfo");
+        check(!initialInformation.getText().isBlank(),
+                "Configuration Studio opens with a useful explicit state, never a blank screen");
         check(tabs.getItemCount() == 3
                 && tabs.getItem(0).getText().equals("Overview")
                 && tabs.getItem(1).getText().equals("Hardware")
@@ -766,6 +770,13 @@ public final class EditorSmoke implements IApplication {
         tabs.setSelection(0);
         settleNativeStudioLayout();
         var availableKinds = io.github.niwantha33.zew.core.PeripheralWorkflow.categories();
+        var overviewFilter = (org.eclipse.swt.widgets.Text)
+                studioField(view, cls, "overviewSearch");
+        overviewFilter.setText("DMA");
+        check(table.getItemCount() == 1
+                && table.getItem(0).getText(0).equals("DMA"),
+                "Overview keyword search shows only matching generated peripheral summary");
+        overviewFilter.setText("");
         check(table.getItemCount() == availableKinds.size()
                 && Arrays.stream(table.getItems()).anyMatch(t ->
                         t.getText(0).equals("DMA") && t.getText(1).equals("Setup incomplete"))
@@ -797,10 +808,16 @@ public final class EditorSmoke implements IApplication {
                             "REVIEW — " + kind),
                     "installed UI retains 4 tailored steps for " + kind);
         }
+        kinds.select(kinds.indexOf("ADC"));
+        kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
+                new org.eclipse.swt.widgets.Event());
         kinds.select(kinds.indexOf("SPI"));
         kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
                 new org.eclipse.swt.widgets.Event());
         awaitFocusedDetail(view, cls);
+        check(texts[0].getText().contains("Exact generated node")
+                && !texts[0].getText().contains("ADC channel"),
+                "old ADC background result never replaces newly selected SPI details");
         next.notifyListeners(org.eclipse.swt.SWT.Selection,
                 new org.eclipse.swt.widgets.Event());
         check(texts[1].getText().contains("chip-select")
@@ -808,6 +825,26 @@ public final class EditorSmoke implements IApplication {
                 "SPI guidance is bus/chip-select specific, not recycled ADC instructions");
         settleNativeStudioLayout();
         captureNativeStudioScreenshot("configuration-spi-setup-ci-fixture.png");
+        var shell = win.getShell();
+        var originalBounds = shell.getBounds();
+        try {
+            // Geometry test of actual installed SWT controls; does not claim
+            // Windows 125/150 percent scaling (separate physical UI check).
+            for (int[] viewport : new int[][] {{1366, 768}, {1920, 1080}}) {
+                shell.setSize(viewport[0], viewport[1]);
+                settleNativeStudioLayout();
+                var searchControl = (org.eclipse.swt.widgets.Text)
+                        studioField(view, cls, "hardwareSearch");
+                check(searchControl.getBounds().width > 120
+                        && controller.getBounds().width > 120
+                        && next.getBounds().width > 60,
+                        "native hardware view is usable at "
+                            + viewport[0] + "x" + viewport[1]);
+            }
+        } finally {
+            shell.setBounds(originalBounds);
+            settleNativeStudioLayout();
+        }
         kinds.select(kinds.indexOf("Flash / Storage"));
         kinds.notifyListeners(org.eclipse.swt.SWT.Selection,
                 new org.eclipse.swt.widgets.Event());
