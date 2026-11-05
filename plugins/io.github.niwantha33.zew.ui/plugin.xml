@@ -2,6 +2,11 @@
 <?eclipse version="3.4"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <plugin>
+  <extension point="org.eclipse.ui.editors">
+    <editor id="io.github.niwantha33.zew.ui.devicetreeEditor" name="Zephyr Devicetree Editor"
+      extensions="overlay,dts,dtsi" default="true"
+      class="io.github.niwantha33.zew.ui.DevicetreeEditor"/>
+  </extension>
   <extension point="org.eclipse.core.resources.natures" id="zephyrNature" name="Zephyr Project">
     <runtime><run class="io.github.niwantha33.zew.ui.ZephyrProjectNature"/></runtime>
   </extension>
