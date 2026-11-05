@@ -549,6 +549,142 @@ public final class EditorSmoke implements IApplication {
         shell.layout(true, true);
         shell.update();
     }
+
+    /**
+     * These are screenshots of the REAL installed Eclipse SWT view, rendered
+     * with explicitly marked CI fixture evidence — NOT physical hardware.
+     */
+    private static void verifyThreeSectionStudio(IProject project) throws Exception {
+        var win = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+        var view = win.getActivePage().showView(
+                "io.github.niwantha33.zew.ui.configurationHome");
+        var cls = view.getClass();
+        cls.getMethod("displayProject", IProject.class).invoke(view, project);
+        var tabs = (org.eclipse.swt.widgets.TabFolder) studioField(view, cls, "primary");
+        check(tabs.getItemCount() == 3
+                && tabs.getItem(0).getText().equals("Overview")
+                && tabs.getItem(1).getText().equals("Hardware")
+                && tabs.getItem(2).getText().equals("Build & System")
+                && tabs.getSelectionIndex() == 0,
+                "real installed Configuration Studio has EXACTLY three primary sections");
+
+        // Cancel asynchronous project refresh before installing a controlled
+        // fixture, to avoid a race between the smoke and actual files.
+        var generation = (java.util.concurrent.atomic.AtomicInteger)
+                studioField(view, cls, "generation");
+        generation.incrementAndGet();
+        var job = (org.eclipse.core.runtime.jobs.Job) studioField(view, cls, "refreshJob");
+        if (job != null) job.cancel();
+
+        String dts = """
+                /dts-v1/;
+                / {
+                    #address-cells = <1>;
+                    #size-cells = <1>;
+                    memory@20000000 {
+                        compatible = "mmio-sram";
+                        reg = <0x20000000 0x8000>;
+                    };
+                    soc {
+                        #address-cells = <1>;
+                        #size-cells = <1>;
+                        ranges;
+                        flash@0 {
+                            compatible = "soc-nv-flash";
+                            reg = <0x0 0x20000>;
+                        };
+                        gpio@5000 {
+                            compatible = "vendor,gpio";
+                            status = "disabled";
+                        };
+                        adc@4000 {
+                            compatible = "vendor,adc";
+                            status = "okay";
+                            phandle = <0x22>;
+                            #io-channel-cells = <1>;
+                            channel@0 {
+                                reg = <0>;
+                                zephyr,gain = "ADC_GAIN_1";
+                                zephyr,reference = "ADC_REF_INTERNAL";
+                                zephyr,acquisition-time = <10>;
+                                zephyr,resolution = <12>;
+                            };
+                        };
+                    };
+                    zephyr,user {
+                        io-channels = <0x22 0>;
+                    };
+                };
+                """;
+        String config = "CONFIG_ADC=y\nCONFIG_GPIO=y\n";
+        var overview = io.github.niwantha33.zew.core.FocusedConfigurationModel.inspect(
+                "lp_mspm0g3507/mspm0g3507", "CI synthetic fixture",
+                dts, config, false);
+        var type = Arrays.stream(cls.getDeclaredClasses())
+                .filter(c -> c.getSimpleName().equals("Evidence"))
+                .findFirst().orElseThrow();
+        var constructor = type.getDeclaredConstructors()[0];
+        constructor.setAccessible(true);
+        var field = cls.getDeclaredField("evidence"); field.setAccessible(true);
+        var render = cls.getDeclaredMethod("render"); render.setAccessible(true);
+        Object sample = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
+                "CI synthetic fixture", null, dts, config, new java.util.Properties(),
+                false, "CI FIXTURE: synthetic DTS; no physical hardware verified.", overview);
+        field.set(view, sample); render.invoke(view);
+        settleNativeStudioLayout();
+        var table = (org.eclipse.swt.widgets.Table) studioField(view, cls, "peripheralRows");
+        var flash = (org.eclipse.swt.widgets.Label) studioField(view, cls, "capacityFlash");
+        var ram = (org.eclipse.swt.widgets.Label) studioField(view, cls, "capacityRam");
+        check(table.getItemCount() == 6 && flash.getText().equals("128 KiB")
+                && ram.getText().equals("32 KiB")
+                && Arrays.stream(table.getItems()).anyMatch(t ->
+                        t.getText(0).equals("ADC") && t.getText(1).startsWith("Configured"))
+                && Arrays.stream(table.getItems()).anyMatch(t ->
+                        t.getText(0).equals("GPIO") && t.getText(1).equals("Disabled")),
+                "actual Overview uses build-backed memory capacities and precise peripheral states");
+        captureNativeStudioScreenshot("configuration-overview-ci-fixture.png");
+
+        tabs.setSelection(1);
+        settleNativeStudioLayout();
+        var controller = (org.eclipse.swt.widgets.Combo) studioField(view, cls, "controllers");
+        var texts = (org.eclipse.swt.widgets.Text[]) studioField(view, cls, "pageText");
+        check(controller.getItemCount() == 1 && controller.getText().contains("adc@4000"),
+                "guided ADC controller is the exact selected DTS node");
+        var next = (org.eclipse.swt.widgets.Button) studioField(view, cls, "next");
+        next.notifyListeners(org.eclipse.swt.SWT.Selection,
+                new org.eclipse.swt.widgets.Event());
+        settleNativeStudioLayout();
+        check(texts[1].getText().contains("PIN & CHANNEL")
+                && texts[1].getText().contains("Physical pad")
+                && texts[1].getText().contains("zephyr,resolution"),
+                "ADC pin/channel step shows source-backed logical channels, not invented pads");
+        captureNativeStudioScreenshot("configuration-adc-setup-ci-fixture.png");
+
+        next.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+        next.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+        settleNativeStudioLayout();
+        var apply = (org.eclipse.swt.widgets.Button) studioField(view, cls, "validateApply");
+        check(texts[3].getText().contains("REVIEW PROPOSED CHANGES")
+                && texts[3].getText().contains("NONE proposed yet")
+                && apply.getEnabled(),
+                "review makes no unverified pin edit and offers guarded source validation");
+        captureNativeStudioScreenshot("configuration-review-ci-fixture.png");
+
+        var unknown = io.github.niwantha33.zew.core.FocusedConfigurationModel.inspect(
+                "lp_mspm0g3507/mspm0g3507", "CI missing-data fixture", "", "", false);
+        Object missing = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
+                "CI missing-data fixture", null, "", "", new java.util.Properties(),
+                true, "CI FIXTURE: missing build data; no hardware validated.", unknown);
+        field.set(view, missing); render.invoke(view);
+        tabs.setSelection(0);
+        settleNativeStudioLayout();
+        check(flash.getText().equals("Unknown")
+                && Arrays.stream(table.getItems()).allMatch(t ->
+                        t.getText(1).equals("Unknown")),
+                "missing build state never claims capacity or configured hardware");
+        captureNativeStudioScreenshot("configuration-missing-data-ci-fixture.png");
+    }
+
     private static void captureNativeStudioScreenshot(String screenshotName) throws Exception {
         String directory = System.getenv("ZEW_SCREENSHOT_DIR");
         if (directory == null || directory.isBlank()) return;
@@ -596,7 +732,11 @@ public final class EditorSmoke implements IApplication {
         var studioViews = Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.views"));
         check(studioViews.anyMatch(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui")
                 && "io.github.niwantha33.zew.ui.configurationStudio".equals(e.getAttribute("id"))),
-                "installed Configuration Studio view registered");
+                "advanced Configuration Studio remains installed");
+        check(Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.views"))
+                .anyMatch(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui")
+                        && "io.github.niwantha33.zew.ui.configurationHome".equals(e.getAttribute("id"))),
+                "new three-section Configuration Studio registered in actual installed Eclipse");
         var studioMenus = Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.menus"))
                 .filter(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui"))
                 .filter(e -> "popup:org.eclipse.ui.popup.any?after=additions".equals(e.getAttribute("locationURI")))
@@ -829,6 +969,8 @@ public final class EditorSmoke implements IApplication {
                     check(!"—".equals(overridesCount.getText()),
                             "live project override summary is populated");
                     verifyStudioNavigation(view, cls, snapshotField, snapshot, featureTable, hw, fixture);
+                    verifyThreeSectionStudio(project);
+                    windows[0].getActivePage().activate(view);
                     // Reproduce the user's screenshot: opening via a prj.conf
                     // context used to switch to Kconfig with the overview still
                     // hidden. A deliberate context link must restore chrome.
