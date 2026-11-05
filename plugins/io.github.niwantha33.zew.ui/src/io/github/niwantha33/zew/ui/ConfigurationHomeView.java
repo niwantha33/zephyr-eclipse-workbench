@@ -149,6 +149,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 new int[]{240, 630}, false);
         issueInfo = new Label(root, SWT.WRAP);
         issueInfo.setLayoutData(fillWidth());
+        issueRows.addListener(SWT.DefaultSelection, event -> reviewIssue());
         issueRows.addListener(SWT.Selection, e -> {
             if (issueRows.getSelectionCount() == 1)
                 issueInfo.setText(((FocusedConfigurationModel.Issue)
@@ -162,6 +163,7 @@ public final class ConfigurationHomeView extends ViewPart {
         overviewSearch = new Text(root, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
         overviewSearch.setLayoutData(fillWidth());
         overviewSearch.setMessage("Find a peripheral or configuration issue...");
+        accessibleName(overviewSearch, "Find a peripheral or configuration issue");
         overviewSearch.addModifyListener(event -> populateOverviewRows());
         peripheralRows = table(root, new String[]{"Peripheral", "Status", "Next action"},
                 new int[]{135, 165, 570}, true);
@@ -187,6 +189,7 @@ public final class ConfigurationHomeView extends ViewPart {
         hardwareSearch = new Text(left, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL | SWT.BORDER);
         hardwareSearch.setLayoutData(fillWidth());
         hardwareSearch.setMessage("Search name, address or compatible");
+        accessibleName(hardwareSearch, "Find hardware by name, address or compatible");
         hardwareSearch.addModifyListener(event -> {
             controllersForCategory();
             step = 0;
@@ -195,6 +198,7 @@ public final class ConfigurationHomeView extends ViewPart {
         new Label(left, SWT.NONE).setText("Type");
         categories = new Combo(left, SWT.READ_ONLY | SWT.DROP_DOWN);
         categories.setLayoutData(fillWidth());
+        accessibleName(categories, "Hardware type");
         categories.setItems(PeripheralWorkflow.categories().toArray(String[]::new));
         categories.select(categories.indexOf(category));
         categories.addListener(SWT.Selection, event -> {
@@ -308,6 +312,8 @@ public final class ConfigurationHomeView extends ViewPart {
         kconfigOriginSymbol = new Text(origin, SWT.BORDER | SWT.SEARCH);
         kconfigOriginSymbol.setLayoutData(fillWidth());
         kconfigOriginSymbol.setMessage("Exact CONFIG_ symbol, e.g. CONFIG_GPIO");
+        accessibleName(kconfigOriginSymbol, "Exact Kconfig symbol for recorded origin");
+        kconfigOriginSymbol.addListener(SWT.DefaultSelection, event -> explainKconfigOrigin());
         button(origin, "Explain recorded origin", this::explainKconfigOrigin);
         kconfigOriginResult = new Text(systemAdvanced,
                 SWT.READ_ONLY | SWT.MULTI | SWT.WRAP | SWT.V_SCROLL | SWT.BORDER);
@@ -335,15 +341,42 @@ public final class ConfigurationHomeView extends ViewPart {
     private static Button button(Composite parent, String title, Runnable action) {
         Button result = new Button(parent, SWT.PUSH);
         result.setText(title);
+        accessibleName(result, title);
         result.addListener(SWT.Selection, e -> action.run());
         return result;
     }
+    private static void accessibleName(org.eclipse.swt.widgets.Control control, String name) {
+        control.getAccessible().addAccessibleListener(new org.eclipse.swt.accessibility.AccessibleAdapter() {
+            @Override public void getName(org.eclipse.swt.accessibility.AccessibleEvent event) {
+                event.result = name;
+            }
+        });
+    }
+
+    private static void post(org.eclipse.swt.widgets.Display display, Runnable action) {
+        if (display.isDisposed()) return;
+        try { display.asyncExec(action); }
+        catch (org.eclipse.swt.SWTException closing) {
+            if (closing.code != SWT.ERROR_DEVICE_DISPOSED) throw closing;
+        }
+    }
+
+    private void cancelSourceLookups() {
+        originGeneration.incrementAndGet();
+        if (originJob != null) originJob.cancel();
+        diagnosisGeneration.incrementAndGet();
+        if (diagnosisJob != null) diagnosisJob.cancel();
+        if (kconfigOriginResult != null && !kconfigOriginResult.isDisposed())
+            kconfigOriginResult.setText("No current origin result. Choose an exact symbol in the selected build.");
+    }
+
     private static Table table(Composite parent, String[] headings, int[] widths, boolean grow) {
         Table t = new Table(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL);
         var gd = new GridData(SWT.FILL, SWT.FILL, true, grow);
         if (!grow) gd.heightHint = 100;
         t.setLayoutData(gd);
         t.setHeaderVisible(true); t.setLinesVisible(true);
+        accessibleName(t, String.join(", ", headings));
         for (int i = 0; i < headings.length; i++) {
             var col = new TableColumn(t, SWT.LEFT);
             col.setText(headings[i]); col.setWidth(widths[i]);
@@ -367,6 +400,7 @@ public final class ConfigurationHomeView extends ViewPart {
     }
 
     public void displayMissingProject() {
+        cancelSourceLookups();
         project = null;
         evidence = null;
         detail = null;
@@ -429,6 +463,7 @@ public final class ConfigurationHomeView extends ViewPart {
             displayMissingProject();
             return;
         }
+        cancelSourceLookups();
         int ticket = generation.incrementAndGet();
         if (refreshJob != null) refreshJob.cancel();
         IProject selected = project;
@@ -463,6 +498,7 @@ public final class ConfigurationHomeView extends ViewPart {
                     } catch (Exception unavailable) {
                         warning = "Project environment: " + unavailable.getMessage();
                     }
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     var snapshot = ConfigurationStudioFiles.inspect(app, build, profile);
                     Path effective = build == null ? null : build.resolve("zephyr/.config");
                     String config = effective != null && Files.isRegularFile(effective)
@@ -482,6 +518,7 @@ public final class ConfigurationHomeView extends ViewPart {
                     boolean stale = freshnessState != FocusedConfigurationModel.Freshness.CURRENT_SNAPSHOT;
                     warning += (warning.isBlank() ? "" : "\n")
                             + receipt.detail() + " Tracked source inputs: " + receipt.sourceCount() + ".";
+                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     var summary = FocusedConfigurationModel.inspect(
                             board, profile, snapshot.devicetree(), config, freshnessState);
                     // CS-02: a successful build is NOT a prerequisite for
@@ -522,7 +559,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 }
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 final Evidence result = observed;
-                display.asyncExec(() -> {
+                post(display, () -> {
                     if (ticket == generation.get() && project == selected
                             && header != null && !header.isDisposed()) {
                         evidence = result; render();
@@ -563,12 +600,25 @@ public final class ConfigurationHomeView extends ViewPart {
                     message = report.display() + "\nSource observations are also available in Eclipse Problems. "
                             + "Only matching source bytes receive navigable line markers.\n";
                 } catch (Exception error) {
+                    post(display, () -> {
+                        if (ticket == diagnosisGeneration.get() && project == selected && evidence == snapshot
+                                && buildDetails != null && !buildDetails.isDisposed())
+                            buildDetails.setText("Configuration diagnosis failed. Source may have changed during inspection; "
+                                    + "refresh this board/profile and retry. See Error Log for details.");
+                    });
                     return new Status(IStatus.ERROR, Activator.ID,
                             "Configuration diagnosis failed; refresh the selected build and retry.", error);
                 }
-                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                if (monitor.isCanceled()) {
+                    post(display, () -> {
+                        if (ticket == diagnosisGeneration.get() && project == selected && evidence == snapshot
+                                && buildDetails != null && !buildDetails.isDisposed())
+                            buildDetails.setText("Configuration diagnosis cancelled. No source was changed.");
+                    });
+                    return Status.CANCEL_STATUS;
+                }
                 final String result = message;
-                display.asyncExec(() -> {
+                post(display, () -> {
                     if (ticket == diagnosisGeneration.get() && project == selected && evidence == snapshot
                             && buildDetails != null && !buildDetails.isDisposed()) buildDetails.setText(result);
                 });
@@ -849,7 +899,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 }
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 final Detail completed = result;
-                ui.asyncExec(() -> {
+                post(ui, () -> {
                     if (ticket != detailGeneration.get()
                             || stepHost == null || stepHost.isDisposed()
                             || evidence != snapshot || !category.equals(requestedCategory)
@@ -959,7 +1009,7 @@ public final class ConfigurationHomeView extends ViewPart {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 var result = KconfigTraceEvidence.inspect(snapshot.build(), query);
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
-                ui.asyncExec(() -> {
+                post(ui, () -> {
                     if (ticket != originGeneration.get()
                             || evidence != snapshot || kconfigOriginResult.isDisposed())
                         return;
