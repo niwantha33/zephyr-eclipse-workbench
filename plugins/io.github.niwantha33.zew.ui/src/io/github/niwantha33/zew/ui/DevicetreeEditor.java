@@ -8,7 +8,6 @@ import org.eclipse.core.resources.IFile;
 import org.eclipse.core.runtime.*;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.text.*;
-import org.eclipse.jface.text.contentassist.*;
 import org.eclipse.jface.text.presentation.*;
 import org.eclipse.jface.text.rules.*;
 import org.eclipse.jface.text.source.*;
@@ -79,11 +78,12 @@ public final class DevicetreeEditor extends TextEditor {
         IAnnotationModel model = getDocumentProvider().getAnnotationModel(getEditorInput());
         if (model == null) return;
         Map<Annotation, Position> next = new LinkedHashMap<>();
+        // Silence advisory hints. Keep actual errors visible as annotations,
+        // but do not create completions or show text/annotation hover popups.
         for (var problem : findings) {
-            String type = problem.severity().equals("error")
-                    ? "org.eclipse.ui.workbench.texteditor.error"
-                    : "org.eclipse.ui.workbench.texteditor.warning";
-            Annotation annotation = new Annotation(type, false, problem.message());
+            if (!"error".equals(problem.severity())) continue;
+            Annotation annotation = new Annotation(
+                    "org.eclipse.ui.workbench.texteditor.error", false, problem.message());
             next.put(annotation, new Position(problem.offset(), problem.length()));
         }
         if (model instanceof IAnnotationModelExtension extension) {
@@ -94,16 +94,11 @@ public final class DevicetreeEditor extends TextEditor {
         }
         shownDiagnostics.clear();
         shownDiagnostics.putAll(next);
+        // The annotation is the only visual diagnostic: do not overwrite the
+        // workbench status line with live guidance or hover-style messages.
         var status = getEditorSite().getActionBars().getStatusLineManager();
-        var firstError = findings.stream().filter(p -> "error".equals(p.severity())).findFirst();
-        if (firstError.isPresent()) {
-            status.setErrorMessage("Devicetree: " + firstError.get().message());
-        } else {
-            status.setErrorMessage(null);
-            status.setMessage(findings.isEmpty()
-                    ? "Devicetree editor hints are not a Zephyr build validation"
-                    : "Devicetree: " + findings.size() + " advisory finding(s). Hover the annotation for details.");
-        }
+        status.setErrorMessage(null);
+        status.setMessage(null);
     }
 
 
@@ -160,20 +155,21 @@ public final class DevicetreeEditor extends TextEditor {
     private static final class Configuration extends SourceViewerConfiguration {
         private final DevicetreeEditor editor;
         Configuration(DevicetreeEditor editor) { this.editor = editor; }
-        @Override public IContentAssistant getContentAssistant(ISourceViewer sourceViewer) {
-            var assistant = new ContentAssistant();
-            assistant.setContentAssistProcessor(new Processor(editor), IDocument.DEFAULT_CONTENT_TYPE);
-            assistant.enableAutoActivation(true);
-            assistant.setAutoActivationDelay(350);
-            assistant.setProposalPopupOrientation(IContentAssistant.PROPOSAL_OVERLAY);
-            assistant.setContextInformationPopupOrientation(IContentAssistant.CONTEXT_INFO_ABOVE);
-            return assistant;
+        // No auto completion, Ctrl+Space proposals, context information or
+        // pop-up hints. Typing and syntax colouring stay fully functional.
+        @Override public org.eclipse.jface.text.contentassist.IContentAssistant getContentAssistant(
+                ISourceViewer sourceViewer) { return null; }
+        @Override public ITextHover getTextHover(ISourceViewer sourceViewer, String contentType) {
+            return null;
+        }
+        @Override public IAnnotationHover getAnnotationHover(ISourceViewer sourceViewer) {
+            return null;
         }
         @Override public IPresentationReconciler getPresentationReconciler(ISourceViewer sourceViewer) {
             Color comment = Display.getDefault().getSystemColor(SWT.COLOR_DARK_GREEN);
             Color literal = Display.getDefault().getSystemColor(SWT.COLOR_DARK_BLUE);
             Color directive = Display.getDefault().getSystemColor(SWT.COLOR_DARK_MAGENTA);
-            var scanner = new RuleBasedScanner();
+            var scanner = new RainbowBracketScanner();
             var keyword = new Token(new TextAttribute(directive, null, SWT.BOLD));
             var words = new WordRule(new IWordDetector() {
                 @Override public boolean isWordStart(char c) { return Character.isLetter(c) || c == '#' || c == '/'; }
@@ -184,10 +180,25 @@ public final class DevicetreeEditor extends TextEditor {
             for (String value : List.of("status", "compatible", "reg", "pinctrl-0",
                     "/dts-v1/", "/delete-node/", "/delete-property/", "#include"))
                 words.addWord(value, keyword);
+            // Use SWT system colours so no resource cleanup is required.
+            int[] colours = {SWT.COLOR_DARK_MAGENTA, SWT.COLOR_DARK_CYAN,
+                    SWT.COLOR_DARK_BLUE, SWT.COLOR_DARK_GREEN,
+                    SWT.COLOR_DARK_RED, SWT.COLOR_DARK_YELLOW};
+            IToken[] bracketTokens = new IToken[colours.length];
+            for (int i = 0; i < colours.length; i++)
+                bracketTokens[i] = new Token(new TextAttribute(
+                        Display.getDefault().getSystemColor(colours[i]), null, SWT.BOLD));
+            IRule bracketRule = input -> {
+                int depth = scanner.bracketLevel(scanner.getTokenOffset());
+                if (depth < 0) return Token.UNDEFINED;
+                if (input.read() == ICharacterScanner.EOF) return Token.UNDEFINED;
+                return bracketTokens[depth % bracketTokens.length];
+            };
             scanner.setRules(new IRule[] {
                     new MultiLineRule("/*", "*/", new Token(new TextAttribute(comment))),
                     new EndOfLineRule("//", new Token(new TextAttribute(comment))),
                     new SingleLineRule("\"", "\"", new Token(new TextAttribute(literal)), '\\'),
+                    bracketRule,
                     words
             });
             var repairer = new DefaultDamagerRepairer(scanner);
@@ -196,77 +207,75 @@ public final class DevicetreeEditor extends TextEditor {
             reconciler.setRepairer(repairer, IDocument.DEFAULT_CONTENT_TYPE);
             return reconciler;
         }
-        @Override public ITextHover getTextHover(ISourceViewer sourceViewer, String contentType) {
-            return new ITextHover() {
-                @Override public IRegion getHoverRegion(ITextViewer viewer, int offset) {
-                    IDocument doc = viewer.getDocument();
-                    try {
-                        int left = offset, right = offset;
-                        while (left > 0 && word(doc.getChar(left - 1))) left--;
-                        while (right < doc.getLength() && word(doc.getChar(right))) right++;
-                        return new Region(left, right - left);
-                    } catch (BadLocationException error) {
-                        return new Region(offset, 0);
-                    }
-                }
-                @Override public String getHoverInfo(ITextViewer viewer, IRegion region) {
-                    try {
-                        String word = viewer.getDocument().get(region.getOffset(), region.getLength());
-                        String document = viewer.getDocument().get();
-                        var index = editor.index();
-                        if (region.getOffset() > 0 && document.charAt(region.getOffset() - 1) == '&') {
-                            var node = index.label(word);
-                            if (node != null) return node.path() + "\nGenerated status: " + node.status()
-                                    + "\nCompatible: " + node.compatible()
-                                    + "\nFrom the selected build, not hardware runtime evidence.";
-                        }
-                        if ("status".equals(word))
-                            return "Controls the Devicetree status of a node. status = \"okay\" does not prove driver initialisation or runtime use.";
-                        var header = java.util.regex.Pattern.compile("&([A-Za-z_][A-Za-z0-9_]*)\\s*\\{")
-                                .matcher(document.substring(0, region.getOffset()));
-                        String path = null;
-                        while (header.find()) {
-                            var node = index.label(header.group(1));
-                            if (node != null) path = node.path();
-                        }
-                        for (var property : index.properties(path)) if (property.name().equals(word))
-                            return property.description() + "\nType: " + property.type() +
-                                    (property.required() ? " (required)" : " (optional)") +
-                                    "\nSource: " + property.source() +
-                                    "\nBuilt snapshot; not validation of unsaved edits.";
-                        return null;
-                    } catch (BadLocationException error) { return null; }
-                }
-            };
+
+    }
+    /**
+     * Bracket colours come from balanced nesting in the actual document, not
+     * a guessed board/binding. A full lexical pass is necessary so repainting
+     * just one line never changes the bracket-pair colours.
+     */
+    private static final class RainbowBracketScanner extends RuleBasedScanner {
+        private byte[] levels = new byte[0];
+
+        @Override public void setRange(IDocument document, int offset, int length) {
+            levels = bracketLevels(document.get());
+            super.setRange(document, offset, length);
         }
-        private static boolean word(char c) {
-            return Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == ',' || c == '#' || c == '.';
+        int bracketLevel(int offset) {
+            return offset >= 0 && offset < levels.length ? levels[offset] : -1;
         }
     }
-    private static final class Processor implements IContentAssistProcessor {
-        private final DevicetreeEditor editor;
-        Processor(DevicetreeEditor editor) { this.editor = editor; }
-        @Override public ICompletionProposal[] computeCompletionProposals(ITextViewer viewer, int offset) {
-            var result = DevicetreeAssist.suggest(viewer.getDocument().get(), offset, editor.index());
-            var proposals = new ArrayList<ICompletionProposal>();
-            for (var entry : result.suggestions()) {
-                proposals.add(new CompletionProposal(entry.replacement(), result.start(),
-                        result.length(), entry.replacement().length(), null,
-                        entry.label(), null, entry.help()));
+
+    /**
+     * Return nesting depths for punctuation in Devicetree source. -1 means
+     * ordinary text, including all quoted strings and comments. A matching
+     * opener and closer receive exactly the same palette index. No edits.
+     */
+    private static byte[] bracketLevels(String source) {
+        if (source == null || source.length() > 2_000_000) return new byte[0];
+        byte[] result = new byte[source.length()];
+        Arrays.fill(result, (byte) -1);
+        var opens = new ArrayDeque<Integer>();
+        boolean blockComment = false, lineComment = false, quoted = false;
+        boolean character = false, escaped = false;
+        for (int i = 0; i < source.length(); i++) {
+            char ch = source.charAt(i);
+            char next = i + 1 < source.length() ? source.charAt(i + 1) : 0;
+            if (lineComment) {
+                if (ch == '\n') lineComment = false;
+                continue;
             }
-            return proposals.toArray(ICompletionProposal[]::new);
+            if (blockComment) {
+                if (ch == '*' && next == '/') { blockComment = false; i++; }
+                continue;
+            }
+            if (quoted || character) {
+                if (escaped) escaped = false;
+                else if (ch == '\\') escaped = true;
+                else if (quoted && ch == '"' || character && ch == '\'') {
+                    quoted = false;
+                    character = false;
+                }
+                continue;
+            }
+            if (ch == '/' && next == '*') { blockComment = true; i++; continue; }
+            if (ch == '/' && next == '/') { lineComment = true; i++; continue; }
+            if (ch == '"') { quoted = true; continue; }
+            if (ch == '\'') { character = true; continue; }
+            if (ch == '{' || ch == '(' || ch == '[' || ch == '<') {
+                result[i] = (byte) (opens.size() % 6);
+                opens.push(i);
+            } else if (ch == '}' || ch == ')' || ch == ']' || ch == '>') {
+                if (!opens.isEmpty()) {
+                    int opening = opens.peek();
+                    char partner = source.charAt(opening);
+                    if (partner == '{' && ch == '}' || partner == '(' && ch == ')'
+                            || partner == '[' && ch == ']' || partner == '<' && ch == '>') {
+                        result[i] = result[opens.pop()];
+                    }
+                }
+            }
         }
-        @Override public IContextInformation[] computeContextInformation(ITextViewer viewer, int offset) {
-            return new IContextInformation[0];
-        }
-        @Override public char[] getCompletionProposalAutoActivationCharacters() {
-            return new char[]{'&', '=', '{'};
-        }
-        @Override public char[] getContextInformationAutoActivationCharacters() { return null; }
-        @Override public String getErrorMessage() {
-            return editor.index().built() ? null :
-                    editor.index().explanation() + " — syntax assistance only until an exact build is available.";
-        }
-        @Override public IContextInformationValidator getContextInformationValidator() { return null; }
+        return result;
     }
 }

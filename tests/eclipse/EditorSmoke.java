@@ -1026,6 +1026,50 @@ public final class EditorSmoke implements IApplication {
                     opened.set((org.eclipse.ui.texteditor.ITextEditor) part);
                 } catch (Exception e) { throw new IllegalStateException(e); }
             });
+            // Actual installed .overlay editor: no completion or hover hints,
+            // even when Ctrl+Space is invoked by an Eclipse key binding.
+            var editorClass = opened.get().getClass();
+            var configurationType = Class.forName(editorClass.getName() + "$Configuration",
+                    true, editorClass.getClassLoader());
+            var constructor = configurationType.getDeclaredConstructor(editorClass);
+            constructor.setAccessible(true);
+            var silentConfiguration = (org.eclipse.jface.text.source.SourceViewerConfiguration)
+                    constructor.newInstance(opened.get());
+            check(silentConfiguration.getContentAssistant(null) == null
+                    && silentConfiguration.getTextHover(null, org.eclipse.jface.text.IDocument.DEFAULT_CONTENT_TYPE) == null
+                    && silentConfiguration.getAnnotationHover(null) == null,
+                    "installed native Devicetree editor disables proposals and hover hints");
+            // JFace presentation setup asks SWT for theme colours; like the
+            // actual editor, invoke it only from the Eclipse display thread.
+            org.eclipse.swt.widgets.Display.getDefault().syncExec(() ->
+                    check(silentConfiguration.getPresentationReconciler(null) != null,
+                            "Devicetree highlighting remains enabled when suggestions are disabled"));
+
+            // Brackets in strings/comments are never coloured; matching open
+            // and close tokens keep their level even across partial repaints.
+            var bracketMethod = editorClass.getDeclaredMethod("bracketLevels", String.class);
+            bracketMethod.setAccessible(true);
+            String colourfulSource = "/ { values = <(1) [2]>; /* { ignored } */"
+                    + " name = \"{ string }\"; child { }; };";
+            byte[] levels = (byte[]) bracketMethod.invoke(null, colourfulSource);
+            int rootOpen = colourfulSource.indexOf('{');
+            int rootClose = colourfulSource.lastIndexOf('}');
+            int cellsOpen = colourfulSource.indexOf('<');
+            int cellsClose = colourfulSource.indexOf('>');
+            int parenOpen = colourfulSource.indexOf('(');
+            int parenClose = colourfulSource.indexOf(')');
+            int squareOpen = colourfulSource.indexOf('[');
+            int squareClose = colourfulSource.indexOf(']');
+            int blockOpen = colourfulSource.indexOf('{', colourfulSource.indexOf("child"));
+            int blockClose = colourfulSource.indexOf('}', blockOpen);
+            check(levels[rootOpen] == 0 && levels[rootClose] == 0
+                    && levels[cellsOpen] == 1 && levels[cellsClose] == 1
+                    && levels[parenOpen] == 2 && levels[parenClose] == 2
+                    && levels[squareOpen] == 2 && levels[squareClose] == 2
+                    && levels[blockOpen] == 1 && levels[blockClose] == 1
+                    && levels[colourfulSource.indexOf('{', colourfulSource.indexOf("/*"))] == -1
+                    && levels[colourfulSource.indexOf('{', colourfulSource.indexOf("name ="))] == -1,
+                    "balanced rainbow brackets match by nesting and skip comments and strings");
             boolean errorShown = false;
             for (int attempt = 0; attempt < 50 && !errorShown; attempt++) {
                 var visible = new java.util.concurrent.atomic.AtomicBoolean();
