@@ -183,28 +183,38 @@ public final class ConfigurationFlowCanvas extends Canvas {
         for (int i = 0; i < 4; i++)
             boxes[i] = new Rectangle(INSET + i * (boxWidth + gap),
                     TOP, boxWidth, HEIGHT);
-        // Bottom cells align with the four upper columns.
-        for (int i = 4; i < 8; i++)
-            boxes[i] = new Rectangle(INSET + (i - 4) * (boxWidth + gap),
-                    SECOND, boxWidth, HEIGHT);
+        // The lower row separates documentation/driver configuration
+        // from the source-include chain. Only the memory view is reached
+        // directly from the generated DTS (inspection; not a build input).
+        boxes[Block.BINDING.ordinal()] =
+                new Rectangle(INSET, SECOND, boxWidth, HEIGHT);
+        boxes[Block.KCONFIG.ordinal()] =
+                new Rectangle(INSET + boxWidth + gap, SECOND, boxWidth, HEIGHT);
+        boxes[Block.BUILD.ordinal()] =
+                new Rectangle(INSET + 2 * (boxWidth + gap), SECOND, boxWidth, HEIGHT);
+        boxes[Block.MEMORY.ordinal()] =
+                new Rectangle(INSET + 3 * (boxWidth + gap), SECOND, boxWidth, HEIGHT);
 
         // Draw connectors FIRST so they cannot cover any clickable text.
         gc.setForeground(arrow);
         for (int i = 0; i < 3; i++)
             drawArrow(gc, boxes[i].x + boxWidth + 3, TOP + HEIGHT / 2,
                     boxes[i + 1].x - 6, TOP + HEIGHT / 2, false);
-        // A binding informs the board/DTS processing; it is not a child node.
-        drawArrow(gc, centerX(boxes[5]), SECOND - 8,
-                centerX(boxes[1]), TOP + HEIGHT + 9, false);
-        // Generated Devicetree is an input to the real build.
-        drawArrow(gc, centerX(boxes[3]), TOP + HEIGHT + 9,
-                centerX(boxes[7]), SECOND - 8, false);
-        // Kconfig software choices are an independent input to the build.
-        drawArrow(gc, boxes[6].x + boxWidth + 3, SECOND + HEIGHT / 2,
-                boxes[7].x - 6, SECOND + HEIGHT / 2, false);
-        // An inspection shortcut is NOT a configuration/build dependency.
-        drawArrow(gc, centerX(boxes[0]), TOP + HEIGHT + 9,
-                centerX(boxes[4]), SECOND - 8, true);
+        // Generated DTS participates in the selected build verification.
+        // The arrow stays entirely within the gap between the two rows.
+        drawArrow(gc, centerX(boxes[Block.GENERATED.ordinal()]), TOP + HEIGHT + 9,
+                centerX(boxes[Block.BUILD.ordinal()]), SECOND - 8, false);
+        // Kconfig is an independent software/driver configuration input.
+        drawArrow(gc, boxes[Block.KCONFIG.ordinal()].x + boxWidth + 3,
+                SECOND + HEIGHT / 2,
+                boxes[Block.BUILD.ordinal()].x - 6, SECOND + HEIGHT / 2, false);
+        // Memory Map merely INSPECTS what the selected build described.
+        drawArrow(gc, centerX(boxes[Block.GENERATED.ordinal()]),
+                TOP + HEIGHT + 9,
+                centerX(boxes[Block.MEMORY.ordinal()]), SECOND - 8, true);
+        // The YAML binding card is deliberately independent: compatible
+        // resolves it during Zephyr processing. A binding is neither a
+        // physical child node nor an included DTS file.
 
         List<Area> fresh = new ArrayList<>();
         for (Block b : Block.values()) {
@@ -233,7 +243,7 @@ public final class ConfigurationFlowCanvas extends Canvas {
         gc.setFont(detailFont);
         gc.setForeground(muted);
         gc.drawText("SOLID ARROWS = CONFIGURATION INPUTS", INSET, 10, true);
-        gc.drawText("DASHED = INSPECTION ONLY", INSET,
+        gc.drawText("YAML BINDINGS MATCH compatible; THEY ARE NOT DTS CHILD NODES", INSET,
                 DIAGRAM_HEIGHT - 18, true);
     }
 
