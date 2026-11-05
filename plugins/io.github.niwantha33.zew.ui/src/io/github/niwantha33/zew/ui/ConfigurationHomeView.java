@@ -35,6 +35,7 @@ import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
 import io.github.niwantha33.zew.core.HardwarePeripheralIndex;
 import io.github.niwantha33.zew.core.PeripheralStartGuide;
+import io.github.niwantha33.zew.core.PeripheralWorkflow;
 
 /** Three-section configuration entrypoint, backed by existing evidence engines. */
 public final class ConfigurationHomeView extends ViewPart {
@@ -42,10 +43,6 @@ public final class ConfigurationHomeView extends ViewPart {
     private record Evidence(String board, String profile, Path build, String dts,
                             String config, Properties setup, boolean stale, String warning,
                             FocusedConfigurationModel.Overview overview) {}
-    private static final String[] ADC_STEPS =
-            {"Controller", "Pin & channel", "Settings", "Review"};
-    private static final String[] BUS_STEPS =
-            {"Controller", "Connections", "Driver & settings", "Review"};
     private static final int OVERVIEW = 0, HARDWARE = 1, BUILD = 2;
     private final AtomicInteger generation = new AtomicInteger();
     private IProject project;
@@ -146,7 +143,9 @@ public final class ConfigurationHomeView extends ViewPart {
         var selection = bar(root, 4);
         new Label(selection, SWT.NONE).setText("Peripheral");
         categories = new Combo(selection, SWT.READ_ONLY | SWT.DROP_DOWN);
-        categories.setItems(FocusedConfigurationModel.COMMON.toArray(String[]::new));
+        // Every Zephyr peripheral index family, not an ADC-centred shortlist.
+        // Categories are navigation, NOT claims that every chip has the block.
+        categories.setItems(PeripheralWorkflow.categories().toArray(String[]::new));
         categories.select(1);
         categories.addListener(SWT.Selection, e -> {
             category = categories.getText(); controllerPath = ""; step = 0;
@@ -194,7 +193,8 @@ public final class ConfigurationHomeView extends ViewPart {
         button(tools, "Memory map", this::memoryMap);
         button(tools, "Devicetree sources", () -> advanced("sources"));
         button(tools, "Binding & evidence", () -> advanced("guide"));
-        example = button(tools, "Verified C example", () -> advanced("guide"));
+        example = button(tools, "Official samples / examples", () ->
+                advanced("Other".equals(category) ? "sources" : "guide"));
         setPanelVisible(hardwareAdvanced, false);
         renderGuide();
     }
@@ -449,7 +449,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 : DevicetreeHardware.inspect(evidence.dts());
         int n = 0;
         for (var node : nodes) {
-            if (!HardwarePeripheralIndex.category(node).equals(category)) continue;
+            if (!PeripheralWorkflow.selectable(node, category)) continue;
             controllers.add(node.name() + "  •  " + node.path());
             controllers.setData(Integer.toString(n++), node.path());
         }
@@ -468,59 +468,52 @@ public final class ConfigurationHomeView extends ViewPart {
                 controllerPath, d == null ? "" : d.config(), d == null || d.stale());
     }
 
-    private String detailsForChannel() {
-        if (evidence == null || evidence.dts().isBlank() || controllerPath.isBlank())
-            return "Channel and pin evidence unavailable.";
-        var out = new StringBuilder();
-        for (var p : DevicetreeParameters.inspect(evidence.dts()))
-            if ((p.path().startsWith(controllerPath + "/channel@")
-                    || p.path().equals("/zephyr,user"))
-                    && List.of("reg","io-channels","zephyr,gain","zephyr,reference",
-                            "zephyr,resolution","zephyr,acquisition-time").contains(p.name()))
-                out.append(p.path()).append("  •  ").append(p.name())
-                        .append(" = ").append(p.value()).append('\n');
-        return out.isEmpty() ? "No verified ADC channel or consumer link." : out.toString();
-    }
-
-    private String detailsForSettings() {
-        if (evidence == null || controllerPath.isBlank()) return "Build first.";
-        var out = new StringBuilder();
-        for (var p : DevicetreeParameters.inspect(evidence.dts()))
-            if ((p.path().equals(controllerPath)
-                    || p.path().startsWith(controllerPath + "/channel@"))
-                    && List.of("status","pinctrl-0","clocks","interrupts",
-                            "zephyr,gain","zephyr,reference","zephyr,resolution",
-                            "zephyr,acquisition-time").contains(p.name()))
-                out.append(p.name()).append(" = ").append(p.value()).append('\n');
-        return out.isEmpty() ? "No verified configurable values found." : out.toString();
-    }
-
     private void renderGuide() {
         if (stepHost == null || stepHost.isDisposed()) return;
-        var d = evidence; var g = guide();
-        var labels = category.equals("ADC") ? ADC_STEPS : BUS_STEPS;
-        breadcrumb.setText("Hardware  /  " + category + "  /  " + labels[step]
+        var d = evidence;
+        var plan = PeripheralWorkflow.forCategory(category);
+        var g = guide();
+        var labels = plan.steps();
+        breadcrumb.setText("Hardware  /  " + category + "  /  " + labels.get(step)
                 + "  •  " + (step + 1) + " of 4");
         guideState.setText(g.state() + "  •  " + g.explanation());
+
         pageText[0].setText("CONTROLLER\n\n" + g.steps()
-                + "\n\nSelected generated node: "
-                + (controllerPath.isBlank() ? "(none)" : controllerPath));
-        pageText[1].setText(category.equals("ADC")
-                ? "PIN & CHANNEL\n\n" + FocusedConfigurationModel.pinEvidence(g)
-                + "\n\n" + detailsForChannel()
-                : connectionsHelp(category) + "\n\n" + g.explanation());
-        pageText[2].setText("SETTINGS\n\n" + detailsForSettings()
-                + "\n\nDriver/Kconfig evidence:\n" + g.configExample()
-                + "\n\nValues can only be edited through an exact binding-guided request.");
-        pageText[3].setText("REVIEW PROPOSED CHANGES\n\n"
-                + "Current controller: " + (controllerPath.isBlank() ? "(none)" : controllerPath)
+                + "\n\nExact selected generated controller: "
+                + (controllerPath.isBlank() ? "(none)" : controllerPath)
+                + "\n\nAn enabled DTS controller does NOT prove driver compilation "
+                + "or active hardware at runtime.");
+
+        String details = PeripheralWorkflow.describeProperties(
+                d == null ? "" : d.dts(), controllerPath, category);
+        pageText[1].setText(plan.connectionTitle().toUpperCase(java.util.Locale.ROOT)
+                + "\n\n" + plan.connectionHelp()
+                + ("ADC".equals(category) ? "\n\n"
+                    + FocusedConfigurationModel.pinEvidence(g) : "")
+                + "\n\nOBSERVED VALUES IN THE SELECTED GENERATED DTS:\n"
+                + details + "\n\nPhysical pad/connector availability and "
+                + "resource ownership remain unverified unless the exact "
+                + "board, binding and package metadata establish them.");
+
+        pageText[2].setText("SETTINGS FOR " + category + "\n\n" + plan.settingsHelp()
+                + "\n\nOBSERVED CONFIGURATION (NOT EDITABLE HERE):\n"
+                + details
+                + "\n\nLast-build driver/Kconfig guidance:\n" + g.configExample()
+                + "\n\nOnly values allowed by the exact selected Zephyr binding "
+                + "can be proposed in the advanced source editor.");
+
+        pageText[3].setText("REVIEW PROPOSED CHANGES — " + category + "\n\n"
+                + "Selected controller: "
+                + (controllerPath.isBlank() ? "(none)" : controllerPath)
                 + "\n\nNew source changes: NONE proposed yet.\n\n"
-                + "Use the existing verified change editor to preview the exact overlay diff, "
-                + "run scratch-only Zephyr configure, and explicitly save with backup."
-                + "\nPhysical pins and resource conflicts are NOT verified here; no "
-                + "automatic pinmux or channel assignment will be invented."
-                + "\nAfter a source save: rebuild the selected profile; generated values "
-                + "stay stale until that build completes.");
+                + plan.reviewHelp() + "\n\n"
+                + "The existing binding-guided editor previews a real source diff, "
+                + "validates the exact proposal with scratch-only Zephyr CMake "
+                + "and requires explicit confirmation for an atomic, backed-up save."
+                + "\n\nNo pin, channel, clock or driver assignments are invented. "
+                + "After saving, rebuild the exact board/profile; last-build "
+                + "DTS/Kconfig remain stale until successful regeneration.");
+
         stepLayout.topControl = pages[step];
         stepHost.layout(true, true);
         previous.setEnabled(step > 0);
@@ -535,19 +528,11 @@ public final class ConfigurationHomeView extends ViewPart {
         next.getParent().layout(true, true);
         validateApply.setEnabled(reviewing && d != null && !d.stale()
                 && !controllerPath.isBlank());
-        example.setEnabled(FocusedConfigurationModel.canOfferAdcCode(g,
-                d == null || d.stale(), d == null ? "" : d.config()));
-    }
-
-    private static String connectionsHelp(String type) {
-        return switch (type) {
-            case "UART" -> "TX/RX: verify pinctrl, voltage and wiring; then driver and baud.";
-            case "I2C" -> "SDA/SCL: verify pull-ups, pinctrl and client bus address (not CPU address).";
-            case "SPI" -> "SCK/MOSI/MISO/CS: verify pinctrl, ownership, clock and CS mapping.";
-            case "CAN" -> "Verify transceiver, termination, clocks, pinctrl and bitrate.";
-            case "GPIO" -> "Logical GPIO lines are NOT physical package pads. Verify pin metadata.";
-            default -> "Inspect verified binding and board wiring for this peripheral.";
-        };
+        // The official samples and binding inspection remain available for
+        // ALL selected categories. A generated C scaffold is still gated
+        // by the original verified ADC engine, never fabricated for others.
+        example.setEnabled(d != null && !d.dts().isBlank()
+                && !controllerPath.isBlank());
     }
 
     private void memoryMap() {
