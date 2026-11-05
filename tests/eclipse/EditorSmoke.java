@@ -571,6 +571,23 @@ public final class EditorSmoke implements IApplication {
                 && tabs.getItem(2).getText().equals("Build & System")
                 && tabs.getSelectionIndex() == 0,
                 "real installed Configuration Studio has EXACTLY three primary sections");
+        // The no-project launch must show a useful empty state, rather than
+        // dismissing the command or rendering the legacy blank Start Here.
+        cls.getMethod("displayMissingProject").invoke(view);
+        var noProjectHeader = (org.eclipse.swt.widgets.Label) studioField(view, cls, "header");
+        var noProjectMessage = (org.eclipse.swt.widgets.Label) studioField(view, cls, "overviewInfo");
+        var noProjectTable = (org.eclipse.swt.widgets.Table) studioField(view, cls, "peripheralRows");
+        check(noProjectHeader.getText().contains("No Zephyr project selected")
+                && noProjectMessage.getText().contains("Project Explorer")
+                && noProjectTable.getItemCount() == 0,
+                "no project opens a nonblank, actionable Eclipse Overview");
+        cls.getMethod("openSection", String.class).invoke(view, "hardware");
+        check(tabs.getSelectionIndex() == 1,
+                "overlay context opens Hardware in the same three-tab view");
+        cls.getMethod("openSection", String.class).invoke(view, "system");
+        check(tabs.getSelectionIndex() == 2,
+                "prj.conf context opens Build & System in the same three-tab view");
+        cls.getMethod("displayProject", IProject.class).invoke(view, project);
 
         // Cancel asynchronous project refresh before installing a controlled
         // fixture, to avoid a race between the smoke and actual files.
