@@ -16,6 +16,8 @@ def build(output):
     output.parent.mkdir(parents=True, exist_ok=True)
     files = {"__main__.py": ROOT / "zew.py", "LICENSE": ROOT / "LICENSE",
              "CLI_REFERENCE.md": ROOT / "docs/CLI_REFERENCE.md",
+             "CONFIGURATION_STUDIO_CLI.md": ROOT / "docs/CONFIGURATION_STUDIO_CLI.md",
+             "CONFIGURATION_STUDIO_ROADMAP.md": ROOT / "docs/CONFIGURATION_STUDIO_ROADMAP.md",
              "schemas/evidence-graph-0.1.0.json": ROOT / "schemas/evidence-graph-0.1.0.json"}
     files.update({p.relative_to(ROOT).as_posix(): p for p in (ROOT / "zew_evidence").glob("*.py")})
     created = False
