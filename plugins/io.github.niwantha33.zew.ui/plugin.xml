@@ -132,8 +132,12 @@
           name="Zephyr SoC Memory Map"
           class="io.github.niwantha33.zew.ui.SocMemoryMapView"
           restorable="true"/>
-    <view id="io.github.niwantha33.zew.ui.configurationStudio"
+    <view id="io.github.niwantha33.zew.ui.configurationHome"
           name="Zephyr Configuration Studio"
+          class="io.github.niwantha33.zew.ui.ConfigurationHomeView"
+          restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.configurationStudio"
+          name="Zephyr Advanced Configuration Studio"
           class="io.github.niwantha33.zew.ui.ConfigurationStudioView"
           restorable="true"/>
   </extension>

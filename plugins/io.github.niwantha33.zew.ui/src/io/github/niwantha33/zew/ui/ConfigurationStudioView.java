@@ -156,6 +156,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private Button enableButton, disableButton, editButton, removeButton;
     private Combo category;
     private TabFolder tabs;
+    private Button visualGuideButton;
     private Label context, status, overview, detailTitle, detailMeta, detailNotice;
     private Label totalMetric, changesMetric, issuesMetric, targetMetric;
     private Font headingFont, metricFont;
@@ -209,7 +210,9 @@ public final class ConfigurationStudioView extends ViewPart {
         context.setText("Select a Zephyr application to explore its configuration.");
 
         var primary = new Composite(heading, SWT.NONE);
-        primary.setLayout(new GridLayout(2, false));
+        primary.setLayout(new GridLayout(3, false));
+        visualGuideButton = action(primary, "Visual guide", this::showVisualGuide);
+        visualGuideButton.setToolTipText("Open the colourful SoC → board → overlay → build flow from any workspace.");
         action(primary, "Project settings", this::openProjectSettings)
                 .setToolTipText("Environment, exact target and build configuration");
         Button buildButton = action(primary, "Build & validate", this::build);
@@ -1135,8 +1138,7 @@ public final class ConfigurationStudioView extends ViewPart {
         reload();
         // For an ordinary Configuration Studio launch, start with the user's
         // desired task. Explicit Hardware / Features navigation still wins.
-        tabs.setSelection(START_TAB);
-        updateBeginnerChrome();
+        showVisualGuide();
     }
 
     private Label metric(Composite parent, String caption, String initial) {
@@ -1250,8 +1252,10 @@ public final class ConfigurationStudioView extends ViewPart {
         setPartName("Configuration — " + selected.getName());
         if (options != null && !options.isDisposed()) {
             reload();
-            tabs.setSelection(hardware ? HARDWARE_TAB : START_TAB);
-            updateBeginnerChrome();
+            if (hardware) {
+                tabs.setSelection(HARDWARE_TAB);
+                updateBeginnerChrome();
+            } else showVisualGuide();
         }
     }
 
@@ -1261,6 +1265,7 @@ public final class ConfigurationStudioView extends ViewPart {
         selectDomain(ConfigurationStudioDomains.OVERVIEW);
         category.select(1);
         tabs.setSelection(SOFTWARE_TAB);
+        updateBeginnerChrome();
         refreshOptions();
     }
 
@@ -2249,6 +2254,20 @@ public final class ConfigurationStudioView extends ViewPart {
         int available = Math.max(990, beginnerScroll.getClientArea().width);
         var required = beginnerBody.computeSize(available, SWT.DEFAULT, true);
         beginnerScroll.setMinSize(required);
+    }
+
+    /** Always-visible escape hatch from any advanced view to the first-screen diagram. */
+    private void showVisualGuide() {
+        if (tabs == null || tabs.isDisposed()) return;
+        tabs.setSelection(START_TAB);
+        updateBeginnerChrome();
+        if (beginnerScroll != null && !beginnerScroll.isDisposed()) {
+            refreshBeginnerScrollSize();
+            beginnerScroll.setOrigin(0, 0);
+        }
+        // Focusing a hidden Software search field can inadvertently reselect
+        // Kconfig. The tab bar is focusable without changing the selected page.
+        tabs.setFocus();
     }
 
     private void chooseBeginnerGoal(BeginnerHardwareGuide.Goal goal) {
@@ -3745,6 +3764,69 @@ public final class ConfigurationStudioView extends ViewPart {
         }
     }
 
+
+    /**
+     * Narrow, project-scoped navigation adapter for the task-first Studio.
+     * The existing binding-aware draft, scratch Zephyr configure and atomic
+     * reviewed source-save workflow remains the ONLY apply path.
+     */
+    public void openFocusedTool(String destination, String requestedCategory, String nodePath) {
+        if (tabs == null || tabs.isDisposed() || project == null) return;
+        switch (destination) {
+            case "build" -> { build(); return; }
+            case "settings" -> { openProjectSettings(); return; }
+            case "software", "rtos" -> {
+                tabs.setSelection(SOFTWARE_TAB);
+                updateBeginnerChrome();
+                if ("rtos".equals(destination)) {
+                    for (var domain : ConfigurationStudioDomains.TABS)
+                        if ("rtos".equalsIgnoreCase(domain.id())) {
+                            selectDomain(domain);
+                            break;
+                        }
+                }
+                return;
+            }
+            case "evidence" -> {
+                tabs.setSelection(EVIDENCE_TAB);
+                updateBeginnerChrome();
+                return;
+            }
+            default -> { }
+        }
+        tabs.setSelection(HARDWARE_TAB);
+        updateBeginnerChrome();
+        if (requestedCategory != null && hardwareKind != null
+                && hardwareKind.indexOf(requestedCategory) >= 0) {
+            hardwareKind.select(hardwareKind.indexOf(requestedCategory));
+            hardwareState.select(0);
+            hardwareSearch.setText("");
+            refreshHardware();
+        }
+        if (nodePath != null && !nodePath.isBlank() && hardwareDevices != null) {
+            for (var node : hardwareItems()) {
+                var device = (DevicetreeHardware.Device) node.getData();
+                if (device != null && device.path().equals(nodePath)) {
+                    hardwareDevices.setSelection(node);
+                    hardwareDevices.showSelection();
+                    describeHardware();
+                    break;
+                }
+            }
+        }
+        switch (destination) {
+            case "sources" -> selectHardwareDetails(6);
+            case "guide" -> openStartGuide(requestedCategory);
+            case "review" -> {
+                selectHardwareDetails(0);
+                // This asks for a binding-qualified proposed source diff;
+                // it never commits a file or guesses pinmux on entry.
+                prepareGuidedOverlay();
+            }
+            default -> selectHardwareDetails(1);
+        }
+    }
+
     private void openStartGuide(String overrideCategory) {
         if (startGuideCategory == null || startGuideCategory.isDisposed()) return;
         String kind = overrideCategory;
@@ -3957,6 +4039,22 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     @Override public void setFocus() {
-        if (search != null && !search.isDisposed()) search.setFocus();
+        // Eclipse calls setFocus when an already-created ViewPart is opened.
+        // Never focus a control in a hidden tab: that can unexpectedly switch
+        // the view from the colourful Start Here page to Software / Kconfig.
+        if (tabs == null || tabs.isDisposed()) return;
+        switch (tabs.getSelectionIndex()) {
+            case START_TAB -> tabs.setFocus();
+            case SOFTWARE_TAB -> {
+                if (search != null && !search.isDisposed()) search.setFocus();
+                else tabs.setFocus();
+            }
+            case HARDWARE_TAB -> {
+                if (hardwareSearch != null && !hardwareSearch.isDisposed())
+                    hardwareSearch.setFocus();
+                else tabs.setFocus();
+            }
+            default -> tabs.setFocus();
+        }
     }
 }
