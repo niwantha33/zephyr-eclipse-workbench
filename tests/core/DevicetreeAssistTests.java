@@ -25,7 +25,7 @@ public final class DevicetreeAssistTests {
         );
         var properties = List.of(
             new DevicetreeIndex.Property("/soc/serial@40001000", "current-speed", "int",
-                    "Serial baud rate", false, false, List.of(), "", "uart-controller.yaml"),
+                    "Serial baud rate", false, false, List.of("9600", "115200"), "", "uart-controller.yaml"),
             new DevicetreeIndex.Property("/soc/serial@40001000", "hw-flow-control", "boolean",
                     "Enable hardware flow control", false, false, List.of(), "", "uart-controller.yaml"),
             new DevicetreeIndex.Property("/soc/serial@40001000", "parity", "string",
@@ -59,6 +59,14 @@ public final class DevicetreeAssistTests {
         var enumChoice = DevicetreeAssist.suggest(value, value.length(), snapshot);
         check(enumChoice.suggestions().stream().anyMatch(p -> p.replacement().equals("even")),
                 "String enum insertion inside quotes");
+        String baud = "&uart0 {\n    current-speed = ";
+        var numeric = DevicetreeAssist.suggest(baud, baud.length(), snapshot);
+        check(numeric.suggestions().stream().anyMatch(p -> p.replacement().equals("<9600>")),
+                "Integer enum is a cell, never a quoted string");
+        String cell = "&uart0 {\n    current-speed = <9";
+        var insideCell = DevicetreeAssist.suggest(cell, cell.length(), snapshot);
+        check(insideCell.suggestions().stream().anyMatch(p -> p.replacement().equals("9600")),
+                "An integer inside a cell list is not wrapped twice");
         check(DevicetreeAssist.suggest("&adc", 4, snapshot).suggestions().isEmpty(),
                 "Unlisted peripherals not fabricated");
         check(DevicetreeAssist.suggest("/* &u", 5, snapshot).suggestions().isEmpty(),
