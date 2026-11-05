@@ -959,8 +959,9 @@ public final class EditorSmoke implements IApplication {
         var registry = Platform.getExtensionRegistry();
         var studioViews = Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.views"));
         check(studioViews.anyMatch(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui")
-                && "io.github.niwantha33.zew.ui.configurationStudio".equals(e.getAttribute("id"))),
-                "advanced Configuration Studio remains installed");
+                && "io.github.niwantha33.zew.ui.configurationStudio".equals(e.getAttribute("id"))
+                && "false".equals(e.getAttribute("restorable"))),
+                "legacy seven-tab Studio is available for explicit advanced use but not restored as landing");
         check(Arrays.stream(registry.getConfigurationElementsFor("org.eclipse.ui.views"))
                 .anyMatch(e -> e.getContributor().getName().equals("io.github.niwantha33.zew.ui")
                         && "io.github.niwantha33.zew.ui.configurationHome".equals(e.getAttribute("id"))),
