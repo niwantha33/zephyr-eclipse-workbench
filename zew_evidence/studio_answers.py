@@ -32,6 +32,8 @@ TEMPLATES = {
 
 
 def report_digest(report: dict) -> str:
+    if not isinstance(report, dict):
+        raise InputError("Report must be a JSON object")
     try:
         raw = json.dumps(report, sort_keys=True, separators=(",", ":"),
                          ensure_ascii=True, allow_nan=False).encode("utf-8")
