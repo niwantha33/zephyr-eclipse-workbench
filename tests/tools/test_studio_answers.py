@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -11,6 +12,22 @@ from zew_evidence.collector import InputError
 
 
 class StudioAnswerTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows filesystem short-name aliases")
+    def test_windows_short_and_long_source_spellings_share_approved_identity(self):
+        import ctypes
+        from ctypes import wintypes
+        short_path = ctypes.WinDLL("kernel32", use_last_error=True).GetShortPathNameW
+        short_path.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+        short_path.restype = wintypes.DWORD
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = short_path(str(self.source.resolve(strict=True)), buffer, len(buffer))
+        self.assertGreater(length, 0, "Existing source must have a resolvable Windows spelling")
+        self.assertLess(length, len(buffer))
+        report = copy.deepcopy(self.report)
+        report["findings"][0]["evidence"][0]["path"] = buffer.value
+        for root in (self.root, self.root.resolve(strict=True)):
+            self.assertEqual(answer(report, self.ident, [root])["status"], "recorded-observation")
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix="studio-answer-Ω ")
         self.addCleanup(temp.cleanup)

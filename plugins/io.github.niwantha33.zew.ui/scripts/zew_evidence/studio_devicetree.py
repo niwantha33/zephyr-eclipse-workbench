@@ -67,6 +67,9 @@ def _source(filename: str, build: Path, roots: list[Path], budget: list[int] | N
         return {"state": "unsafe-source", "confidence": "unknown"}
     path = path.resolve(strict=False)
     for index, root in enumerate(roots):
+        # CPP paths and explicitly supplied roots may use different Windows
+        # 8.3 spellings for the same directory. Compare canonical identities.
+        root = root.resolve(strict=True)
         if path.is_relative_to(root):
             if not path.is_file():
                 return {"state": "source-missing", "confidence": "unknown"}

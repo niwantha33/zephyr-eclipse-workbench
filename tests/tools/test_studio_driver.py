@@ -111,11 +111,14 @@ class StudioDriverTests(unittest.TestCase):
         cc = shutil.which("cc")
         if cc is None:
             self.skipTest("Host C compiler unavailable; fixture tests still apply")
-        subprocess.run([cc, "-ffunction-sections", "-c", str(self.source), "-o", str(self.obj)],
-                       check=True, capture_output=True, timeout=20)
-        subprocess.run([cc, str(self.obj), "-Wl,-Map=" + str(self.map),
-                        "-o", str(self.build / "zephyr/zephyr.elf")],
-                       check=True, capture_output=True, timeout=20)
+        # Keep the Unicode/spaced fixture directory, but pass relative source
+        # and output paths to legacy MinGW tools whose argv uses an ANSI code
+        # page. The evidence adapter still inspects the real Unicode paths.
+        subprocess.run([cc, "-ffunction-sections", "-c", "../source/drivers/adc.c", "-o", "adc.o"],
+                       cwd=self.build, check=True, capture_output=True, timeout=20)
+        subprocess.run([cc, "adc.o", "-Wl,-Map=zephyr/zephyr.map",
+                        "-o", "zephyr/zephyr.elf"],
+                       cwd=self.build, check=True, capture_output=True, timeout=20)
         row = self.scan()["images"][0]
         self.assertEqual(row["compiled"]["state"], "object-bytes-observed")
         self.assertEqual(row["linked"]["state"], "map-assigned-section-observed")

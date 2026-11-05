@@ -123,6 +123,15 @@ def answer(report: dict, finding_id: str, roots: list[Path] | None = None,
         source = Path(item["path"])
         if ".." in source.parts or not source.is_absolute():
             return _refuse("absolute-reviewed-source-path-required", digest, finding_id)
+        # Compare canonical filesystem identities on both sides. Windows TEMP
+        # commonly contains RUNNER~1 while resolve() expands it to runneradmin.
+        # Reject links before resolution so canonicalization cannot hide them.
+        if any(p.is_symlink() for p in (source, *source.parents)):
+            return _refuse("symlinked-source", digest, finding_id)
+        try:
+            source = source.resolve(strict=False)
+        except (OSError, RuntimeError):
+            return _refuse("missing-or-unsafe-source-evidence", digest, finding_id)
         matches = [(index, root) for index, root in enumerate(approved)
                    if source == root or root in source.parents]
         if not matches:
