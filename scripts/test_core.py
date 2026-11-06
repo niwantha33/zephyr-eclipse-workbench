@@ -25,6 +25,7 @@ sources += sorted((root / 'tests/core').glob('*.java'))
 # Reuse the real editor's JFace-independent index and completion engine in CI.
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/MemoryProfilerJson.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/MemoryProfilerLayout.java']
+sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/MemoryProfilerReportGuard.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/DevicetreeIndex.java',
             root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/DevicetreeAssist.java',
             root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/DevicetreeEditorDiagnostics.java']
@@ -39,6 +40,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'ApplicationDiscoveryTests'], che
 subprocess.run([tool('java'), '-cp', str(out), 'EditorTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'MemoryProfilerJsonTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'MemoryProfilerLayoutTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'MemoryProfilerReportGuardTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'io.github.niwantha33.zew.ui.DevicetreeAssistTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'io.github.niwantha33.zew.ui.DevicetreeEditorDiagnosticsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ProjectTests'], check=True, cwd=root, timeout=90)
