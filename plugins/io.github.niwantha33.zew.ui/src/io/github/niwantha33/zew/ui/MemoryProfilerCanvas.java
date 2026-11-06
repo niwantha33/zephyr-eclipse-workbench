@@ -37,6 +37,8 @@ public final class MemoryProfilerCanvas extends Canvas {
                 if (data == null || data.regions().isEmpty()) return;
                 if (event.keyCode == SWT.ARROW_DOWN) selectIndex(Math.min(selection + 1, data.regions().size() - 1), true);
                 if (event.keyCode == SWT.ARROW_UP) selectIndex(Math.max(0, selection - 1), true);
+                if (event.keyCode == SWT.HOME) selectIndex(0, true);
+                if (event.keyCode == SWT.END) selectIndex(data.regions().size() - 1, true);
             }
         });
         setToolTipText("Each region has its own scale. VMA and explicit LMA are linker observations, not measured usage.");
@@ -49,6 +51,8 @@ public final class MemoryProfilerCanvas extends Canvas {
         setSize(WIDTH, HEADER_HEIGHT + Math.max(1, count) * ROW_HEIGHT + 12);
         redraw();
     }
+
+    public int selectedIndex() { return selection; }
 
     public void onSelection(Consumer<Region> callback) {
         listener = callback == null ? region -> {} : callback;
