@@ -10,8 +10,11 @@ import org.eclipse.ui.handlers.HandlerUtil;
 public final class ThreadTimelineHandler extends AbstractHandler {
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
         try {
-            HandlerUtil.getActiveWorkbenchWindowChecked(event).getActivePage()
-                    .showView(ThreadTimelineView.ID);
+            var view = (ThreadTimelineView) HandlerUtil.getActiveWorkbenchWindowChecked(event)
+                    .getActivePage().showView(ThreadTimelineView.ID);
+            var project = SelectedProject.from(event);
+            if (project != null && ZephyrProjectLifecycle.canInspect(project))
+                view.displayProject(project);
         } catch (Exception error) {
             throw new ExecutionException("Unable to open Zephyr Thread Timeline.", error);
         }
