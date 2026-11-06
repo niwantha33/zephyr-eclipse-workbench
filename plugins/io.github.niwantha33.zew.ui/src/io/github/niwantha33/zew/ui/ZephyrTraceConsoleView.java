@@ -171,7 +171,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
                 final Snapshot inspected = result;
                 final String label = status;
                 if (context != null && !context.isDisposed()) {
-                    context.getDisplay().asyncExec(() -> {
+                    org.eclipse.swt.widgets.Display.getDefault().asyncExec(() -> {
                         if (context.isDisposed() || generation.get() != request
                                 || project != selected) return;
                         snapshot = inspected;
@@ -227,7 +227,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
         for (var view : OPEN) {
             if (view.project == null || !view.project.equals(source)
                     || view.output == null || view.output.isDisposed()) continue;
-            view.output.getDisplay().asyncExec(() -> {
+            org.eclipse.swt.widgets.Display.getDefault().asyncExec(() -> {
                 if (view.output == null || view.output.isDisposed() || !source.equals(view.project)) return;
                 var text = view.output;
                 if (text.getCharCount() >= MAX_TEXT)
