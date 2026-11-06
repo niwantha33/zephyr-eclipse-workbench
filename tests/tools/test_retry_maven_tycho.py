@@ -75,13 +75,24 @@ class TychoReleaseRetryTests(unittest.TestCase):
         self.assertEqual(calls, [VERSION])
 
     def test_exact_pinned_tycho_version_is_read_from_pom(self):
-        self.assertEqual(retry.tycho_version(), VERSION)
+        # Historical #189 retry fixtures deliberately use VERSION=5.0.3,
+        # but the current pinned version can advance through Dependabot.
+        self.assertRegex(retry.tycho_version(), r"^[0-9]+\\.[0-9]+\\.[0-9]+$")
         with tempfile.TemporaryDirectory() as path:
-            invalid = Path(path, "pom.xml")
-            invalid.write_text("<project><properties><tycho.version>latest</tycho.version>"
-                               "</properties></project>")
+            pom = Path(path, "pom.xml")
+            for version in ("5.0.3", "5.0.4"):
+                with self.subTest(version=version):
+                    pom.write_text(
+                        '<project xmlns="http://maven.apache.org/POM/4.0.0">'
+                        "<properties><tycho.version>" + version +
+                        "</tycho.version></properties></project>", encoding="utf-8")
+                    self.assertEqual(retry.tycho_version(pom), version)
+            pom.write_text(
+                '<project xmlns="http://maven.apache.org/POM/4.0.0">'
+                "<properties><tycho.version>latest</tycho.version>"
+                "</properties></project>", encoding="utf-8")
             with self.assertRaises(ValueError):
-                retry.tycho_version(invalid)
+                retry.tycho_version(pom)
 
     def test_release_qualifier_cannot_be_injected(self):
         with self.assertRaises(SystemExit):
