@@ -66,6 +66,6 @@ Submodule validation includes exact gitlinks, nested dependencies, upstream URLs
 
 ## Current status
 
-The first development slice has 29 passing core/process checks and a successful Tycho package build against Eclipse 4.41. A package-inspection script checks JAR integrity, original licence text, extension classes, feature references and p2 metadata. See BUILD_REPORT.md for exact versions and limitations.
+The first development slice has 29 passing core/process checks and a successful Tycho package build against Eclipse 4.41. A package-inspection script checks JAR integrity, original licence text, extension classes, feature references and p2 metadata. See reports/BUILD_REPORT.md for exact versions and limitations.
 
 A manual GitHub Actions packaging workflow is provided but has not been run. Desktop installation, Windows runtime, actual firmware builds through the UI, hardware, update/recovery behaviour and complete dependency/licence review remain unverified. The earlier sections define remaining release checks rather than successful results.

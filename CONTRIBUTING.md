@@ -1,6 +1,6 @@
 # Contributing
 
-The repository is public and contains a working development preview; the feature-completion and production-release gates remain open. See docs/RELEASE_STATUS_2026-10-30.md.
+The repository is public and contains a working development preview; the feature-completion and production-release gates remain open. See docs/reports/RELEASE_STATUS_2026-10-30.md.
 
 Read docs/ARCHITECTURE.md, docs/ROADMAP.md and docs/COMPATIBILITY.md before implementation.
 
