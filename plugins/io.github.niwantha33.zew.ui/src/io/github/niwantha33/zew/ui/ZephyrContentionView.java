@@ -282,7 +282,7 @@ public final class ZephyrContentionView extends ViewPart {
         } finally {
             table.setRedraw(true);
         }
-        if (report.observedResourceEvents() == 0)
+        if (report.resourceEvents() == 0)
             status.setText("No mutex or semaphore events were observed in this trace. "
                     + "Resource tracing may not have been enabled.");
         else if (report.findings().isEmpty())
