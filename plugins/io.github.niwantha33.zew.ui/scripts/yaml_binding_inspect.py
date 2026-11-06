@@ -185,10 +185,10 @@ def inspect(root, relative, kind, zephyr, application):
         for name, spec in binding.prop2specs.items():
             if len(properties) >= MAX_PROPERTY_SPECS:
                 raise Rejected("too-many-binding-properties")
-            properties.append((_limited(name, 120), _limited(spec.type, 80),
+            properties.append((_limited(name, 120), _limited(spec.type, 48),
                                "yes" if spec.required else "no",
                                "yes" if spec.deprecated else "no",
-                               _limited(spec.description)))
+                               _limited(spec.description, 160)))
         if source_hash != hashlib.sha256(read_selected(str(root), relative, kind)).hexdigest():
             raise Rejected("binding-source-changed")
         if edt_hash != hashlib.sha256(_regular_bytes(edt_path, 1024 * 1024)).hexdigest():
