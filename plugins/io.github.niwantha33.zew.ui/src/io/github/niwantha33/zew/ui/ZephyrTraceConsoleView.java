@@ -292,7 +292,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
                     append(selected, "RTT", "Receiver failed: " + error.getMessage());
                     return new Status(IStatus.ERROR, Activator.ID, "RTT receiver failed", error);
                 } finally {
-                    rttJob = null;
+                    if (rttJob == this) rttJob = null;
                     var display = org.eclipse.swt.widgets.Display.getDefault();
                     if (!display.isDisposed()) display.asyncExec(() -> {
                         if (captureRtt != null && !captureRtt.isDisposed())
