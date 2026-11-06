@@ -147,7 +147,7 @@ public final class MemoryProfilerView extends ViewPart {
             canvas.setDiagram(diagram);
             scroll.setMinSize(canvas.getSize());
             status.setText(message);
-            detail.setText(diagram == null ? "No verified layout available." :
+            detail.setText(diagram == null ? "No valid layout available." :
                     "Select a region for exact addresses. MPU status: " + diagram.mpuStatus()
                     + "\nSaved linker-map evidence; no target or ELF validation performed.");
             status.getParent().layout(true, true);
@@ -156,6 +156,16 @@ public final class MemoryProfilerView extends ViewPart {
 
     private void showDetails(Region region) {
         if (displayed == null || detail == null || detail.isDisposed()) return;
+        int selectedRow = canvas.selectedIndex();
+        if (selectedRow >= 0) {
+            int top = MemoryProfilerCanvas.HEADER_HEIGHT + selectedRow * MemoryProfilerCanvas.ROW_HEIGHT;
+            int bottom = top + MemoryProfilerCanvas.ROW_HEIGHT;
+            var origin = scroll.getOrigin();
+            int height = scroll.getClientArea().height;
+            if (top < origin.y) scroll.setOrigin(origin.x, top);
+            else if (height > 0 && bottom > origin.y + height)
+                scroll.setOrigin(origin.x, bottom - height);
+        }
         int vma = 0, lma = 0, capturedMpu = 0;
         for (var section : displayed.sections()) {
             if (region.address().intersect(section.vma()) != null) vma++;
