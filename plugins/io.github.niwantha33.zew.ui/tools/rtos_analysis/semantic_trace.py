@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+import math
+import struct
 from typing import Iterable, Mapping
 
 
@@ -27,6 +29,7 @@ class EventKind(str, Enum):
     SEM_GIVE = "SEM_GIVE"
     MEM_ALLOC = "MEM_ALLOC"
     MEM_FREE = "MEM_FREE"
+    VALUE_SAMPLE = "VALUE_SAMPLE"
     UNKNOWN = "UNKNOWN"
 
 
@@ -42,6 +45,8 @@ class SemanticEvent:
     # ID nor an address is substituted for a human-readable thread/object name.
     thread_id: str | None = None
     stream: object | None = None
+    tracepoint_name: str = ""
+    value: int | float | None = None
 
 
 @dataclass
@@ -55,6 +60,9 @@ class SemanticTrace:
     # Preserves non-event decoder messages (including reported loss) for
     # existing evidence-qualified analysis without changing its API.
     raw_records: list[dict] = field(default_factory=list)
+    tracepoint_sample_counts: dict[str, int] = field(default_factory=dict)
+    missing_tracepoints: list[str] = field(default_factory=list)
+    sample_errors: list[str] = field(default_factory=list)
 
     @property
     def unknown_message(self) -> str:
@@ -104,6 +112,41 @@ def _first(record: Mapping, *keys: str):
     return None
 
 
+def _named_u32(value) -> int:
+    """Accept CTF unsigned 32-bit integer or a signed int32 bit pattern."""
+    if isinstance(value, bool):
+        raise ValueError("boolean is not a trace sample")
+    number = int(value, 0) if isinstance(value, str) else int(value)
+    if number < -0x80000000 or number > 0xFFFFFFFF:
+        raise ValueError("arg0 is outside its 32-bit range")
+    return number & 0xFFFFFFFF
+
+
+def _tracepoint_value(raw: Mapping, spec) -> int | float:
+    # Current Zephyr CTF named_event carries a 32-bit unsigned bit pattern
+    # in arg0. arg1 is reserved, NOT an additional sample.
+    raw_name = _text(raw.get("name")).rsplit(":", 1)[-1]
+    encoded = raw.get("arg0") if raw_name == "named_event" else raw.get("value")
+    if encoded is None:
+        raise ValueError("missing arg0/value payload")
+    if raw_name == "named_event":
+        bits = _named_u32(encoded)
+        if spec.type == "integer":
+            return bits if bits < 0x80000000 else bits - 0x100000000
+        number = struct.unpack("<f", struct.pack("<I", bits))[0]
+    elif spec.type == "integer":
+        if isinstance(encoded, bool) or isinstance(encoded, float):
+            raise ValueError("integer sample must be integral")
+        number = int(encoded, 0) if isinstance(encoded, str) else int(encoded)
+        if not -(2 ** 31) <= number <= 2 ** 31 - 1:
+            raise ValueError("signed integer sample outside int32 range")
+    else:
+        number = float(encoded)
+    if isinstance(number, float) and not math.isfinite(number):
+        raise ValueError("float sample is not finite")
+    return number
+
+
 def decode_ctf(path: Path):
     """Yield Babeltrace records from a saved CTF trace; errors reach the parser.
 
@@ -126,6 +169,20 @@ def decode_ctf(path: Path):
             def get(name):
                 return str(fields[name]) if fields is not None and name in fields else None
 
+            def bounded_text(name):
+                if fields is None or name not in fields:
+                    return None
+                value = fields[name]
+                if isinstance(value, str):
+                    return value.split("\0", 1)[0]
+                if isinstance(value, bytes):
+                    return value.split(b"\0", 1)[0].decode("ascii", "replace")
+                try:
+                    values = bytes(int(char) for char in value)
+                    return values.split(b"\0", 1)[0].decode("ascii", "replace")
+                except (TypeError, ValueError, OverflowError):
+                    return str(value).split("\0", 1)[0]
+
             try:
                 timestamp = message.default_clock_snapshot.ns_from_origin
             except (AttributeError, ValueError):
@@ -134,7 +191,8 @@ def decode_ctf(path: Path):
                 "kind": "event", "stream": streams[stream],
                 "name": event.name, "timestamp_ns": timestamp,
                 "thread_id": get("thread_id"),
-                "thread_name": get("name"),
+                "thread_name": None if event.name.rsplit(":", 1)[-1] == "named_event" else bounded_text("name"),
+                "named_event_name": bounded_text("name") if event.name.rsplit(":", 1)[-1] == "named_event" else None,
                 "priority": get("prio"),
                 "core_id": get("cpu"),
                 "object_id": get("id"),
@@ -146,6 +204,7 @@ def decode_ctf(path: Path):
                 "next_comm": get("next_comm"),
                 "next_prio": get("next_prio"),
                 "arg0": get("arg0"), "arg1": get("arg1"),
+                "value": get("value"),
             }
 
 
@@ -159,8 +218,14 @@ class SemanticTraceParser:
 
     MAX_EVENTS = 2_000_000
 
-    def parse(self, source: Iterable[Mapping] | str | Path) -> SemanticTrace:
+    def parse(self, source: Iterable[Mapping] | str | Path, tracepoints=None) -> SemanticTrace:
         trace = SemanticTrace()
+        # Optional project configuration: without it all named events follow
+        # the existing UNKNOWN preservation path. No CTF name is presumed.
+        specs = {spec.name: spec for spec in
+                 (tracepoints.specs if tracepoints is not None
+                  and tracepoints.status == "active" else ())}
+        trace.tracepoint_sample_counts = {name: 0 for name in specs}
         previous_timestamp = None
         records = decode_ctf(Path(source)) if isinstance(source, (str, Path)) else source
         try:
@@ -178,6 +243,19 @@ class SemanticTraceParser:
                     name = _text(raw.get("name"))
                     simple_name = name.rsplit(":", 1)[-1]
                     kind = RAW_EVENT_KINDS.get(simple_name, EventKind.UNKNOWN)
+                    # Zephyr CTF's wire event name is always "named_event";
+                    # the declared tracepoint is in its bounded "name" field.
+                    declared_name = _text(raw.get("named_event_name")) if simple_name == "named_event" else simple_name
+                    spec = specs.get(declared_name)
+                    sample_value = None
+                    if spec is not None:
+                        try:
+                            sample_value = _tracepoint_value(raw, spec)
+                            kind = EventKind.VALUE_SAMPLE
+                        except (TypeError, ValueError, OverflowError) as exc:
+                            kind = EventKind.UNKNOWN
+                            if len(trace.sample_errors) < 100:
+                                trace.sample_errors.append(f"{declared_name}: {exc}")
                     timestamp = raw.get("timestamp_ns")
                     if type(timestamp) is not int or timestamp < 0:
                         timestamp = None
@@ -186,6 +264,12 @@ class SemanticTraceParser:
                         trace.input_out_of_order = True
                     if timestamp is not None:
                         previous_timestamp = timestamp
+                    if kind == EventKind.VALUE_SAMPLE and timestamp is None:
+                        kind = EventKind.UNKNOWN
+                        if len(trace.sample_errors) < 100:
+                            trace.sample_errors.append(f"{declared_name}: missing timestamp")
+                    if kind == EventKind.VALUE_SAMPLE:
+                        trace.tracepoint_sample_counts[declared_name] += 1
                     sched = simple_name == "sched_switch"
                     thread_id = _first(raw, "next_tid", "thread_id") if sched else raw.get("thread_id")
                     thread_name = _first(raw, "next_comm", "thread_name") if sched else raw.get("thread_name")
@@ -197,7 +281,9 @@ class SemanticTraceParser:
                         thread_priority=None if priority is None else str(priority),
                         object_name=_text(object_name), raw_event_name=name,
                         thread_id=None if thread_id is None else str(thread_id),
-                        stream=raw.get("stream"))
+                        stream=raw.get("stream"),
+                        tracepoint_name=declared_name if kind == EventKind.VALUE_SAMPLE else "",
+                        value=sample_value if kind == EventKind.VALUE_SAMPLE else None)
                     if not name:
                         trace.incomplete = True
                 trace.events.append(event)
@@ -218,4 +304,6 @@ class SemanticTraceParser:
             trace.error = f"{type(exc).__name__}: {exc}"
         trace.events.sort(key=lambda event: (event.timestamp_ns is None,
                                             event.timestamp_ns if event.timestamp_ns is not None else 0))
+        trace.missing_tracepoints = [
+            name for name, count in trace.tracepoint_sample_counts.items() if count == 0]
         return trace
