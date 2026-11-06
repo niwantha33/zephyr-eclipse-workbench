@@ -5,6 +5,7 @@
 
 **More than a Zephyr code editor — a hardware-aware engineering and evidence workbench.**
 
+[![PR build](https://github.com/niwantha33/zephyr-eclipse-workbench/actions/workflows/build.yml/badge.svg?event=pull_request)](https://github.com/niwantha33/zephyr-eclipse-workbench/actions/workflows/build.yml)
 [![GitHub release](https://img.shields.io/github/v/release/niwantha33/zephyr-eclipse-workbench?include_prereleases&label=latest%20release)](https://github.com/niwantha33/zephyr-eclipse-workbench/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/niwantha33/zephyr-eclipse-workbench)](https://github.com/niwantha33/zephyr-eclipse-workbench/stargazers)
