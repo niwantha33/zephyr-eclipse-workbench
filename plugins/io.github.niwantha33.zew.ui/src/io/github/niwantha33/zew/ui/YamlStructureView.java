@@ -508,6 +508,8 @@ public final class YamlStructureView extends ViewPart {
                 YamlBindingIntelligence.Summary binding = null;
                 YamlHardwareModel.Summary hardware = null;
                 YamlTwisterModel.Summary twister = null;
+                YamlDiagnosticModel.Summary diagnostics = null;
+                String markerNotice = "";
                 String failure = null;
                 try {
                     Properties settings = ProjectContext.settings(context);
@@ -523,6 +525,25 @@ public final class YamlStructureView extends ViewPart {
                     snapshot = YamlSourceLoader.inspect(Path.of(settings.getProperty("python")),
                             script, source,
                             () -> monitor.isCanceled() || generation.get() != request);
+                    var diagnosticEntry = Activator.getDefault().getBundle().getEntry(
+                            "scripts/yaml_diagnostic_inspect.py");
+                    if (diagnosticEntry == null) {
+                        diagnostics = YamlDiagnosticModel.unavailable("inspector-not-installed");
+                    } else {
+                        try {
+                            Path diagnosticScript = Path.of(FileLocator.toFileURL(diagnosticEntry).toURI());
+                            diagnostics = YamlDiagnosticModel.inspect(
+                                    Path.of(settings.getProperty("python")), diagnosticScript,
+                                    source, zephyr, app, () -> monitor.isCanceled()
+                                            || generation.get() != request);
+                        } catch (java.io.IOException unavailable) {
+                            diagnostics = YamlDiagnosticModel.unavailable(
+                                    "source-diagnostics-unavailable");
+                        }
+                    }
+                    if (!"unavailable".equals(diagnostics.state())
+                            && !snapshot.sha256().equals(diagnostics.sourceSha256()))
+                        throw new java.io.IOException("Diagnostic source and YAML observation hashes differ");
                     if (snapshot.parsed() && "devicetree-binding".equals(snapshot.kind())) {
                         var bindingEntry = Activator.getDefault().getBundle().getEntry(
                                 "scripts/yaml_binding_inspect.py");
@@ -584,6 +605,8 @@ public final class YamlStructureView extends ViewPart {
                         if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
                             throw new java.io.IOException("YAML source changed during Twister inspection");
                     }
+                    if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
+                        throw new java.io.IOException("YAML source changed during validation");
                 } catch (InterruptedException cancelled) {
                     Thread.currentThread().interrupt();
                     return Status.CANCEL_STATUS;
@@ -592,12 +615,23 @@ public final class YamlStructureView extends ViewPart {
                             + "application or its exact Zephyr checkout, and check the Python setup. "
                             + "No file was modified.";
                 }
-                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                if (monitor.isCanceled() || request != generation.get()) return Status.CANCEL_STATUS;
+                try {
+                    boolean applied = YamlDiagnosticMarkers.replace(markerOwner,
+                            failure == null ? file : null,
+                            failure == null ? diagnostics : null,
+                            () -> !monitor.isCanceled() && request == generation.get());
+                    if (applied) markerOwner = failure == null ? file : null;
+                } catch (org.eclipse.core.runtime.CoreException markerError) {
+                    markerNotice = " Workspace problem markers could not be updated.";
+                }
                 YamlDocumentModel.Snapshot loaded = snapshot;
                 YamlSourceLoader.Source loadedSource = source;
                 YamlBindingIntelligence.Summary bindingResult = binding;
                 YamlHardwareModel.Summary hardwareResult = hardware;
                 YamlTwisterModel.Summary twisterResult = twister;
+                YamlDiagnosticModel.Summary diagnosticResult = diagnostics;
+                String diagnosticsNotice = markerNotice;
                 String problem = failure;
                 Display.getDefault().asyncExec(() -> {
                     if (request != generation.get() || tree == null || tree.getTree().isDisposed()) return;
@@ -608,6 +642,9 @@ public final class YamlStructureView extends ViewPart {
                         hardwareStatus.setText("HWMv2: unavailable; source or checkout context unverified.");
                         twisterTree.setInput(List.of());
                         twisterStatus.setText("Twister: unavailable; source or checkout context unverified.");
+                        diagnosticTree.setInput(List.of());
+                        diagnosticStatus.setText("Diagnostics unavailable: source or checkout context unverified."
+                                + diagnosticsNotice);
                         tree.setInput(List.of());
                         return;
                     }
@@ -637,6 +674,19 @@ public final class YamlStructureView extends ViewPart {
                                 + twisterResult.reason()
                                 + ". Schema metadata only — no test plan, execution or result verified.");
                         if (twisterResult.resolved()) twisterTree.expandToLevel(2);
+                    }
+                    diagnosticTree.setInput(YamlDiagnosticModel.rows(diagnosticResult));
+                    if (diagnosticResult == null) {
+                        diagnosticStatus.setText("YAML diagnostics were not produced." + diagnosticsNotice);
+                    } else if ("checked".equals(diagnosticResult.state())) {
+                        diagnosticStatus.setText("Verified " + diagnosticResult.scope()
+                                + " only — " + diagnosticResult.reason()
+                                + ". No binding, build, or test execution implied." + diagnosticsNotice);
+                    } else {
+                        diagnosticStatus.setText("Diagnostics " + diagnosticResult.state()
+                                + " — " + diagnosticResult.reason() + " ("
+                                + diagnosticResult.findings().size() + " findings)."
+                                + " Unknown positions are not marked." + diagnosticsNotice);
                     }
                 });
                 return Status.OK_STATUS;
