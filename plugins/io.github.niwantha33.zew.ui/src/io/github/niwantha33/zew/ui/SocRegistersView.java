@@ -31,6 +31,7 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
@@ -57,6 +58,7 @@ import io.github.niwantha33.zew.core.SvdPartCompatibility;
 import io.github.niwantha33.zew.core.VendorSvdProvisioner;
 import io.github.niwantha33.zew.core.GitHubSvdProvisioner;
 import io.github.niwantha33.zew.core.RegisterHistory;
+import io.github.niwantha33.zew.core.RegisterSparkline;
 import io.github.niwantha33.zew.core.SvdDevice.Register;
 
 /** Read-only peripheral inspection through the user's selected native DSF session. */
@@ -76,6 +78,11 @@ public final class SocRegistersView extends ViewPart {
     private volatile long discoveryGeneration;
     private final Map<String, BigInteger> values = new HashMap<>();
     private final RegisterHistory history = new RegisterHistory();
+    private boolean liveWatch; // always off at startup
+    private int watchEpoch;
+    private volatile long quietUntil;
+    private Button watchButton;
+    private Canvas historyChart;
     private String svdIdentity;
     private final Map<String, String> errors = new HashMap<>();
     private final Set<String> watches = new HashSet<>();
@@ -104,10 +111,13 @@ public final class SocRegistersView extends ViewPart {
         });
         button(bar, "Refresh Live Values", this::refresh);
         var options = new Composite(parent, SWT.NONE);
-        options.setLayout(new GridLayout(4, false));
+        options.setLayout(new GridLayout(5, false));
         options.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(options, "Pin baseline", this::pinBaseline);
         button(options, "Export history CSV…", this::exportHistory);
+        watchButton = new Button(options, SWT.PUSH);
+        watchButton.setText("Start Live Watch (opt-in)");
+        watchButton.addListener(SWT.Selection, e -> toggleLiveWatch());
         button(options, "Watch / unwatch", () -> {
             var selected = selected();
             if (selected != null) {
@@ -128,6 +138,13 @@ public final class SocRegistersView extends ViewPart {
         summary = new Label(parent, SWT.WRAP);
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         summary.setText("No SVD model loaded yet. Find Device Definitions searches installed SDKs and packs; register values require a halted manual read.");
+        historyChart = new Canvas(parent, SWT.BORDER | SWT.DOUBLE_BUFFERED);
+        var chartData = new GridData(SWT.FILL, SWT.TOP, true, false);
+        chartData.heightHint = 105;
+        chartData.exclude = true;
+        historyChart.setLayoutData(chartData);
+        historyChart.setVisible(false);
+        historyChart.addPaintListener(e -> paintHistory(e.gc));
         tree = new Tree(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         tree.setHeaderVisible(true); tree.setLinesVisible(true);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -141,6 +158,7 @@ public final class SocRegistersView extends ViewPart {
             if (item.getData("registers") instanceof java.util.List<?>) populatePeripheral(item);
             else if (item.getData() instanceof Register r) populateFields(item, r);
         });
+        tree.addListener(SWT.Selection, e -> historyChart.redraw());
         tree.addListener(SWT.MouseHover, e -> {
             var item = tree.getItem(new org.eclipse.swt.graphics.Point(e.x, e.y));
             tree.setToolTipText(item == null ? null : (String) item.getData("description"));
@@ -188,6 +206,7 @@ public final class SocRegistersView extends ViewPart {
      */
     public void useLaunchProject(IProject project) {
         if (project == null || !project.isAccessible()) return;
+        stopLiveWatch();
         selectedProjectName = project.getName();
         selectedBoard = null;
         discoveryExplanation = "Finding vendor register descriptions for project " + selectedProjectName + "…";
@@ -486,6 +505,7 @@ public final class SocRegistersView extends ViewPart {
 
     /** No implicit peripheral read: selection/resume/step only invalidates snapshots. */
     private void contextChanged() {
+        quietUntil = System.currentTimeMillis() + 1500;
         generation++; busy = false; values.clear(); errors.clear(); render();
         var context = debugContext();
         var selectedSession = context == null ? null : DsfSession.getSession(context.getSessionId());
@@ -506,12 +526,15 @@ public final class SocRegistersView extends ViewPart {
     /** Public because DSF invokes annotated listener methods reflectively across bundles. */
     public final class RunListener {
         @DsfServiceEventHandler public void eventDispatched(IRunControl.IResumedDMEvent event) {
+            quietUntil = Long.MAX_VALUE;
             invalidateSnapshot(event.getDMContext(), "Target resumed. Previous register values were cleared; halt and Refresh for a new snapshot.");
         }
         @DsfServiceEventHandler public void eventDispatched(IRunControl.ISuspendedDMEvent event) {
+            quietUntil = System.currentTimeMillis() + 1500;
             invalidateSnapshot(event.getDMContext(), "Target suspended. Select its stack frame, then Refresh selected registers and watches.");
         }
         @DsfServiceEventHandler public void eventDispatched(IRunControl.IExitedDMEvent event) {
+            quietUntil = Long.MAX_VALUE;
             invalidateSnapshot(event.getDMContext(), "Debug execution exited. No live peripheral values are available.");
         }
     }
@@ -531,6 +554,7 @@ public final class SocRegistersView extends ViewPart {
         if (previous == next) return;
         // Never mix snapshot evidence across two different DSF debug sessions.
         history.clear();
+        stopLiveWatch();
         listenedSession = next;
         if (previous != null) {
             try { previous.getExecutor().execute(() -> previous.removeServiceEventListener(runListener)); }
@@ -551,6 +575,7 @@ public final class SocRegistersView extends ViewPart {
     private void load(String path) { load(path, false); }
 
     private void load(String path, boolean exactPackDeviceMapping) {
+        stopLiveWatch();
         // Parsing a multi-megabyte vendor SVD on SWT's UI thread can starve
         // DSF/GDB progress and make a healthy debug session appear frozen.
         // This operation is offline: never resume, suspend or terminate GDB.
@@ -612,6 +637,62 @@ public final class SocRegistersView extends ViewPart {
         job.schedule();
     }
 
+    private void stopLiveWatch() {
+        liveWatch = false;
+        watchEpoch++;
+        if (watchButton != null && !watchButton.isDisposed()) watchButton.setText("Start Live Watch (opt-in)");
+        if (historyChart != null && !historyChart.isDisposed()) {
+            historyChart.setVisible(false);
+            ((GridData) historyChart.getLayoutData()).exclude = true;
+            historyChart.getParent().layout(true, true);
+        }
+    }
+    private void toggleLiveWatch() {
+        if (liveWatch) { stopLiveWatch(); status.setText("Live Watch stopped."); return; }
+        if (device == null || watches.isEmpty() || watches.size() > 8 || debugContext() == null
+                || listenedSession == null) {
+            status.setText("Load an exact SVD; watch 1–8 safe registers; select a suspended DSF stack frame.");
+            return;
+        }
+        liveWatch = true;
+        quietUntil = System.currentTimeMillis() + 1500;
+        watchButton.setText("Stop Live Watch");
+        historyChart.setVisible(true);
+        ((GridData) historyChart.getLayoutData()).exclude = false;
+        historyChart.getParent().layout(true, true);
+        status.setText("Live Watch: host-timed halted snapshots only; NOT continuous trace.");
+        scheduleWatch(++watchEpoch);
+    }
+    private void scheduleWatch(int epoch) {
+        if (closed || ui == null || ui.isDisposed()) return;
+        ui.timerExec(1500, () -> {
+            if (closed || tree.isDisposed() || !liveWatch || epoch != watchEpoch) return;
+            if (watches.isEmpty() || watches.size() > 8) {
+                stopLiveWatch();
+                status.setText("Live Watch stopped: watch count outside 1–8.");
+                return;
+            }
+            if (!busy && listenedSession != null && debugContext() != null
+                    && System.currentTimeMillis() >= quietUntil) refresh();
+            scheduleWatch(epoch);
+        });
+    }
+    private void paintHistory(org.eclipse.swt.graphics.GC gc) {
+        if (!liveWatch) return;
+        String key = watches.stream().sorted().findFirst().orElse(null);
+        var selected = selected();
+        if (selected != null && watches.contains(selected.key())) key = selected.key();
+        var points = RegisterSparkline.series(history.samples(), key);
+        var bounds = historyChart.getClientArea();
+        gc.drawText("Sampled halted snapshots: " + key + " (not target timestamps)", 6, 5, true);
+        if (points.size() < 2) { gc.drawText("Need two successful samples; missing data is not zero.", 6, 38, true); return; }
+        int width = Math.max(1, bounds.width - 20), height = Math.max(1, bounds.height - 43);
+        for (int i = 1; i < points.size(); i++)
+            gc.drawLine(10 + (i - 1) * width / (points.size() - 1),
+                    29 + (int) ((1 - points.get(i - 1).level()) * height),
+                    10 + i * width / (points.size() - 1),
+                    29 + (int) ((1 - points.get(i).level()) * height));
+    }
     private Register selected() {
         if (tree.getSelectionCount() == 0) return null;
         var item = tree.getSelection()[0];
@@ -666,7 +747,8 @@ public final class SocRegistersView extends ViewPart {
                     + " captured register snapshots (max " + RegisterHistory.LIMIT + ")."
                     + (history.baseline() == null ? " No baseline pinned."
                             : " Baseline: " + history.baseline().timestamp() + ".")
-                    + " No automatic polling.");
+                    + (liveWatch ? " Halted-only sampled Live Watch; NOT continuous hardware tracing."
+                            : " No automatic polling."));
         } finally { tree.setRedraw(true); }
     }
 
@@ -815,6 +897,7 @@ public final class SocRegistersView extends ViewPart {
                         history.record(new RegisterHistory.Sample(listenedSession.getId(),
                                 svdIdentity, java.time.Instant.now(), new HashMap<>(values)));
                         render();
+                        historyChart.redraw();
                     } catch (IllegalArgumentException invalid) {
                         status.setText("Register snapshot rejected: " + invalid.getMessage());
                         return;
@@ -870,6 +953,7 @@ public final class SocRegistersView extends ViewPart {
     }
     @Override public void setFocus() { if (tree != null) tree.setFocus(); }
     @Override public void dispose() {
+        stopLiveWatch();
         closed = true; generation++;
         listenTo(null);
         if (contextListener != null) DebugUITools.getDebugContextManager()

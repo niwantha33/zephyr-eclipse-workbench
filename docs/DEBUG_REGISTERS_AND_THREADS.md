@@ -364,3 +364,22 @@ For an independent GDB check, select GDB's interactive debugger console and
 run `info address gpio_dev`, `p/x gpio_dev`, and `p/x &gpio_dev`. These
 are diagnostic reads only. Do not dereference a value until the symbol and
 target identity are independently confirmed.
+
+## Opt-in halted Live Watch and sampled-history chart (development)
+
+Watch between 1 and 8 SVD-declared safe registers and select a suspended native
+DSF frame, then click **Start Live Watch (opt-in)**. This reveals a bounded
+sparkline and requests readings at roughly 1.5-second intervals via the existing
+read-only GDB expression service. It never launches an auxiliary debug server,
+issues memory writes, resumes/halts the CPU, or bypasses read-side-effect guards.
+
+A resume or step event pauses polling; new suspended events require a 1.5-second
+quiet interval. Session, project, SVD, watch count or view changes stop Live
+Watch. Every read rechecks halted state; already-issued reads cannot be
+cancelled. The chart displays at most the existing 16 recorded snapshots,
+normalised over successfully observed values. These are **host-time sampled
+snapshots**, not hardware trace, simultaneous state or CPU utilisation.
+
+Synthetic core projection tests cover missing values, session boundaries and
+bounded history. Installed Eclipse/real probe stepping stress acceptance is
+still pending and must not be claimed from source tests alone.
