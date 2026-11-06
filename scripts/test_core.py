@@ -25,6 +25,7 @@ sources += sorted((root / 'tests/core').glob('*.java'))
 # Reuse the real editor's JFace-independent index and completion engine in CI.
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/MemoryProfilerJson.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ThreadTimelineReport.java']
+sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ThreadCpuLoad.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlDocumentModel.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlTreeProjection.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlSourceLoader.java']
@@ -50,6 +51,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'ApplicationDiscoveryTests'], che
 subprocess.run([tool('java'), '-cp', str(out), 'EditorTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'MemoryProfilerJsonTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ThreadTimelineReportTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'ThreadCpuLoadTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'YamlDocumentModelTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'YamlTreeProjectionTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'YamlSourceLoaderTests'], check=True, cwd=root, timeout=90)
