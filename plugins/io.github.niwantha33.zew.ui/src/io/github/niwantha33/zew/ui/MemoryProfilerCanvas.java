@@ -127,7 +127,7 @@ public final class MemoryProfilerCanvas extends Canvas {
         if (data.hasMpuSnapshot()) {
             for (var mpu : data.mpu())
                 drawSlice(gc, region.address(), mpu.address(), y + 92, SWT.COLOR_DARK_MAGENTA);
-            for (Range conflict : data.conflicts(region))
+            for (Range conflict : data.overlaps(region))
                 drawSlice(gc, region.address(), conflict, y + 92, SWT.COLOR_RED);
         } else {
             gc.setForeground(getDisplay().getSystemColor(selected ? SWT.COLOR_LIST_SELECTION_TEXT : SWT.COLOR_WIDGET_FOREGROUND));
