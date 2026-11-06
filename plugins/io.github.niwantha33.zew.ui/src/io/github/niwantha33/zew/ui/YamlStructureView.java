@@ -5,14 +5,20 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Properties;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.runtime.Adapters;
+import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
+import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.ITreeContentProvider;
 import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.TreeViewerColumn;
@@ -25,6 +31,11 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.ui.IEditorPart;
+import org.eclipse.ui.IFileEditorInput;
+import org.eclipse.ui.ISelectionListener;
+import org.eclipse.ui.ide.IDE;
+import org.eclipse.ui.texteditor.ITextEditor;
 import org.eclipse.ui.part.ViewPart;
 
 /**
@@ -43,6 +54,27 @@ public final class YamlStructureView extends ViewPart {
     private TreeViewer tree;
     private Label status;
     private Job reader;
+    private IFile selectedYaml;
+    private IProject selectedContext;
+    private IFile observedFile;
+    private YamlSourceLoader.Source observedSource;
+    private String observedSha;
+    private final ISelectionListener followSelection = (part, selection) -> {
+        if (part == this || !(selection instanceof IStructuredSelection items) || items.size() != 1) return;
+        Object selected = items.getFirstElement();
+        if (selected instanceof IProject project) {
+            IProject managed = SelectedProject.importedProject(project);
+            if (managed != null) selectedContext = managed;
+            return;
+        }
+        IFile file = selected instanceof IFile direct ? direct : Adapters.adapt(selected, IFile.class);
+        if (file != null && isYaml(file)) {
+            selectedYaml = file;
+            IProject managed = SelectedProject.importedProject(file.getProject());
+            if (managed != null) selectedContext = managed;
+            loadSource(file);
+        }
+    };
 
     @Override
     public void createPartControl(Composite parent) {
@@ -52,18 +84,27 @@ public final class YamlStructureView extends ViewPart {
         parent.setLayout(layout);
 
         var header = new Label(parent, SWT.WRAP);
-        header.setText("ZEPHYR YAML STRUCTURE  /  SAVED OBSERVATION  /  READ-ONLY");
+        header.setText("ZEPHYR YAML STRUCTURE  /  SELECTED SOURCE OR SAVED OBSERVATION  /  READ-ONLY");
         header.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
-        var button = new Button(parent, SWT.PUSH);
+        var controls = new Composite(parent, SWT.NONE);
+        controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        controls.setLayout(new GridLayout(3, false));
+        var selectedButton = new Button(controls, SWT.PUSH);
+        selectedButton.setText("Inspect selected YAML");
+        selectedButton.addListener(SWT.Selection, event -> inspectSelection());
+        var refreshButton = new Button(controls, SWT.PUSH);
+        refreshButton.setText("Refresh source");
+        refreshButton.addListener(SWT.Selection, event -> refreshSource());
+        var button = new Button(controls, SWT.PUSH);
         button.setText("Open YAML observation JSON…");
-        button.setToolTipText("Import an existing zew.yaml-observation/1 report. Source YAML selection is not wired yet.");
+        button.setToolTipText("Import an existing zew.yaml-observation/1 report instead of a source file.");
         button.addListener(SWT.Selection, event -> chooseReport());
 
         status = new Label(parent, SWT.WRAP);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        status.setText("Import a saved YAML observation report to inspect its structure. "
-                + "Open-file integration with .yaml/.yml is planned for the next step.");
+        status.setText("Select a .yaml/.yml file in Project Explorer, or import a saved JSON observation. "
+                + "Select your managed Zephyr application first when inspecting checkout files.");
 
         tree = new TreeViewer(parent, SWT.BORDER | SWT.FULL_SELECTION
                 | SWT.H_SCROLL | SWT.V_SCROLL | SWT.SINGLE);
@@ -91,6 +132,9 @@ public final class YamlStructureView extends ViewPart {
         column("Value preview", 380, 2);
         column("Line:column", 100, 3);
         tree.setInput(List.of());
+        tree.addDoubleClickListener(event -> navigateToSource());
+        getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(followSelection);
+        inspectSelection();
     }
 
     private void column(String name, int width, int kind) {
@@ -122,6 +166,9 @@ public final class YamlStructureView extends ViewPart {
         // Any previous import is stale immediately; discard its delayed UI result.
         int request = generation.incrementAndGet();
         if (reader != null) reader.cancel();
+        observedFile = null;
+        observedSource = null;
+        observedSha = null;
         tree.setInput(List.of());
         status.setText("Loading saved YAML observation…");
         Path report;
@@ -186,6 +233,158 @@ public final class YamlStructureView extends ViewPart {
             tree.expandToLevel(2);
     }
 
+
+    private static boolean isYaml(IFile file) {
+        if (file == null || file.getName() == null) return false;
+        String name = file.getName().toLowerCase(java.util.Locale.ROOT);
+        return name.endsWith(".yaml") || name.endsWith(".yml");
+    }
+
+    private void inspectSelection() {
+        var selection = getSite().getWorkbenchWindow().getSelectionService().getSelection();
+        IFile file = null;
+        if (selection instanceof IStructuredSelection items && items.size() == 1) {
+            Object chosen = items.getFirstElement();
+            if (chosen instanceof IProject project) {
+                IProject managed = SelectedProject.importedProject(project);
+                if (managed != null) selectedContext = managed;
+            }
+            file = chosen instanceof IFile direct ? direct : Adapters.adapt(chosen, IFile.class);
+        }
+        if (file == null) {
+            IEditorPart editor = getSite().getPage().getActiveEditor();
+            if (editor != null && editor.getEditorInput() instanceof IFileEditorInput input)
+                file = input.getFile();
+        }
+        if (isYaml(file)) {
+            selectedYaml = file;
+            IProject managed = SelectedProject.importedProject(file.getProject());
+            if (managed != null) selectedContext = managed;
+            loadSource(file);
+        } else if (selectedYaml != null && isYaml(selectedYaml)) {
+            loadSource(selectedYaml);
+        } else {
+            status.setText("Select exactly one .yaml or .yml file in Project Explorer. "
+                    + "Select a managed Zephyr application first for checkout-owned files.");
+        }
+    }
+
+    private void refreshSource() {
+        IFile target = observedFile == null ? selectedYaml : observedFile;
+        if (target == null) {
+            status.setText("No selected YAML source to refresh.");
+            return;
+        }
+        loadSource(target);
+    }
+
+    private void loadSource(IFile file) {
+        int request = generation.incrementAndGet();
+        if (reader != null) reader.cancel();
+        observedFile = null;
+        observedSource = null;
+        observedSha = null;
+        tree.setInput(List.of());
+        status.setText("Inspecting selected YAML with the project's managed Python…");
+        IProject managed = SelectedProject.importedProject(file.getProject());
+        if (managed == null) managed = selectedContext;
+        IProject context = managed;
+        if (context == null) {
+            status.setText("Select a managed Zephyr application before inspecting this YAML file.");
+            return;
+        }
+        reader = new Job("Inspect selected Zephyr YAML (read-only)") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                YamlDocumentModel.Snapshot snapshot = null;
+                YamlSourceLoader.Source source = null;
+                String failure = null;
+                try {
+                    Properties settings = ProjectContext.settings(context);
+                    Path app = context.getLocation().toFile().toPath();
+                    Path zephyr = Path.of(settings.getProperty("workspace"), "zephyr");
+                    if (file.getLocation() == null)
+                        throw new java.io.IOException("The selected YAML file has no local source path.");
+                    source = YamlSourceLoader.resolve(file.getLocation().toFile().toPath(), app, zephyr);
+                    var entry = Activator.getDefault().getBundle().getEntry("scripts/yaml_observe_file.py");
+                    if (entry == null)
+                        throw new java.io.IOException("The packaged YAML source parser is missing.");
+                    Path script = Path.of(FileLocator.toFileURL(entry).toURI());
+                    snapshot = YamlSourceLoader.inspect(Path.of(settings.getProperty("python")),
+                            script, source,
+                            () -> monitor.isCanceled() || generation.get() != request);
+                } catch (InterruptedException cancelled) {
+                    Thread.currentThread().interrupt();
+                    return Status.CANCEL_STATUS;
+                } catch (Exception exception) {
+                    failure = "YAML inspection unavailable: select a file within this managed "
+                            + "application or its exact Zephyr checkout, and check the Python setup. "
+                            + "No file was modified.";
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                YamlDocumentModel.Snapshot loaded = snapshot;
+                YamlSourceLoader.Source loadedSource = source;
+                String problem = failure;
+                Display.getDefault().asyncExec(() -> {
+                    if (request != generation.get() || tree == null || tree.getTree().isDisposed()) return;
+                    if (problem != null) {
+                        status.setText(problem);
+                        tree.setInput(List.of());
+                        return;
+                    }
+                    observedFile = file;
+                    observedSource = loadedSource;
+                    observedSha = loaded.sha256();
+                    displayObservation(loaded);
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        reader.setSystem(true);
+        reader.schedule();
+    }
+
+    private void navigateToSource() {
+        if (observedFile == null || observedSource == null || observedSha == null) {
+            status.setText("A saved JSON observation has no verified workspace source for navigation.");
+            return;
+        }
+        if (!(tree.getStructuredSelection().getFirstElement() instanceof YamlTreeProjection.Row row))
+            return;
+        try {
+            YamlSourceLoader.Source current = YamlSourceLoader.resolve(observedSource.file(),
+                    "application".equals(observedSource.kind()) ? observedSource.root() : null,
+                    "zephyr".equals(observedSource.kind()) ? observedSource.root() : null);
+            if (!current.equals(observedSource)
+                    || !observedSha.equals(YamlSourceLoader.hash(observedSource.file()))) {
+                status.setText("YAML source changed since inspection. Refresh before navigating.");
+                return;
+            }
+            if (!observedFile.exists()) {
+                status.setText("The originating workspace file is no longer accessible.");
+                return;
+            }
+            IEditorPart part = IDE.openEditor(getSite().getPage(), observedFile, true);
+            ITextEditor editor = part instanceof ITextEditor text ? text : part.getAdapter(ITextEditor.class);
+            if (editor == null) {
+                status.setText("The selected editor cannot navigate to a YAML source location.");
+                return;
+            }
+            var document = editor.getDocumentProvider().getDocument(editor.getEditorInput());
+            if (document == null || row.sourceRange().start().line() > document.getNumberOfLines()) {
+                status.setText("The selected YAML line is no longer available. Refresh the observation.");
+                return;
+            }
+            int offset = document.getLineOffset(row.sourceRange().start().line() - 1);
+            int lineLength = document.getLineLength(row.sourceRange().start().line() - 1);
+            String line = document.get(offset, lineLength);
+            int count = Math.min(Math.max(0, row.sourceRange().start().column() - 1),
+                    line.codePointCount(0, line.length()));
+            editor.selectAndReveal(offset + line.offsetByCodePoints(0, count), 0);
+        } catch (Exception error) {
+            status.setText("Cannot navigate to the original YAML line. Refresh and verify the source.");
+        }
+    }
+
     @Override public void setFocus() {
         if (tree != null && !tree.getTree().isDisposed())
             tree.getTree().setFocus();
@@ -194,6 +393,7 @@ public final class YamlStructureView extends ViewPart {
     @Override public void dispose() {
         generation.incrementAndGet();
         if (reader != null) reader.cancel();
+        getSite().getWorkbenchWindow().getSelectionService().removeSelectionListener(followSelection);
         super.dispose();
     }
 }
