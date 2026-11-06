@@ -67,7 +67,7 @@ jobs:
           python3 scripts/package_cli.py --output build-cli/zew-0.1.1.pyz > build-cli/SHA256SUMS
           python3 build-cli/zew-0.1.1.pyz --version
       - name: Retain Phase-0 CLI distribution
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: zew-evidence-cli-prototype
           path: build-cli/
@@ -110,14 +110,14 @@ jobs:
             --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
       - name: Retain native Eclipse screenshots from the actual installed UI
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: zephyr-native-ui-evidence
           path: release-smoke-screenshots/
           if-no-files-found: warn
           retention-days: 7
       - name: Retain private development update site
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: zephyr-eclipse-workbench-development-site
           path: releng/repository/target/repository/
@@ -154,7 +154,7 @@ jobs:
         run: python scripts/qualify_firmware_matrix.py --input windows-firmware-results.json --output windows-firmware-qualification.json
       - name: Retain verified target results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: windows-firmware-evidence
           path: |
