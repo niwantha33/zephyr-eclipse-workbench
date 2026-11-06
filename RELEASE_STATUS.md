@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
-**Authoritative scope:** [Evidence Engine Program v2](docs/EVIDENCE_ENGINE_PROGRAM_V2.md). Earlier [16-area acceptance](docs/COMMERCIAL_RELEASE_ACCEPTANCE.md) is historical, not the current release plan.
+**Authoritative scope:** [Evidence Engine Program v2](docs/EVIDENCE_ENGINE_PROGRAM_V2.md). Earlier [16-area acceptance](docs/reports/COMMERCIAL_RELEASE_ACCEPTANCE.md) is historical, not the current release plan.
 **Gate G0:** OPEN. No evidence-engine installer, release, production or certification claim.
 
 ## Baseline

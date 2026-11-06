@@ -1,6 +1,6 @@
 # Architecture
 
-Status: architecture with a first development implementation, 2026-10-23. The core/UI bundles, feature and p2 packaging exist. Most higher-level capabilities below remain planned; see DEVELOPMENT.md and BUILD_REPORT.md for implemented scope and evidence.
+Status: architecture with a first development implementation, 2026-10-23. The core/UI bundles, feature and p2 packaging exist. Most higher-level capabilities below remain planned; see DEVELOPMENT.md and reports/BUILD_REPORT.md for implemented scope and evidence.
 
 ## Product decision
 
