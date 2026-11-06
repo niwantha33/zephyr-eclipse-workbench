@@ -8,33 +8,39 @@ observed sample maxima, *never* worst-case execution times (WCET).
 """
 from __future__ import annotations
 from collections import defaultdict
+from semantic_trace import EventKind, SemanticTrace, SemanticTraceParser
 
 
 def analyze_timing(records, *, deadlines_ns=None):
-    records = list(records)
+    semantic = records if isinstance(records, SemanticTrace) else SemanticTraceParser().parse(records)
     deadlines_ns = deadlines_ns or {}
     result = {"status": "unavailable", "reason": "", "threads": {}, "warnings": [],
               "scope": "One ordered stream; scheduled bursts include any ISR time and are not exclusive CPU usage.",
               "units": "ns", "maxima": "observed, never proven WCET"}
-    if len(records) > 2_000_000:
+    if semantic.incomplete:
+        result["reason"] = "incomplete or malformed CTF trace"
+        return result
+    if semantic.input_out_of_order:
+        result["reason"] = "clock reordered or wrapped without proven conversion"
+        return result
+    if len(semantic.events) > 2_000_000:
         result["reason"] = "bounded event count exceeded"
+        return result
+    if any(item.get("kind") in ("discarded_events", "discarded_packets")
+           for item in semantic.raw_records):
+        result["reason"] = "decoder-reported loss"
         return result
     stream_ids = set()
     last = None
-    for record in records:
-        if record.get("kind") in ("discarded_events", "discarded_packets"):
-            result["reason"] = "decoder-reported loss"
-            return result
-        if record.get("kind") != "event":
-            continue
-        timestamp = record.get("timestamp_ns")
+    for record in semantic.events:
+        timestamp = record.timestamp_ns
         if type(timestamp) is not int or timestamp < 0:
             result["reason"] = "missing or invalid monotonic clock"
             return result
         if last is not None and timestamp < last:
             result["reason"] = "clock reordered or wrapped without proven conversion"
             return result
-        stream_ids.add(record.get("stream"))
+        stream_ids.add(record.stream)
         if len(stream_ids) > 1:
             result["reason"] = "several streams/cores without time synchronization proof"
             return result
@@ -54,25 +60,24 @@ def analyze_timing(records, *, deadlines_ns=None):
     stats = {}
     pending_ready = {}
     active = None
-    for record in records:
-        if record.get("kind") != "event":
-            continue
-        name = str(record.get("name", "")).rsplit(":", 1)[-1]
-        ts = record["timestamp_ns"]
-        tid = record.get("thread_id")
+    for record in semantic.events:
+        name = record.raw_event_name.rsplit(":", 1)[-1]
+        kind = record.kind
+        ts = record.timestamp_ns
+        tid = record.thread_id
         if tid is None:
             continue
         key = str(tid)
         row = entry(key)
-        if record.get("thread_name"):
-            row["name"] = str(record["thread_name"])[:96]
-        if name == "thread_ready":
+        if record.thread_name:
+            row["name"] = record.thread_name[:96]
+        if kind == EventKind.THREAD_READY:
             row["observed_ready_events"] += 1
             pending_ready[key] = ts
-        elif name == "thread_pending":
+        elif kind == EventKind.THREAD_BLOCKED:
             row["observed_pending_events"] += 1
             pending_ready.pop(key, None)
-        elif name == "thread_sleep_enter":
+        elif kind == EventKind.THREAD_SLEEPING:
             row["observed_sleep_enters"] += 1
             pending_ready.pop(key, None)
         elif name == "thread_sleep_exit":
@@ -81,7 +86,7 @@ def analyze_timing(records, *, deadlines_ns=None):
             row["observed_resume_events"] += 1
         elif name in ("thread_priority_set", "thread_sched_prio_set"):
             row["observed_priority_changes"] += 1
-        elif name == "thread_switched_in":
+        elif kind == EventKind.THREAD_SWITCHED_IN:
             if active is not None:
                 result["warnings"].append(
                     "Unmatched switch-in; invalidated open burst before " + key)
@@ -89,7 +94,7 @@ def analyze_timing(records, *, deadlines_ns=None):
             row["switch_in_ns"].append(ts)
             if key in pending_ready:
                 row["ready_to_run_ns"].append(ts - pending_ready.pop(key))
-        elif name == "thread_switched_out":
+        elif kind == EventKind.THREAD_SWITCHED_OUT:
             if active is not None and active[0] == key:
                 row["scheduled_bursts_ns"].append(ts - active[1])
             else:
