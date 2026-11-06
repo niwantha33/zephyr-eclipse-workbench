@@ -27,6 +27,7 @@ sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlDocumentModel.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlTreeProjection.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlSourceLoader.java']
+sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlBindingIntelligence.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/MemoryProfilerLayout.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/MemoryProfilerReportGuard.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/DevicetreeIndex.java',
@@ -45,6 +46,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'MemoryProfilerJsonTests'], check
 subprocess.run([tool('java'), '-cp', str(out), 'YamlDocumentModelTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'YamlTreeProjectionTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'YamlSourceLoaderTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'YamlBindingIntelligenceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'MemoryProfilerLayoutTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'MemoryProfilerReportGuardTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'io.github.niwantha33.zew.ui.DevicetreeAssistTests'], check=True, cwd=root, timeout=90)

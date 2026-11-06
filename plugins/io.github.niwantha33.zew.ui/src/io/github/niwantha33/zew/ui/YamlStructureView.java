@@ -31,6 +31,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IFileEditorInput;
 import org.eclipse.ui.ISelectionListener;
@@ -53,6 +54,7 @@ public final class YamlStructureView extends ViewPart {
     private final AtomicInteger generation = new AtomicInteger();
     private TreeViewer tree;
     private Label status;
+    private Text bindingDetails;
     private Job reader;
     private IFile selectedYaml;
     private IProject selectedContext;
@@ -132,6 +134,12 @@ public final class YamlStructureView extends ViewPart {
         column("Value preview", 380, 2);
         column("Line:column", 100, 3);
         tree.setInput(List.of());
+        bindingDetails = new Text(parent, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
+        GridData detailsLayout = new GridData(SWT.FILL, SWT.BOTTOM, true, false);
+        detailsLayout.heightHint = 135;
+        bindingDetails.setLayoutData(detailsLayout);
+        bindingDetails.setText("Binding intelligence: select a Devicetree binding under dts/bindings/."
+                + " An exact Zephyr checkout is required; no build match is implied.");
         tree.addDoubleClickListener(event -> navigateToSource());
         getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(followSelection);
         inspectSelection();
@@ -171,6 +179,7 @@ public final class YamlStructureView extends ViewPart {
         observedSha = null;
         tree.setInput(List.of());
         status.setText("Loading saved YAML observation…");
+        bindingDetails.setText("Binding intelligence unavailable for imported JSON without verified source context.");
         Path report;
         try {
             report = Path.of(chosen);
@@ -221,6 +230,7 @@ public final class YamlStructureView extends ViewPart {
         if (tree == null || tree.getTree().isDisposed()) return;
         tree.setInput(YamlTreeProjection.rows(snapshot));
         if (snapshot == null) {
+            bindingDetails.setText("Binding intelligence: no selected source.");
             status.setText("No YAML observation has been selected.");
             return;
         }
@@ -286,6 +296,7 @@ public final class YamlStructureView extends ViewPart {
         observedSha = null;
         tree.setInput(List.of());
         status.setText("Inspecting selected YAML with the project's managed Python…");
+        bindingDetails.setText("Binding intelligence: inspecting only if this is a Devicetree binding.");
         IProject managed = SelectedProject.importedProject(file.getProject());
         if (managed == null) managed = selectedContext;
         IProject context = managed;
@@ -297,6 +308,7 @@ public final class YamlStructureView extends ViewPart {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 YamlDocumentModel.Snapshot snapshot = null;
                 YamlSourceLoader.Source source = null;
+                YamlBindingIntelligence.Summary binding = null;
                 String failure = null;
                 try {
                     Properties settings = ProjectContext.settings(context);
@@ -312,6 +324,26 @@ public final class YamlStructureView extends ViewPart {
                     snapshot = YamlSourceLoader.inspect(Path.of(settings.getProperty("python")),
                             script, source,
                             () -> monitor.isCanceled() || generation.get() != request);
+                    if (snapshot.parsed() && "devicetree-binding".equals(snapshot.kind())) {
+                        var bindingEntry = Activator.getDefault().getBundle().getEntry(
+                                "scripts/yaml_binding_inspect.py");
+                        if (bindingEntry == null) {
+                            binding = YamlBindingIntelligence.unavailable("inspector-not-installed");
+                        } else {
+                            Path bindingScript = Path.of(FileLocator.toFileURL(bindingEntry).toURI());
+                            try {
+                                binding = YamlBindingIntelligence.inspect(
+                                        Path.of(settings.getProperty("python")), bindingScript, source,
+                                        zephyr, app, () -> monitor.isCanceled()
+                                                || generation.get() != request);
+                            } catch (java.io.IOException exception) {
+                                binding = YamlBindingIntelligence.unavailable(
+                                        "selected-edtlib-unavailable-or-rejected");
+                            }
+                        }
+                        if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
+                            throw new java.io.IOException("YAML source changed between inspection stages");
+                    }
                 } catch (InterruptedException cancelled) {
                     Thread.currentThread().interrupt();
                     return Status.CANCEL_STATUS;
@@ -323,11 +355,13 @@ public final class YamlStructureView extends ViewPart {
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 YamlDocumentModel.Snapshot loaded = snapshot;
                 YamlSourceLoader.Source loadedSource = source;
+                YamlBindingIntelligence.Summary bindingResult = binding;
                 String problem = failure;
                 Display.getDefault().asyncExec(() -> {
                     if (request != generation.get() || tree == null || tree.getTree().isDisposed()) return;
                     if (problem != null) {
                         status.setText(problem);
+                        bindingDetails.setText("Binding intelligence: unavailable; source or checkout context unverified.");
                         tree.setInput(List.of());
                         return;
                     }
@@ -335,6 +369,11 @@ public final class YamlStructureView extends ViewPart {
                     observedSource = loadedSource;
                     observedSha = loaded.sha256();
                     displayObservation(loaded);
+                    if (bindingResult != null)
+                        bindingDetails.setText(YamlBindingIntelligence.describe(bindingResult));
+                    else
+                        bindingDetails.setText("Binding intelligence: not applicable to this YAML document."
+                                + " Syntax parsing does not imply Zephyr semantic validation.");
                 });
                 return Status.OK_STATUS;
             }
