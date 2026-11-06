@@ -226,7 +226,7 @@ public final class YamlStructureView extends ViewPart {
         }
         String source = snapshot.relativePath() == null ? "(path not verified)"
                 : YamlTreeProjection.preview(snapshot.relativePath());
-        status.setText("Recorded " + snapshot.status() + " — " + snapshot.kind()
+        status.setText((observedFile == null ? "Imported recorded " : "Saved-file ") + snapshot.status() + " — " + snapshot.kind()
                 + " — " + snapshot.reason() + " — " + source
                 + ". Syntax observation only; Zephyr schema validity is unverified.");
         if (snapshot.parsed() && snapshot.root() != null)
@@ -367,6 +367,10 @@ public final class YamlStructureView extends ViewPart {
             ITextEditor editor = part instanceof ITextEditor text ? text : part.getAdapter(ITextEditor.class);
             if (editor == null) {
                 status.setText("The selected editor cannot navigate to a YAML source location.");
+                return;
+            }
+            if (editor.isDirty()) {
+                status.setText("The source editor contains unsaved changes. Save and refresh before navigating.");
                 return;
             }
             var document = editor.getDocumentProvider().getDocument(editor.getEditorInput());
