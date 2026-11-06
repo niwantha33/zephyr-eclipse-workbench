@@ -71,7 +71,8 @@ public final class YamlScalarEdit {
         @Override public byte[] candidate() { return candidate.clone(); }
         public String candidateSha() { return digest(candidate); }
         public String diff() {
-            return "- " + truncate(beforeLine, 320) + "\n+ " + truncate(afterLine, 320);
+            return "@@ line " + row.sourceRange().start().line() + " (one YAML scalar) @@\n"
+                    + "- " + oldToken + "\n+ " + newToken;
         }
     }
 
@@ -225,6 +226,8 @@ public final class YamlScalarEdit {
         if (start >= end || text.substring(start, end).indexOf('\n') >= 0)
             throw new IOException("Scalar token range is not editable.");
         String old = text.substring(start, end);
+        if (old.codePointCount(0, old.length()) > MAX_VALUE)
+            throw new IOException("Existing scalar exceeds the safely previewable edit limit.");
         String candidateText = text.substring(0, start) + token + text.substring(end);
         byte[] candidate = candidateText.getBytes(StandardCharsets.UTF_8);
         if (candidate.length > LIMIT)
@@ -262,6 +265,8 @@ public final class YamlScalarEdit {
         if (preview == null) throw new IOException("No confirmed patch.");
         YamlSourceLoader.Source source = preview.source();
         requireEditable(source);
+        if (Files.size(source.file()) > LIMIT)
+            throw new IOException("Original YAML exceeds the bounded patch limit.");
         byte[] current = Files.readAllBytes(source.file());
         if (!Arrays.equals(current, preview.original()) ||
                 !preview.originalSha().equals(digest(current)))
