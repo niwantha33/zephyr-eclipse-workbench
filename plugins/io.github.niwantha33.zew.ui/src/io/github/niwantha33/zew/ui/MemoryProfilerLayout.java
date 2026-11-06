@@ -35,7 +35,7 @@ public final class MemoryProfilerLayout {
             mpu = List.copyOf(mpu);
         }
         public boolean hasMpuSnapshot() { return mpuStatus.equals("recorded-debugger-snapshot"); }
-        public List<Range> conflicts(Region region) {
+        public List<Range> overlaps(Region region) {
             if (!hasMpuSnapshot()) return List.of();
             List<Range> clipped = new ArrayList<>(), collisions = new ArrayList<>();
             for (MpuRegion m : mpu) {
