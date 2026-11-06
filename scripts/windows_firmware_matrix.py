@@ -172,6 +172,13 @@ def main():
             run([*configure, '-UIMGTOOL'], workspace, env)
         run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
         if label == 'ti':
+            # Capture and verify the exact native Java receipt on REAL Zephyr
+            # output. Fixture-only tests previously missed post-build false
+            # UNVERIFIED states. Uses the core classes compiled by test_core.py.
+            java = Path(os.environ['JAVA_HOME']) / 'bin/java.exe'
+            run([java, '-cp', REPO / 'build-core-tests',
+                 'ConfigurationEvidenceRealBuildProbe', app, build_arg, target, 'debug'],
+                workspace, env)
             # Exercise the actual generated Kconfiglib environment for an
             # MSPM0G3507 Zephyr build. No source or .config writes allowed.
             kconfig_source = Path(build_arg) / 'zephyr/.config'
