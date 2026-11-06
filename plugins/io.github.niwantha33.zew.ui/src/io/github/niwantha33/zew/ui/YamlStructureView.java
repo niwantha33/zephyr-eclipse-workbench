@@ -59,6 +59,8 @@ public final class YamlStructureView extends ViewPart {
     private Text bindingDetails;
     private Label hardwareStatus;
     private TreeViewer hardwareTree;
+    private Label twisterStatus;
+    private TreeViewer twisterTree;
     private Job reader;
     private IFile selectedYaml;
     private IProject selectedContext;
@@ -182,6 +184,39 @@ public final class YamlStructureView extends ViewPart {
         hardwareColumn("Board / SoC / qualifier", 290, true);
         hardwareColumn("Resolved metadata", 370, false);
         hardwareTree.setInput(List.of());
+
+        var twisterTab = new TabItem(detailsTabs, SWT.NONE);
+        twisterTab.setText("Twister tests");
+        var twisterPanel = new Composite(detailsTabs, SWT.NONE);
+        twisterPanel.setLayout(new GridLayout(1, false));
+        twisterTab.setControl(twisterPanel);
+        twisterStatus = new Label(twisterPanel, SWT.WRAP);
+        twisterStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        twisterStatus.setText("Select a Twister testcase.yaml, sample.yaml or test_config.yaml.");
+        twisterTree = new TreeViewer(twisterPanel, SWT.BORDER | SWT.FULL_SELECTION
+                | SWT.H_SCROLL | SWT.V_SCROLL | SWT.SINGLE);
+        twisterTree.getTree().setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        twisterTree.getTree().setHeaderVisible(true);
+        twisterTree.getTree().setLinesVisible(true);
+        twisterTree.setContentProvider(new ITreeContentProvider() {
+            @Override public Object[] getElements(Object input) {
+                return input instanceof List<?> items ? items.toArray() : new Object[0];
+            }
+            @Override public Object[] getChildren(Object parentRow) {
+                return parentRow instanceof YamlTwisterModel.Row row
+                        ? row.children().toArray() : new Object[0];
+            }
+            @Override public Object getParent(Object element) { return null; }
+            @Override public boolean hasChildren(Object element) {
+                return element instanceof YamlTwisterModel.Row row
+                        && !row.children().isEmpty();
+            }
+            @Override public void dispose() {}
+            @Override public void inputChanged(Viewer viewer, Object oldValue, Object newValue) {}
+        });
+        twisterColumn("Scenario / config", 300, true);
+        twisterColumn("Declared value preview", 370, false);
+        twisterTree.setInput(List.of());
         tree.addDoubleClickListener(event -> navigateToSource());
         getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(followSelection);
         inspectSelection();
@@ -217,6 +252,18 @@ public final class YamlStructureView extends ViewPart {
         });
     }
 
+    private void twisterColumn(String header, int width, boolean first) {
+        var column = new TreeViewerColumn(twisterTree, SWT.LEFT);
+        column.getColumn().setText(header);
+        column.getColumn().setWidth(width);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override public String getText(Object item) {
+                if (!(item instanceof YamlTwisterModel.Row row)) return "";
+                return first ? row.name() : row.preview();
+            }
+        });
+    }
+
     private void chooseReport() {
         var dialog = new FileDialog(getSite().getShell(), SWT.OPEN);
         dialog.setText("Open a saved Zephyr YAML observation");
@@ -236,6 +283,8 @@ public final class YamlStructureView extends ViewPart {
         bindingDetails.setText("Binding intelligence unavailable for imported JSON without verified source context.");
         hardwareTree.setInput(List.of());
         hardwareStatus.setText("HWMv2 metadata unavailable for an imported JSON report without selected checkout context.");
+        twisterTree.setInput(List.of());
+        twisterStatus.setText("Twister metadata requires an explicitly selected checkout, not imported JSON.");
         Path report;
         try {
             report = Path.of(chosen);
@@ -289,6 +338,8 @@ public final class YamlStructureView extends ViewPart {
             bindingDetails.setText("Binding intelligence: no selected source.");
             hardwareTree.setInput(List.of());
             hardwareStatus.setText("HWMv2: no selected source.");
+            twisterTree.setInput(List.of());
+            twisterStatus.setText("Twister: no selected source.");
             status.setText("No YAML observation has been selected.");
             return;
         }
@@ -357,6 +408,8 @@ public final class YamlStructureView extends ViewPart {
         bindingDetails.setText("Binding intelligence: inspecting only if this is a Devicetree binding.");
         hardwareTree.setInput(List.of());
         hardwareStatus.setText("HWMv2: loading only for canonical board.yml and soc.yml sources.");
+        twisterTree.setInput(List.of());
+        twisterStatus.setText("Twister: waiting for selected saved test YAML and checkout schema.");
         IProject managed = SelectedProject.importedProject(file.getProject());
         if (managed == null) managed = selectedContext;
         IProject context = managed;
@@ -370,6 +423,7 @@ public final class YamlStructureView extends ViewPart {
                 YamlSourceLoader.Source source = null;
                 YamlBindingIntelligence.Summary binding = null;
                 YamlHardwareModel.Summary hardware = null;
+                YamlTwisterModel.Summary twister = null;
                 String failure = null;
                 try {
                     Properties settings = ProjectContext.settings(context);
@@ -425,6 +479,27 @@ public final class YamlStructureView extends ViewPart {
                         if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
                             throw new java.io.IOException("YAML source changed during HWMv2 inspection");
                     }
+                    if (snapshot.parsed() && ("twister-test".equals(snapshot.kind())
+                            || "twister-config".equals(snapshot.kind()))) {
+                        var twisterEntry = Activator.getDefault().getBundle().getEntry(
+                                "scripts/yaml_twister_inspect.py");
+                        if (twisterEntry == null) {
+                            twister = YamlTwisterModel.unavailable("twister-inspector-not-installed");
+                        } else {
+                            try {
+                                Path twisterScript = Path.of(FileLocator.toFileURL(twisterEntry).toURI());
+                                twister = YamlTwisterModel.inspect(
+                                        Path.of(settings.getProperty("python")), twisterScript,
+                                        source, zephyr, app, () -> monitor.isCanceled()
+                                                || generation.get() != request);
+                            } catch (java.io.IOException unavailable) {
+                                twister = YamlTwisterModel.unavailable(
+                                        "selected-twister-validation-unavailable");
+                            }
+                        }
+                        if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
+                            throw new java.io.IOException("YAML source changed during Twister inspection");
+                    }
                 } catch (InterruptedException cancelled) {
                     Thread.currentThread().interrupt();
                     return Status.CANCEL_STATUS;
@@ -438,6 +513,7 @@ public final class YamlStructureView extends ViewPart {
                 YamlSourceLoader.Source loadedSource = source;
                 YamlBindingIntelligence.Summary bindingResult = binding;
                 YamlHardwareModel.Summary hardwareResult = hardware;
+                YamlTwisterModel.Summary twisterResult = twister;
                 String problem = failure;
                 Display.getDefault().asyncExec(() -> {
                     if (request != generation.get() || tree == null || tree.getTree().isDisposed()) return;
@@ -446,6 +522,8 @@ public final class YamlStructureView extends ViewPart {
                         bindingDetails.setText("Binding intelligence: unavailable; source or checkout context unverified.");
                         hardwareTree.setInput(List.of());
                         hardwareStatus.setText("HWMv2: unavailable; source or checkout context unverified.");
+                        twisterTree.setInput(List.of());
+                        twisterStatus.setText("Twister: unavailable; source or checkout context unverified.");
                         tree.setInput(List.of());
                         return;
                     }
@@ -466,6 +544,15 @@ public final class YamlStructureView extends ViewPart {
                                 + hardwareResult.reason()
                                 + ". Selected-checkout metadata only; not an active build target.");
                         if (hardwareResult.resolved()) hardwareTree.expandToLevel(2);
+                    }
+                    twisterTree.setInput(YamlTwisterModel.hierarchy(twisterResult));
+                    if (twisterResult == null) {
+                        twisterStatus.setText("Twister: not applicable to this YAML source.");
+                    } else {
+                        twisterStatus.setText("Twister " + twisterResult.state() + ": "
+                                + twisterResult.reason()
+                                + ". Schema metadata only — no test plan, execution or result verified.");
+                        if (twisterResult.resolved()) twisterTree.expandToLevel(2);
                     }
                 });
                 return Status.OK_STATUS;
