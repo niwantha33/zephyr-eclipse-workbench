@@ -41,7 +41,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
     private static final int MAX_TEXT = 120_000;
 
     private final AtomicInteger generation = new AtomicInteger();
-    private IProject project;
+    private volatile IProject project;
     private Snapshot snapshot = TraceConsoleCapabilities.inspect(Map.of());
     private Label context;
     private Table transports;
@@ -228,7 +228,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
             if (view.project == null || !view.project.equals(source)
                     || view.output == null || view.output.isDisposed()) continue;
             view.output.getDisplay().asyncExec(() -> {
-                if (view.output == null || view.output.isDisposed() || view.project != source) return;
+                if (view.output == null || view.output.isDisposed() || !source.equals(view.project)) return;
                 var text = view.output;
                 if (text.getCharCount() >= MAX_TEXT)
                     text.replaceTextRange(0, text.getCharCount() / 2, "[Earlier diagnostic lines omitted]\n");
