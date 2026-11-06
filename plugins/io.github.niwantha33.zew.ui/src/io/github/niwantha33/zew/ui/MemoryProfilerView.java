@@ -62,7 +62,7 @@ public final class MemoryProfilerView extends ViewPart {
         var legend = new Label(parent, SWT.WRAP);
         legend.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         legend.setText("Blue: Flash hint · Green: RAM hint · Cyan: section VMA · Yellow: explicit section LMA · "
-                + "Purple: imported MPU range · Red: overlapping MPU ranges (only when captured)");
+                + "Purple: imported MPU range · Red: overlapping MPU ranges (not necessarily a fault; captured data only)");
 
         scroll = new ScrolledComposite(parent, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
         scroll.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -163,7 +163,7 @@ public final class MemoryProfilerView extends ViewPart {
         }
         for (var mpu : displayed.mpu())
             if (region.address().intersect(mpu.address()) != null) capturedMpu++;
-        int overlaps = displayed.conflicts(region).size();
+        int overlaps = displayed.overlaps(region).size();
         String note = displayed.hasMpuSnapshot()
                 ? "Imported MPU capture intersects this region: " + capturedMpu
                     + "; pairwise overlap intervals: " + overlaps
