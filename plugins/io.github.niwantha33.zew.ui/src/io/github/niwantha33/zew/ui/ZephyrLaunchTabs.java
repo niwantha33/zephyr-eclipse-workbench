@@ -37,6 +37,7 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
         private Combo action;
         private Text port;
         private Combo runner;
+        private Button rawTcl;
         public MainTab(boolean debugMode) { this.debugMode = debugMode; }
         @Override public void createControl(Composite parent) {
             var group = new Composite(parent, SWT.NONE);
@@ -74,6 +75,10 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
                 runner.select(0);
                 runner.addListener(SWT.Selection, e -> updateLaunchConfigurationDialog());
                 new Label(group, SWT.NONE);
+                rawTcl = new Button(group, SWT.CHECK);
+                rawTcl.setText("Save raw OpenOCD Tcl preflight responses (opt-in; local debug evidence)");
+                rawTcl.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1));
+                rawTcl.addListener(SWT.Selection, e -> updateLaunchConfigurationDialog());
                 new Label(group, SWT.NONE).setText("GDB TCP port");
                 port = new Text(group, SWT.BORDER);
                 port.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -104,7 +109,10 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
         @Override public void setDefaults(ILaunchConfigurationWorkingCopy configuration) {
             configuration.setAttribute(ZephyrLaunchDelegate.PROJECT, "");
             configuration.setAttribute(ZephyrLaunchDelegate.ACTION, debugMode ? "debug" : "run");
-            if (debugMode) configuration.setAttribute(ZephyrNativeDebugDelegate.PORT, 3333);
+            if (debugMode) {
+                configuration.setAttribute(ZephyrNativeDebugDelegate.PORT, 3333);
+                configuration.setAttribute(ZephyrNativeDebugDelegate.RAW_TCL_TRANSCRIPT, false);
+            }
         }
         @Override public void initializeFrom(ILaunchConfiguration configuration) {
             try {
@@ -113,6 +121,7 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
                     String backend = configuration.getAttribute(ZephyrNativeDebugDelegate.RUNNER, "");
                     runner.select(switch (backend) { case "openocd" -> 1; case "jlink" -> 2; case "pyocd" -> 3; default -> 0; });
                     port.setText(Integer.toString(configuration.getAttribute(ZephyrNativeDebugDelegate.PORT, 3333)));
+                    rawTcl.setSelection(configuration.getAttribute(ZephyrNativeDebugDelegate.RAW_TCL_TRANSCRIPT, false));
                 } else {
                     String current = configuration.getAttribute(ZephyrLaunchDelegate.ACTION, "run");
                     action.select(switch (current) { case "flash" -> 1; case "debugserver" -> 2; default -> 0; });
@@ -125,6 +134,7 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
                 configuration.setAttribute(ZephyrNativeDebugDelegate.RUNNER,
                         runner.getSelectionIndex() > 0 ? runner.getText() : "");
                 configuration.setAttribute(ZephyrLaunchDelegate.ACTION, "debug");
+                configuration.setAttribute(ZephyrNativeDebugDelegate.RAW_TCL_TRANSCRIPT, rawTcl.getSelection());
                 try { configuration.setAttribute(ZephyrNativeDebugDelegate.PORT, Integer.parseInt(port.getText().trim())); }
                 catch (NumberFormatException ignored) { configuration.setAttribute(ZephyrNativeDebugDelegate.PORT, -1); }
             } else {

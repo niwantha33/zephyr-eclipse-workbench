@@ -45,6 +45,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
     public static final String FLASH_BUILD = Activator.ID + ".launch.flashedBuild";
     public static final String RUNNER = Activator.ID + ".launch.debugRunner";
     public static final String PORT = Activator.ID + ".launch.gdbPort";
+    public static final String RAW_TCL_TRANSCRIPT = Activator.ID + ".launch.rawTclTranscript";
     private static final String RESOLVED_RUNNER = RUNNER + ".resolved";
     private static final Pattern DEFAULT_DEBUG_RUNNER =
             Pattern.compile("(?m)^debug-runner:\\s*([A-Za-z0-9_+.-]+)\\s*$");
@@ -292,7 +293,15 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 try (var info = console.newMessageStream()) {
                     info.println("Preflight: comparing static Zephyr thread metadata in target memory with " + params.elf());
                     try {
-                        io.github.niwantha33.zew.core.OpenOcdThreadCheck.verify(tclPort, params.threadMetadata());
+                        java.nio.file.Path transcript = null;
+                        if (configuration.getAttribute(RAW_TCL_TRANSCRIPT, false)) {
+                            var folder = params.plan().buildDirectory().resolve(".zew-debug");
+                            Files.createDirectories(folder);
+                            transcript = folder.resolve("thread-tcl-" + java.util.UUID.randomUUID() + ".log");
+                            info.println("Opt-in Tcl evidence (reply bytes in hex, local): " + transcript);
+                        }
+                        io.github.niwantha33.zew.core.OpenOcdThreadCheck.verify(tclPort,
+                                params.threadMetadata(), transcript);
                     } catch (IOException error) {
                         info.println("Thread metadata verification failed: " + error.getMessage());
                         throw error;
