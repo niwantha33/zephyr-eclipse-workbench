@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Contract tests for the shared, offline Zephyr CTF semantic boundary."""
-import importlib.util
 from pathlib import Path
 import sys
 import unittest
@@ -8,10 +7,7 @@ from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parents[2] / "plugins/io.github.niwantha33.zew.ui/tools/rtos_analysis"
 sys.path.insert(0, str(HERE))
-spec = importlib.util.spec_from_file_location("semantic_trace", HERE / "semantic_trace.py")
-subject = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = subject
-spec.loader.exec_module(subject)
+import semantic_trace as subject
 
 
 def raw(name, time, **fields):
