@@ -83,3 +83,23 @@ reset values or MMIO read safety from an unmapped header.
 Status of this change: extra local source discovery is implemented.
 Automatic trusted vendor downloads for arbitrary parts, header-to-SVD
 conversion for ESP-IDF, and physical target acceptance remain pending.
+
+## Effective build metadata and unqualified board targets (development)
+
+Zephyr allows a single-SoC board target with no SoC qualifier. For such a
+project, the resolver first checks generated `zephyr/.config` for a matching
+`CONFIG_BOARD`, exact `CONFIG_SOC` and compatible `CONFIG_BOARD_QUALIFIERS`.
+Only then does it supply an SoC-qualified target to the existing exact-SVD/pack
+verifier. No board-name heuristic or generic CPU SVD fallback is permitted.
+
+For explicitly qualified targets, contradictory effective-build board or SoC
+metadata blocks automatic discovery; a stale build must be rebuilt or a
+verified exact SVD chosen manually. Missing generated build metadata does not
+override an already explicit SoC qualifier but is labeled accordingly.
+The attempt and result are logged in Eclipse Error Log as informational entries,
+including scan status and number of inspected roots. UI and log messages do
+not establish flashed-firmware identity.
+
+Synthetic tests cover board-only targets, valid qualifiers, stale builds,
+conflicting SoCs and architecture-only identifiers. Real vendor metadata,
+pack selection, Eclipse UI and physical read qualification remain open.

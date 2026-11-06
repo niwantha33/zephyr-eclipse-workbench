@@ -51,6 +51,8 @@ import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 import io.github.niwantha33.zew.core.SvdDevice;
 import io.github.niwantha33.zew.core.SvdAutoDiscovery;
+import io.github.niwantha33.zew.core.SvdTargetEvidence;
+import io.github.niwantha33.zew.core.BuildArtifacts;
 import io.github.niwantha33.zew.core.SvdPartCompatibility;
 import io.github.niwantha33.zew.core.VendorSvdProvisioner;
 import io.github.niwantha33.zew.core.GitHubSvdProvisioner;
@@ -200,10 +202,17 @@ public final class SocRegistersView extends ViewPart {
         Job job = new Job("Find Device Definitions — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 final SvdAutoDiscovery.Result result;
+                final SvdTargetEvidence.Selection target;
                 final String board;
                 try {
                     var settings = ProjectContext.settings(project);
                     board = settings.getProperty("board", "");
+                    Path build = ProjectContext.buildDirectory(project, settings);
+                    Map<String, String> effective = Files.isRegularFile(build.resolve("zephyr/.config"))
+                            ? BuildArtifacts.configuration(build) : Map.of();
+                    target = SvdTargetEvidence.select(board, effective);
+                    Activator.getDefault().getLog().log(new Status(IStatus.INFO, Activator.ID,
+                            "SVD target selection: " + target.state() + " — " + target.explanation()));
                     var roots = new ArrayList<Path>();
                     Path workspace = Path.of(settings.getProperty("workspace"));
                     // Probe focused exact-chip/vendor-pack directories first;
@@ -247,7 +256,13 @@ public final class SocRegistersView extends ViewPart {
                     if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win"))
                         roots.add(Path.of("C:/ti"));
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
-                    result = SvdAutoDiscovery.resolve(board, roots, userHome.resolve(".zew/svd-cache"));
+                    result = target.usable()
+                            ? SvdAutoDiscovery.resolve(target.target(), roots, userHome.resolve(".zew/svd-cache"))
+                            : new SvdAutoDiscovery.Result(SvdAutoDiscovery.State.INVALID_TARGET,
+                                    "", null, 0, false, target.explanation(), List.of());
+                    Activator.getDefault().getLog().log(new Status(IStatus.INFO, Activator.ID,
+                            "SVD search: " + result.state() + " — " + result.explanation()
+                            + "; scanned roots: " + result.inspected().size()));
                 } catch (Exception error) {
                     if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
                         if (request != discoveryGeneration || tree.isDisposed()) return;
@@ -260,11 +275,12 @@ public final class SocRegistersView extends ViewPart {
                 if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
                     if (tree.isDisposed() || request != discoveryGeneration) return;
                     selectedBoard = board;
+                    discoveryExplanation = target.explanation();
                     if (result.state() == SvdAutoDiscovery.State.MATCHED) {
                         load(result.path().toString(), result.mappedByPack());
                     } else {
                         discoveryExplanation = result.explanation();
-                        status.setText(discoveryExplanation + " Looked in: "
+                        status.setText(discoveryExplanation + " " + result.explanation() + " Looked in: "
                                 + String.join("; ", result.inspected().stream().limit(8).toList()));
                         summary.setText("SoC " + result.part() + ": no verified SVD available. "
                                 + "Install the vendor's CMSIS pack under the managed workspace, or Import Register Definitions…");
