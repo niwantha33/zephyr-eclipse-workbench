@@ -47,6 +47,9 @@ class SemanticEvent:
     stream: object | None = None
     tracepoint_name: str = ""
     value: int | float | None = None
+    # Resource identifiers and phases remain separate from human-readable names.
+    object_id: str | None = None
+    resource_phase: str = ""
 
 
 @dataclass
@@ -88,16 +91,57 @@ RAW_EVENT_KINDS: dict[str, EventKind] = {
     "isr_exit_user": EventKind.ISR_EXIT,
     "isr_exit_to_scheduler": EventKind.ISR_EXIT,
     "mutex_lock": EventKind.MUTEX_TAKE,
+    "mutex_lock_enter": EventKind.MUTEX_TAKE,
+    "mutex_lock_blocking": EventKind.MUTEX_TAKE,
+    "mutex_lock_exit": EventKind.MUTEX_TAKE,
     "mutex_take": EventKind.MUTEX_TAKE,
     "mutex_unlock": EventKind.MUTEX_GIVE,
+    "mutex_unlock_enter": EventKind.MUTEX_GIVE,
+    "mutex_unlock_exit": EventKind.MUTEX_GIVE,
     "mutex_give": EventKind.MUTEX_GIVE,
     "semaphore_take": EventKind.SEM_TAKE,
+    "semaphore_take_enter": EventKind.SEM_TAKE,
+    "semaphore_take_blocking": EventKind.SEM_TAKE,
+    "semaphore_take_exit": EventKind.SEM_TAKE,
     "sem_take": EventKind.SEM_TAKE,
     "semaphore_give": EventKind.SEM_GIVE,
+    "semaphore_give_enter": EventKind.SEM_GIVE,
+    "semaphore_give_exit": EventKind.SEM_GIVE,
     "sem_give": EventKind.SEM_GIVE,
     "mem_alloc": EventKind.MEM_ALLOC,
     "mem_free": EventKind.MEM_FREE,
 }
+
+
+# Resource phases are explicit in Zephyr CTF's lock/take enter/blocking/exit
+# event names. An "enter" does NOT prove successful acquisition. For mutex
+# operations with a ret field, non-zero or missing ret never establishes a hold.
+RESOURCE_EVENT_PHASES = {
+    "mutex_lock": "acquired", "mutex_take": "acquired",
+    "mutex_lock_enter": "attempt", "mutex_lock_blocking": "blocking",
+    "mutex_lock_exit": "result",
+    "mutex_unlock": "released", "mutex_give": "released",
+    "mutex_unlock_enter": "release_attempt", "mutex_unlock_exit": "release_result",
+    "semaphore_take": "acquired", "sem_take": "acquired",
+    "semaphore_take_enter": "attempt", "semaphore_take_blocking": "blocking",
+    "semaphore_take_exit": "result",
+    "semaphore_give": "released", "sem_give": "released",
+    "semaphore_give_enter": "release_attempt", "semaphore_give_exit": "released",
+}
+
+
+def _resource_phase(name: str, raw: Mapping) -> str:
+    phase = RESOURCE_EVENT_PHASES.get(name, "")
+    if phase in ("result", "release_result"):
+        result = raw.get("ret")
+        try:
+            code = int(result, 0) if isinstance(result, str) else int(result)
+        except (TypeError, ValueError, OverflowError):
+            return "failed"  # no successful resource transition is established
+        if code != 0:
+            return "failed"
+        return "acquired" if phase == "result" else "released"
+    return phase
 
 
 def _text(value) -> str:
@@ -196,6 +240,7 @@ def decode_ctf(path: Path):
                 "priority": get("prio"),
                 "core_id": get("cpu"),
                 "object_id": get("id"),
+                "ret": get("ret"),
                 "object_name": get("object_name"),
                 "mutex_name": get("mutex_name"),
                 "semaphore_name": get("semaphore_name"),
@@ -282,6 +327,8 @@ class SemanticTraceParser:
                         object_name=_text(object_name), raw_event_name=name,
                         thread_id=None if thread_id is None else str(thread_id),
                         stream=raw.get("stream"),
+                        object_id=None if raw.get("object_id") is None else str(raw["object_id"]),
+                        resource_phase=_resource_phase(simple_name, raw),
                         tracepoint_name=declared_name if kind == EventKind.VALUE_SAMPLE else "",
                         value=sample_value if kind == EventKind.VALUE_SAMPLE else None)
                     if not name:
