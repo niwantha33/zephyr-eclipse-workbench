@@ -78,6 +78,20 @@ class ThreadTimelineTests(unittest.TestCase):
         self.assertIn((6, 9, "ISR"), [(r.start_ns,r.end_ns,r.state) for r in actual.intervals])
         self.assertNotIn((0, 4, "Running"), [(r.start_ns,r.end_ns,r.state) for r in actual.intervals])
 
+    def test_unmapped_sleep_exit_breaks_sleeping_without_guessing(self):
+        actual = timeline.timeline_from_events([
+            raw("thread_switched_in", 0, "a"),
+            raw("thread_sleep_enter", 10, "b", "worker_b"),
+            raw("thread_sleep_exit", 20, "b", "worker_b"),
+            raw("thread_ready", 30, "b", "worker_b"),
+            raw("thread_switched_out", 40, "a"),
+        ])
+        self.assertIn((10, 20, "Sleeping"),
+                      [(r.start_ns, r.end_ns, r.state) for r in actual.intervals])
+        self.assertIn((20, 30, "Unknown"),
+                      [(r.start_ns, r.end_ns, r.state) for r in actual.intervals])
+        self.assertEqual(actual.unknown_events, 1)
+
     def test_zero_scheduler_events_reports_empty_state(self):
         actual = timeline.timeline_from_events([raw("isr_enter", 5, None, ""),
                                                  raw("isr_exit", 8, None, "")])
