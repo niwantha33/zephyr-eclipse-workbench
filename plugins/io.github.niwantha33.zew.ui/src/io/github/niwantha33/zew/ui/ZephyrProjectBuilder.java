@@ -93,6 +93,24 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         }
     }
 
+    /** A completed managed build updates the open, matching Studio without
+     *  changing its selected tab or treating a partial receipt as verified. */
+    private static void notifyOpenConfigurationStudio(IProject builtProject) {
+        if (!org.eclipse.ui.PlatformUI.isWorkbenchRunning()) return;
+        var ui = org.eclipse.ui.PlatformUI.getWorkbench().getDisplay();
+        if (ui == null || ui.isDisposed()) return;
+        ui.asyncExec(() -> {
+            if (ui.isDisposed() || !org.eclipse.ui.PlatformUI.isWorkbenchRunning()) return;
+            for (var window : org.eclipse.ui.PlatformUI.getWorkbench().getWorkbenchWindows()) {
+                var page = window.getActivePage();
+                if (page == null) continue;
+                var part = page.findView(ConfigurationHomeView.ID);
+                if (part instanceof ConfigurationHomeView home)
+                    home.refreshAfterBuild(builtProject);
+            }
+        });
+    }
+
     @Override protected void clean(IProgressMonitor monitor) throws CoreException {
         try { if (ZephyrProjectLifecycle.configure(getProject(), monitor)) run(true, false, false, null, monitor); }
         catch (CoreException error) { throw error; }
@@ -313,6 +331,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             }
             getProject().refreshLocal(IResource.DEPTH_INFINITE, monitor);
             var output = getProject().getFolder(".zew-build"); if (output.exists()) output.setDerived(true, monitor);
+            if (!clean) notifyOpenConfigurationStudio(getProject());
         } catch (java.io.InterruptedIOException error) { throw new CoreException(Status.CANCEL_STATUS); }
         catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new CoreException(Status.CANCEL_STATUS); }
         catch (Exception error) { throw new CoreException(new Status(IStatus.ERROR, Activator.ID, stage[0] + " failed: " + error.getMessage(), error)); }
