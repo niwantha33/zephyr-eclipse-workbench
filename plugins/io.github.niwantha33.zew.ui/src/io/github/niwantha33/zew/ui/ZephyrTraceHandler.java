@@ -131,7 +131,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                     if (!owned.isAlive() || !diagnostics.isListening(ports.gdb()))
                         throw new IOException(diagnostics.describe(plan.board(), ports.gdb(), owned.isAlive() ? null : owned.exitValue()));
                     staging = Files.createTempDirectory("zew-trace-tool-");
-                    for (String name : List.of("capture_snapshot.py", "analyze_trace.py", "cpu_analysis.py",
+                    for (String name : List.of("capture_snapshot.py", "analyze_trace.py", "thread_event_log.py", "cpu_analysis.py",
                             "timing_analysis.py", "investigation.py", "trace_compass_bridge.py", "Zephyr_RTOS_Timeline.xml")) {
                         var resource = Activator.getDefault().getBundle().getEntry("tools/rtos_analysis/" + name);
                         if (resource == null) throw new IOException("Trace component missing: " + name + ". Reinstall Workbench.");

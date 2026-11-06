@@ -160,6 +160,7 @@ def review_receipt(receipt, *, trace=None, metadata=None, build_elf=None,
         "fault": fault,
         "timing": timing,
         "events": analysis.get("observed_events", {}),
+        "thread_events": analysis.get("thread_event_log", {"quality": "UNKNOWN", "rows": []}),
         "findings": findings,
         "limits": [
             "Capture identity, target timestamp accuracy and unreported loss are not independently established.",
@@ -236,6 +237,21 @@ def render_html(report):
                     '<th>Observed threshold exceedances</th></tr>'
                     + ''.join(timing_rows) + '</table>') if timing_rows else (
                     '<p>No qualified observed timing table; inspect CTF timing quality.</p>')
+    log = report.get("thread_events", {})
+    log_rows = []
+    if isinstance(log, dict):
+        for item in log.get("rows", [])[:128]:
+            if not isinstance(item, dict):
+                continue
+            log_rows.append('<tr>' + ''.join('<td>' +
+                cell(item.get(key) if item.get(key) is not None else "UNKNOWN") + '</td>'
+                for key in ("timestamp_ns", "stream", "core", "thread_id",
+                            "thread_name", "event", "observed")) + '</tr>')
+    log_quality = cell(log.get("quality", "UNKNOWN")) if isinstance(log, dict) else "UNKNOWN"
+    log_table = ('<table><tr><th>CTF ns</th><th>Stream</th><th>Core</th>'
+                 '<th>Thread ID</th><th>Thread name</th><th>Event</th><th>Observation</th></tr>'
+                 + ''.join(log_rows) + '</table>') if log_rows else (
+                 '<p>No decoded thread/ISR events available.</p>')
     busy = data.get("cpu_busy_percent")
     busy_text = "unknown (requires explicit idle identity and full interval coverage)" \
         if busy is None else cell(str(busy) + "% (conditional scheduler occupancy)")
@@ -258,7 +274,12 @@ small{color:#64748b}
 <small>Single-stream CTF, observed nanoseconds only. Unknown is not idle.
 ISR time is separated from interrupted threads. Do not infer complete trace capture or WCET.</small></section>
 <section><h2>UART application messages</h2>''' + uart_summary + '''</section>
-<section><h2>Thread timing and deadline observations</h2>''' + timing_table + '''
+<section><h2>Thread and ISR event log (observations only)</h2><p>Quality: '''
+    + log_quality + '''</p>''' + log_table + '''
+    <small>At most 128 rows. No inferred sleeping, waiting or ready intervals.
+    Host source locations and externally calibrated clock UNKNOWN; missing
+    records and unreported losses remain possible.</small></section>
+    <section><h2>Thread timing and deadline observations</h2>''' + timing_table + '''
 <small>Observed scheduling bursts include interrupts; their maximum is NOT WCET.
 Ready latency requires a matched explicit ready event. No inferred blocked state.</small></section>
 <section><h2>Guided findings</h2><ol>''' + entries + '''</ol></section>

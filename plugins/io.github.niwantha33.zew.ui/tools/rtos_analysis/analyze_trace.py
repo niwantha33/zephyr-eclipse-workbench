@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from cpu_analysis import account
 from timing_analysis import analyze_timing
+from thread_event_log import events_table
 
 
 def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
@@ -64,6 +65,7 @@ def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
                 result['warnings'].append('Switch-out without matching switch-in; incomplete interval excluded.')
             active = None
     result['streams'] = len(streams)
+    result['thread_event_log'] = events_table(records)
     result['cpu'] = account(records, idle_thread_id=idle_thread_id)
     result['timing'] = analyze_timing(records, deadlines_ns=deadlines_ns)
     result['observed_events'] = {}
