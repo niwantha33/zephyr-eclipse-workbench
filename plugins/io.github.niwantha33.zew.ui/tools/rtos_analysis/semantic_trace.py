@@ -117,7 +117,8 @@ RAW_EVENT_KINDS: dict[str, EventKind] = {
 # event names. An "enter" does NOT prove successful acquisition. For mutex
 # operations with a ret field, non-zero or missing ret never establishes a hold.
 RESOURCE_EVENT_PHASES = {
-    "mutex_lock": "acquired", "mutex_take": "acquired",
+    # Generic lock/take aliases lack an explicit success return: attempt only.
+    "mutex_lock": "attempt", "mutex_take": "attempt",
     "mutex_lock_enter": "attempt", "mutex_lock_blocking": "blocking",
     "mutex_lock_exit": "result",
     "mutex_unlock": "released", "mutex_give": "released",
