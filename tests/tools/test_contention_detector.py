@@ -45,6 +45,9 @@ class ContentionTests(unittest.TestCase):
         self.assertEqual((finding.waiter_priority, finding.holder_priority,
                           finding.medium_priority), (1, 5, 3))
         self.assertEqual(finding.object_name, "lock_A")
+        self.assertIn("low (priority 5)", finding.explanation)
+        self.assertIn("high (priority 1)", finding.explanation)
+        self.assertIn("medium (priority 3)", finding.explanation)
         self.assertEqual(finding.duration_ns, 500)
         self.assertFalse(finding.holder_unknown)
 
