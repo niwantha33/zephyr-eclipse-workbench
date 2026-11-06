@@ -84,6 +84,10 @@ public final class ThreadTimelineSmoke {
                 && field(view, "loadJob") == null,
                 "CPU tab displays disclaimer and runs no calculation or decoding before load");
 
+        tabs.setSelection(1);
+        check(tabs.getSelectionIndex() == 1 && field(view, "loadJob") == null,
+                "selecting CPU tab remains passive and starts no decoder job");
+
         // Inject a synthetic *already normalized interval report* into the
         // installed SWT view. Never open a file or start the Python decoder.
         String encoded = "ZEW_THREAD_TIMELINE\t1\t0\t0\t4\t\t0\n"
