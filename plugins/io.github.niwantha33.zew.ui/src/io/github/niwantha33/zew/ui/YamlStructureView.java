@@ -61,6 +61,9 @@ public final class YamlStructureView extends ViewPart {
     private TreeViewer hardwareTree;
     private Label twisterStatus;
     private TreeViewer twisterTree;
+    private Label diagnosticStatus;
+    private TreeViewer diagnosticTree;
+    private volatile IFile markerOwner;
     private Job reader;
     private IFile selectedYaml;
     private IProject selectedContext;
@@ -217,6 +220,40 @@ public final class YamlStructureView extends ViewPart {
         twisterColumn("Scenario / config", 300, true);
         twisterColumn("Declared value preview", 370, false);
         twisterTree.setInput(List.of());
+
+        var diagnosticsTab = new TabItem(detailsTabs, SWT.NONE);
+        diagnosticsTab.setText("Diagnostics");
+        var diagnosticsPanel = new Composite(detailsTabs, SWT.NONE);
+        diagnosticsPanel.setLayout(new GridLayout(1, false));
+        diagnosticsTab.setControl(diagnosticsPanel);
+        diagnosticStatus = new Label(diagnosticsPanel, SWT.WRAP);
+        diagnosticStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        diagnosticStatus.setText("Select a saved YAML file for source-linked syntax diagnostics.");
+        diagnosticTree = new TreeViewer(diagnosticsPanel, SWT.BORDER | SWT.FULL_SELECTION
+                | SWT.H_SCROLL | SWT.V_SCROLL | SWT.SINGLE);
+        diagnosticTree.getTree().setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        diagnosticTree.getTree().setHeaderVisible(true);
+        diagnosticTree.getTree().setLinesVisible(true);
+        diagnosticTree.setContentProvider(new ITreeContentProvider() {
+            @Override public Object[] getElements(Object input) {
+                return input instanceof List<?> items ? items.toArray() : new Object[0];
+            }
+            @Override public Object[] getChildren(Object row) { return new Object[0]; }
+            @Override public Object getParent(Object row) { return null; }
+            @Override public boolean hasChildren(Object row) { return false; }
+            @Override public void dispose() {}
+            @Override public void inputChanged(Viewer viewer, Object oldValue, Object newValue) {}
+        });
+        diagnosticColumn("Severity", 85, 0);
+        diagnosticColumn("Reason", 195, 1);
+        diagnosticColumn("Line:column", 105, 2);
+        diagnosticColumn("Explanation", 430, 3);
+        diagnosticTree.setInput(List.of());
+        diagnosticTree.addDoubleClickListener(event -> {
+            if (diagnosticTree.getStructuredSelection().getFirstElement()
+                    instanceof YamlDiagnosticModel.Row row && row.line() > 0)
+                navigateToSource(row.line(), row.column());
+        });
         tree.addDoubleClickListener(event -> navigateToSource());
         getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(followSelection);
         inspectSelection();
@@ -264,6 +301,44 @@ public final class YamlStructureView extends ViewPart {
         });
     }
 
+    private void diagnosticColumn(String header, int width, int field) {
+        var column = new TreeViewerColumn(diagnosticTree, SWT.LEFT);
+        column.getColumn().setText(header);
+        column.getColumn().setWidth(width);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override public String getText(Object element) {
+                if (!(element instanceof YamlDiagnosticModel.Row row)) return "";
+                return switch (field) {
+                    case 0 -> row.severity();
+                    case 1 -> row.code();
+                    case 2 -> row.location();
+                    case 3 -> row.message();
+                    default -> "";
+                };
+            }
+        });
+    }
+
+    /** Remove only our own transient markers, always off the SWT thread. */
+    private void clearPublishedYamlMarkers(int request) {
+        IFile previous = markerOwner;
+        if (previous == null) return;
+        Job cleanup = new Job("Clear obsolete YAML validation markers") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                try {
+                    if (YamlDiagnosticMarkers.replace(previous, null, null,
+                            () -> !monitor.isCanceled() && request == generation.get()))
+                        markerOwner = null;
+                } catch (org.eclipse.core.runtime.CoreException ignored) {
+                    return Status.CANCEL_STATUS;
+                }
+                return Status.OK_STATUS;
+            }
+        };
+        cleanup.setSystem(true);
+        cleanup.schedule();
+    }
+
     private void chooseReport() {
         var dialog = new FileDialog(getSite().getShell(), SWT.OPEN);
         dialog.setText("Open a saved Zephyr YAML observation");
@@ -275,6 +350,7 @@ public final class YamlStructureView extends ViewPart {
         // Any previous import is stale immediately; discard its delayed UI result.
         int request = generation.incrementAndGet();
         if (reader != null) reader.cancel();
+        clearPublishedYamlMarkers(request);
         observedFile = null;
         observedSource = null;
         observedSha = null;
@@ -285,6 +361,8 @@ public final class YamlStructureView extends ViewPart {
         hardwareStatus.setText("HWMv2 metadata unavailable for an imported JSON report without selected checkout context.");
         twisterTree.setInput(List.of());
         twisterStatus.setText("Twister metadata requires an explicitly selected checkout, not imported JSON.");
+        diagnosticTree.setInput(List.of());
+        diagnosticStatus.setText("Imported JSON is not an authenticated workspace source; no diagnostics or markers.");
         Path report;
         try {
             report = Path.of(chosen);
@@ -340,6 +418,8 @@ public final class YamlStructureView extends ViewPart {
             hardwareStatus.setText("HWMv2: no selected source.");
             twisterTree.setInput(List.of());
             twisterStatus.setText("Twister: no selected source.");
+            diagnosticTree.setInput(List.of());
+            diagnosticStatus.setText("Diagnostics: no selected source.");
             status.setText("No YAML observation has been selected.");
             return;
         }
@@ -410,10 +490,14 @@ public final class YamlStructureView extends ViewPart {
         hardwareStatus.setText("HWMv2: loading only for canonical board.yml and soc.yml sources.");
         twisterTree.setInput(List.of());
         twisterStatus.setText("Twister: waiting for selected saved test YAML and checkout schema.");
+        diagnosticTree.setInput(List.of());
+        diagnosticStatus.setText("Diagnostics: verifying saved YAML and selected checkout rules…");
         IProject managed = SelectedProject.importedProject(file.getProject());
         if (managed == null) managed = selectedContext;
         IProject context = managed;
         if (context == null) {
+            clearPublishedYamlMarkers(request);
+            diagnosticStatus.setText("Diagnostics unavailable: no managed application context.");
             status.setText("Select a managed Zephyr application before inspecting this YAML file.");
             return;
         }
@@ -563,12 +647,16 @@ public final class YamlStructureView extends ViewPart {
     }
 
     private void navigateToSource() {
+        if (!(tree.getStructuredSelection().getFirstElement() instanceof YamlTreeProjection.Row row))
+            return;
+        navigateToSource(row.sourceRange().start().line(), row.sourceRange().start().column());
+    }
+
+    private void navigateToSource(int targetLine, int targetColumn) {
         if (observedFile == null || observedSource == null || observedSha == null) {
             status.setText("A saved JSON observation has no verified workspace source for navigation.");
             return;
         }
-        if (!(tree.getStructuredSelection().getFirstElement() instanceof YamlTreeProjection.Row row))
-            return;
         try {
             YamlSourceLoader.Source current = YamlSourceLoader.resolve(observedSource.file(),
                     "application".equals(observedSource.kind()) ? observedSource.root() : null,
@@ -593,14 +681,14 @@ public final class YamlStructureView extends ViewPart {
                 return;
             }
             var document = editor.getDocumentProvider().getDocument(editor.getEditorInput());
-            if (document == null || row.sourceRange().start().line() > document.getNumberOfLines()) {
+            if (document == null || targetLine < 1 || targetLine > document.getNumberOfLines()) {
                 status.setText("The selected YAML line is no longer available. Refresh the observation.");
                 return;
             }
-            int offset = document.getLineOffset(row.sourceRange().start().line() - 1);
-            int lineLength = document.getLineLength(row.sourceRange().start().line() - 1);
+            int offset = document.getLineOffset(targetLine - 1);
+            int lineLength = document.getLineLength(targetLine - 1);
             String line = document.get(offset, lineLength);
-            int count = Math.min(Math.max(0, row.sourceRange().start().column() - 1),
+            int count = Math.min(Math.max(0, targetColumn - 1),
                     line.codePointCount(0, line.length()));
             editor.selectAndReveal(offset + line.offsetByCodePoints(0, count), 0);
         } catch (Exception error) {
@@ -616,6 +704,7 @@ public final class YamlStructureView extends ViewPart {
     @Override public void dispose() {
         generation.incrementAndGet();
         if (reader != null) reader.cancel();
+        clearPublishedYamlMarkers(generation.get());
         getSite().getWorkbenchWindow().getSelectionService().removeSelectionListener(followSelection);
         super.dispose();
     }
