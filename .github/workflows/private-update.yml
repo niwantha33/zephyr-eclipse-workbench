@@ -106,7 +106,11 @@ jobs:
           print(f"Publishing candidate {target} (current channel: {previous})")
           PY
       - name: Build clean Tycho p2 update site
-        run: mvn --batch-mode --no-transfer-progress "-DforceContextQualifier=${ZEW_RELEASE_QUALIFIER}" clean verify
+        # Maven Central briefly returned a missing Tycho extension for a real
+        # published release (workload run #189, 2026-11-06). Do not upgrade
+        # Tycho, switch mirrors or mask compiler/test/p2 verification errors.
+        # A bounded retry with -U rechecks only the exact missing plugin.
+        run: python3 scripts/retry_maven_tycho.py --qualifier "${ZEW_RELEASE_QUALIFIER}"
       - name: Verify packaged p2 site before publication
         run: python3 scripts/verify_site.py
       - name: Exercise native Eclipse import, export and CDT configuration selection
