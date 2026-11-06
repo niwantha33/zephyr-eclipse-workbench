@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+name: CodeQL Java security analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '21 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  codeql-java:
+    name: CodeQL (Java)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      # Build mode 'none' analyses Java source without invoking the
+      # Tycho/p2 build. The existing build.yml remains the build gate.
+      - name: Initialize CodeQL for Java
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4 pinned
+        with:
+          languages: java-kotlin
+          build-mode: none
+          queries: security-extended
+      - name: Analyse Java source
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4 pinned
+        with:
+          category: /language:java-kotlin
