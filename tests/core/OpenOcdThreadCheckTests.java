@@ -3,6 +3,8 @@ import io.github.niwantha33.zew.core.OpenOcdThreadCheck;
 import io.github.niwantha33.zew.core.OpenOcdThreadCheck.Region;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +14,10 @@ public final class OpenOcdThreadCheckTests {
     private static int checks;
     private static void yes(boolean value, String message) { if (!value) throw new AssertionError(message); checks++; }
     private static String exercise(List<String> replies, List<Region> regions, List<String> commands) throws Exception {
+        return exercise(replies, regions, commands, null);
+    }
+    private static String exercise(List<String> replies, List<Region> regions, List<String> commands,
+            Path transcript) throws Exception {
         try (var server = new ServerSocket(0); var worker = Executors.newSingleThreadExecutor()) {
             var served = worker.submit(() -> {
                 try (var peer = server.accept()) {
@@ -27,7 +33,7 @@ public final class OpenOcdThreadCheckTests {
                 } catch (Exception error) { throw new RuntimeException(error); }
             });
             String failure = "";
-            try { OpenOcdThreadCheck.verify(server.getLocalPort(), regions); }
+            try { OpenOcdThreadCheck.verify(server.getLocalPort(), regions, transcript); }
             catch (IOException error) { failure = error.getMessage(); }
             served.get(5, TimeUnit.SECONDS);
             return failure;
@@ -43,6 +49,17 @@ public final class OpenOcdThreadCheckTests {
         String mismatch = exercise(List.of("", "0", "0"), List.of(size), commands);
         yes(mismatch.contains("expected byte 4, target byte 0") && mismatch.contains("0x1280"), "report observed address, expected and actual value");
         yes(mismatch.contains("GDB was not attached") && mismatch.contains("No firmware or metadata was written"), "mismatch prevents false thread decoding without repairing RAM");
+        Path transcript = Files.createTempFile("zew-openocd-transcript-", ".tmp");
+        Files.delete(transcript); // CREATE_NEW must not overwrite an existing file
+        try {
+            String withLog = exercise(List.of("", "255", "255"), List.of(size), new ArrayList<>(), transcript);
+            yes(withLog.contains("Readback 0xFF") && withLog.contains("_kernel_thread_info_size_t_size"),
+                    "0xFF diagnostics retain the exact symbol/address, not a presumed cause");
+            String raw = Files.readString(transcript);
+            yes(raw.contains("TX ascii: read_memory 0x1280 8 1")
+                    && raw.contains("RX hex (Tcl delimiter 1a excluded): 323535"),
+                    "opt-in transcript preserves raw Tcl reply bytes");
+        } finally { Files.deleteIfExists(transcript); }
         String error = exercise(List.of("", "target not examined"), List.of(size), new ArrayList<>());
         yes(error.contains("could not read") && error.contains("target not examined"), "preserve actual Tcl read error");
         yes(exercise(List.of("", "4 4"), List.of(size), new ArrayList<>()).contains("could not read"), "wrong response length rejected");

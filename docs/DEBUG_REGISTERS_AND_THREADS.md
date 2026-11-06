@@ -56,6 +56,21 @@ checks do not establish probe or physical peripheral correctness. Validate on
 hardware with a safe, documented read-only register and compare the same
 address in GDB.
 
+## Optional OpenOCD Tcl transcript
+
+In a Zephyr native **Debug** launch configuration, select **Save raw OpenOCD Tcl
+preflight responses** to opt in. Successful or failed preflight checks create
+an exclusive log under that build's `.zew-debug/thread-tcl-*.log`. Exact
+commands and reply bytes appear as hexadecimal; the Tcl delimiter is excluded.
+Treat the file as local debug evidence containing memory values. Review it before
+sharing, do not commit it, and delete it when no longer needed.
+
+The report includes the ELF symbol, exact mismatch address, expected and observed
+byte, and whether the second halted read agreed. A target byte `0xFF` may
+indicate missing flash or a probe memory-access issue, not proof of either.
+No target write is added. If the preflight cannot reach Tcl, a complete transcript
+cannot be produced.
+
 ## Repeated `Only size_t of 4 bytes are supported`
 
 OpenOCD's Zephyr RTOS decoder reads the byte at the ELF symbol

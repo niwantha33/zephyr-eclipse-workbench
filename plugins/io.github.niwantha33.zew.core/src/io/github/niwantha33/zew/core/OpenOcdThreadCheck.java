@@ -2,6 +2,10 @@
 package io.github.niwantha33.zew.core;
 
 import java.io.IOException;
+import java.io.BufferedWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -21,18 +25,25 @@ public final class OpenOcdThreadCheck {
         }
     }
     public static void verify(int port, List<Region> regions) throws IOException {
+        verify(port, regions, null);
+    }
+
+    /** Opt-in exact Tcl response bytes as hex, never an automatic probe scan. */
+    public static void verify(int port, List<Region> regions, Path transcript) throws IOException {
         if (port < 1024 || port > 65535 || regions.isEmpty() || regions.size() > 3)
             throw new IOException("Invalid thread metadata verification request");
-        try (var socket = new Socket()) {
+        try (BufferedWriter log = transcript == null ? null : Files.newBufferedWriter(transcript,
+                StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+             var socket = new Socket()) {
             socket.connect(new InetSocketAddress("127.0.0.1", port), 3000);
             socket.setSoTimeout(8000);
             // Listening ports are announced before the runner's reset/halt has
             // necessarily completed. Do not compare flash while startup is pending.
-            String halted = exchange(socket, "wait_halt 5000");
+            String halted = exchange(socket, "wait_halt 5000", log);
             if (!halted.isBlank())
                 throw new IOException("OpenOCD target was not confirmed halted before metadata verification: "
                         + printable(halted) + ". Check reset/halt and probe access; firmware identity was not assessed.");
-            var first = readRegions(socket, regions);
+            var first = readRegions(socket, regions, log);
             int mismatchRegion = -1, mismatchByte = -1;
             for (int r = 0; r < regions.size() && mismatchRegion < 0; r++) {
                 for (int i = 0; i < regions.get(r).bytes().size(); i++) {
@@ -49,7 +60,7 @@ public final class OpenOcdThreadCheck {
                         + ", target byte " + first.get(mismatchRegion).get(mismatchByte);
                 String repeated;
                 try {
-                    var second = readRegions(socket, regions);
+                    var second = readRegions(socket, regions, log);
                     repeated = first.equals(second)
                             ? " The mismatch persisted across two halted reads. A different flashed image or repeatable probe/read error remains possible."
                             : " Target metadata changed between two halted reads. Probe/target reads are inconsistent; reflashing alone is not a confirmed remedy.";
@@ -62,7 +73,8 @@ public final class OpenOcdThreadCheck {
                             .append(Long.toHexString(regions.get(r).address())).append(" expected=")
                             .append(regions.get(r).bytes()).append(" observed=").append(first.get(r)).append(';');
                 }
-                throw new IOException(detail + "." + repeated
+                throw new IOException(detail + "." + guidance(region.bytes().get(mismatchByte),
+                        first.get(mismatchRegion).get(mismatchByte)) + repeated
                         + " GDB was not attached. Terminate old sessions and use Zephyr > Flash and Debug Application for this exact board/build, or Flash then retry Debug. "
                         + "If already flashed, investigate target reads/OpenOCD compatibility. "
                         + "No firmware or metadata was written by this check. Readback:" + summary);
@@ -70,11 +82,20 @@ public final class OpenOcdThreadCheck {
         }
     }
 
-    private static List<List<Integer>> readRegions(Socket socket, List<Region> regions) throws IOException {
+    private static String guidance(int expected, int observed) {
+        if (observed == 255)
+            return " Readback 0xFF may mean unmapped/erased flash or probe read failure; it is not proof of an erase. Check the exact image and flash address.";
+        if (observed == 0 && expected != 0)
+            return " Readback zero may mean missing/uninitialised target data or the wrong image; compare independently without changing target memory.";
+        return " Verify the ELF/board/profile, flashed image and OpenOCD access before assuming an ABI mismatch.";
+    }
+
+    private static List<List<Integer>> readRegions(Socket socket, List<Region> regions,
+            BufferedWriter log) throws IOException {
         var result = new java.util.ArrayList<List<Integer>>();
         for (var region : regions) {
             String raw = exchange(socket, "read_memory 0x" + Long.toHexString(region.address())
-                    + " 8 " + region.bytes().size()).trim();
+                    + " 8 " + region.bytes().size(), log).trim();
             try {
                 if (!raw.matches("(?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\\s+(?:0[xX][0-9a-fA-F]+|[0-9]+))*"))
                     throw new NumberFormatException();
@@ -96,7 +117,11 @@ public final class OpenOcdThreadCheck {
         return value.replaceAll("[\\p{Cntrl}&&[^\\t]]", " ");
     }
 
-    private static String exchange(Socket socket, String command) throws IOException {
+    private static String exchange(Socket socket, String command, BufferedWriter transcript) throws IOException {
+        if (transcript != null) {
+            transcript.write("TX ascii: " + command + "\n");
+            transcript.flush();
+        }
         socket.getOutputStream().write((command + '\u001a').getBytes(StandardCharsets.US_ASCII));
         socket.getOutputStream().flush();
         var response = new StringBuilder();
@@ -105,6 +130,12 @@ public final class OpenOcdThreadCheck {
             if (value < 0) throw new IOException("Owned OpenOCD Tcl endpoint closed during thread metadata verification");
             if (response.length() >= 4096) throw new IOException("Oversized OpenOCD thread metadata response");
             response.append((char) value);
+        }
+        if (transcript != null) {
+            transcript.write("RX hex (Tcl delimiter 1a excluded): "
+                    + java.util.HexFormat.of().formatHex(response.toString()
+                            .getBytes(StandardCharsets.ISO_8859_1)) + "\n");
+            transcript.flush();
         }
         return response.toString();
     }
