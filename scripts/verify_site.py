@@ -47,6 +47,18 @@ for p in bundles:
             if z.read('scripts/studio.py') != (root / 'plugins/io.github.niwantha33.zew.ui/scripts/studio.py').read_bytes():
                 raise SystemExit('Installed Studio command entrypoint differs from source')
             compile(z.read('scripts/studio.py'), 'scripts/studio.py', 'exec')
+            # The installed p2 bundle must contain the exact tested Step-1
+            # parser used by the automatic post-build memory snapshot.
+            memory_parser = z.read('scripts/memory_profiler.py')
+            if memory_parser != (root / 'scripts/memory_profiler.py').read_bytes():
+                raise SystemExit('Packaged memory profiler differs from tested Python parser')
+            compile(memory_parser, 'scripts/memory_profiler.py', 'exec')
+            for name in ('MemoryProfilerView', 'MemoryProfilerCanvas',
+                         'MemoryProfilerLayout', 'MemoryProfilerJson',
+                         'MemoryProfilerBuildIntegration', 'MemoryProfilerReportGuard'):
+                classfile = 'io/github/niwantha33/zew/ui/' + name + '.class'
+                if classfile not in z.namelist():
+                    raise SystemExit('Missing native Memory Profiler class: ' + classfile)
             if 'tools/inventory.py' not in z.namelist():
                 raise SystemExit('Tools inventory helper missing.')
             compile(z.read('tools/inventory.py'), 'tools/inventory.py', 'exec')
