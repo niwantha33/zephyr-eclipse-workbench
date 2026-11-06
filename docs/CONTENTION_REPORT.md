@@ -55,8 +55,8 @@ IDs explicitly labelled **object ID** instead of inventing a name. If
 numeric priority evidence is entirely absent, Pattern A is **disabled**
 and the view explains why. Long waits remain reportable.
 
-The normalizer treats Zephyr's CTF \`mutex_lock_enter\` as an **attempt**
-and \`mutex_lock_exit\` with **ret = 0** as an **acquisition**; a lock
+The normalizer treats Zephyr's CTF `mutex_lock_enter` as an **attempt**
+and `mutex_lock_exit` with **ret = 0** as an **acquisition**; a lock
 attempt alone is not ownership evidence. Similarly, semaphore takes use
 the enter/blocking/exit distinction. A missing, failed, interrupted,
 truncated or otherwise unmatched event cannot be used to manufacture a
