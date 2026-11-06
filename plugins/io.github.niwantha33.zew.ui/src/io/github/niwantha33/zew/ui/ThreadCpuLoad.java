@@ -60,13 +60,24 @@ public final class ThreadCpuLoad {
     }
 
     public static Result calculate(List<ThreadTimelineReport.Interval> intervals, long startNs, long endNs) {
+        return calculate(intervals, startNs, endNs, observedBounds(intervals));
+    }
+
+    /** Explicit trace boundaries come from semantic event timestamps, not guessed intervals. */
+    public static Result calculate(List<ThreadTimelineReport.Interval> intervals,
+                                   long startNs, long endNs, Bounds traceBounds) {
         if (startNs < 0 || endNs <= startNs)
             throw new IllegalArgumentException("End (ns) must be greater than Start (ns).");
-        Bounds bounds = observedBounds(intervals);
-        if (startNs < bounds.startNs() || endNs > bounds.endNs())
+        Bounds intervalBounds = observedBounds(intervals);
+        if (traceBounds == null || traceBounds.startNs() < 0
+                || traceBounds.endNs() <= traceBounds.startNs()
+                || traceBounds.startNs() > intervalBounds.startNs()
+                || traceBounds.endNs() < intervalBounds.endNs())
+            throw new IllegalArgumentException("Observed trace bounds conflict with timeline intervals.");
+        if (startNs < traceBounds.startNs() || endNs > traceBounds.endNs())
             throw new IllegalArgumentException(
-                    "Selected window must stay within the observed trace interval range ("
-                    + bounds.startNs() + " to " + bounds.endNs() + " ns).");
+                    "Selected window must stay within the observed trace range ("
+                    + traceBounds.startNs() + " to " + traceBounds.endNs() + " ns).");
         BigInteger window = BigInteger.valueOf(endNs).subtract(BigInteger.valueOf(startNs));
         Map<String, BigInteger> running = new TreeMap<>();
         BigInteger isr = BigInteger.ZERO;
