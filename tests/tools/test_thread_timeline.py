@@ -125,6 +125,21 @@ class ThreadTimelineTests(unittest.TestCase):
         self.assertEqual([r for r in actual.intervals if r.state == "ISR"],
                          [timeline.Interval(2, 5, "", "", "ISR")])
 
+    def test_v2_header_keeps_full_raw_trace_range_even_with_unpaired_edges(self):
+        result = timeline.timeline_from_events([
+            raw("thread_ready", 5, "a"),
+            raw("thread_switched_in", 20, "a"),
+            raw("thread_switched_out", 30, "a"),
+            raw("thread_ready", 50, "b"),
+        ])
+        self.assertEqual((result.trace_start_ns, result.trace_end_ns), (5, 50))
+        self.assertEqual([(x.start_ns, x.end_ns) for x in result.intervals],
+                         [(20, 30)])
+        header = timeline.serialize(result).splitlines()[0].split("\t")
+        self.assertEqual(header[1], "2")
+        self.assertEqual(header[-2:], ["5", "50"])
+        self.assertEqual(len(header), 9)
+
     def test_cross_stream_switches_never_pair(self):
         actual = timeline.timeline_from_events([
             raw("thread_switched_in", 10, stream=0),
