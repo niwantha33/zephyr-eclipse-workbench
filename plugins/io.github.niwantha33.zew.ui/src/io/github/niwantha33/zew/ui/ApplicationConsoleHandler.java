@@ -25,6 +25,10 @@ import io.github.niwantha33.zew.core.ProcessRunner;
 
 /** Explicit, bounded UART-only application console capture. No probe access. */
 public final class ApplicationConsoleHandler extends AbstractHandler {
+    private static final org.eclipse.core.runtime.QualifiedName LAST_PORT =
+            new org.eclipse.core.runtime.QualifiedName(Activator.ID, "uart.lastPort");
+    private static final org.eclipse.core.runtime.QualifiedName LAST_BAUD =
+            new org.eclipse.core.runtime.QualifiedName(Activator.ID, "uart.lastBaud");
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
         capture(SelectedProject.from(event), HandlerUtil.getActiveShell(event));
         return null;
@@ -37,15 +41,23 @@ public final class ApplicationConsoleHandler extends AbstractHandler {
                     "Select an open Zephyr project first. This action captures a separately named UART/USB serial port.");
             return;
         }
+        String defaultPort = "";
+        String defaultBaud = "115200";
+        try {
+            String savedPort = project.getPersistentProperty(LAST_PORT);
+            String savedBaud = project.getPersistentProperty(LAST_BAUD);
+            if (savedPort != null) defaultPort = savedPort;
+            if (savedBaud != null) defaultBaud = savedBaud;
+        } catch (org.eclipse.core.runtime.CoreException ignored) { /* no defaults */ }
         var portInput = new InputDialog(shell, "UART/USB application console",
                 "Serial port name (e.g. COM8 or /dev/ttyACM0). Only use a port NOT owned by GDB, OpenOCD, RTT or another terminal.",
-                "", value -> value == null || value.isBlank() || value.length() > 128
+                defaultPort, value -> value == null || value.isBlank() || value.length() > 128
                         || value.contains("\n") || value.contains("\r")
                         ? "Enter one existing port name." : null);
         if (portInput.open() != Window.OK) return;
         String port = portInput.getValue().trim();
         var baudInput = new InputDialog(shell, "UART baud rate",
-                "Set the exact baud rate configured by the firmware.", "115200", value -> {
+                "Set the exact baud rate configured by the firmware.", defaultBaud, value -> {
                     try {
                         int rate = Integer.parseInt(value);
                         return rate >= 1200 && rate <= 4000000 ? null : "Use 1200 to 4000000.";
@@ -68,6 +80,12 @@ public final class ApplicationConsoleHandler extends AbstractHandler {
                 + " seconds?\n\nThis port must be free. Serial data is saved locally; raw binary CTF must "
                 + "not be treated as text. Host timestamps are NOT target timestamps. "
                 + "No flash, halt, reset or debug command is sent.")) return;
+        try {
+            project.setPersistentProperty(LAST_PORT, port);
+            project.setPersistentProperty(LAST_BAUD, Integer.toString(baud));
+        } catch (org.eclipse.core.runtime.CoreException ignored) {
+            // Capture is still explicitly requested; persistence failure never changes port.
+        }
         Job job = new Job("Capture Zephyr UART application log — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 var console = new MessageConsole("Zephyr UART (" + port + ") — " + project.getName(), null);
