@@ -52,7 +52,8 @@ def _regular_bytes(path, limit=MAX_FILE_BYTES):
 
 def _bindings(root):
     directory = root / "dts" / "bindings"
-    if not directory.is_dir() or directory.is_symlink():
+    if not directory.is_dir() or any(p.is_symlink() for p in
+                                     (directory, *directory.parents)):
         return []
     items = []
     scanned = 0
@@ -126,7 +127,8 @@ def inspect(root, relative, kind, zephyr, application):
     if selected.is_symlink() or not selected.is_file():
         raise Rejected("selected-binding-unavailable")
     edt_path = zephyr / "scripts/dts/python-devicetree/src/devicetree/edtlib.py"
-    if not edt_path.is_file() or edt_path.is_symlink():
+    if not edt_path.is_file() or any(p.is_symlink() for p in
+                                     (edt_path, *edt_path.parents)):
         return ("unavailable", "selected-edtlib-missing", source_hash,
                 "0" * 64, "", "", "", 0, [])
     edt_hash = hashlib.sha256(_regular_bytes(edt_path, 1024 * 1024)).hexdigest()
