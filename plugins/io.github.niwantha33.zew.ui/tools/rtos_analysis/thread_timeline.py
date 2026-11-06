@@ -71,6 +71,7 @@ def build_intervals(trace: SemanticTrace) -> Timeline:
     running: dict[object, SemanticEvent] = {}
     unknown_start: dict[object, int] = {}
     explicit: dict[tuple[object, str], tuple[str, SemanticEvent]] = {}
+    unknown_thread: dict[tuple[object, str], SemanticEvent] = {}
     isr: dict[object, list[SemanticEvent]] = {}
     intervals: list[Interval] = []
 
@@ -92,6 +93,10 @@ def build_intervals(trace: SemanticTrace) -> Timeline:
         if identity is not None:
             ident = (stream, str(identity))
             if event.kind in THREAD_STATES or event.kind == EventKind.THREAD_SWITCHED_IN:
+                uncertain = unknown_thread.pop(ident, None)
+                if uncertain is not None:
+                    append(uncertain.timestamp_ns, ts, uncertain.thread_name,
+                           uncertain.thread_priority or "", "Unknown")
                 prior = explicit.pop(ident, None)
                 if prior is not None:
                     state, before = prior
@@ -99,6 +104,15 @@ def build_intervals(trace: SemanticTrace) -> Timeline:
                            before.thread_priority or "", state)
                 if event.kind in THREAD_STATES:
                     explicit[ident] = (THREAD_STATES[event.kind], event)
+            elif event.kind == EventKind.UNKNOWN:
+                # A future Zephyr event may change the thread state (e.g.
+                # unmapped sleep-exit). Do not carry a known state across it.
+                prior = explicit.pop(ident, None)
+                if prior is not None:
+                    state, before = prior
+                    append(before.timestamp_ns, ts, before.thread_name,
+                           before.thread_priority or "", state)
+                    unknown_thread[ident] = event
 
         if event.kind == EventKind.THREAD_SWITCHED_IN:
             prior = running.pop(stream, None)
