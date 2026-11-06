@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zew-evidence"
+version = "0.1.1"
+description = "Read-only Zephyr build evidence CLI and offline investigation utilities"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Zephyr Eclipse Workbench contributors" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+]
+
+[project.scripts]
+zew = "zew_evidence.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["zew_evidence*"]
+exclude = ["tests*"]

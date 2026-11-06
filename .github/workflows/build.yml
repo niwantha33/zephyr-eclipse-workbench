@@ -11,6 +11,31 @@ concurrency:
   group: workbench-build-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  evidence-pytest:
+    name: Evidence CLI pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.11', '3.13']
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up matrix Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Evidence CLI package and pytest
+        run: python -m pip install --disable-pip-version-check -e . pytest==8.4.2
+      - name: Run synthetic Evidence CLI regression tests
+        run: |
+          python -m pytest -q tests/pytest/test_evidence_cli.py
+          zew --version
+          python zew.py --version
+
   package:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -139,13 +164,13 @@ jobs:
           retention-days: 7
 
   # This is the *single* status to require in branch protection. It cannot
-  # pass until both the native Eclipse and full 7-target Windows jobs succeed.
+  # pass until native Eclipse, full 7-target Windows, and Python matrix jobs succeed.
   # Repository admins must configure it as a required check; this workflow
   # cannot change protected branch settings by itself.
   evidence-qualification-gate:
     name: Evidence qualification gate
     if: ${{ always() }}
-    needs: [package, windows-firmware]
+    needs: [package, windows-firmware, evidence-pytest]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -153,9 +178,10 @@ jobs:
         env:
           PACKAGE_RESULT: ${{ needs.package.result }}
           WINDOWS_RESULT: ${{ needs.windows-firmware.result }}
+          PYTEST_RESULT: ${{ needs.evidence-pytest.result }}
         run: |
-          if [ "$PACKAGE_RESULT" != "success" ] || [ "$WINDOWS_RESULT" != "success" ]; then
-            echo "Not qualified: Linux=$PACKAGE_RESULT, Windows=$WINDOWS_RESULT" >&2
+          if [ "$PACKAGE_RESULT" != "success" ] || [ "$WINDOWS_RESULT" != "success" ] || [ "$PYTEST_RESULT" != "success" ]; then
+            echo "Not qualified: Linux=$PACKAGE_RESULT, Windows=$WINDOWS_RESULT, Python=$PYTEST_RESULT" >&2
             exit 1
           fi
-          echo "Both CI jobs passed; no source causality, device or production approval is implied."
+          echo "Packaging, Windows firmware, and Python matrix passed; no device or production approval is implied."
