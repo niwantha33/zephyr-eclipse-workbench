@@ -18,7 +18,7 @@ def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
                 'Install it for this Python interpreter or validate the CTF in Trace Compass.',
                 'timing_scope': 'No timing metrics computed.', 'incomplete': True,
                 'unknown_events': semantic.unknown_count}
-    if semantic.incomplete:
+    if semantic.incomplete and semantic.error:
         return {'ctf_decode': 'invalid', 'reason': semantic.error or 'Incomplete or malformed CTF input',
                 'timing_scope': 'No timing metrics computed.', 'incomplete': True,
                 'partial_semantic_events': len(semantic.events), 'unknown_events': semantic.unknown_count,
@@ -79,7 +79,7 @@ def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
     result['semantic_event_count'] = len(semantic.events)
     result['unknown_events'] = semantic.unknown_count
     result['unknown_event_message'] = semantic.unknown_message
-    result['incomplete'] = False
+    result['incomplete'] = semantic.incomplete
     result['semantic_kind_counts'] = {
         kind.value: sum(event.kind == kind for event in semantic.events)
         for kind in EventKind if any(event.kind == kind for event in semantic.events)
