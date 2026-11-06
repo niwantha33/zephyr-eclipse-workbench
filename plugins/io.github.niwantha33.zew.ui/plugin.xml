@@ -148,6 +148,11 @@
           category="org.eclipse.debug.ui"
           class="io.github.niwantha33.zew.ui.ZephyrTraceConsoleView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.threadTimeline"
+          name="Zephyr Thread Timeline"
+          category="org.eclipse.debug.ui"
+          class="io.github.niwantha33.zew.ui.ThreadTimelineView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.memoryProfiler"
           name="Zephyr Visual Memory &amp; MPU Profiler"
           class="io.github.niwantha33.zew.ui.MemoryProfilerView"
@@ -185,6 +190,7 @@
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.traceConsole" name="Open Debug Trace Console" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.threadTimeline" name="Open Zephyr Thread Timeline" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.trace" name="Capture RTOS Trace" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.rtosInvestigation" name="Review Saved RTOS Capture" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.applicationConsole" name="Capture UART Application Console" categoryId="io.github.niwantha33.zew.commands"/>
@@ -230,6 +236,7 @@
       </activeWhen>
     </handler>
     <handler commandId="io.github.niwantha33.zew.traceConsole" class="io.github.niwantha33.zew.ui.ZephyrTraceConsoleHandler"/>
+    <handler commandId="io.github.niwantha33.zew.threadTimeline" class="io.github.niwantha33.zew.ui.ThreadTimelineHandler"/>
     <handler commandId="io.github.niwantha33.zew.trace" class="io.github.niwantha33.zew.ui.ZephyrTraceHandler"/>
     <handler commandId="io.github.niwantha33.zew.rtosInvestigation" class="io.github.niwantha33.zew.ui.RtosInvestigationHandler"/>
     <handler commandId="io.github.niwantha33.zew.applicationConsole" class="io.github.niwantha33.zew.ui.ApplicationConsoleHandler"/>
@@ -295,6 +302,7 @@
         </menu>
         <menu id="io.github.niwantha33.zew.menu.capture" label="Capture &amp; Analyse">
           <command commandId="io.github.niwantha33.zew.traceConsole" label="Debug Trace Console..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.threadTimeline" label="Zephyr Thread Timeline..." style="push"/>
           <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace (Preview)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.rtosInvestigation" label="Review Saved RTOS Capture (Offline)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.applicationConsole" label="Capture UART Application Console..." style="push"/>
