@@ -101,7 +101,11 @@ public final class YamlDiagnosticModelTests {
         reject(invalid.replace(b64("3"), b64("1000000")));
         reject(invalid.replace(b64("a".repeat(64)), b64("short")));
         reject(invalid.replace(b64("error"), b64("critical")));
-        reject(invalid.replace(b64("3"), b64("0")));
+        reject(invalid.replace(
+                row("D", "error", "syntax-duplicate-mapping-key",
+                        "3", "3", "A YAML mapping contains a repeated key."),
+                row("D", "error", "syntax-duplicate-mapping-key",
+                        "0", "3", "A YAML mapping contains a repeated key.")));
         reject(unavailable + row("D", "error", "fake", "1", "1", "SECRET"));
         reject(invalid + "D\tSECRET\n");
         reject(" ".repeat(64 * 1024 + 1));
