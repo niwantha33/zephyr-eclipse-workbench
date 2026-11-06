@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Wiring checks for PR1 Step 2; native SWT still requires installed Eclipse smoke."""
+"""Wiring checks for PR1 Step 3; native SWT still requires installed Eclipse smoke."""
 from pathlib import Path
 import unittest
 import xml.etree.ElementTree as ET
@@ -20,9 +20,15 @@ class MemoryProfilerViewWiringTests(unittest.TestCase):
 
     def test_report_is_explicit_import_not_a_build_trigger(self):
         view = (UI / "src/io/github/niwantha33/zew/ui/MemoryProfilerView.java").read_text()
-        self.assertIn("new TableViewer(", view)
+        self.assertIn("new MemoryProfilerCanvas(", view)
+        self.assertNotIn("new TableViewer(", view)
+        canvas = (UI / "src/io/github/niwantha33/zew/ui/MemoryProfilerCanvas.java").read_text()
+        self.assertIn("extends Canvas", canvas)
+        self.assertIn("SWT.COLOR_RED", canvas)
+        self.assertIn("data.conflicts(region)", canvas)
         self.assertIn("new FileDialog(", view)
         self.assertIn("MemoryProfilerJson.parse(json)", view)
+        self.assertIn("MemoryProfilerLayout.fromRows(fields)", view)
         self.assertNotIn("west build", view)
         self.assertNotIn("ProcessBuilder(", view)
 
