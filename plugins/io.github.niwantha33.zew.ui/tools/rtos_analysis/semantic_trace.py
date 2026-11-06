@@ -204,6 +204,7 @@ def decode_ctf(path: Path):
                 "next_comm": get("next_comm"),
                 "next_prio": get("next_prio"),
                 "arg0": get("arg0"), "arg1": get("arg1"),
+                "value": get("value"),
             }
 
 
