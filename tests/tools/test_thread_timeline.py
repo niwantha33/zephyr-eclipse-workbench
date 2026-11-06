@@ -127,10 +127,10 @@ class ThreadTimelineTests(unittest.TestCase):
 
     def test_v2_header_keeps_full_raw_trace_range_even_with_unpaired_edges(self):
         result = timeline.timeline_from_events([
-            raw("thread_ready", 5, "a"),
+            raw("thread_name_set", 5, "a"),
             raw("thread_switched_in", 20, "a"),
             raw("thread_switched_out", 30, "a"),
-            raw("thread_ready", 50, "b"),
+            raw("thread_name_set", 50, "b"),
         ])
         self.assertEqual((result.trace_start_ns, result.trace_end_ns), (5, 50))
         self.assertEqual([(x.start_ns, x.end_ns) for x in result.intervals],
