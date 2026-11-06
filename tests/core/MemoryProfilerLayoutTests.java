@@ -69,7 +69,7 @@ public final class MemoryProfilerLayoutTests {
         check(diagram.sections().get(0).vma().start().equals(BigInteger.valueOf(536870912L))
                 && diagram.sections().get(0).lma().start().equals(BigInteger.valueOf(96)),
                 "RAM VMA and separate Flash LMA retained without conflation");
-        check(!diagram.hasMpuSnapshot() && diagram.conflicts(diagram.regions().get(1)).isEmpty(),
+        check(!diagram.hasMpuSnapshot() && diagram.overlaps(diagram.regions().get(1)).isEmpty(),
                 "ordinary map cannot create MPU overlays or overlaps");
         check(MemoryProfilerLayout.pixel(BigInteger.valueOf(500), BigInteger.valueOf(1000), 600) == 300
                 && MemoryProfilerLayout.pixel(BigInteger.valueOf(1000), BigInteger.valueOf(1000), 600) == 600,
@@ -107,11 +107,11 @@ public final class MemoryProfilerLayoutTests {
         var snapshot = MemoryProfilerLayout.fromRows(captured);
         check(snapshot.hasMpuSnapshot() && snapshot.mpu().size() == 2,
                 "separately identified snapshot enables recorded MPU overlays");
-        var overlaps = snapshot.conflicts(snapshot.regions().get(1));
+        var overlaps = snapshot.overlaps(snapshot.regions().get(1));
         check(overlaps.size() == 1 && overlaps.get(0).start().equals(BigInteger.valueOf(536870928L))
                 && overlaps.get(0).end().equals(BigInteger.valueOf(536870944L)),
                 "two MPU snapshots yield the exact 16-byte overlap interval");
-        check(snapshot.conflicts(snapshot.regions().get(0)).isEmpty(),
+        check(snapshot.overlaps(snapshot.regions().get(0)).isEmpty(),
                 "MPU overlap is never painted in unrelated Flash region");
         put(captured, "mpu.evidence.map_sha256", "\"" + "d".repeat(64) + "\"");
         rejects(captured);
