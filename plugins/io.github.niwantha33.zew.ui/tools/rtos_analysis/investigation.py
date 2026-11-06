@@ -274,8 +274,7 @@ small{color:#64748b}
 <small>Single-stream CTF, observed nanoseconds only. Unknown is not idle.
 ISR time is separated from interrupted threads. Do not infer complete trace capture or WCET.</small></section>
 <section><h2>UART application messages</h2>''' + uart_summary + '''</section>
-<section><h2>Thread and ISR event log (observations only)</h2><p>Quality: '''
-    + log_quality + '''</p>''' + log_table + '''
+<section><h2>Thread and ISR event log (observations only)</h2><p>Quality: ''' + log_quality + '''</p>''' + log_table + '''
     <small>At most 128 rows. No inferred sleeping, waiting or ready intervals.
     Host source locations and externally calibrated clock UNKNOWN; missing
     records and unreported losses remain possible.</small></section>
