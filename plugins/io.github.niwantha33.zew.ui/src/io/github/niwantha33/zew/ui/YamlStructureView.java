@@ -11,12 +11,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.Adapters;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.jface.dialogs.InputDialog;
+import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.window.Window;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.ITreeContentProvider;
@@ -70,6 +74,7 @@ public final class YamlStructureView extends ViewPart {
     private IFile observedFile;
     private YamlSourceLoader.Source observedSource;
     private String observedSha;
+    private YamlDocumentModel.Snapshot observedSnapshot;
     private final ISelectionListener followSelection = (part, selection) -> {
         if (part == this || !(selection instanceof IStructuredSelection items) || items.size() != 1) return;
         Object selected = items.getFirstElement();
@@ -95,18 +100,22 @@ public final class YamlStructureView extends ViewPart {
         parent.setLayout(layout);
 
         var header = new Label(parent, SWT.WRAP);
-        header.setText("ZEPHYR YAML STRUCTURE  /  SELECTED SOURCE OR SAVED OBSERVATION  /  READ-ONLY");
+        header.setText("ZEPHYR YAML STRUCTURE  /  INSPECT & VERIFY  /  PREVIEWED SCALAR EDITS");
         header.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         var controls = new Composite(parent, SWT.NONE);
         controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        controls.setLayout(new GridLayout(3, false));
+        controls.setLayout(new GridLayout(4, false));
         var selectedButton = new Button(controls, SWT.PUSH);
         selectedButton.setText("Inspect selected YAML");
         selectedButton.addListener(SWT.Selection, event -> inspectSelection());
         var refreshButton = new Button(controls, SWT.PUSH);
         refreshButton.setText("Refresh source");
         refreshButton.addListener(SWT.Selection, event -> refreshSource());
+        var editButton = new Button(controls, SWT.PUSH);
+        editButton.setText("Edit selected scalar…");
+        editButton.setToolTipText("User-owned application YAML only; preview and validate before an explicit save.");
+        editButton.addListener(SWT.Selection, event -> editSelectedScalar());
         var button = new Button(controls, SWT.PUSH);
         button.setText("Open YAML observation JSON…");
         button.setToolTipText("Import an existing zew.yaml-observation/1 report instead of a source file.");
@@ -354,6 +363,7 @@ public final class YamlStructureView extends ViewPart {
         observedFile = null;
         observedSource = null;
         observedSha = null;
+        observedSnapshot = null;
         tree.setInput(List.of());
         status.setText("Loading saved YAML observation…");
         bindingDetails.setText("Binding intelligence unavailable for imported JSON without verified source context.");
@@ -412,6 +422,7 @@ public final class YamlStructureView extends ViewPart {
             throw new IllegalStateException("YAML view updates require the UI thread");
         if (tree == null || tree.getTree().isDisposed()) return;
         tree.setInput(YamlTreeProjection.rows(snapshot));
+        observedSnapshot = observedFile == null ? null : snapshot;
         if (snapshot == null) {
             bindingDetails.setText("Binding intelligence: no selected source.");
             hardwareTree.setInput(List.of());
@@ -483,6 +494,7 @@ public final class YamlStructureView extends ViewPart {
         observedFile = null;
         observedSource = null;
         observedSha = null;
+        observedSnapshot = null;
         tree.setInput(List.of());
         status.setText("Inspecting selected YAML with the project's managed Python…");
         bindingDetails.setText("Binding intelligence: inspecting only if this is a Devicetree binding.");
