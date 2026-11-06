@@ -64,6 +64,11 @@ public final class YamlHardwareModel {
 
     private YamlHardwareModel() {}
 
+    public static Summary unavailable(String reason) {
+        if (reason == null || !reason.matches("[a-z0-9-]{1,80}")) throw invalid();
+        return new Summary("unavailable", reason, ZERO, "none", ZERO, List.of());
+    }
+
     private static IllegalArgumentException invalid() {
         return new IllegalArgumentException("Invalid HWMv2 observation");
     }
