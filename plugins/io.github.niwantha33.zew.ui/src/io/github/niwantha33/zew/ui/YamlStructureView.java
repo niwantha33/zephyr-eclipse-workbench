@@ -708,6 +708,162 @@ public final class YamlStructureView extends ViewPart {
         reader.schedule();
     }
 
+    private boolean hasDirtySourceEditor(IFile file) {
+        for (var reference : getSite().getPage().getEditorReferences()) {
+            IEditorPart editor = reference.getEditor(false);
+            if (editor != null && editor.isDirty()
+                    && editor.getEditorInput() instanceof IFileEditorInput input
+                    && file.equals(input.getFile()))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * The UI collects a single scalar replacement. No write occurs until
+     * managed-Python preflight, a complete old/new token preview, and a
+     * separate explicit confirmation.
+     */
+    private void editSelectedScalar() {
+        if (observedFile == null || observedSource == null
+                || observedSnapshot == null || observedSha == null) {
+            status.setText("Edit unavailable: select an inspected application YAML source, not imported JSON.");
+            return;
+        }
+        IFile file = observedFile;
+        YamlSourceLoader.Source source = observedSource;
+        YamlDocumentModel.Snapshot snapshot = observedSnapshot;
+        if (!"application".equals(source.kind()) || file.isLinked() || file.isDerived()
+                || !file.getProject().equals(selectedContext)) {
+            status.setText("Only local, user-owned application YAML sources are editable. "
+                    + "Checkout, generated and linked files remain read-only.");
+            return;
+        }
+        if (hasDirtySourceEditor(file)) {
+            status.setText("Save or discard unsaved YAML editor changes before preparing a patch.");
+            return;
+        }
+        if (!(tree.getStructuredSelection().getFirstElement() instanceof YamlTreeProjection.Row row)) {
+            status.setText("Select a scalar value row in the YAML structure tree first.");
+            return;
+        }
+        YamlScalarEdit.Target target = YamlScalarEdit.target(snapshot, row);
+        if (target == null) {
+            status.setText("Selected YAML row is not a scalar value; maps and sequences are not writable.");
+            return;
+        }
+        var dialog = new InputDialog(getSite().getShell(), "Edit YAML scalar",
+                "New value for " + row.label() + " (" + target.scalar().scalarType() + "). "
+                        + "This is a typed, single-value source patch; no YAML is rewritten yet.",
+                target.scalar().value(), null);
+        if (dialog.open() != Window.OK) return;
+        String replacement = dialog.getValue();
+        int request = generation.get();
+        Job previewJob = new Job("Validate YAML scalar patch preview") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                YamlScalarEdit.Preview preview = null;
+                String failure = null;
+                try {
+                    if (monitor.isCanceled() || request != generation.get())
+                        return Status.CANCEL_STATUS;
+                    preview = YamlScalarEdit.prepare(source, snapshot, row, replacement);
+                    var entry = Activator.getDefault().getBundle().getEntry(
+                            "scripts/yaml_validate_patch.py");
+                    if (entry == null)
+                        throw new IOException("Managed candidate validator is not installed.");
+                    Path script = Path.of(FileLocator.toFileURL(entry).toURI());
+                    Properties settings = ProjectContext.settings(file.getProject());
+                    YamlPatchValidator.validate(Path.of(settings.getProperty("python")),
+                            script, preview, () -> monitor.isCanceled()
+                                    || generation.get() != request);
+                } catch (InterruptedException canceled) {
+                    Thread.currentThread().interrupt();
+                    return Status.CANCEL_STATUS;
+                } catch (Exception error) {
+                    failure = "Scalar edit preview rejected: invalid type, unavailable managed Python, "
+                            + "stale source, or unsafe YAML path. Nothing was changed.";
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                YamlScalarEdit.Preview ready = preview;
+                String problem = failure;
+                Display.getDefault().asyncExec(() -> {
+                    if (request != generation.get() || tree.getTree().isDisposed()) return;
+                    if (problem != null) {
+                        status.setText(problem);
+                        MessageDialog.openInformation(getSite().getShell(),
+                                "YAML preview rejected", problem);
+                        return;
+                    }
+                    if (hasDirtySourceEditor(file)) {
+                        status.setText("YAML editor has unsaved changes. No patch applied.");
+                        return;
+                    }
+                    String summary = "Source: " + source.relative()
+                            + "\nScalar type: " + ready.scalarType()
+                            + "\n\nExact scalar-token patch:\n"
+                            + ready.diff()
+                            + "\n\nThe candidate passed managed YAML syntax inspection."
+                            + "\nThis does not prove Devicetree, board, or Twister schema validity."
+                            + "\n\nAn original-file backup will be kept. Apply this patch?";
+                    if (!MessageDialog.openConfirm(getSite().getShell(),
+                            "Preview and confirm YAML edit", summary))
+                        return;
+                    if (request != generation.get() || hasDirtySourceEditor(file)) {
+                        status.setText("Patch discarded: source selection changed or editor is dirty.");
+                        return;
+                    }
+                    applyConfirmedPatch(request, file, ready);
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        previewJob.setSystem(true);
+        previewJob.schedule();
+        status.setText("Checking the candidate YAML patch before showing the confirmation preview…");
+    }
+
+    private void applyConfirmedPatch(int request, IFile file,
+                                     YamlScalarEdit.Preview confirmed) {
+        Job applyJob = new Job("Apply confirmed YAML source patch") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                if (monitor.isCanceled() || request != generation.get())
+                    return Status.CANCEL_STATUS;
+                Path backup = null;
+                String problem = null;
+                try {
+                    backup = YamlScalarEdit.apply(confirmed);
+                    file.refreshLocal(IResource.DEPTH_ZERO, monitor);
+                } catch (Exception failure) {
+                    problem = backup == null
+                            ? "YAML patch was not applied. Source may have changed or atomic replacement failed. "
+                                    + "A retained backup may exist; inspect before retrying."
+                            : "YAML patch was saved, but the Eclipse workspace refresh failed. "
+                                    + "Refresh the project manually.";
+                }
+                Path backupCopy = backup;
+                String error = problem;
+                Display.getDefault().asyncExec(() -> {
+                    if (tree.getTree().isDisposed()) return;
+                    if (backupCopy != null && request == generation.get()) {
+                        MessageDialog.openInformation(getSite().getShell(),
+                                "YAML patch applied",
+                                "Saved only the confirmed scalar token. Original backup: "
+                                        + backupCopy.getFileName()
+                                        + "\nVerify domain-specific validation before building.");
+                        loadSource(file);
+                    } else if (error != null && request == generation.get()) {
+                        status.setText(error);
+                        MessageDialog.openInformation(getSite().getShell(),
+                                "YAML patch not confirmed", error);
+                    }
+                });
+                return error == null ? Status.OK_STATUS : Status.CANCEL_STATUS;
+            }
+        };
+        applyJob.setSystem(true);
+        applyJob.schedule();
+    }
+
     private void navigateToSource() {
         if (!(tree.getStructuredSelection().getFirstElement() instanceof YamlTreeProjection.Row row))
             return;
