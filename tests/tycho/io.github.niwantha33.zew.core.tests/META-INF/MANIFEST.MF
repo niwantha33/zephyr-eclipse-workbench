@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Zephyr Workbench Core Unit Tests
+Bundle-SymbolicName: io.github.niwantha33.zew.core.tests
+Bundle-Version: 0.1.21.qualifier
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Require-Bundle: io.github.niwantha33.zew.core,
+ org.junit;bundle-version="[4.13.0,5.0.0)"
+Bundle-License: Apache-2.0;link="https://www.apache.org/licenses/LICENSE-2.0"
