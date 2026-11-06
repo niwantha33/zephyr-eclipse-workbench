@@ -28,6 +28,7 @@ import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 import io.github.niwantha33.zew.core.BuildRecovery;
 import io.github.niwantha33.zew.core.BuildFailureInvestigator;
 import io.github.niwantha33.zew.core.BuildFailureLogs;
+import io.github.niwantha33.zew.core.DevicetreeOverlaySupport;
 import io.github.niwantha33.zew.core.KconfigFailure;
 import io.github.niwantha33.zew.core.BuildSession;
 import io.github.niwantha33.zew.core.ProcessRunner;
@@ -136,6 +137,12 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     "-DCMAKE_MAKE_PROGRAM:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("tools.ninja")),
                     "-DPython3_EXECUTABLE:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("python"))));
             if (!clean) command.addAll(configuration.cmakeArguments());
+            // Explicit extra overlays are opt-in. With no selection file,
+            // preserve Zephyr's automatic board/SoC/app.overlay discovery and
+            // all existing project CMake-cache overrides unchanged.
+            final List<Path> selectedExtraOverlays = clean ? List.of()
+                    : DevicetreeOverlaySupport.selectedExtras(project);
+            if (!clean) command.addAll(DevicetreeOverlaySupport.extraCmakeArguments(project));
             if (!clean && "true".equals(settings.getProperty("zew.modules.none"))) command.add("-DZEPHYR_MODULES=");
             if (!clean) {
                 // One shared OpenOCD tool registry serves every imported project.
@@ -210,6 +217,23 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                                 monitor::isCanceled, log, environment);
                     }
                     requireConfigured(configured, kconfigFailure, stream::println);
+                    // Confirm that every explicitly selected file reached the
+                    // actual Zephyr preprocessor, not just the CMake command.
+                    // This is intentionally NOT required of unselected overlays.
+                    if (!selectedExtraOverlays.isEmpty()) {
+                        var context = DevicetreeOverlaySupport.inspect(project, buildDirectory,
+                                Path.of(paths.workspace(), "zephyr"));
+                        if (!context.verified())
+                            throw new java.io.IOException("Cannot confirm selected overlay participation: "
+                                    + context.message());
+                        for (Path overlay : selectedExtraOverlays)
+                            if (!context.active(overlay))
+                                throw new java.io.IOException("Selected extra overlay did not reach the generated "
+                                    + "Devicetree dependencies: " + project.relativize(overlay)
+                                    + ". Check DTC_OVERLAY_FILE, EXTRA_DTC_OVERLAY_FILE and rebuild.");
+                        stream.println("Verified " + selectedExtraOverlays.size()
+                                + " explicitly selected overlay(s) in zephyr.dts.d.");
+                    }
                     var inspectCommands = List.of(settings.getProperty("tools.ninja"), "-C", paths.build(), "-t", "commands");
                     var missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
                     var recovery = new BuildRecovery(Map.of("IMGTOOL", () ->

@@ -1076,6 +1076,24 @@ public final class EditorSmoke implements IApplication {
                     check(silentConfiguration.getPresentationReconciler(null) != null,
                             "Devicetree highlighting remains enabled when suggestions are disabled"));
 
+            // Navigation stays available without forcing completion/hover on.
+            check(silentConfiguration.getHyperlinkDetectors(null) != null
+                    && silentConfiguration.getHyperlinkDetectors(null).length == 1,
+                    "native Devicetree editor registers verified Ctrl+click source navigation");
+            Path editorPrefs = fixture.resolve(".zew/devicetree-editor.properties");
+            Files.createDirectories(editorPrefs.getParent());
+            try {
+                Files.writeString(editorPrefs, "completion=true\nhover=true\n");
+                org.eclipse.swt.widgets.Display.getDefault().syncExec(() -> {
+                    check(silentConfiguration.getContentAssistant(null) != null
+                            && silentConfiguration.getTextHover(null,
+                                org.eclipse.jface.text.IDocument.DEFAULT_CONTENT_TYPE) != null,
+                            "project opt-in enables manual DTS completion and node hover");
+                });
+            } finally {
+                Files.deleteIfExists(editorPrefs);
+            }
+
             // Brackets in strings/comments are never coloured; matching open
             // and close tokens keep their level even across partial repaints.
             var bracketMethod = editorClass.getDeclaredMethod("bracketLevels", String.class);
