@@ -31,6 +31,8 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.TabFolder;
+import org.eclipse.swt.widgets.TabItem;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IFileEditorInput;
@@ -55,6 +57,8 @@ public final class YamlStructureView extends ViewPart {
     private TreeViewer tree;
     private Label status;
     private Text bindingDetails;
+    private Label hardwareStatus;
+    private TreeViewer hardwareTree;
     private Job reader;
     private IFile selectedYaml;
     private IProject selectedContext;
@@ -134,12 +138,50 @@ public final class YamlStructureView extends ViewPart {
         column("Value preview", 380, 2);
         column("Line:column", 100, 3);
         tree.setInput(List.of());
-        bindingDetails = new Text(parent, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
+        var detailsTabs = new TabFolder(parent, SWT.NONE);
         GridData detailsLayout = new GridData(SWT.FILL, SWT.BOTTOM, true, false);
-        detailsLayout.heightHint = 135;
-        bindingDetails.setLayoutData(detailsLayout);
+        detailsLayout.heightHint = 190;
+        detailsTabs.setLayoutData(detailsLayout);
+        var bindingTab = new TabItem(detailsTabs, SWT.NONE);
+        bindingTab.setText("Devicetree binding");
+        bindingDetails = new Text(detailsTabs, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY
+                | SWT.WRAP | SWT.V_SCROLL);
+        bindingTab.setControl(bindingDetails);
         bindingDetails.setText("Binding intelligence: select a Devicetree binding under dts/bindings/."
                 + " An exact Zephyr checkout is required; no build match is implied.");
+
+        var hardwareTab = new TabItem(detailsTabs, SWT.NONE);
+        hardwareTab.setText("Hardware Model v2");
+        var hardwarePanel = new Composite(detailsTabs, SWT.NONE);
+        hardwarePanel.setLayout(new GridLayout(1, false));
+        hardwareTab.setControl(hardwarePanel);
+        hardwareStatus = new Label(hardwarePanel, SWT.WRAP);
+        hardwareStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        hardwareStatus.setText("Select an HWMv2 board.yml or soc.yml in the managed checkout.");
+        hardwareTree = new TreeViewer(hardwarePanel, SWT.BORDER | SWT.FULL_SELECTION
+                | SWT.H_SCROLL | SWT.V_SCROLL | SWT.SINGLE);
+        hardwareTree.getTree().setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        hardwareTree.getTree().setHeaderVisible(true);
+        hardwareTree.getTree().setLinesVisible(true);
+        hardwareTree.setContentProvider(new ITreeContentProvider() {
+            @Override public Object[] getElements(Object input) {
+                return input instanceof List<?> items ? items.toArray() : new Object[0];
+            }
+            @Override public Object[] getChildren(Object element) {
+                return element instanceof YamlHardwareModel.Row row
+                        ? row.children().toArray() : new Object[0];
+            }
+            @Override public Object getParent(Object element) { return null; }
+            @Override public boolean hasChildren(Object element) {
+                return element instanceof YamlHardwareModel.Row row
+                        && !row.children().isEmpty();
+            }
+            @Override public void dispose() {}
+            @Override public void inputChanged(Viewer viewer, Object oldValue, Object newValue) {}
+        });
+        hardwareColumn("Board / SoC / qualifier", 290, true);
+        hardwareColumn("Resolved metadata", 370, false);
+        hardwareTree.setInput(List.of());
         tree.addDoubleClickListener(event -> navigateToSource());
         getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(followSelection);
         inspectSelection();
@@ -163,6 +205,18 @@ public final class YamlStructureView extends ViewPart {
         });
     }
 
+    private void hardwareColumn(String label, int width, boolean first) {
+        var column = new TreeViewerColumn(hardwareTree, SWT.LEFT);
+        column.getColumn().setText(label);
+        column.getColumn().setWidth(width);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override public String getText(Object item) {
+                if (!(item instanceof YamlHardwareModel.Row row)) return "";
+                return first ? row.label() : row.detail();
+            }
+        });
+    }
+
     private void chooseReport() {
         var dialog = new FileDialog(getSite().getShell(), SWT.OPEN);
         dialog.setText("Open a saved Zephyr YAML observation");
@@ -180,6 +234,8 @@ public final class YamlStructureView extends ViewPart {
         tree.setInput(List.of());
         status.setText("Loading saved YAML observation…");
         bindingDetails.setText("Binding intelligence unavailable for imported JSON without verified source context.");
+        hardwareTree.setInput(List.of());
+        hardwareStatus.setText("HWMv2 metadata unavailable for an imported JSON report without selected checkout context.");
         Path report;
         try {
             report = Path.of(chosen);
@@ -231,6 +287,8 @@ public final class YamlStructureView extends ViewPart {
         tree.setInput(YamlTreeProjection.rows(snapshot));
         if (snapshot == null) {
             bindingDetails.setText("Binding intelligence: no selected source.");
+            hardwareTree.setInput(List.of());
+            hardwareStatus.setText("HWMv2: no selected source.");
             status.setText("No YAML observation has been selected.");
             return;
         }
@@ -297,6 +355,8 @@ public final class YamlStructureView extends ViewPart {
         tree.setInput(List.of());
         status.setText("Inspecting selected YAML with the project's managed Python…");
         bindingDetails.setText("Binding intelligence: inspecting only if this is a Devicetree binding.");
+        hardwareTree.setInput(List.of());
+        hardwareStatus.setText("HWMv2: loading only for canonical board.yml and soc.yml sources.");
         IProject managed = SelectedProject.importedProject(file.getProject());
         if (managed == null) managed = selectedContext;
         IProject context = managed;
@@ -309,6 +369,7 @@ public final class YamlStructureView extends ViewPart {
                 YamlDocumentModel.Snapshot snapshot = null;
                 YamlSourceLoader.Source source = null;
                 YamlBindingIntelligence.Summary binding = null;
+                YamlHardwareModel.Summary hardware = null;
                 String failure = null;
                 try {
                     Properties settings = ProjectContext.settings(context);
@@ -344,6 +405,26 @@ public final class YamlStructureView extends ViewPart {
                         if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
                             throw new java.io.IOException("YAML source changed between inspection stages");
                     }
+                    if (snapshot.parsed() && ("hwmv2-board".equals(snapshot.kind())
+                            || "hwmv2-soc".equals(snapshot.kind()))) {
+                        var hardwareEntry = Activator.getDefault().getBundle().getEntry(
+                                "scripts/yaml_hwmv2_inspect.py");
+                        if (hardwareEntry == null) {
+                            hardware = YamlHardwareModel.unavailable("hwmv2-resolver-not-installed");
+                        } else {
+                            try {
+                                Path hardwareScript = Path.of(FileLocator.toFileURL(hardwareEntry).toURI());
+                                hardware = YamlHardwareModel.inspect(
+                                        Path.of(settings.getProperty("python")), hardwareScript,
+                                        source, zephyr, app, () -> monitor.isCanceled()
+                                                || generation.get() != request);
+                            } catch (java.io.IOException exception) {
+                                hardware = YamlHardwareModel.unavailable("selected-hwmv2-api-unavailable");
+                            }
+                        }
+                        if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
+                            throw new java.io.IOException("YAML source changed during HWMv2 inspection");
+                    }
                 } catch (InterruptedException cancelled) {
                     Thread.currentThread().interrupt();
                     return Status.CANCEL_STATUS;
@@ -356,12 +437,15 @@ public final class YamlStructureView extends ViewPart {
                 YamlDocumentModel.Snapshot loaded = snapshot;
                 YamlSourceLoader.Source loadedSource = source;
                 YamlBindingIntelligence.Summary bindingResult = binding;
+                YamlHardwareModel.Summary hardwareResult = hardware;
                 String problem = failure;
                 Display.getDefault().asyncExec(() -> {
                     if (request != generation.get() || tree == null || tree.getTree().isDisposed()) return;
                     if (problem != null) {
                         status.setText(problem);
                         bindingDetails.setText("Binding intelligence: unavailable; source or checkout context unverified.");
+                        hardwareTree.setInput(List.of());
+                        hardwareStatus.setText("HWMv2: unavailable; source or checkout context unverified.");
                         tree.setInput(List.of());
                         return;
                     }
@@ -374,6 +458,15 @@ public final class YamlStructureView extends ViewPart {
                     else
                         bindingDetails.setText("Binding intelligence: not applicable to this YAML document."
                                 + " Syntax parsing does not imply Zephyr semantic validation.");
+                    hardwareTree.setInput(YamlHardwareModel.hierarchy(hardwareResult));
+                    if (hardwareResult == null) {
+                        hardwareStatus.setText("HWMv2: not applicable to this YAML file.");
+                    } else {
+                        hardwareStatus.setText("HWMv2 " + hardwareResult.state() + ": "
+                                + hardwareResult.reason()
+                                + ". Selected-checkout metadata only; not an active build target.");
+                        if (hardwareResult.resolved()) hardwareTree.expandToLevel(2);
+                    }
                 });
                 return Status.OK_STATUS;
             }
