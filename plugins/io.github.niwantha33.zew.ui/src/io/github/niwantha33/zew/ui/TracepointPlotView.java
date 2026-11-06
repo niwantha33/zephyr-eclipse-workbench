@@ -218,6 +218,13 @@ public final class TracepointPlotView extends ViewPart {
     private void present(int ticket, TracepointReport.Snapshot result, String error) {
         org.eclipse.swt.widgets.Display.getDefault().asyncExec(() -> {
             if (generation.get() != ticket || table == null || table.isDisposed()) return;
+            render(result, error);
+        });
+    }
+
+    /** UI-thread-only application of an already parsed, offline report. */
+    private void render(TracepointReport.Snapshot result, String error) {
+            if (table == null || table.isDisposed()) return;
             displayed = result;
             clearDisplayed();
             if (error != null) {
@@ -255,7 +262,6 @@ public final class TracepointPlotView extends ViewPart {
             selector.setEnabled(true);
             selector.select(selectedIndex);
             refreshSamples();
-        });
     }
 
     private void clearDisplayed() {
