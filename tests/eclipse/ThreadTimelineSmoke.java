@@ -121,6 +121,16 @@ public final class ThreadTimelineSmoke {
         check(cpuTable.getItemCount() == 0
                 && cpuStatus.getText().contains("greater than Start"),
                 "zero-length CPU window displays a clear validation error");
+        // Version 2 carries actual event timestamps, which may extend beyond
+        // paired interval edges. Default to those observed bounds, not guesses.
+        String v2 = "ZEW_THREAD_TIMELINE\t2\t0\t0\t2\t\t0\t0\t1000000000\n"
+                + "I\t200000000\t900000000\t" + b64("A") + "\t\tRunning\n";
+        displayed.set(view, model.getMethod("parse", String.class).invoke(null, v2));
+        prepare.invoke(view);
+        check(windowStart.getText().equals("0") && windowEnd.getText().equals("1000000000")
+                && cpuTable.getItemCount() == 1
+                && cpuTable.getItem(0).getText(2).equals("70.00%"),
+                "CPU default uses full observed trace range including unpaired edges");
         window.getActivePage().hideView(view);
         System.out.println("PASS THREAD TIMELINE INSTALLED UI: no-trace view disposed cleanly");
     }
