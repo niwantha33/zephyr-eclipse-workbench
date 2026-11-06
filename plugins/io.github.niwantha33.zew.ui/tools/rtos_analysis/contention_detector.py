@@ -153,8 +153,9 @@ class ContentionDetector:
                 result.findings.append(Finding(
                     "Inversion", request.object_label, waiter, holder,
                     finish_ns - request.blocked_ns,
-                    f"Observed {holder} holding the mutex; {waiter} blocked while "
-                    f"{request.medium.name} ran at intermediate priority. "
+                    f"Observed {holder} (priority {request.holder.priority}) holding the mutex; "
+                    f"{waiter} (priority {request.waiter.priority}) blocked while "
+                    f"{request.medium.name} (priority {request.medium.priority}) ran. "
                     "No missed deadline is implied.",
                     False, request.waiter.priority, request.holder.priority,
                     request.medium.name, request.medium.priority))
