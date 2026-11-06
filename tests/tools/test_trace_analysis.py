@@ -125,6 +125,19 @@ class TraceAnalysisTests(unittest.TestCase):
         self.assertEqual(report["semantic_kind_counts"]["UNKNOWN"], 1)
         self.assertEqual(report["unknown_event_message"], "1 events were not understood")
 
+    def test_semantic_normalization_preserves_thread_event_log(self):
+        report = subject.summarize([
+            event("thread_switched_in", 1),
+            event("vendor:unknown_hook", 5),
+            event("thread_switched_out", 10)])
+        self.assertEqual(report["semantic_event_count"], 3)
+        log = report["thread_event_log"]
+        self.assertEqual(log["events_observed"], 3)
+        self.assertEqual(len(log["rows"]), 3)
+        self.assertIn("ready/wait/sleep UNKNOWN", log["rows"][2]["observed"])
+        self.assertEqual(log["rows"][1]["event"], "vendor:unknown_hook")
+        self.assertEqual(report["unknown_events"], 1)
+
     def test_missing_decoder_is_explicit(self):
         with patch.object(subject, 'decode', side_effect=ImportError('bt2 unavailable')):
             report = subject.analyze(Path('unused'))

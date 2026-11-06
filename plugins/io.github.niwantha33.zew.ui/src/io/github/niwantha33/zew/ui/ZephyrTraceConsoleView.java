@@ -2,6 +2,13 @@
 package io.github.niwantha33.zew.ui;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
+import org.eclipse.core.runtime.QualifiedName;
+import org.eclipse.ui.console.ConsolePlugin;
+import org.eclipse.ui.console.IConsole;
+import org.eclipse.ui.console.MessageConsole;
+import io.github.niwantha33.zew.core.RttTcpReader;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,7 +53,10 @@ public final class ZephyrTraceConsoleView extends ViewPart {
     private Label context;
     private Table transports;
     private Text explanation, output;
-    private Button captureRam, captureUart;
+    private Button captureRam, captureUart, captureRtt;
+    private Text rttPort;
+    private volatile Job rttJob;
+    private static final QualifiedName RTT_PORT = new QualifiedName(Activator.ID, "rtt.localPort");
 
     @Override public void createPartControl(Composite parent) {
         var layout = new GridLayout(1, false);
@@ -92,7 +102,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
 
         var actions = new Composite(parent, SWT.NONE);
         actions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        actions.setLayout(new GridLayout(2, false));
+        actions.setLayout(new GridLayout(5, false));
         captureRam = button(actions, "Capture RAM CTF (halts/resets target)...", () -> {
             if (project != null && snapshot.get(Backend.RAM_CTF).state() == State.CONFIGURED)
                 ZephyrTraceHandler.capture(project, getSite().getShell());
@@ -100,9 +110,15 @@ public final class ZephyrTraceConsoleView extends ViewPart {
         captureUart = button(actions, "Capture UART/USB text (no probe)...", () -> {
             if (project != null) ApplicationConsoleHandler.capture(project, getSite().getShell());
         });
+        new Label(actions, SWT.NONE).setText("Local RTT TCP port:");
+        rttPort = new Text(actions, SWT.BORDER);
+        rttPort.setLayoutData(new GridData(90, SWT.DEFAULT));
+        rttPort.setText("19021");
+        captureRtt = button(actions, "Connect RTT (opt-in)", this::toggleRtt);
 
         var note = new Label(parent, SWT.WRAP);
-        note.setText("RTT and ITM/SWO require a probe-specific receiver (not started by this version). "
+        note.setText("RTT connects only to a user-configured EXISTING localhost TCP receiver; no OpenOCD commands or target-memory scans. "
+                + "ITM/SWO remains build-intent only. "
                 + "RAM CTF must be decoded as a trace, never printed as text. "
                 + "Captured evidence is also kept in the normal Eclipse Console and project output folders.");
         note.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -135,7 +151,13 @@ public final class ZephyrTraceConsoleView extends ViewPart {
 
     public void displayProject(IProject selected) {
         if (selected == null || !selected.isAccessible()) return;
+        if (rttJob != null && project != selected) rttJob.cancel();
         project = selected;
+        try {
+            String saved = selected.getPersistentProperty(RTT_PORT);
+            if (saved != null && !saved.isBlank() && rttPort != null && !rttPort.isDisposed())
+                rttPort.setText(saved);
+        } catch (org.eclipse.core.runtime.CoreException ignored) { /* default remains */ }
         setPartName("Debug Trace Console — " + selected.getName());
         refresh();
     }
@@ -205,6 +227,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
         captureRam.setEnabled(project != null && project.isAccessible()
                 && snapshot.get(Backend.RAM_CTF).state() == State.CONFIGURED);
         captureUart.setEnabled(project != null && project.isAccessible());
+        captureRtt.setEnabled(project != null && project.isAccessible());
         explainSelection();
     }
 
@@ -219,6 +242,69 @@ public final class ZephyrTraceConsoleView extends ViewPart {
         if (explanation == null || explanation.isDisposed() || transports.getSelectionCount() != 1) return;
         var channel = (Channel) transports.getSelection()[0].getData();
         explanation.setText(channel.explanation() + "\n\nNext: " + channel.nextStep());
+    }
+
+    private void toggleRtt() {
+        if (rttJob != null) {
+            rttJob.cancel();
+            append(project, "RTT", "Stop requested; receiver will release TCP connection.");
+            return;
+        }
+        final IProject selected = project;
+        if (selected == null || !selected.isAccessible()) return;
+        int port;
+        try {
+            port = Integer.parseInt(rttPort.getText().trim());
+            if (port < 1024 || port > 65535) throw new NumberFormatException();
+        } catch (NumberFormatException invalid) {
+            append(selected, "RTT", "Enter an explicitly configured localhost TCP port (1024–65535).");
+            return;
+        }
+        try { selected.setPersistentProperty(RTT_PORT, Integer.toString(port)); }
+        catch (org.eclipse.core.runtime.CoreException ignored) { /* capture still explicit */ }
+        final int receiverPort = port;
+        Job job = new Job("Receive Zephyr RTT localhost TCP — " + selected.getName()) {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                var console = new MessageConsole("Zephyr RTT localhost:" + receiverPort
+                        + " — " + selected.getName(), null);
+                ConsolePlugin.getDefault().getConsoleManager().addConsoles(new IConsole[] {console});
+                ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
+                try (var stream = console.newMessageStream()) {
+                    Path folder = selected.getLocation().toFile().toPath().resolve(".zew-rtt");
+                    Files.createDirectories(folder);
+                    Path raw = folder.resolve("rtt-" + java.util.UUID.randomUUID() + ".bin");
+                    stream.println("Passive RTT channel-0 text stream, host receive time only; "
+                            + "requires an existing user-configured local TCP RTT server.");
+                    stream.println("Raw byte evidence: " + raw);
+                    var result = RttTcpReader.capture(receiverPort, 60, raw,
+                            monitor::isCanceled, bytes -> {
+                                String text = new String(bytes, StandardCharsets.UTF_8);
+                                stream.print(text);
+                                append(selected, "RTT", text);
+                            });
+                    stream.println("\nRTT receiver ended: " + result.bytes() + " raw bytes; "
+                            + (result.peerClosed() ? "peer closed" : "capture duration reached")
+                            + ". Not MCU timestamps.");
+                    return Status.OK_STATUS;
+                } catch (java.io.InterruptedIOException cancelled) {
+                    return Status.CANCEL_STATUS;
+                } catch (Exception error) {
+                    append(selected, "RTT", "Receiver failed: " + error.getMessage());
+                    return new Status(IStatus.ERROR, Activator.ID, "RTT receiver failed", error);
+                } finally {
+                    if (rttJob == this) rttJob = null;
+                    var display = org.eclipse.swt.widgets.Display.getDefault();
+                    if (!display.isDisposed()) display.asyncExec(() -> {
+                        if (captureRtt != null && !captureRtt.isDisposed())
+                            captureRtt.setText("Connect RTT (opt-in)");
+                    });
+                }
+            }
+        };
+        rttJob = job;
+        captureRtt.setText("Stop RTT capture");
+        job.setUser(true);
+        job.schedule();
     }
 
     /** Read-only progress fan-out. The original Eclipse Console remains authoritative. */
@@ -243,6 +329,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
     }
 
     @Override public void dispose() {
+        if (rttJob != null) rttJob.cancel();
         generation.incrementAndGet();
         OPEN.remove(this);
         super.dispose();

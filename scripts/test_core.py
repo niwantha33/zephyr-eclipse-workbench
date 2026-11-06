@@ -90,6 +90,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'DemoConfigurationCompatibilityTe
 subprocess.run([tool('java'), '-cp', str(out), 'OpenOcdThreadCheckTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DebugConsoleOutputTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'TraceConsoleCapabilitiesTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'RttTcpReaderTests'], check=True, cwd=root, timeout=90)
 
 subprocess.run([tool('java'), '-cp', str(out), 'SvdDeviceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdAutoDiscoveryTests'], check=True, cwd=root, timeout=90)

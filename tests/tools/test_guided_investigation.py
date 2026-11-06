@@ -170,6 +170,23 @@ class GuidedInvestigationTests(unittest.TestCase):
         self.assertIn("120", html)
         self.assertIn("NOT WCET", html)
 
+    def test_offline_ctf_event_table_renders_observations_not_inferred_state(self):
+        self.receipt["ctf_analysis"]["thread_event_log"] = {
+            "quality": "partial: reported CTF loss",
+            "rows": [{"timestamp_ns": 1234, "stream": "0", "core": "",
+                      "thread_id": "5", "thread_name": "<script>bad</script>",
+                      "event": "zephyr:thread_switched_out",
+                      "observed": "switch-out observed; ready/wait/sleep UNKNOWN"}],
+            "rows_omitted": 10,
+        }
+        report = reviewer.review_receipt(self.receipt, trace=self.trace, metadata=self.metadata)
+        html = reviewer.render_html(report)
+        self.assertIn("Thread and ISR event log", html)
+        self.assertIn("partial: reported CTF loss", html)
+        self.assertIn("ready/wait/sleep UNKNOWN", html)
+        self.assertIn("&lt;script&gt;bad&lt;/script&gt;", html)
+        self.assertNotIn("<script>bad</script>", html)
+
     def test_multiple_fatal_markers_are_ambiguous(self):
         result = reviewer.review_receipt(self.receipt, trace=self.trace, metadata=self.metadata,
                             fault_log=b"ZEPHYR FATAL ERROR\nZEPHYR FATAL ERROR\n")

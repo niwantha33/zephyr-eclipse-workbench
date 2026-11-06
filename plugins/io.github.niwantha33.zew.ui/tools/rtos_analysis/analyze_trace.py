@@ -8,6 +8,7 @@ from pathlib import Path
 from cpu_analysis import account
 from timing_analysis import analyze_timing
 from semantic_trace import SemanticTraceParser, EventKind, decode_ctf
+from thread_event_log import events_table
 
 
 def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
@@ -76,6 +77,9 @@ def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
                 result['warnings'].append('Switch-out without matching switch-in; incomplete interval excluded.')
             active = None
     result['streams'] = len(streams)
+    # Preserve PR #190's observed-only event log alongside semantic normalization.
+    # The parser's raw records retain decoder-reported loss and original names.
+    result['thread_event_log'] = events_table(records)
     result['semantic_event_count'] = len(semantic.events)
     result['unknown_events'] = semantic.unknown_count
     result['unknown_event_message'] = semantic.unknown_message
