@@ -156,6 +156,23 @@ class ContentionTests(unittest.TestCase):
                             for e in trace.events))
         self.assertFalse(trace.incomplete)
 
+    def test_generic_lock_alias_does_not_prove_successful_ownership(self):
+        trace = SemanticTraceParser().parse([
+            {"kind": "event", "name": "mutex_lock", "timestamp_ns": 0,
+             "thread_name": "low", "priority": 5, "object_name": "m"},
+            {"kind": "event", "name": "mutex_lock_enter", "timestamp_ns": 10,
+             "thread_name": "high", "priority": 1, "object_name": "m"},
+            {"kind": "event", "name": "thread_pending", "timestamp_ns": 20,
+             "thread_name": "high", "priority": 1},
+            {"kind": "event", "name": "thread_switched_in", "timestamp_ns": 30,
+             "thread_name": "medium", "priority": 3, "stream": 0},
+            {"kind": "event", "name": "thread_ready", "timestamp_ns": 40,
+             "thread_name": "high", "priority": 1},
+        ])
+        self.assertEqual(trace.events[0].resource_phase, "attempt")
+        self.assertEqual([f for f in ContentionDetector().detect(trace).findings
+                          if f.kind == "Inversion"], [])
+
     def test_anonymous_resource_never_produces_a_finding(self):
         trace = SemanticTrace([
             ev(K.MUTEX_TAKE, 0, "a", 4, "", "attempt"),
