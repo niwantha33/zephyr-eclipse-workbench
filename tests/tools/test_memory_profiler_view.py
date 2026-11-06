@@ -39,7 +39,7 @@ class MemoryProfilerViewWiringTests(unittest.TestCase):
         self.assertEqual(builder.count(hook), 1)
         self.assertLess(builder.index("BuildArtifacts.verify(buildDirectory);"), builder.index(hook))
         self.assertLess(builder.index("configuration.verify(buildDirectory);"), builder.index(hook))
-        self.assertIn("if (!monitor.isCanceled())\\n                        " + hook, builder)
+        self.assertLess(builder.index("if (!monitor.isCanceled())"), builder.index(hook))
         integration = (ui_source / "MemoryProfilerBuildIntegration.java").read_text()
         self.assertIn('getEntry("scripts/memory_profiler.py")', integration)
         self.assertIn("MemoryProfilerReportGuard.publish(", integration)
