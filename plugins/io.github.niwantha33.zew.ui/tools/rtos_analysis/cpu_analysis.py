@@ -6,6 +6,7 @@ This measures *observed* intervals only. It never treats absence of events as
 sleep or idle, and does not infer WCET, CPU frequency or unreported packet loss.
 """
 from __future__ import annotations
+from semantic_trace import EventKind, SemanticTrace, SemanticTraceParser
 
 
 def account(records, *, idle_thread_id=None):
@@ -20,16 +21,20 @@ def account(records, *, idle_thread_id=None):
         "cpu_busy_percent": None, "thread_exclusive_ns": None, "isr_ns": None,
         "idle_ns": None, "unknown_ns": None, "observed_window_ns": None,
     }
+    semantic = records if isinstance(records, SemanticTrace) else SemanticTraceParser().parse(records)
+    if semantic.incomplete:
+        return unknown("incomplete or malformed CTF trace")
+    if semantic.input_out_of_order:
+        return unknown("reordered timestamps or clock wrap without conversion")
+    if any(item.get("kind") in ("discarded_events", "discarded_packets")
+           for item in semantic.raw_records):
+        return unknown("decoder-reported loss; CPU accounting withheld")
     timestamped = []
     stream_ids = set()
-    for item in records:
-        if item.get("kind") in ("discarded_events", "discarded_packets"):
-            return unknown("decoder-reported loss; CPU accounting withheld")
-        if item.get("kind") != "event":
-            continue
-        if item.get("timestamp_ns") is None or not isinstance(item["timestamp_ns"], int):
+    for item in semantic.events:
+        if item.timestamp_ns is None:
             return unknown("missing or non-integer timestamp")
-        stream_ids.add(item.get("stream"))
+        stream_ids.add(item.stream)
         if len(stream_ids) != 1:
             return unknown("multiple streams/cores without an explicit clock and core mapping")
         timestamped.append(item)
@@ -46,9 +51,9 @@ def account(records, *, idle_thread_id=None):
     nested_max = 0
     irq_entries = 0
     switches = 0
-    first = last = timestamped[0]["timestamp_ns"]
+    first = last = timestamped[0].timestamp_ns
     for item in timestamped:
-        stamp = item["timestamp_ns"]
+        stamp = item.timestamp_ns
         if stamp < last:
             return unknown("reordered timestamps or clock wrap without conversion")
         delta = stamp - last
@@ -58,22 +63,22 @@ def account(records, *, idle_thread_id=None):
             gap_ns += delta
         else:
             threads[active] = threads.get(active, 0) + delta
-        name = item["name"].rsplit(":", 1)[-1]
-        tid = item.get("thread_id")
-        if name == "thread_switched_in":
+        kind = item.kind
+        tid = item.thread_id
+        if kind == EventKind.THREAD_SWITCHED_IN:
             if tid is None or irq_depth or active is not None:
                 return unknown("ambiguous or overlapping thread switch-in")
             active = str(tid)
             switches += 1
-        elif name == "thread_switched_out":
+        elif kind == EventKind.THREAD_SWITCHED_OUT:
             if tid is None or active != str(tid) or irq_depth:
                 return unknown("unmatched thread switch-out")
             active = None
-        elif name in ("isr_enter", "isr_enter_user"):
+        elif kind == EventKind.ISR_ENTER:
             irq_depth += 1
             irq_entries += 1
             nested_max = max(nested_max, irq_depth)
-        elif name in ("isr_exit", "isr_exit_user", "isr_exit_to_scheduler"):
+        elif kind == EventKind.ISR_EXIT:
             if not irq_depth:
                 return unknown("unmatched ISR exit")
             irq_depth -= 1
