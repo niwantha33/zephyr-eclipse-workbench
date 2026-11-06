@@ -1603,6 +1603,19 @@ public final class EditorSmoke implements IApplication {
                     var mapTabs = (org.eclipse.swt.widgets.TabFolder) topology.getParent();
                     mapTabs.setSelection(1);
                     captureNativeStudioScreenshot("devicetree-hierarchy-native.png");
+                    // PR1: the installed Eclipse view must instantiate a real
+                    // SWT Canvas, not a placeholder TableViewer or JSON-only panel.
+                    var profiler = windows[0].getActivePage().showView(
+                            "io.github.niwantha33.zew.ui.memoryProfiler");
+                    var profilerType = profiler.getClass();
+                    var profilerCanvas = (org.eclipse.swt.widgets.Canvas)
+                            studioField(profiler, profilerType, "canvas");
+                    var profilerDetails = (org.eclipse.swt.widgets.Text)
+                            studioField(profiler, profilerType, "detail");
+                    check(profilerCanvas.getSize().x >= 900 && profilerCanvas.getSize().y >= 90
+                            && !profilerDetails.getEditable(),
+                            "installed Memory Profiler renders real read-only SWT Canvas");
+                    captureNativeStudioScreenshot("memory-profiler-native.png");
                     windows[0].getActivePage().activate(view);
                 } catch (Throwable error) { studioFailure.set(error); }
             });
