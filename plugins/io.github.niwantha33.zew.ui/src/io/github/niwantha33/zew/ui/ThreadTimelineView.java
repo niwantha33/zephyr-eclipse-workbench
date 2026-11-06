@@ -50,6 +50,7 @@ public final class ThreadTimelineView extends ViewPart {
     private Table table;
     private ThreadTimelineReport.Snapshot displayed;
     private Path selectedTrace;
+    private IProject contextProject;
     private volatile Job loadJob;
 
     @Override public void createPartControl(Composite parent) {
@@ -112,10 +113,18 @@ public final class ThreadTimelineView extends ViewPart {
         if (chosen != null) load(Path.of(chosen));
     }
 
+    /** Retain the explicit project context without reading or decoding its trace. */
+    public void displayProject(IProject project) {
+        if (project != null && project.isAccessible()) contextProject = project;
+    }
+
     private IProject selectedProject() {
         var selection = getSite().getWorkbenchWindow().getSelectionService().getSelection();
-        if (!(selection instanceof IStructuredSelection items) || items.size() != 1) return null;
-        return SelectedProject.importedProject(items.getFirstElement());
+        if (selection instanceof IStructuredSelection items && items.size() == 1) {
+            IProject selected = SelectedProject.importedProject(items.getFirstElement());
+            if (selected != null && selected.isAccessible()) contextProject = selected;
+        }
+        return contextProject != null && contextProject.isAccessible() ? contextProject : null;
     }
 
     private void load(Path chosen) {
