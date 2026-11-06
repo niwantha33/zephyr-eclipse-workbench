@@ -86,8 +86,12 @@ public final class YamlSourceLoaderTests {
                     "Java validates Python provenance against exact source bytes");
             check(Arrays.equals(Files.readAllBytes(appFile), text),
                     "inspection never modifies application YAML");
-            fails(() -> YamlSourceLoader.inspect(Path.of(python), script, appSource, () -> true),
-                    "cancellation stops source inspection");
+            try {
+                YamlSourceLoader.inspect(Path.of(python), script, appSource, () -> true);
+                throw new AssertionError("Cancellation should interrupt YAML inspection");
+            } catch (InterruptedException expected) {
+                check(true, "cancellation stops source inspection");
+            }
             Files.writeString(appFile, "name: changed\n", StandardCharsets.UTF_8);
             check(!YamlSourceLoader.hash(appFile).equals(snapshot.sha256()),
                     "stale source detection distinguishes changed bytes");
