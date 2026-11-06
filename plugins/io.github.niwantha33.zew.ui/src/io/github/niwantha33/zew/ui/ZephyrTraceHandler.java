@@ -39,11 +39,14 @@ public final class ZephyrTraceHandler extends AbstractHandler {
     private static final Pattern GDB = Pattern.compile("(?m)^\\s+gdb:\\s*(.*?)\\s*$");
 
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
-        IProject project = SelectedProject.from(event);
-        Shell shell = HandlerUtil.getActiveShell(event);
+        capture(SelectedProject.from(event), HandlerUtil.getActiveShell(event));
+        return null;
+    }
+
+    static void capture(IProject project, Shell shell) {
         if (project == null || !project.isAccessible() || shell == null) {
             MessageDialog.openInformation(shell, "RTOS Trace", "Select an open Zephyr project first.");
-            return null;
+            return;
         }
         final String expectedBoard;
         final String expectedProfile;
@@ -53,14 +56,14 @@ public final class ZephyrTraceHandler extends AbstractHandler {
             expectedProfile = settings.getProperty("zew.buildConfiguration");
         } catch (Exception error) {
             MessageDialog.openError(shell, "RTOS Trace", "Project setup is incomplete: " + error.getMessage());
-            return null;
+            return;
         }
         if (!MessageDialog.openConfirm(shell, "Capture RTOS trace",
                 "Project: " + project.getName() + "\nBoard: " + expectedBoard
                 + "\nConfiguration: " + expectedProfile + "\n\n"
                 + "First build and flash this exact configuration. The capture resets the target, "
                 + "runs it briefly and leaves it halted. Firmware identity cannot yet be verified.\n\n"
-                + "This preview uses the board's OpenOCD runner and needs CTF RAM tracing enabled.\n"                + "If standalone Trace Compass is installed, Workbench requests opening the saved trace.")) return null;
+                + "This preview uses the board's OpenOCD runner and needs CTF RAM tracing enabled.\n"                + "If standalone Trace Compass is installed, Workbench requests opening the saved trace.")) return;
         Job job = new Job("Capture RTOS trace — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 var console = new MessageConsole("RTOS trace — " + project.getName(), null);
@@ -72,6 +75,10 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                 TargetOperationGuard.Lease lease = null;
                 var ownedChildren = java.util.concurrent.ConcurrentHashMap.<ProcessHandle>newKeySet();
                 var stream = console.newMessageStream();
+                java.util.function.Consumer<String> report = line -> {
+                    stream.println(line);
+                    ZephyrTraceConsoleView.append(project, "RAM CTF", line);
+                };
                 try {
                     lease = TargetOperationGuard.acquire("debugserver");
                     monitor.beginTask("Capture Zephyr RTOS snapshot", IProgressMonitor.UNKNOWN);
@@ -111,7 +118,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                             String line;
                             while ((line = input.readLine()) != null) {
                                 ownedChildren.addAll(owned.descendants().toList());
-                                diagnostics.accept(line); stream.println(line);
+                                diagnostics.accept(line); report.accept(line);
                             }
                         } catch (IOException ignored) { /* process termination closes pipe */ }
                     }, "zew-trace-server-output");
@@ -138,7 +145,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                             "--output", out.toString(), "--port", Integer.toString(ports.gdb()),
                             "--result-file", resultFile.toString());
                     new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofSeconds(45),
-                            monitor::isCanceled, stream::println, ProjectContext.environment(settings)).requireSuccess();
+                            monitor::isCanceled, report, ProjectContext.environment(settings)).requireSuccess();
                     if (!Files.isRegularFile(resultFile))
                         throw new IOException("Capture did not report its saved directory.");
                     Path captureDir = Path.of(Files.readString(resultFile).trim()).toAbsolutePath().normalize();
@@ -155,7 +162,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                                 staging.resolve("trace_compass_bridge.py").toString(),
                                 "--capture", captureDir.toString(), "--open");
                         new ProcessRunner().run(viewer, Path.of(settings.getProperty("workspace")),
-                                Duration.ofSeconds(10), monitor::isCanceled, stream::println,
+                                Duration.ofSeconds(10), monitor::isCanceled, report,
                                 ProjectContext.environment(settings));
                     } catch (Exception viewerError) {
                         stream.println("Standalone Trace Compass handoff unavailable: " + viewerError.getMessage());
@@ -206,6 +213,6 @@ public final class ZephyrTraceHandler extends AbstractHandler {
             }
         };
         job.setUser(true); job.schedule();
-        return null;
+        return;
     }
 }

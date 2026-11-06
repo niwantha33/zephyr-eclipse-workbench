@@ -26,20 +26,23 @@ import io.github.niwantha33.zew.core.ProcessRunner;
 /** Explicit, bounded UART-only application console capture. No probe access. */
 public final class ApplicationConsoleHandler extends AbstractHandler {
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
-        Shell shell = HandlerUtil.getActiveShell(event);
-        var project = SelectedProject.from(event);
-        if (shell == null || shell.isDisposed()) return null;
+        capture(SelectedProject.from(event), HandlerUtil.getActiveShell(event));
+        return null;
+    }
+
+    static void capture(org.eclipse.core.resources.IProject project, Shell shell) {
+        if (shell == null || shell.isDisposed()) return;
         if (project == null || !project.isAccessible()) {
             MessageDialog.openInformation(shell, "Application console",
                     "Select an open Zephyr project first. This action captures a separately named UART/USB serial port.");
-            return null;
+            return;
         }
         var portInput = new InputDialog(shell, "UART/USB application console",
                 "Serial port name (e.g. COM8 or /dev/ttyACM0). Only use a port NOT owned by GDB, OpenOCD, RTT or another terminal.",
                 "", value -> value == null || value.isBlank() || value.length() > 128
                         || value.contains("\n") || value.contains("\r")
                         ? "Enter one existing port name." : null);
-        if (portInput.open() != Window.OK) return null;
+        if (portInput.open() != Window.OK) return;
         String port = portInput.getValue().trim();
         var baudInput = new InputDialog(shell, "UART baud rate",
                 "Set the exact baud rate configured by the firmware.", "115200", value -> {
@@ -48,7 +51,7 @@ public final class ApplicationConsoleHandler extends AbstractHandler {
                         return rate >= 1200 && rate <= 4000000 ? null : "Use 1200 to 4000000.";
                     } catch (NumberFormatException invalid) { return "Enter an integer baud rate."; }
                 });
-        if (baudInput.open() != Window.OK) return null;
+        if (baudInput.open() != Window.OK) return;
         int baud = Integer.parseInt(baudInput.getValue());
         var secondsInput = new InputDialog(shell, "Application console duration",
                 "Capture duration in seconds (1–3600); cancellation stops capture and closes the port.",
@@ -58,13 +61,13 @@ public final class ApplicationConsoleHandler extends AbstractHandler {
                         return seconds >= 1 && seconds <= 3600 ? null : "Use 1 to 3600 seconds.";
                     } catch (NumberFormatException invalid) { return "Enter whole seconds."; }
                 });
-        if (secondsInput.open() != Window.OK) return null;
+        if (secondsInput.open() != Window.OK) return;
         int seconds = Integer.parseInt(secondsInput.getValue());
         if (!MessageDialog.openConfirm(shell, "Capture UART application output",
                 "Open only " + port + " at " + baud + " baud for up to " + seconds
                 + " seconds?\n\nThis port must be free. Serial data is saved locally; raw binary CTF must "
                 + "not be treated as text. Host timestamps are NOT target timestamps. "
-                + "No flash, halt, reset or debug command is sent.")) return null;
+                + "No flash, halt, reset or debug command is sent.")) return;
         Job job = new Job("Capture Zephyr UART application log — " + project.getName()) {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 var console = new MessageConsole("Zephyr UART (" + port + ") — " + project.getName(), null);
@@ -72,6 +75,10 @@ public final class ApplicationConsoleHandler extends AbstractHandler {
                 ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
                 Path helper = null;
                 try (var stream = console.newMessageStream()) {
+                    java.util.function.Consumer<String> report = line -> {
+                        stream.println(line);
+                        ZephyrTraceConsoleView.append(project, "UART", line);
+                    };
                     var settings = ProjectContext.settings(project);
                     String python = settings.getProperty("python");
                     if (python == null || python.isBlank())
@@ -84,14 +91,14 @@ public final class ApplicationConsoleHandler extends AbstractHandler {
                         Files.copy(input, helper, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     }
                     Path output = project.getLocation().append(".zew-uart").toFile().toPath();
-                    var args = new ArrayList<>(List.of(python, helper.toString(),
+                    var args = new ArrayList<>(List.of(python, "-u", helper.toString(),
                             "--port", port, "--baud", Integer.toString(baud),
                             "--seconds", Integer.toString(seconds), "--output", output.toString()));
                     stream.println("UART application output: host receive timestamps ONLY; no assumed thread or MCU clock.");
                     stream.println("Saved raw bytes and JSON lines under " + output);
                     new ProcessRunner().run(args, project.getLocation().toFile().toPath(),
                             Duration.ofSeconds(seconds + 20L), monitor::isCanceled,
-                            stream::println, ProjectContext.environment(settings)).requireSuccess();
+                            report, ProjectContext.environment(settings)).requireSuccess();
                     return Status.OK_STATUS;
                 } catch (java.io.InterruptedIOException cancelled) {
                     return Status.CANCEL_STATUS;
@@ -109,6 +116,6 @@ public final class ApplicationConsoleHandler extends AbstractHandler {
         };
         job.setUser(true);
         job.schedule();
-        return null;
+        return;
     }
 }
