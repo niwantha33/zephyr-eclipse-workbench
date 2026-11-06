@@ -48,6 +48,18 @@ public final class ThreadTimelineReportTests {
         catch (IllegalArgumentException expected) { malformed = true; }
         check(malformed, "invented state rejected");
 
+        var version2 = ThreadTimelineReport.parse(
+                "ZEW_THREAD_TIMELINE\t2\t0\t0\t2\t\t0\t0\t1000\n"
+                + row(200, 900, "worker", "Running"));
+        check(version2.traceStartNs() == 0L && version2.traceEndNs() == 1000L,
+                "v2 observed trace extent preserved independently of interval range");
+        malformed = false;
+        try { ThreadTimelineReport.parse(
+                "ZEW_THREAD_TIMELINE\t2\t0\t0\t2\t\t0\t300\t1000\n"
+                + row(200, 900, "worker", "Running")); }
+        catch (IllegalArgumentException expected) { malformed = true; }
+        check(malformed, "v2 refuses intervals extending outside observed trace extent");
+
         System.out.println("PASS ThreadTimelineReportTests");
     }
 }

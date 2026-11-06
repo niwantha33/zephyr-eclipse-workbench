@@ -24,10 +24,15 @@ public final class WorkbenchSmoke implements IApplication {
                 @Override public void postStartup() {
                     new Thread(() -> {
                         try {
+                            // SWT catches exceptions on the UI event loop. Preserve them
+                            // on the worker thread so native smoke failures fail CI.
+                            var uiFailure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
                             display.syncExec(() -> {
                                 try { SocRegistersSmoke.run(); YamlStructureSmoke.run(); ThreadTimelineSmoke.run(); }
-                                catch (Throwable ex) { throw new IllegalStateException(ex); }
+                                catch (Throwable ex) { uiFailure.set(ex); }
                             });
+                            if (uiFailure.get() != null)
+                                throw new IllegalStateException("Installed native SWT smoke failed", uiFailure.get());
                             new EditorSmoke().start(context);
                         }
                         catch (Throwable error) { failure = error; error.printStackTrace(); }

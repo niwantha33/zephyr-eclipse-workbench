@@ -49,6 +49,8 @@ class Timeline:
     unknown_events: int = 0
     detail: str = ""
     decoder_unavailable: bool = False
+    trace_start_ns: int | None = None
+    trace_end_ns: int | None = None
 
 
 def build_intervals(trace: SemanticTrace) -> Timeline:
@@ -62,6 +64,12 @@ def build_intervals(trace: SemanticTrace) -> Timeline:
     """
     result = Timeline(incomplete=trace.incomplete, unknown_events=trace.unknown_count,
                       detail=trace.error, decoder_unavailable=trace.decoder_unavailable)
+    timestamps = [event.timestamp_ns for event in trace.events if event.timestamp_ns is not None]
+    if timestamps:
+        # Preserve observed trace bounds independently of complete intervals:
+        # incomplete first/last scheduler bursts must never shrink the window.
+        result.trace_start_ns = min(timestamps)
+        result.trace_end_ns = max(timestamps)
     result.scheduler_events = sum(event.kind in SCHEDULER for event in trace.events)
     if not result.scheduler_events:
         result.detail = result.detail or EMPTY_MESSAGE
@@ -178,9 +186,11 @@ def _b64(value: str) -> str:
 
 def serialize(result: Timeline) -> str:
     """Versioned UTF-8, tab-separated, base64-escaped names and diagnostics."""
-    lines = ["\t".join(("ZEW_THREAD_TIMELINE", "1", str(int(result.incomplete)),
+    lines = ["\t".join(("ZEW_THREAD_TIMELINE", "2", str(int(result.incomplete)),
                         str(result.unknown_events), str(result.scheduler_events),
-                        _b64(result.detail), str(int(result.decoder_unavailable))))]
+                        _b64(result.detail), str(int(result.decoder_unavailable)),
+                        "" if result.trace_start_ns is None else str(result.trace_start_ns),
+                        "" if result.trace_end_ns is None else str(result.trace_end_ns)))]
     for interval in result.intervals:
         lines.append("\t".join(("I", str(interval.start_ns), str(interval.end_ns),
                                 _b64(interval.thread_name), _b64(interval.priority),

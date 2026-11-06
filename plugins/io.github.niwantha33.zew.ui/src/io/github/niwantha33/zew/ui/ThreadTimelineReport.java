@@ -26,7 +26,8 @@ public final class ThreadTimelineReport {
 
     public record Snapshot(List<Interval> intervals, boolean incomplete,
                            long unknownEvents, long schedulerEvents,
-                           String detail, boolean decoderUnavailable) {
+                           String detail, boolean decoderUnavailable,
+                           Long traceStartNs, Long traceEndNs) {
         public Snapshot { intervals = List.copyOf(intervals); }
     }
 
@@ -39,14 +40,20 @@ public final class ThreadTimelineReport {
         if (lines.length < 2 || !lines[lines.length - 1].isEmpty())
             throw new IllegalArgumentException("Incomplete thread timeline output");
         String[] header = lines[0].split("\\t", -1);
-        if (header.length != 7 || !"ZEW_THREAD_TIMELINE".equals(header[0])
-                || !"1".equals(header[1]))
+        if (!"ZEW_THREAD_TIMELINE".equals(header[0])
+                || !(header.length == 7 && "1".equals(header[1])
+                        || header.length == 9 && "2".equals(header[1])))
             throw new IllegalArgumentException("Unsupported thread timeline protocol");
         boolean incomplete = flag(header[2]);
         long unknown = positive(header[3]);
         long scheduler = positive(header[4]);
         String detail = decoded(header[5]);
         boolean decoderMissing = flag(header[6]);
+        Long traceStart = header.length == 9 && !header[7].isEmpty() ? positive(header[7]) : null;
+        Long traceEnd = header.length == 9 && !header[8].isEmpty() ? positive(header[8]) : null;
+        if ((traceStart == null) != (traceEnd == null)
+                || traceStart != null && traceEnd < traceStart)
+            throw new IllegalArgumentException("Invalid observed trace bounds");
         List<Interval> rows = new ArrayList<>();
         for (int i = 1; i < lines.length - 1; i++) {
             if (rows.size() >= MAX_ROWS)
@@ -56,7 +63,8 @@ public final class ThreadTimelineReport {
                 throw new IllegalArgumentException("Malformed timeline interval line " + i);
             long start = positive(tokens[1]);
             long end = positive(tokens[2]);
-            if (end <= start || !STATES.contains(tokens[5]))
+            if (end <= start || !STATES.contains(tokens[5])
+                    || traceStart != null && (start < traceStart || end > traceEnd))
                 throw new IllegalArgumentException("Invalid timeline boundaries or state on line " + i);
             BigInteger nanos = BigInteger.valueOf(end).subtract(BigInteger.valueOf(start));
             String micros = nanos.divide(BigInteger.valueOf(1000)).toString()
@@ -64,7 +72,8 @@ public final class ThreadTimelineReport {
                                          nanos.remainder(BigInteger.valueOf(1000)).intValue());
             rows.add(new Interval(start, end, micros, decoded(tokens[3]), decoded(tokens[4]), tokens[5]));
         }
-        return new Snapshot(rows, incomplete, unknown, scheduler, detail, decoderMissing);
+        return new Snapshot(rows, incomplete, unknown, scheduler, detail, decoderMissing,
+                traceStart, traceEnd);
     }
 
     private static boolean flag(String text) {
