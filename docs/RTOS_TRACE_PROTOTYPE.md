@@ -29,6 +29,16 @@ The selected build must enable `CONFIG_TRACING`, `CONFIG_TRACING_CTF`, and
 built the firmware. Trace Compass can import the capture folder's `ctf` subdirectory as Generic CTF;
 import `Zephyr_RTOS_Timeline.xml` using Manage XML Analyses.
 
+The saved HTML investigation report now includes a bounded table of CTF
+thread switch, explicit ready/pend/sleep/wakeup, and ISR entry/exit events,
+plus any unrecognised hook labels. A thread switch-out never proves that a
+thread slept or waited. Timestamp and names are shown only when present in
+decoded CTF records; source locations are UNKNOWN without validated
+PC-to-ELF evidence. Reported loss and clock gaps are explicitly labelled,
+up to 128 event rows are shown, and omitted-row counts remain in the JSON
+evidence. Babeltrace 2 availability, trace identity and hardware validity
+remain independent acceptance checks.
+
 The initial timeline shows scheduled/not-scheduled thread intervals and a
 non-nested ISR lane. Scheduled time includes interrupt time. It does not infer
 ready/sleeping/blocked states, exclusive CPU use, or nested interrupt activity.
