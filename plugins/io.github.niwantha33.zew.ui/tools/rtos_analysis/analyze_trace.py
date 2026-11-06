@@ -7,12 +7,24 @@ import json
 from pathlib import Path
 from cpu_analysis import account
 from timing_analysis import analyze_timing
+from semantic_trace import SemanticTraceParser, EventKind, decode_ctf
 from thread_event_log import events_table
 
 
 def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
-    records = list(records)
     """Consume normalized Babeltrace records. Pair single-stream scheduled intervals only."""
+    semantic = SemanticTraceParser().parse(records)
+    if semantic.decoder_unavailable:
+        return {'ctf_decode': 'not checked', 'reason': 'Babeltrace 2 Python module bt2 is unavailable. '
+                'Install it for this Python interpreter or validate the CTF in Trace Compass.',
+                'timing_scope': 'No timing metrics computed.', 'incomplete': True,
+                'unknown_events': semantic.unknown_count}
+    if semantic.incomplete and semantic.error:
+        return {'ctf_decode': 'invalid', 'reason': semantic.error or 'Incomplete or malformed CTF input',
+                'timing_scope': 'No timing metrics computed.', 'incomplete': True,
+                'partial_semantic_events': len(semantic.events), 'unknown_events': semantic.unknown_count,
+                'unknown_event_message': semantic.unknown_message}
+    records = semantic.raw_records
     result = {'ctf_decode': 'validated', 'events': 0, 'streams': 0,
               'discarded_events_reported': 0, 'discarded_packets_reported': 0,
               'discard_count_unknown': False, 'warnings': [], 'threads': {},
@@ -65,9 +77,19 @@ def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
                 result['warnings'].append('Switch-out without matching switch-in; incomplete interval excluded.')
             active = None
     result['streams'] = len(streams)
+    # Preserve PR #190's observed-only event log alongside semantic normalization.
+    # The parser's raw records retain decoder-reported loss and original names.
     result['thread_event_log'] = events_table(records)
-    result['cpu'] = account(records, idle_thread_id=idle_thread_id)
-    result['timing'] = analyze_timing(records, deadlines_ns=deadlines_ns)
+    result['semantic_event_count'] = len(semantic.events)
+    result['unknown_events'] = semantic.unknown_count
+    result['unknown_event_message'] = semantic.unknown_message
+    result['incomplete'] = semantic.incomplete
+    result['semantic_kind_counts'] = {
+        kind.value: sum(event.kind == kind for event in semantic.events)
+        for kind in EventKind if any(event.kind == kind for event in semantic.events)
+    }
+    result['cpu'] = account(semantic, idle_thread_id=idle_thread_id)
+    result['timing'] = analyze_timing(semantic, deadlines_ns=deadlines_ns)
     result['observed_events'] = {}
     for record in records:
         if record.get('kind') == 'event':
@@ -92,31 +114,8 @@ def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
 
 
 def decode(ctf):
-    import bt2
-    streams = {}
-    for message in bt2.TraceCollectionMessageIterator(str(ctf)):
-        if isinstance(message, bt2._DiscardedEventsMessageConst):
-            yield {'kind': 'discarded_events', 'count': message.count}
-        elif isinstance(message, bt2._DiscardedPacketsMessageConst):
-            yield {'kind': 'discarded_packets', 'count': message.count}
-        elif isinstance(message, bt2._EventMessageConst):
-            event = message.event
-            # stream.addr is the stable C object identity exposed by Babeltrace.
-            stream = event.stream.addr
-            streams.setdefault(stream, len(streams))
-            fields = event.payload_field
-            def field(name):
-                return str(fields[name]) if fields is not None and name in fields else None
-            try:
-                timestamp = message.default_clock_snapshot.ns_from_origin
-            except (AttributeError, ValueError):
-                timestamp = None
-            yield {'kind': 'event', 'stream': streams[stream], 'name': event.name,
-                   'timestamp_ns': timestamp, 'thread_id': field('thread_id'),
-                   'thread_name': field('name'), 'core_id': field('cpu'),
-                   'object_id': field('id'), 'priority': field('prio'),
-                   'arg0': field('arg0'), 'arg1': field('arg1')}
-
+    """Compatibility entrypoint: the shared normalizer owns CTF decoding."""
+    yield from decode_ctf(ctf)
 
 def analyze(ctf, *, idle_thread_id=None, deadlines_ns=None):
     try:
