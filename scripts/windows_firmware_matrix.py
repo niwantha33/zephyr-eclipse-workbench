@@ -172,6 +172,19 @@ def main():
             run([*configure, '-UIMGTOOL'], workspace, env)
         run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
         if label == 'ti':
+            # Capture and verify the exact native Java receipt on REAL Zephyr
+            # output. Fixture-only tests previously missed post-build false
+            # UNVERIFIED states. Uses the core classes compiled by test_core.py.
+            java = Path(os.environ['JAVA_HOME']) / 'bin/java.exe'
+            # Windows Java's launcher can lose Unicode (such as Ω) in argv.
+            # Transport the exact paths as URL-safe base64 ASCII; the Java
+            # probe decodes the original UTF-8 before opening any files.
+            encode_arg = lambda path: base64.urlsafe_b64encode(
+                str(path).encode('utf-8')).decode('ascii')
+            run([java, '-cp', REPO / 'build-core-tests',
+                 'ConfigurationEvidenceRealBuildProbe',
+                 encode_arg(app), encode_arg(build_arg), target, 'debug'],
+                workspace, env)
             # Exercise the actual generated Kconfiglib environment for an
             # MSPM0G3507 Zephyr build. No source or .config writes allowed.
             kconfig_source = Path(build_arg) / 'zephyr/.config'

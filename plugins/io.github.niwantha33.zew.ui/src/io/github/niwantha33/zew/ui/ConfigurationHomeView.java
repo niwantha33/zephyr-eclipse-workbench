@@ -206,6 +206,9 @@ public final class ConfigurationHomeView extends ViewPart {
             category = categories.getText();
             controllerPath = "";
             step = 0;
+            // Search text belongs to the previous hardware kind. Otherwise
+            // a GPIO alias such as red_led silently hides every ADC controller.
+            if (!hardwareSearch.getText().isBlank()) hardwareSearch.setText("");
             controllersForCategory();
             renderGuide();
         });
@@ -431,6 +434,12 @@ public final class ConfigurationHomeView extends ViewPart {
         if (primary == null || primary.isDisposed()) return;
         primary.setSelection("hardware".equals(section) ? HARDWARE
                 : "system".equals(section) ? BUILD : OVERVIEW);
+    }
+
+    /** Called on the UI thread after this project's managed firmware build. */
+    void refreshAfterBuild(IProject built) {
+        if (built != null && built.equals(project) && primary != null && !primary.isDisposed())
+            refresh(); // Preserve the selected tab and hardware category.
     }
 
     private static boolean newer(Path source, Path target) throws Exception {
@@ -718,11 +727,12 @@ public final class ConfigurationHomeView extends ViewPart {
         freshness.setText(switch (summary.freshness()) {
             case NO_BUILD -> "Build data MISSING — configure/build required";
             case STALE_SNAPSHOT -> "Build inputs CHANGED — rebuild required";
-            case UNVERIFIED_SNAPSHOT -> "Build provenance UNVERIFIED — rebuild to capture";
+            case UNVERIFIED_SNAPSHOT -> "Provenance UNVERIFIED — see Build & System";
             case CURRENT_SNAPSHOT -> "Tracked build inputs MATCH (not runtime)";
         });
         if (hasDirtyProjectEditor())
             freshness.setText("Pending unsaved project edits — generated build not current");
+        freshness.setToolTipText(found.warning());
         freshness.setForeground(freshness.getDisplay().getSystemColor(
                 summary.freshness() == FocusedConfigurationModel.Freshness.CURRENT_SNAPSHOT
                 ? SWT.COLOR_DARK_GREEN : summary.freshness()
@@ -760,6 +770,12 @@ public final class ConfigurationHomeView extends ViewPart {
                 + "\nZephyr checkout: " + (found.setup().getProperty("workspace", "").isBlank()
                         ? "not configured" : Path.of(found.setup().getProperty("workspace"), "zephyr"))
                 + "\nZephyr revision: not proven by this snapshot; inspect locked West manifest"
+                + "\n\nBUILD PROVENANCE DIAGNOSTICS\n"
+                + (found.warning().isBlank() ? "No additional build provenance detail." : found.warning())
+                + "\n\nTo create a new receipt, use Zephyr > Build or Rebuild on the same selected "
+                + "project and target. External west builds do not capture a Workbench receipt."
+                + "\nA partial receipt needs its missing dependencies corrected; repeating the same "
+                + "build without resolving them cannot make it verified."
                 + "\n\nBuild profiles and source revisions are selected independently."
                 + "\nAdvanced Kconfig and RTOS options remain accessible below.");
         primary.getParent().layout(true, true);
@@ -823,6 +839,7 @@ public final class ConfigurationHomeView extends ViewPart {
         int index = categories.indexOf(type);
         if (index < 0) return;
         categories.select(index); category = type; controllerPath = ""; step = 0;
+        if (!hardwareSearch.getText().isBlank()) hardwareSearch.setText("");
         controllersForCategory();
         primary.setSelection(HARDWARE); renderGuide();
     }
@@ -865,8 +882,12 @@ public final class ConfigurationHomeView extends ViewPart {
             controllerPath = "";
             navigationEmpty.setText(evidence == null || evidence.dts().isBlank()
                     ? "No generated build data. Build the selected target before selecting hardware."
-                    : "No " + category + " controller matches this filter in the selected build. "
-                        + "This does not prove silicon lacks it.");
+                    : !filter.isBlank()
+                    ? "Search '" + hardwareSearch.getText().trim() + "' is active while Type is "
+                        + category + ". Clear Find hardware to see all " + category
+                        + " nodes. An empty search result does not prove silicon lacks the peripheral."
+                    : "No " + category + " controller appears in this generated Devicetree. "
+                        + "Inspect the selected board's DTS/DTSI and Build & System evidence.");
         } else {
             controllerPath = ((DevicetreeHardware.Device) target.getData()).path();
             hardwareNodes.setSelection(target);

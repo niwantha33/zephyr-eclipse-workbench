@@ -123,6 +123,20 @@ public final class ConfigurationEvidenceReceiptTests {
         check(state(f, "example/qualifier", "debug") == State.NO_BUILD,
                 "missing generated DTS never presents a current build");
 
+        var cmakeRegenerated = fixture();
+        Files.setLastModifiedTime(cmakeRegenerated.app().resolve("CMakeLists.txt"),
+                FileTime.from(Instant.now().plusSeconds(3600)));
+        Files.setLastModifiedTime(cmakeRegenerated.build().resolve("CMakeCache.txt"),
+                FileTime.from(Instant.now().plusSeconds(7200)));
+        check(capture(cmakeRegenerated).state() == State.CURRENT,
+                "a newer CMakeLists with regenerated CMake cache must not require a rewritten DTS");
+
+        var cmakeNotRegenerated = fixture();
+        Files.setLastModifiedTime(cmakeNotRegenerated.app().resolve("CMakeLists.txt"),
+                FileTime.from(Instant.now().plusSeconds(3600)));
+        check(capture(cmakeNotRegenerated).state() == State.UNVERIFIED,
+                "CMakeLists changed after CMake cache remains unverified");
+
         var lateSource = fixture();
         Files.setLastModifiedTime(lateSource.conf(),
                 FileTime.from(Instant.now().plusSeconds(3600)));
@@ -134,6 +148,9 @@ public final class ConfigurationEvidenceReceiptTests {
         check(capture(incomplete).state() == State.UNVERIFIED
                 && state(incomplete, "example/qualifier", "debug") == State.UNVERIFIED,
                 "missing DTS input dependency evidence forces unverified, not current");
+        check(ConfigurationEvidenceReceipt.inspect(incomplete.app(), incomplete.build(),
+                "example/qualifier", "debug").detail().contains("DTS dependency file is unavailable"),
+                "persistent partial receipts retain a specific reason for the Studio to display");
         check(Files.readString(incomplete.conf()).equals("CONFIG_GPIO=y\n"),
                 "collecting partial evidence never edits configuration sources");
 

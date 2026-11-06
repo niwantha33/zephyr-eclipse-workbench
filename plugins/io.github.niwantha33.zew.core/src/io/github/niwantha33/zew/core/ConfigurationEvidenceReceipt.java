@@ -81,8 +81,14 @@ public final class ConfigurationEvidenceReceipt {
                 // may have happened during a successful compilation. The
                 // hash would be fresh but NOT part of those generated outputs.
                 // Degrade the receipt rather than certifying a mixed snapshot.
-                Path target = source.toString().endsWith(".conf")
-                        || source.getFileName().toString().equals("Kconfig")
+                // CMake can refresh its cache without rewriting the generated
+                // Devicetree. Comparing CMakeLists.txt against zephyr.dts
+                // incorrectly marks a successful rebuild incomplete forever.
+                String sourceName = source.getFileName().toString();
+                Path target = sourceName.equals("CMakeLists.txt")
+                        ? root.resolve("CMakeCache.txt")
+                        : sourceName.endsWith(".conf") || sourceName.equals("Kconfig")
+                            || sourceName.startsWith("Kconfig.")
                         ? root.resolve("zephyr/.config") : root.resolve("zephyr/zephyr.dts");
                 if (Files.getLastModifiedTime(source).compareTo(
                         Files.getLastModifiedTime(target)) > 0) {
@@ -101,6 +107,14 @@ public final class ConfigurationEvidenceReceipt {
         output.append("P\t").append(encode(profile)).append('\n');
         output.append("A\t").append(encode(app.toString())).append('\n');
         output.append("C\t").append(complete ? '1' : '0').append('\n');
+        // Keep the original bounded reason in the build-local receipt so a
+        // later Studio refresh can explain persistent UNVERIFIED state.
+        if (!complete) {
+            String reason = issue == null || issue.isBlank()
+                    ? "Source input coverage could not be verified." : issue;
+            output.append("L\t").append(encode(reason.substring(0, Math.min(200, reason.length()))))
+                    .append('\n');
+        }
         output.append("O\t").append(encode(root.resolve("zephyr/.config").toString()))
                 .append('\t').append(configHash).append('\n');
         output.append("O\t").append(encode(root.resolve("zephyr/zephyr.dts").toString()))
@@ -168,11 +182,20 @@ public final class ConfigurationEvidenceReceipt {
             if (!complete && !"C\t0".equals(lines.get(4)))
                 return unknown(State.UNVERIFIED, "Unrecognized receipt coverage state.");
             int outputs = 0, sources = 0;
-            String configHash = "", dtsHash = "";
+            String configHash = "", dtsHash = "", incompleteReason = "";
             Set<String> seen = new HashSet<>();
             for (int i = 5; i < lines.size(); i++) {
                 String[] fields = lines.get(i).split("\t", -1);
                 if (fields.length == 1 && fields[0].isEmpty() && i == lines.size() - 1) continue;
+                if ("L".equals(fields[0])) {
+                    if (complete || fields.length != 2 || !incompleteReason.isEmpty())
+                        return unknown(State.UNVERIFIED, "Malformed input coverage reason.");
+                    incompleteReason = decode(fields[1]);
+                    if (incompleteReason.isBlank() || incompleteReason.length() > 200
+                            || incompleteReason.chars().anyMatch(c -> Character.isISOControl(c)))
+                        return unknown(State.UNVERIFIED, "Invalid input coverage reason.");
+                    continue;
+                }
                 if (fields.length != 3 || (!"S".equals(fields[0]) && !"O".equals(fields[0]))
                         || !fields[2].matches("[0-9a-f]{64}"))
                     return unknown(State.UNVERIFIED, "Malformed receipt entry.");
@@ -201,7 +224,9 @@ public final class ConfigurationEvidenceReceipt {
                     || !seen.contains("O" + root.resolve("CMakeCache.txt")))
                 return unknown(State.UNVERIFIED, "Incomplete generated-output provenance.");
             if (!complete) return new Result(State.UNVERIFIED,
-                    "Input coverage was incomplete at capture; rebuild with full build dependencies.",
+                    "Input coverage was incomplete at capture"
+                        + (incompleteReason.isBlank() ? "." : ": " + incompleteReason)
+                        + " Inspect this build's generated dependencies before rebuilding.",
                     sources, configHash, dtsHash);
             return new Result(State.CURRENT,
                     "Recorded build outputs and tracked inputs match their captured SHA-256 hashes. "
