@@ -14,6 +14,7 @@
   </properties>
   <modules>
     <module>plugins/io.github.niwantha33.zew.core</module>
+    <module>tests/tycho/io.github.niwantha33.zew.core.tests</module>
     <module>plugins/io.github.niwantha33.zew.ui</module>
     <module>features/io.github.niwantha33.zew.feature</module>
     <module>releng/repository</module>
