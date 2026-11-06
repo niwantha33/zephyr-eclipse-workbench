@@ -151,15 +151,25 @@ public final class YamlSourceLoader {
                     Thread.currentThread().interrupt();
                 }
             }
-            try {
-                Files.deleteIfExists(output);
-            } catch (java.nio.file.FileSystemException locked) {
-                // A terminating Windows child may retain the redirected file
-                // briefly. Never mask the original cancellation/timeout.
-                output.toFile().deleteOnExit();
-                if (process == null || !process.isAlive())
-                    throw locked;
+            // A completed Windows child may still release inherited handles
+            // a fraction later. Retry briefly; do not override cancellation.
+            boolean removed = false;
+            for (int attempt = 0; attempt < 5; attempt++) {
+                try {
+                    Files.deleteIfExists(output);
+                    removed = true;
+                    break;
+                } catch (java.nio.file.FileSystemException locked) {
+                    if (attempt == 4) break;
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
             }
+            if (!removed) output.toFile().deleteOnExit();
         }
     }
 }
