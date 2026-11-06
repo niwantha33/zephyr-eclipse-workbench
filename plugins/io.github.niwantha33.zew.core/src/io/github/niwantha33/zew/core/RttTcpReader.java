@@ -27,6 +27,7 @@ public final class RttTcpReader {
                 || output == null || cancelled == null || consumer == null)
             throw new IllegalArgumentException("Invalid local RTT capture settings");
         if (cancelled.getAsBoolean()) throw new InterruptedIOException("RTT capture cancelled before connect.");
+        if (Files.exists(output)) throw new java.nio.file.FileAlreadyExistsException(output.toString());
         try (var socket = new Socket()) {
             socket.connect(new InetSocketAddress("127.0.0.1", port), 3000);
             socket.setSoTimeout(250);
