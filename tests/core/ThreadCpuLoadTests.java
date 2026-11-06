@@ -101,6 +101,28 @@ public final class ThreadCpuLoadTests {
         check(ThreadCpuLoad.observedBounds(complete).startNs() == 0
                 && ThreadCpuLoad.observedBounds(complete).endNs() == 1000 * ms,
                 "default window uses observed interval bounds");
+        var boundedTrace = List.of(row(200 * ms, 900 * ms, "A", "Running"));
+        var withTraceBounds = ThreadCpuLoad.calculate(boundedTrace, 0, 1000 * ms,
+                new ThreadCpuLoad.Bounds(0, 1000 * ms));
+        percent(withTraceBounds.threads().getFirst().percentage(), "70",
+                "unpaired trace edges are retained in the denominator");
+        check(!withTraceBounds.warnUnknown(),
+                "missing interval edges are not falsely labelled explicit Unknown");
+        rejected = false;
+        try { ThreadCpuLoad.calculate(boundedTrace, 0, 1001 * ms,
+                new ThreadCpuLoad.Bounds(0, 1000 * ms)); }
+        catch (IllegalArgumentException expected) {
+            rejected = expected.getMessage().contains("observed trace");
+        }
+        check(rejected, "explicit trace bounds prevent extrapolation");
+        rejected = false;
+        try { ThreadCpuLoad.calculate(boundedTrace, 0, 1000 * ms,
+                new ThreadCpuLoad.Bounds(300 * ms, 1000 * ms)); }
+        catch (IllegalArgumentException expected) {
+            rejected = expected.getMessage().contains("conflict");
+        }
+        check(rejected, "inconsistent header bounds rejected rather than trusted");
+
         System.out.println("PASS ThreadCpuLoadTests");
     }
 }
