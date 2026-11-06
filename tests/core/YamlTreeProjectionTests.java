@@ -44,6 +44,8 @@ public final class YamlTreeProjectionTests {
         check("compatible".equals(top.children().get(0).label())
                 && "ti,example".equals(top.children().get(0).preview()),
                 "declaration order and scalar value preserved");
+        check("1:1".equals(top.children().get(0).location()),
+                "mapping rows navigate to the YAML key, not the value");
         var list = top.children().get(1);
         check("items".equals(list.label()) && "sequence".equals(list.kind())
                 && "2 items".equals(list.preview()), "sequence shows item count");
