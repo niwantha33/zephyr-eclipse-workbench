@@ -58,6 +58,7 @@ public final class ThreadTimelineView extends ViewPart {
     private Text windowStart, windowEnd;
     private Button cpuApply;
     private Label cpuDisclaimer, cpuWarning, cpuMetrics, cpuStatus;
+    private ThreadCpuLoad.Bounds cpuTraceBounds;
     private ThreadTimelineReport.Snapshot displayed;
     private Path selectedTrace;
     private IProject contextProject;
@@ -309,6 +310,7 @@ public final class ThreadTimelineView extends ViewPart {
     private void clearCpuLoad(String message) {
         if (cpuTable == null || cpuTable.isDisposed()) return;
         cpuTable.removeAll();
+        cpuTraceBounds = null;
         windowStart.setText("");
         windowEnd.setText("");
         windowStart.setEnabled(false);
@@ -328,9 +330,11 @@ public final class ThreadTimelineView extends ViewPart {
             return;
         }
         try {
-            ThreadCpuLoad.Bounds bounds = ThreadCpuLoad.observedBounds(displayed.intervals());
-            windowStart.setText(Long.toString(bounds.startNs()));
-            windowEnd.setText(Long.toString(bounds.endNs()));
+            cpuTraceBounds = displayed.traceStartNs() != null && displayed.traceEndNs() != null
+                    ? new ThreadCpuLoad.Bounds(displayed.traceStartNs(), displayed.traceEndNs())
+                    : ThreadCpuLoad.observedBounds(displayed.intervals());
+            windowStart.setText(Long.toString(cpuTraceBounds.startNs()));
+            windowEnd.setText(Long.toString(cpuTraceBounds.endNs()));
             windowStart.setEnabled(true);
             windowEnd.setEnabled(true);
             cpuApply.setEnabled(true);
@@ -354,7 +358,7 @@ public final class ThreadTimelineView extends ViewPart {
         try {
             long start = Long.parseLong(windowStart.getText().strip());
             long end = Long.parseLong(windowEnd.getText().strip());
-            load = ThreadCpuLoad.calculate(displayed.intervals(), start, end);
+            load = ThreadCpuLoad.calculate(displayed.intervals(), start, end, cpuTraceBounds);
         } catch (NumberFormatException error) {
             cpuStatus.setText("Start and End must be valid integer nanosecond values.");
             return;
