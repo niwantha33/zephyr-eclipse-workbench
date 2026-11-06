@@ -2,6 +2,8 @@
 package io.github.niwantha33.zew.ui;
 
 import java.io.IOException;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.jface.viewers.IStructuredSelection;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -26,8 +28,8 @@ import io.github.niwantha33.zew.ui.MemoryProfilerLayout.Diagram;
 import io.github.niwantha33.zew.ui.MemoryProfilerLayout.Region;
 
 /**
- * PR1 / Step 3: evidence-labelled, read-only SWT linker memory diagram.
- * Import is explicit: no project binding, build listener, or runtime debug calls.
+ * PR1 / Step 4: evidence-labelled, read-only SWT memory map.
+ * Auto-follows verified builds from the existing native CDT/West builder.
  */
 public final class MemoryProfilerView extends ViewPart {
     public static final String ID = Activator.ID + ".memoryProfiler";
@@ -39,6 +41,9 @@ public final class MemoryProfilerView extends ViewPart {
     private Job loadJob;
     private Path selectedReport;
     private Diagram displayed;
+    private IProject followedProject;
+    private Path followedBuild;
+    private boolean manualImport;
 
     @Override public void createPartControl(Composite parent) {
         var layout = new GridLayout(1, false);
@@ -51,13 +56,14 @@ public final class MemoryProfilerView extends ViewPart {
         heading.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         var controls = new Composite(parent, SWT.NONE);
         controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        controls.setLayout(new GridLayout(2, false));
+        controls.setLayout(new GridLayout(3, false));
+        button(controls, "Follow selected project builds", this::followSelectedProject);
         button(controls, "Open memory report JSON…", this::chooseReport);
         button(controls, "Reload selected report", this::reload);
 
         status = new Label(parent, SWT.WRAP);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        status.setText("No report selected. Generate a saved JSON report using scripts/memory_profiler.py first.");
+        status.setText("Select a Zephyr project to follow successful builds, or import a saved JSON report.");
 
         var legend = new Label(parent, SWT.WRAP);
         legend.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -80,6 +86,49 @@ public final class MemoryProfilerView extends ViewPart {
         detail.setLayoutData(details);
         detail.setText("Select a region using the mouse or arrow keys to inspect exact half-open addresses.\n"
                 + "Section placements are linker observations; this is not a utilisation measurement.");
+        var selected = getSite().getWorkbenchWindow().getSelectionService().getSelection();
+        if (selected instanceof IStructuredSelection items && items.size() == 1) {
+            IProject p = SelectedProject.importedProject(items.getFirstElement());
+            if (p != null) followProject(p);
+        }
+    }
+
+    /** Refresh only this view's selected project; manual imports never auto-switch. */
+    public void displayBuiltReport(IProject project, Path build, Path report) {
+        if (manualImport || project == null || !project.isAccessible()
+                || (followedProject != null && !followedProject.equals(project)))
+            return;
+        followedProject = project;
+        followedBuild = build.toAbsolutePath().normalize();
+        selectedReport = report.toAbsolutePath().normalize();
+        setPartName("Memory Profiler — " + project.getName());
+        reload();
+    }
+
+    private void followSelectedProject() {
+        var selected = getSite().getWorkbenchWindow().getSelectionService().getSelection();
+        IProject project = selected instanceof IStructuredSelection items && items.size() == 1
+                ? SelectedProject.importedProject(items.getFirstElement()) : null;
+        if (project == null) {
+            status.setText("Select an imported Zephyr project in Project Explorer, then click Follow selected project builds.");
+            return;
+        }
+        followProject(project);
+    }
+
+    private void followProject(IProject project) {
+        try {
+            var settings = ProjectContext.settings(project);
+            Path build = ProjectContext.buildDirectory(project, settings);
+            manualImport = false;
+            followedProject = project;
+            followedBuild = build.toAbsolutePath().normalize();
+            selectedReport = MemoryProfilerReportGuard.output(build);
+            setPartName("Memory Profiler — " + project.getName());
+            reload();
+        } catch (Exception ex) {
+            status.setText("Cannot follow selected project: " + ex.getMessage());
+        }
     }
 
     private static Button button(Composite parent, String caption, Runnable action) {
@@ -95,7 +144,11 @@ public final class MemoryProfilerView extends ViewPart {
         dialog.setFilterExtensions(new String[] {"*.json", "*.*"});
         String chosen = dialog.open();
         if (chosen != null) {
+            manualImport = true;
+            followedProject = null;
+            followedBuild = null;
             selectedReport = Path.of(chosen);
+            setPartName("Memory Profiler — imported report");
             reload();
         }
     }
@@ -113,6 +166,8 @@ public final class MemoryProfilerView extends ViewPart {
         status.setText("Reading saved linker-map evidence; this is not the active build or live device.");
         detail.setText("No memory range selected.");
         Path path = selectedReport;
+        Path build = manualImport ? null : followedBuild;
+        String projectName = followedProject == null ? null : followedProject.getName();
         loadJob = new Job("Read Zephyr memory profiler JSON") {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
@@ -123,13 +178,22 @@ public final class MemoryProfilerView extends ViewPart {
                     String json = Files.readString(path);
                     List<MemoryProfilerJson.Row> fields = MemoryProfilerJson.parse(json);
                     Diagram diagram = MemoryProfilerLayout.fromRows(fields);
+                    if (build != null) {
+                        Path map = MemoryProfilerReportGuard.map(build);
+                        String mapSha = MemoryProfilerReportGuard.hashMap(map);
+                        MemoryProfilerReportGuard.verifyReport(json, mapSha);
+                    }
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     String mpuNote = diagram.hasMpuSnapshot()
                             ? "Imported debugger snapshot (not independently authenticated; not live)."
                             : "MPU unknown: no hardware readback in linker map.";
-                    show(ticket, diagram, "Imported " + diagram.regions().size() + " linker memory regions, "
-                            + diagram.sections().size() + " section headers from " + path.getFileName()
-                            + ". " + mpuNote + " Build freshness unverified.");
+                    String identity = build == null
+                            ? "Explicit imported report; build freshness unverified."
+                            : "Project " + projectName + " | build " + build
+                              + " | checked against current map SHA-256 (subsequent changes not monitored).";
+                    show(ticket, diagram, "Loaded " + diagram.regions().size() + " linker regions, "
+                            + diagram.sections().size() + " section headers. "
+                            + identity + " " + mpuNote);
                 } catch (IOException | IllegalArgumentException ex) {
                     show(ticket, null, "Cannot load memory report: " + ex.getMessage());
                 }
