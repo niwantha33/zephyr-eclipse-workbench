@@ -115,6 +115,16 @@ class TraceAnalysisTests(unittest.TestCase):
         self.assertEqual(report['ctf_decode'], 'invalid')
         self.assertNotIn('threads', report)
 
+    def test_existing_analyzer_exposes_semantic_event_and_unknown_counts(self):
+        report = subject.summarize([
+            event("thread_switched_in", 1),
+            event("vendor:new_event", 5),
+            event("thread_switched_out", 10)])
+        self.assertEqual(report["semantic_event_count"], 3)
+        self.assertEqual(report["unknown_events"], 1)
+        self.assertEqual(report["semantic_kind_counts"]["UNKNOWN"], 1)
+        self.assertEqual(report["unknown_event_message"], "1 events were not understood")
+
     def test_missing_decoder_is_explicit(self):
         with patch.object(subject, 'decode', side_effect=ImportError('bt2 unavailable')):
             report = subject.analyze(Path('unused'))
