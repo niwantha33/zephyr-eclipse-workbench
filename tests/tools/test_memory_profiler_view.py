@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Wiring checks for PR1 Step 3; native SWT still requires installed Eclipse smoke."""
+"""Wiring checks for PR1 Steps 3–4; installed Eclipse smoke remains separate."""
 from pathlib import Path
 import unittest
 import xml.etree.ElementTree as ET
@@ -31,6 +31,34 @@ class MemoryProfilerViewWiringTests(unittest.TestCase):
         self.assertIn("MemoryProfilerLayout.fromRows(fields)", view)
         self.assertNotIn("west build", view)
         self.assertNotIn("ProcessBuilder(", view)
+
+    def test_build_integration_is_after_verified_success_not_clean(self):
+        ui_source = UI / "src/io/github/niwantha33/zew/ui"
+        builder = (ui_source / "ZephyrProjectBuilder.java").read_text()
+        hook = "MemoryProfilerBuildIntegration.afterSuccessfulBuild("
+        self.assertEqual(builder.count(hook), 1)
+        self.assertLess(builder.index("BuildArtifacts.verify(buildDirectory);"), builder.index(hook))
+        self.assertLess(builder.index("configuration.verify(buildDirectory);"), builder.index(hook))
+        self.assertIn("if (!monitor.isCanceled())\\n                        " + hook, builder)
+        integration = (ui_source / "MemoryProfilerBuildIntegration.java").read_text()
+        self.assertIn('getEntry("scripts/memory_profiler.py")', integration)
+        self.assertIn("MemoryProfilerReportGuard.publish(", integration)
+        self.assertIn("notifyOpenViews(project, build, output)", integration)
+        self.assertIn("page.findView(MemoryProfilerView.ID)", integration)
+        self.assertNotIn("page.showView(", integration)
+        self.assertNotIn('"west", "build"', integration)
+
+    def test_report_is_packaged_exactly_and_ui_tracks_project_identity(self):
+        root = ROOT / "scripts/memory_profiler.py"
+        bundled = UI / "scripts/memory_profiler.py"
+        self.assertEqual(root.read_bytes(), bundled.read_bytes())
+        self.assertIn("scripts/", (UI / "build.properties").read_text())
+        view = (UI / "src/io/github/niwantha33/zew/ui/MemoryProfilerView.java").read_text()
+        self.assertIn("followedProject != null", view)
+        self.assertIn("!followedProject.equals(project)", view)
+        self.assertIn("manualImport", view)
+        self.assertIn("MemoryProfilerReportGuard.verifyReport(json, mapSha)", view)
+        self.assertIn("Follow selected project builds", view)
 
 
 if __name__ == "__main__":
