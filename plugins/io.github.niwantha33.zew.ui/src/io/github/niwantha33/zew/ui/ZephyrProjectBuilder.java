@@ -297,6 +297,14 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     }
                     EditorIntegration.schedule(getProject());
                     ProjectVersionHandler.snapshotOnFirstBuild(getProject(), monitor, stream::println);
+                    // PR1 Step4: CDT native builds and Zephyr menu builds both reach
+                    // this builder. Only verified, non-clean successful builds
+                    // publish a linker-map snapshot for already-open profiler views.
+                    // Optional analysis never changes the firmware build result.
+                    if (!monitor.isCanceled())
+                        MemoryProfilerBuildIntegration.afterSuccessfulBuild(getProject(),
+                                buildDirectory, settings.getProperty("python"),
+                                monitor::isCanceled, stream::println);
                 }
                 stream.println(clean ? "Clean completed." : "BUILD SUCCESS — configured firmware outputs verified.");
             } catch (java.io.InterruptedIOException error) { throw error; }
