@@ -97,16 +97,17 @@ public final class YamlScalarEditTests {
                     "identical preview cannot overwrite already-modified source");
 
             snapshot = YamlSourceLoader.inspect(Path.of(python), inspect, source, () -> false);
+            final var currentSnapshot = snapshot;
             var enabled = named(YamlTreeProjection.rows(snapshot).get(0), "enabled");
-            denied(() -> YamlScalarEdit.prepare(source, snapshot, enabled, "PRIVATE"),
+            denied(() -> YamlScalarEdit.prepare(source, currentSnapshot, enabled, "PRIVATE"),
                     "boolean fields cannot be converted into strings without an explicit type change");
-            var booleanEdit = YamlScalarEdit.prepare(source, snapshot, enabled, "false");
+            var booleanEdit = YamlScalarEdit.prepare(source, currentSnapshot, enabled, "false");
             YamlPatchValidator.validate(Path.of(python), checker, booleanEdit, () -> false);
             check(booleanEdit.diff().contains("+ false"), "typed boolean edit previews clearly");
             var timeout = named(YamlTreeProjection.rows(snapshot).get(0), "timeout");
-            denied(() -> YamlScalarEdit.prepare(source, snapshot, timeout, "twelve"),
+            denied(() -> YamlScalarEdit.prepare(source, currentSnapshot, timeout, "twelve"),
                     "integer values require canonical numeric spelling");
-            var integerEdit = YamlScalarEdit.prepare(source, snapshot, timeout, "42");
+            var integerEdit = YamlScalarEdit.prepare(source, currentSnapshot, timeout, "42");
             YamlPatchValidator.validate(Path.of(python), checker, integerEdit, () -> false);
             check(integerEdit.diff().contains("+ 42"), "integer scalar changes stay type-safe");
 
