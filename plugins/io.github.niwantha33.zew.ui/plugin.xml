@@ -149,6 +149,10 @@
           name="Zephyr Visual Memory &amp; MPU Profiler"
           class="io.github.niwantha33.zew.ui.MemoryProfilerView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.yamlStructure"
+          name="Zephyr YAML Structure (Read-only)"
+          class="io.github.niwantha33.zew.ui.YamlStructureView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.configurationHome"
           name="Zephyr Configuration Studio"
           class="io.github.niwantha33.zew.ui.ConfigurationHomeView"
