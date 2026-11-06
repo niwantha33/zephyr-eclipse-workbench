@@ -141,8 +141,25 @@ public final class YamlSourceLoader {
         } catch (IllegalArgumentException error) {
             throw new IOException("Managed parser produced an invalid YAML observation.", error);
         } finally {
-            if (process != null && process.isAlive()) process.destroyForcibly();
-            Files.deleteIfExists(output);
+            // On Windows, destroyForcibly() is asynchronous. Wait until the
+            // child has released its redirected stdout handle before unlinking.
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+                try {
+                    process.waitFor(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            try {
+                Files.deleteIfExists(output);
+            } catch (java.nio.file.FileSystemException locked) {
+                // A terminating Windows child may retain the redirected file
+                // briefly. Never mask the original cancellation/timeout.
+                output.toFile().deleteOnExit();
+                if (process == null || !process.isAlive())
+                    throw locked;
+            }
         }
     }
 }
