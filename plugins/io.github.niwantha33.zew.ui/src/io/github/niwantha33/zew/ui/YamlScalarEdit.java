@@ -12,6 +12,8 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.channels.FileChannel;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -256,6 +258,26 @@ public final class YamlScalarEdit {
             throw new IOException("Candidate changed the selected YAML scalar type or structure.");
     }
 
+    /** Match the original POSIX mode and Windows ACL before exposing bytes. */
+    private static void preserveSourceAccess(Path original, Path destination) throws IOException {
+        var posix = Files.getFileAttributeView(original, PosixFileAttributeView.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (posix != null) {
+            var destinationMode = Files.getFileAttributeView(destination,
+                    PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+            if (destinationMode == null) throw new IOException("Cannot preserve source permissions.");
+            destinationMode.setPermissions(posix.readAttributes().permissions());
+        }
+        var acl = Files.getFileAttributeView(original, AclFileAttributeView.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (acl != null) {
+            var destinationAcl = Files.getFileAttributeView(destination,
+                    AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+            if (destinationAcl == null) throw new IOException("Cannot preserve source access control.");
+            destinationAcl.setAcl(acl.getAcl());
+        }
+    }
+
     /**
      * User-confirmed write: revalidate exact original bytes immediately before
      * atomic same-directory replacement. Keep an independent original backup.
@@ -275,19 +297,16 @@ public final class YamlScalarEdit {
         Path backup = null, staging = null;
         try {
             backup = Files.createTempFile(directory, "." + source.file().getFileName() + ".zew-backup-", ".bak");
+            preserveSourceAccess(source.file(), backup);
             Files.write(backup, current, StandardOpenOption.TRUNCATE_EXISTING);
             try (FileChannel channel = FileChannel.open(backup, StandardOpenOption.WRITE)) {
                 channel.force(true);
             }
             staging = Files.createTempFile(directory, "." + source.file().getFileName() + ".zew-edit-", ".pending");
+            preserveSourceAccess(source.file(), staging);
             Files.write(staging, preview.candidate(), StandardOpenOption.TRUNCATE_EXISTING);
             try (FileChannel channel = FileChannel.open(staging, StandardOpenOption.WRITE)) {
                 channel.force(true);
-            }
-            try {
-                Files.setPosixFilePermissions(staging, Files.getPosixFilePermissions(source.file()));
-            } catch (UnsupportedOperationException ignored) {
-                // Windows has no POSIX file permissions.
             }
             requireEditable(source);
             if (!preview.originalSha().equals(YamlSourceLoader.hash(source.file())))
