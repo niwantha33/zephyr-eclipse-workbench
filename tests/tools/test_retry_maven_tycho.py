@@ -77,7 +77,7 @@ class TychoReleaseRetryTests(unittest.TestCase):
     def test_exact_pinned_tycho_version_is_read_from_pom(self):
         # Historical #189 retry fixtures deliberately use VERSION=5.0.3,
         # but the current pinned version can advance through Dependabot.
-        self.assertRegex(retry.tycho_version(), r"^[0-9]+\\.[0-9]+\\.[0-9]+$")
+        self.assertRegex(retry.tycho_version(), r"^[0-9]+\.[0-9]+\.[0-9]+$")
         with tempfile.TemporaryDirectory() as path:
             pom = Path(path, "pom.xml")
             for version in ("5.0.3", "5.0.4"):
