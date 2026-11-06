@@ -231,7 +231,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
                 if (view.output == null || view.output.isDisposed() || !source.equals(view.project)) return;
                 var text = view.output;
                 if (text.getCharCount() >= MAX_TEXT)
-                    text.replaceTextRange(0, text.getCharCount() / 2, "[Earlier diagnostic lines omitted]\n");
+                    text.setText("[Earlier diagnostic lines omitted]\n");
                 text.append("[" + transport + "] " + message + "\n");
                 text.setSelection(text.getCharCount());
             });
