@@ -84,8 +84,8 @@ def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
         kind.value: sum(event.kind == kind for event in semantic.events)
         for kind in EventKind if any(event.kind == kind for event in semantic.events)
     }
-    result['cpu'] = account(records, idle_thread_id=idle_thread_id)
-    result['timing'] = analyze_timing(records, deadlines_ns=deadlines_ns)
+    result['cpu'] = account(semantic, idle_thread_id=idle_thread_id)
+    result['timing'] = analyze_timing(semantic, deadlines_ns=deadlines_ns)
     result['observed_events'] = {}
     for record in records:
         if record.get('kind') == 'event':
