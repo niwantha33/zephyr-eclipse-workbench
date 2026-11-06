@@ -43,26 +43,27 @@ public final class YamlTreeProjection {
     public static List<Row> rows(Snapshot snapshot) {
         if (snapshot == null || !snapshot.parsed() || snapshot.root() == null)
             return List.of();
-        return List.of(row("(document)", snapshot.root()));
+        return List.of(row("(document)", snapshot.root(), snapshot.root().range()));
     }
 
-    private static Row row(String label, Node node) {
+    private static Row row(String label, Node node, Range displayRange) {
         if (node instanceof Scalar scalar)
             return new Row(label, scalar.scalarType(), preview(scalar.value()),
-                    scalar.range(), List.of());
+                    displayRange, List.of());
         if (node instanceof Mapping mapping) {
             List<Row> children = new ArrayList<>(mapping.entries().size());
             for (Entry entry : mapping.entries())
-                children.add(row(entry.key(), entry.value()));
+                children.add(row(entry.key(), entry.value(), entry.keyRange()));
             return new Row(label, "mapping", mapping.entries().size() + " entries",
-                    mapping.range(), children);
+                    displayRange, children);
         }
         if (node instanceof Sequence sequence) {
             List<Row> children = new ArrayList<>(sequence.items().size());
             for (int index = 0; index < sequence.items().size(); index++)
-                children.add(row("[" + index + "]", sequence.items().get(index)));
+                children.add(row("[" + index + "]", sequence.items().get(index),
+                        sequence.items().get(index).range()));
             return new Row(label, "sequence", sequence.items().size() + " items",
-                    sequence.range(), children);
+                    displayRange, children);
         }
         throw new IllegalArgumentException("Unsupported YAML observation node");
     }
