@@ -27,7 +27,7 @@ public final class RttTcpReaderTests {
             served.get(5, TimeUnit.SECONDS);
             yes(capture.bytes() == 4 && capture.peerClosed() && count.get() == 4);
             yes(java.util.Arrays.equals(Files.readAllBytes(evidence),
-                    new byte[] {65, 0, 66, (byte) 255}), "raw bytes conserved");
+                    new byte[] {65, 0, 66, (byte) 255}));
             try { RttTcpReader.capture(server.getLocalPort(), 1, evidence, () -> false, b -> {});
                 throw new AssertionError("existing output overwritten");
             } catch (IOException expected) { /* refused or exclusive output, never overwrite */ }
