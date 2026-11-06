@@ -25,7 +25,7 @@ class MemoryProfilerViewWiringTests(unittest.TestCase):
         canvas = (UI / "src/io/github/niwantha33/zew/ui/MemoryProfilerCanvas.java").read_text()
         self.assertIn("extends Canvas", canvas)
         self.assertIn("SWT.COLOR_RED", canvas)
-        self.assertIn("data.conflicts(region)", canvas)
+        self.assertIn("data.overlaps(region)", canvas)
         self.assertIn("new FileDialog(", view)
         self.assertIn("MemoryProfilerJson.parse(json)", view)
         self.assertIn("MemoryProfilerLayout.fromRows(fields)", view)
