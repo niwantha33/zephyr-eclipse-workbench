@@ -2,7 +2,6 @@
 package io.github.niwantha33.zew.ui;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -122,7 +121,7 @@ public final class ThreadTimelineView extends ViewPart {
     private void load(Path chosen) {
         final Path ctf = (Files.isDirectory(chosen.resolve("ctf")) ? chosen.resolve("ctf") : chosen)
                 .toAbsolutePath().normalize();
-        if (ctf.isSymbolicLink() || !Files.isRegularFile(ctf.resolve("metadata"), LinkOption.NOFOLLOW_LINKS)
+        if (Files.isSymbolicLink(ctf) || !Files.isRegularFile(ctf.resolve("metadata"), LinkOption.NOFOLLOW_LINKS)
                 || !Files.isRegularFile(ctf.resolve("channel0_0"), LinkOption.NOFOLLOW_LINKS)) {
             status.setText("Select a saved CTF directory containing metadata and channel0_0.");
             return;
@@ -193,7 +192,7 @@ public final class ThreadTimelineView extends ViewPart {
     }
 
     private void present(int ticket, ThreadTimelineReport.Snapshot snapshot, String error) {
-        getSite().getShell().getDisplay().asyncExec(() -> {
+        org.eclipse.swt.widgets.Display.getDefault().asyncExec(() -> {
             if (generation.get() != ticket || table == null || table.isDisposed()) return;
             displayed = snapshot;
             table.removeAll();
