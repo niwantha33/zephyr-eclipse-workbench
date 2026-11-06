@@ -11,12 +11,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.Adapters;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.jface.dialogs.InputDialog;
+import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.window.Window;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.ITreeContentProvider;
@@ -59,12 +63,18 @@ public final class YamlStructureView extends ViewPart {
     private Text bindingDetails;
     private Label hardwareStatus;
     private TreeViewer hardwareTree;
+    private Label twisterStatus;
+    private TreeViewer twisterTree;
+    private Label diagnosticStatus;
+    private TreeViewer diagnosticTree;
+    private volatile IFile markerOwner;
     private Job reader;
     private IFile selectedYaml;
     private IProject selectedContext;
     private IFile observedFile;
     private YamlSourceLoader.Source observedSource;
     private String observedSha;
+    private YamlDocumentModel.Snapshot observedSnapshot;
     private final ISelectionListener followSelection = (part, selection) -> {
         if (part == this || !(selection instanceof IStructuredSelection items) || items.size() != 1) return;
         Object selected = items.getFirstElement();
@@ -90,18 +100,22 @@ public final class YamlStructureView extends ViewPart {
         parent.setLayout(layout);
 
         var header = new Label(parent, SWT.WRAP);
-        header.setText("ZEPHYR YAML STRUCTURE  /  SELECTED SOURCE OR SAVED OBSERVATION  /  READ-ONLY");
+        header.setText("ZEPHYR YAML STRUCTURE  /  INSPECT & VERIFY  /  PREVIEWED SCALAR EDITS");
         header.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         var controls = new Composite(parent, SWT.NONE);
         controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        controls.setLayout(new GridLayout(3, false));
+        controls.setLayout(new GridLayout(4, false));
         var selectedButton = new Button(controls, SWT.PUSH);
         selectedButton.setText("Inspect selected YAML");
         selectedButton.addListener(SWT.Selection, event -> inspectSelection());
         var refreshButton = new Button(controls, SWT.PUSH);
         refreshButton.setText("Refresh source");
         refreshButton.addListener(SWT.Selection, event -> refreshSource());
+        var editButton = new Button(controls, SWT.PUSH);
+        editButton.setText("Edit selected scalar…");
+        editButton.setToolTipText("User-owned application YAML only; preview and validate before an explicit save.");
+        editButton.addListener(SWT.Selection, event -> editSelectedScalar());
         var button = new Button(controls, SWT.PUSH);
         button.setText("Open YAML observation JSON…");
         button.setToolTipText("Import an existing zew.yaml-observation/1 report instead of a source file.");
@@ -182,6 +196,73 @@ public final class YamlStructureView extends ViewPart {
         hardwareColumn("Board / SoC / qualifier", 290, true);
         hardwareColumn("Resolved metadata", 370, false);
         hardwareTree.setInput(List.of());
+
+        var twisterTab = new TabItem(detailsTabs, SWT.NONE);
+        twisterTab.setText("Twister tests");
+        var twisterPanel = new Composite(detailsTabs, SWT.NONE);
+        twisterPanel.setLayout(new GridLayout(1, false));
+        twisterTab.setControl(twisterPanel);
+        twisterStatus = new Label(twisterPanel, SWT.WRAP);
+        twisterStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        twisterStatus.setText("Select a Twister testcase.yaml, sample.yaml or test_config.yaml.");
+        twisterTree = new TreeViewer(twisterPanel, SWT.BORDER | SWT.FULL_SELECTION
+                | SWT.H_SCROLL | SWT.V_SCROLL | SWT.SINGLE);
+        twisterTree.getTree().setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        twisterTree.getTree().setHeaderVisible(true);
+        twisterTree.getTree().setLinesVisible(true);
+        twisterTree.setContentProvider(new ITreeContentProvider() {
+            @Override public Object[] getElements(Object input) {
+                return input instanceof List<?> items ? items.toArray() : new Object[0];
+            }
+            @Override public Object[] getChildren(Object parentRow) {
+                return parentRow instanceof YamlTwisterModel.Row row
+                        ? row.children().toArray() : new Object[0];
+            }
+            @Override public Object getParent(Object element) { return null; }
+            @Override public boolean hasChildren(Object element) {
+                return element instanceof YamlTwisterModel.Row row
+                        && !row.children().isEmpty();
+            }
+            @Override public void dispose() {}
+            @Override public void inputChanged(Viewer viewer, Object oldValue, Object newValue) {}
+        });
+        twisterColumn("Scenario / config", 300, true);
+        twisterColumn("Declared value preview", 370, false);
+        twisterTree.setInput(List.of());
+
+        var diagnosticsTab = new TabItem(detailsTabs, SWT.NONE);
+        diagnosticsTab.setText("Diagnostics");
+        var diagnosticsPanel = new Composite(detailsTabs, SWT.NONE);
+        diagnosticsPanel.setLayout(new GridLayout(1, false));
+        diagnosticsTab.setControl(diagnosticsPanel);
+        diagnosticStatus = new Label(diagnosticsPanel, SWT.WRAP);
+        diagnosticStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        diagnosticStatus.setText("Select a saved YAML file for source-linked syntax diagnostics.");
+        diagnosticTree = new TreeViewer(diagnosticsPanel, SWT.BORDER | SWT.FULL_SELECTION
+                | SWT.H_SCROLL | SWT.V_SCROLL | SWT.SINGLE);
+        diagnosticTree.getTree().setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        diagnosticTree.getTree().setHeaderVisible(true);
+        diagnosticTree.getTree().setLinesVisible(true);
+        diagnosticTree.setContentProvider(new ITreeContentProvider() {
+            @Override public Object[] getElements(Object input) {
+                return input instanceof List<?> items ? items.toArray() : new Object[0];
+            }
+            @Override public Object[] getChildren(Object row) { return new Object[0]; }
+            @Override public Object getParent(Object row) { return null; }
+            @Override public boolean hasChildren(Object row) { return false; }
+            @Override public void dispose() {}
+            @Override public void inputChanged(Viewer viewer, Object oldValue, Object newValue) {}
+        });
+        diagnosticColumn("Severity", 85, 0);
+        diagnosticColumn("Reason", 195, 1);
+        diagnosticColumn("Line:column", 105, 2);
+        diagnosticColumn("Explanation", 430, 3);
+        diagnosticTree.setInput(List.of());
+        diagnosticTree.addDoubleClickListener(event -> {
+            if (diagnosticTree.getStructuredSelection().getFirstElement()
+                    instanceof YamlDiagnosticModel.Row row && row.line() > 0)
+                navigateToSource(row.line(), row.column());
+        });
         tree.addDoubleClickListener(event -> navigateToSource());
         getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(followSelection);
         inspectSelection();
@@ -217,6 +298,56 @@ public final class YamlStructureView extends ViewPart {
         });
     }
 
+    private void twisterColumn(String header, int width, boolean first) {
+        var column = new TreeViewerColumn(twisterTree, SWT.LEFT);
+        column.getColumn().setText(header);
+        column.getColumn().setWidth(width);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override public String getText(Object item) {
+                if (!(item instanceof YamlTwisterModel.Row row)) return "";
+                return first ? row.name() : row.preview();
+            }
+        });
+    }
+
+    private void diagnosticColumn(String header, int width, int field) {
+        var column = new TreeViewerColumn(diagnosticTree, SWT.LEFT);
+        column.getColumn().setText(header);
+        column.getColumn().setWidth(width);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override public String getText(Object element) {
+                if (!(element instanceof YamlDiagnosticModel.Row row)) return "";
+                return switch (field) {
+                    case 0 -> row.severity();
+                    case 1 -> row.code();
+                    case 2 -> row.location();
+                    case 3 -> row.message();
+                    default -> "";
+                };
+            }
+        });
+    }
+
+    /** Remove only our own transient markers, always off the SWT thread. */
+    private void clearPublishedYamlMarkers(int request) {
+        IFile previous = markerOwner;
+        if (previous == null) return;
+        Job cleanup = new Job("Clear obsolete YAML validation markers") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                try {
+                    if (YamlDiagnosticMarkers.replace(previous, null, null,
+                            () -> !monitor.isCanceled() && request == generation.get()))
+                        markerOwner = null;
+                } catch (org.eclipse.core.runtime.CoreException ignored) {
+                    return Status.CANCEL_STATUS;
+                }
+                return Status.OK_STATUS;
+            }
+        };
+        cleanup.setSystem(true);
+        cleanup.schedule();
+    }
+
     private void chooseReport() {
         var dialog = new FileDialog(getSite().getShell(), SWT.OPEN);
         dialog.setText("Open a saved Zephyr YAML observation");
@@ -228,14 +359,20 @@ public final class YamlStructureView extends ViewPart {
         // Any previous import is stale immediately; discard its delayed UI result.
         int request = generation.incrementAndGet();
         if (reader != null) reader.cancel();
+        clearPublishedYamlMarkers(request);
         observedFile = null;
         observedSource = null;
         observedSha = null;
+        observedSnapshot = null;
         tree.setInput(List.of());
         status.setText("Loading saved YAML observation…");
         bindingDetails.setText("Binding intelligence unavailable for imported JSON without verified source context.");
         hardwareTree.setInput(List.of());
         hardwareStatus.setText("HWMv2 metadata unavailable for an imported JSON report without selected checkout context.");
+        twisterTree.setInput(List.of());
+        twisterStatus.setText("Twister metadata requires an explicitly selected checkout, not imported JSON.");
+        diagnosticTree.setInput(List.of());
+        diagnosticStatus.setText("Imported JSON is not an authenticated workspace source; no diagnostics or markers.");
         Path report;
         try {
             report = Path.of(chosen);
@@ -285,10 +422,15 @@ public final class YamlStructureView extends ViewPart {
             throw new IllegalStateException("YAML view updates require the UI thread");
         if (tree == null || tree.getTree().isDisposed()) return;
         tree.setInput(YamlTreeProjection.rows(snapshot));
+        observedSnapshot = observedFile == null ? null : snapshot;
         if (snapshot == null) {
             bindingDetails.setText("Binding intelligence: no selected source.");
             hardwareTree.setInput(List.of());
             hardwareStatus.setText("HWMv2: no selected source.");
+            twisterTree.setInput(List.of());
+            twisterStatus.setText("Twister: no selected source.");
+            diagnosticTree.setInput(List.of());
+            diagnosticStatus.setText("Diagnostics: no selected source.");
             status.setText("No YAML observation has been selected.");
             return;
         }
@@ -352,15 +494,22 @@ public final class YamlStructureView extends ViewPart {
         observedFile = null;
         observedSource = null;
         observedSha = null;
+        observedSnapshot = null;
         tree.setInput(List.of());
         status.setText("Inspecting selected YAML with the project's managed Python…");
         bindingDetails.setText("Binding intelligence: inspecting only if this is a Devicetree binding.");
         hardwareTree.setInput(List.of());
         hardwareStatus.setText("HWMv2: loading only for canonical board.yml and soc.yml sources.");
+        twisterTree.setInput(List.of());
+        twisterStatus.setText("Twister: waiting for selected saved test YAML and checkout schema.");
+        diagnosticTree.setInput(List.of());
+        diagnosticStatus.setText("Diagnostics: verifying saved YAML and selected checkout rules…");
         IProject managed = SelectedProject.importedProject(file.getProject());
         if (managed == null) managed = selectedContext;
         IProject context = managed;
         if (context == null) {
+            clearPublishedYamlMarkers(request);
+            diagnosticStatus.setText("Diagnostics unavailable: no managed application context.");
             status.setText("Select a managed Zephyr application before inspecting this YAML file.");
             return;
         }
@@ -370,6 +519,9 @@ public final class YamlStructureView extends ViewPart {
                 YamlSourceLoader.Source source = null;
                 YamlBindingIntelligence.Summary binding = null;
                 YamlHardwareModel.Summary hardware = null;
+                YamlTwisterModel.Summary twister = null;
+                YamlDiagnosticModel.Summary diagnostics = null;
+                String markerNotice = "";
                 String failure = null;
                 try {
                     Properties settings = ProjectContext.settings(context);
@@ -385,6 +537,25 @@ public final class YamlStructureView extends ViewPart {
                     snapshot = YamlSourceLoader.inspect(Path.of(settings.getProperty("python")),
                             script, source,
                             () -> monitor.isCanceled() || generation.get() != request);
+                    var diagnosticEntry = Activator.getDefault().getBundle().getEntry(
+                            "scripts/yaml_diagnostic_inspect.py");
+                    if (diagnosticEntry == null) {
+                        diagnostics = YamlDiagnosticModel.unavailable("inspector-not-installed");
+                    } else {
+                        try {
+                            Path diagnosticScript = Path.of(FileLocator.toFileURL(diagnosticEntry).toURI());
+                            diagnostics = YamlDiagnosticModel.inspect(
+                                    Path.of(settings.getProperty("python")), diagnosticScript,
+                                    source, zephyr, app, () -> monitor.isCanceled()
+                                            || generation.get() != request);
+                        } catch (java.io.IOException unavailable) {
+                            diagnostics = YamlDiagnosticModel.unavailable(
+                                    "source-diagnostics-unavailable");
+                        }
+                    }
+                    if (!"unavailable".equals(diagnostics.state())
+                            && !snapshot.sha256().equals(diagnostics.sourceSha256()))
+                        throw new java.io.IOException("Diagnostic source and YAML observation hashes differ");
                     if (snapshot.parsed() && "devicetree-binding".equals(snapshot.kind())) {
                         var bindingEntry = Activator.getDefault().getBundle().getEntry(
                                 "scripts/yaml_binding_inspect.py");
@@ -425,6 +596,29 @@ public final class YamlStructureView extends ViewPart {
                         if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
                             throw new java.io.IOException("YAML source changed during HWMv2 inspection");
                     }
+                    if (snapshot.parsed() && ("twister-test".equals(snapshot.kind())
+                            || "twister-config".equals(snapshot.kind()))) {
+                        var twisterEntry = Activator.getDefault().getBundle().getEntry(
+                                "scripts/yaml_twister_inspect.py");
+                        if (twisterEntry == null) {
+                            twister = YamlTwisterModel.unavailable("twister-inspector-not-installed");
+                        } else {
+                            try {
+                                Path twisterScript = Path.of(FileLocator.toFileURL(twisterEntry).toURI());
+                                twister = YamlTwisterModel.inspect(
+                                        Path.of(settings.getProperty("python")), twisterScript,
+                                        source, zephyr, app, () -> monitor.isCanceled()
+                                                || generation.get() != request);
+                            } catch (java.io.IOException unavailable) {
+                                twister = YamlTwisterModel.unavailable(
+                                        "selected-twister-validation-unavailable");
+                            }
+                        }
+                        if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
+                            throw new java.io.IOException("YAML source changed during Twister inspection");
+                    }
+                    if (!snapshot.sha256().equals(YamlSourceLoader.hash(source.file())))
+                        throw new java.io.IOException("YAML source changed during validation");
                 } catch (InterruptedException cancelled) {
                     Thread.currentThread().interrupt();
                     return Status.CANCEL_STATUS;
@@ -433,11 +627,23 @@ public final class YamlStructureView extends ViewPart {
                             + "application or its exact Zephyr checkout, and check the Python setup. "
                             + "No file was modified.";
                 }
-                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                if (monitor.isCanceled() || request != generation.get()) return Status.CANCEL_STATUS;
+                try {
+                    boolean applied = YamlDiagnosticMarkers.replace(markerOwner,
+                            failure == null ? file : null,
+                            failure == null ? diagnostics : null,
+                            () -> !monitor.isCanceled() && request == generation.get());
+                    if (applied) markerOwner = failure == null ? file : null;
+                } catch (org.eclipse.core.runtime.CoreException markerError) {
+                    markerNotice = " Workspace problem markers could not be updated.";
+                }
                 YamlDocumentModel.Snapshot loaded = snapshot;
                 YamlSourceLoader.Source loadedSource = source;
                 YamlBindingIntelligence.Summary bindingResult = binding;
                 YamlHardwareModel.Summary hardwareResult = hardware;
+                YamlTwisterModel.Summary twisterResult = twister;
+                YamlDiagnosticModel.Summary diagnosticResult = diagnostics;
+                String diagnosticsNotice = markerNotice;
                 String problem = failure;
                 Display.getDefault().asyncExec(() -> {
                     if (request != generation.get() || tree == null || tree.getTree().isDisposed()) return;
@@ -446,6 +652,11 @@ public final class YamlStructureView extends ViewPart {
                         bindingDetails.setText("Binding intelligence: unavailable; source or checkout context unverified.");
                         hardwareTree.setInput(List.of());
                         hardwareStatus.setText("HWMv2: unavailable; source or checkout context unverified.");
+                        twisterTree.setInput(List.of());
+                        twisterStatus.setText("Twister: unavailable; source or checkout context unverified.");
+                        diagnosticTree.setInput(List.of());
+                        diagnosticStatus.setText("Diagnostics unavailable: source or checkout context unverified."
+                                + diagnosticsNotice);
                         tree.setInput(List.of());
                         return;
                     }
@@ -467,6 +678,28 @@ public final class YamlStructureView extends ViewPart {
                                 + ". Selected-checkout metadata only; not an active build target.");
                         if (hardwareResult.resolved()) hardwareTree.expandToLevel(2);
                     }
+                    twisterTree.setInput(YamlTwisterModel.hierarchy(twisterResult));
+                    if (twisterResult == null) {
+                        twisterStatus.setText("Twister: not applicable to this YAML source.");
+                    } else {
+                        twisterStatus.setText("Twister " + twisterResult.state() + ": "
+                                + twisterResult.reason()
+                                + ". Schema metadata only — no test plan, execution or result verified.");
+                        if (twisterResult.resolved()) twisterTree.expandToLevel(2);
+                    }
+                    diagnosticTree.setInput(YamlDiagnosticModel.rows(diagnosticResult));
+                    if (diagnosticResult == null) {
+                        diagnosticStatus.setText("YAML diagnostics were not produced." + diagnosticsNotice);
+                    } else if ("checked".equals(diagnosticResult.state())) {
+                        diagnosticStatus.setText("Verified " + diagnosticResult.scope()
+                                + " only — " + diagnosticResult.reason()
+                                + ". No binding, build, or test execution implied." + diagnosticsNotice);
+                    } else {
+                        diagnosticStatus.setText("Diagnostics " + diagnosticResult.state()
+                                + " — " + diagnosticResult.reason() + " ("
+                                + diagnosticResult.findings().size() + " findings)."
+                                + " Unknown positions are not marked." + diagnosticsNotice);
+                    }
                 });
                 return Status.OK_STATUS;
             }
@@ -475,13 +708,173 @@ public final class YamlStructureView extends ViewPart {
         reader.schedule();
     }
 
+    private boolean hasDirtySourceEditor(IFile file) {
+        for (var reference : getSite().getPage().getEditorReferences()) {
+            IEditorPart editor = reference.getEditor(false);
+            if (editor != null && editor.isDirty()
+                    && editor.getEditorInput() instanceof IFileEditorInput input
+                    && file.equals(input.getFile()))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * The UI collects a single scalar replacement. No write occurs until
+     * managed-Python preflight, a complete old/new token preview, and a
+     * separate explicit confirmation.
+     */
+    private void editSelectedScalar() {
+        if (observedFile == null || observedSource == null
+                || observedSnapshot == null || observedSha == null) {
+            status.setText("Edit unavailable: select an inspected application YAML source, not imported JSON.");
+            return;
+        }
+        IFile file = observedFile;
+        YamlSourceLoader.Source source = observedSource;
+        YamlDocumentModel.Snapshot snapshot = observedSnapshot;
+        if (!"application".equals(source.kind()) || file.isLinked() || file.isDerived()
+                || !file.getProject().equals(selectedContext)) {
+            status.setText("Only local, user-owned application YAML sources are editable. "
+                    + "Checkout, generated and linked files remain read-only.");
+            return;
+        }
+        if (hasDirtySourceEditor(file)) {
+            status.setText("Save or discard unsaved YAML editor changes before preparing a patch.");
+            return;
+        }
+        if (!(tree.getStructuredSelection().getFirstElement() instanceof YamlTreeProjection.Row row)) {
+            status.setText("Select a scalar value row in the YAML structure tree first.");
+            return;
+        }
+        YamlScalarEdit.Target target = YamlScalarEdit.target(snapshot, row);
+        if (target == null) {
+            status.setText("Selected YAML row is not a scalar value; maps and sequences are not writable.");
+            return;
+        }
+        var dialog = new InputDialog(getSite().getShell(), "Edit YAML scalar",
+                "New value for " + row.label() + " (" + target.scalar().scalarType() + "). "
+                        + "This is a typed, single-value source patch; no YAML is rewritten yet.",
+                target.scalar().value(), null);
+        if (dialog.open() != Window.OK) return;
+        String replacement = dialog.getValue();
+        int request = generation.get();
+        Job previewJob = new Job("Validate YAML scalar patch preview") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                YamlScalarEdit.Preview preview = null;
+                String failure = null;
+                try {
+                    if (monitor.isCanceled() || request != generation.get())
+                        return Status.CANCEL_STATUS;
+                    preview = YamlScalarEdit.prepare(source, snapshot, row, replacement);
+                    var entry = Activator.getDefault().getBundle().getEntry(
+                            "scripts/yaml_validate_patch.py");
+                    if (entry == null)
+                        throw new IOException("Managed candidate validator is not installed.");
+                    Path script = Path.of(FileLocator.toFileURL(entry).toURI());
+                    Properties settings = ProjectContext.settings(file.getProject());
+                    YamlPatchValidator.validate(Path.of(settings.getProperty("python")),
+                            script, preview, () -> monitor.isCanceled()
+                                    || generation.get() != request);
+                } catch (InterruptedException canceled) {
+                    Thread.currentThread().interrupt();
+                    return Status.CANCEL_STATUS;
+                } catch (Exception error) {
+                    failure = "Scalar edit preview rejected: invalid type, unavailable managed Python, "
+                            + "stale source, or unsafe YAML path. Nothing was changed.";
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                YamlScalarEdit.Preview ready = preview;
+                String problem = failure;
+                Display.getDefault().asyncExec(() -> {
+                    if (request != generation.get() || tree.getTree().isDisposed()) return;
+                    if (problem != null) {
+                        status.setText(problem);
+                        MessageDialog.openInformation(getSite().getShell(),
+                                "YAML preview rejected", problem);
+                        return;
+                    }
+                    if (hasDirtySourceEditor(file)) {
+                        status.setText("YAML editor has unsaved changes. No patch applied.");
+                        return;
+                    }
+                    String summary = "Source: " + source.relative()
+                            + "\nScalar type: " + ready.scalarType()
+                            + "\n\nExact scalar-token patch:\n"
+                            + ready.diff()
+                            + "\n\nThe candidate passed managed YAML syntax inspection."
+                            + "\nThis does not prove Devicetree, board, or Twister schema validity."
+                            + "\n\nAn original-file backup will be kept. Apply this patch?";
+                    if (!MessageDialog.openConfirm(getSite().getShell(),
+                            "Preview and confirm YAML edit", summary))
+                        return;
+                    if (request != generation.get() || hasDirtySourceEditor(file)) {
+                        status.setText("Patch discarded: source selection changed or editor is dirty.");
+                        return;
+                    }
+                    applyConfirmedPatch(request, file, ready);
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        previewJob.setSystem(true);
+        previewJob.schedule();
+        status.setText("Checking the candidate YAML patch before showing the confirmation preview…");
+    }
+
+    private void applyConfirmedPatch(int request, IFile file,
+                                     YamlScalarEdit.Preview confirmed) {
+        Job applyJob = new Job("Apply confirmed YAML source patch") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                if (monitor.isCanceled() || request != generation.get())
+                    return Status.CANCEL_STATUS;
+                Path backup = null;
+                String problem = null;
+                try {
+                    backup = YamlScalarEdit.apply(confirmed);
+                    file.refreshLocal(IResource.DEPTH_ZERO, monitor);
+                } catch (Exception failure) {
+                    problem = backup == null
+                            ? "YAML patch was not applied. Source may have changed or atomic replacement failed. "
+                                    + "A retained backup may exist; inspect before retrying."
+                            : "YAML patch was saved, but the Eclipse workspace refresh failed. "
+                                    + "Refresh the project manually.";
+                }
+                Path backupCopy = backup;
+                String error = problem;
+                Display.getDefault().asyncExec(() -> {
+                    if (tree.getTree().isDisposed()) return;
+                    if (backupCopy != null && request == generation.get()) {
+                        MessageDialog.openInformation(getSite().getShell(),
+                                "YAML patch applied",
+                                "Saved only the confirmed scalar token. Original backup: "
+                                        + backupCopy.getFileName()
+                                        + "\nVerify domain-specific validation before building.");
+                        loadSource(file);
+                    } else if (error != null && request == generation.get()) {
+                        status.setText(error);
+                        MessageDialog.openInformation(getSite().getShell(),
+                                "YAML patch not confirmed", error);
+                    }
+                });
+                return error == null ? Status.OK_STATUS : Status.CANCEL_STATUS;
+            }
+        };
+        applyJob.setSystem(true);
+        applyJob.schedule();
+    }
+
     private void navigateToSource() {
+        if (!(tree.getStructuredSelection().getFirstElement() instanceof YamlTreeProjection.Row row))
+            return;
+        navigateToSource(row.sourceRange().start().line(), row.sourceRange().start().column());
+    }
+
+    private void navigateToSource(int targetLine, int targetColumn) {
         if (observedFile == null || observedSource == null || observedSha == null) {
             status.setText("A saved JSON observation has no verified workspace source for navigation.");
             return;
         }
-        if (!(tree.getStructuredSelection().getFirstElement() instanceof YamlTreeProjection.Row row))
-            return;
         try {
             YamlSourceLoader.Source current = YamlSourceLoader.resolve(observedSource.file(),
                     "application".equals(observedSource.kind()) ? observedSource.root() : null,
@@ -506,14 +899,14 @@ public final class YamlStructureView extends ViewPart {
                 return;
             }
             var document = editor.getDocumentProvider().getDocument(editor.getEditorInput());
-            if (document == null || row.sourceRange().start().line() > document.getNumberOfLines()) {
+            if (document == null || targetLine < 1 || targetLine > document.getNumberOfLines()) {
                 status.setText("The selected YAML line is no longer available. Refresh the observation.");
                 return;
             }
-            int offset = document.getLineOffset(row.sourceRange().start().line() - 1);
-            int lineLength = document.getLineLength(row.sourceRange().start().line() - 1);
+            int offset = document.getLineOffset(targetLine - 1);
+            int lineLength = document.getLineLength(targetLine - 1);
             String line = document.get(offset, lineLength);
-            int count = Math.min(Math.max(0, row.sourceRange().start().column() - 1),
+            int count = Math.min(Math.max(0, targetColumn - 1),
                     line.codePointCount(0, line.length()));
             editor.selectAndReveal(offset + line.offsetByCodePoints(0, count), 0);
         } catch (Exception error) {
@@ -529,6 +922,7 @@ public final class YamlStructureView extends ViewPart {
     @Override public void dispose() {
         generation.incrementAndGet();
         if (reader != null) reader.cancel();
+        clearPublishedYamlMarkers(generation.get());
         getSite().getWorkbenchWindow().getSelectionService().removeSelectionListener(followSelection);
         super.dispose();
     }

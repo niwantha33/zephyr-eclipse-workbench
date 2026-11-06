@@ -116,7 +116,40 @@ for p in bundles:
                     raise SystemExit('Required bundled board helper missing: ' + helper)
             if 'io/github/niwantha33/zew/ui/ToolsDialog.class' not in z.namelist():
                 raise SystemExit('Tools manager dialog missing.')
+            # The shipped IDE must contain the actual YAML inspection/edit
+            # implementation, not just a source-tree test or an empty view id.
+            yaml_py = ('yaml_observe_file.py', 'yaml_binding_inspect.py',
+                       'yaml_hwmv2_inspect.py', 'yaml_twister_inspect.py',
+                       'yaml_diagnostic_inspect.py', 'yaml_validate_patch.py')
+            for helper in yaml_py:
+                entry = 'scripts/' + helper
+                upstream = root / 'plugins/io.github.niwantha33.zew.ui/scripts' / helper
+                if z.read(entry) != upstream.read_bytes():
+                    raise SystemExit('Installed YAML helper differs from source: ' + helper)
+                compile(z.read(entry), entry, 'exec')
+            for module in ('yaml_observation.py', 'yaml_classification.py'):
+                entry = 'scripts/zew_evidence/' + module
+                if z.read(entry) != (root / 'zew_evidence' / module).read_bytes():
+                    raise SystemExit('Installed YAML evidence module differs from source: ' + module)
+            for cls in ('YamlStructureView', 'YamlDocumentModel', 'YamlSourceLoader',
+                        'YamlTreeProjection', 'YamlBindingIntelligence', 'YamlHardwareModel',
+                        'YamlTwisterModel', 'YamlDiagnosticModel', 'YamlDiagnosticMarkers',
+                        'YamlScalarEdit', 'YamlPatchValidator'):
+                entry = 'io/github/niwantha33/zew/ui/' + cls + '.class'
+                if entry not in z.namelist():
+                    raise SystemExit('Missing installed YAML component: ' + cls)
             plugin = ET.fromstring(z.read('plugin.xml'))
+            yaml_views = plugin.findall("./extension[@point='org.eclipse.ui.views']/view")
+            if not any(view.attrib.get('id') == 'io.github.niwantha33.zew.ui.yamlStructure'
+                       and view.attrib.get('class') == 'io.github.niwantha33.zew.ui.YamlStructureView'
+                       for view in yaml_views):
+                raise SystemExit('Native YAML Structure view is not registered')
+            yaml_markers = plugin.findall(
+                "./extension[@point='org.eclipse.core.resources.markers'][@id='yamlProblem']")
+            if len(yaml_markers) != 1 or yaml_markers[0].find('persistent') is None:
+                raise SystemExit('Native YAML problem marker registration missing')
+            if yaml_markers[0].find('persistent').attrib.get('value') != 'false':
+                raise SystemExit('YAML markers must be nonpersistent')
             for page in plugin.findall("./extension[@point='org.eclipse.ui.preferencePages']/page"):
                 if page.attrib['class'].replace('.', '/') + '.class' not in z.namelist():
                     raise SystemExit('Preference page class missing.')
