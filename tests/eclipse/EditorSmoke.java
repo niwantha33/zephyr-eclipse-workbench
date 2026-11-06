@@ -1028,10 +1028,17 @@ public final class EditorSmoke implements IApplication {
         var wd = workspace.getDescription(); wd.setAutoBuilding(false); workspace.setDescription(wd);
         var project = workspace.getRoot().getProject("HelloZephyrEditorSmoke");
         if (!project.exists()) {
-            var description = workspace.newProjectDescription(project.getName()); description.setLocationURI(fixture.toUri());
-            project.create(description, null); project.open(null);
-            var pd = project.getDescription(); var command = pd.newCommand(); command.setBuilderName("io.github.niwantha33.zew.ui.zephyrBuilder");
-            pd.setBuildSpec(new ICommand[] {command}); project.setDescription(pd, null);
+            // Eclipse must see a fully configured project description at
+            // creation. Mutating the build spec immediately after open can
+            // race CDT's initial C-model/PDOM setup on the native UI runner:
+            // the indexer sees a transient nonexistent project and retains a
+            // PDOMProxy instead of a writable index fragment.
+            var description = workspace.newProjectDescription(project.getName());
+            description.setLocationURI(fixture.toUri());
+            var command = description.newCommand();
+            command.setBuilderName("io.github.niwantha33.zew.ui.zephyrBuilder");
+            description.setBuildSpec(new ICommand[] {command});
+            project.create(description, null);
         }
         project.open(null); project.refreshLocal(IResource.DEPTH_INFINITE, null);
         var ui = Platform.getBundle("io.github.niwantha33.zew.ui");
