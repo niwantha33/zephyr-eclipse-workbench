@@ -64,6 +64,7 @@ import io.github.niwantha33.zew.core.VendorSvdProvisioner;
 import io.github.niwantha33.zew.core.GitHubSvdProvisioner;
 import io.github.niwantha33.zew.core.RegisterHistory;
 import io.github.niwantha33.zew.core.RegisterSparkline;
+import io.github.niwantha33.zew.core.DebugSessionSelection;
 import io.github.niwantha33.zew.core.SvdDevice.Register;
 
 /** Read-only peripheral inspection through the user's selected native DSF session. */
@@ -78,6 +79,7 @@ public final class SocRegistersView extends ViewPart {
     private SvdDevice device;
     private String svdPath;
     private String selectedProjectName;
+    private String debugResolution = "No unique active Zephyr debug session.";
     private String selectedBoard;
     private String discoveryExplanation = "No exact project / SVD selected.";
     private volatile long discoveryGeneration;
@@ -516,8 +518,7 @@ public final class SocRegistersView extends ViewPart {
         var selectedSession = target == null ? null : target.session();
         listenTo(selectedSession);
         contextInfo.setText(selectedSession == null
-                ? "No unambiguous native debug session. Start Zephyr Debug or select a stack frame; "
-                    + "multiple active targets require an explicit selection."
+                ? debugResolution
                 : "Native debug session " + selectedSession.getId()
                     + (target.context() == null
                         ? "; no frame selected — Refresh resolves a suspended GDB thread without halting the CPU."
@@ -822,57 +823,44 @@ public final class SocRegistersView extends ViewPart {
         return null;
     }
 
-    /** A selected CDT frame wins; otherwise only a unique Zephyr GDB launch may be inferred. */
+    /** Explicit DSF selection wins; another project's selection forbids fallback. */
     private record DebugTarget(DsfSession session, IDMContext context) {}
 
     private DebugTarget debugTarget() {
         IDMContext selected = debugContext();
-        if (selected != null) {
-            DsfSession session = DsfSession.getSession(selected.getSessionId());
-            if (session != null && (selectedProjectName == null
-                    || launchMatchesProject(session, selectedProjectName))) {
-                return new DebugTarget(session, selected);
-            }
-        }
-        GdbLaunch launch = uniqueZephyrLaunch();
-        return launch == null ? null : new DebugTarget(launch.getSession(), null);
-    }
-
-    private static boolean launchMatchesProject(DsfSession session, String projectName) {
+        var candidates = new ArrayList<DebugSessionSelection.Candidate>();
         for (var launch : DebugPlugin.getDefault().getLaunchManager().getLaunches()) {
             if (!(launch instanceof GdbLaunch gdb) || launch.isTerminated()
-                    || gdb.getSession() != session) continue;
+                    || gdb.getSession() == null) continue;
             try {
-                return projectName.equals(launch.getLaunchConfiguration()
-                        .getAttribute(ZephyrLaunchDelegate.PROJECT, ""));
-            } catch (org.eclipse.core.runtime.CoreException unavailable) {
-                return false;
+                var config = launch.getLaunchConfiguration();
+                if (config == null) continue;
+                String project = config.getAttribute(ZephyrLaunchDelegate.PROJECT, "");
+                if (project.isBlank()) continue; // not a Zephyr project launch
+                candidates.add(new DebugSessionSelection.Candidate(
+                        gdb.getSession().getId(), project,
+                        DsfSession.isSessionActive(gdb.getSession().getId())));
+            } catch (org.eclipse.core.runtime.CoreException ignored) {
+                // Launch metadata without a proven project is unusable here.
             }
         }
-        return false;
-    }
-
-    /**
-     * Never take an arbitrary GDB session when several targets are attached.
-     * The project filter also avoids reading a different chip with this view's SVD.
-     */
-    private GdbLaunch uniqueZephyrLaunch() {
-        GdbLaunch unique = null;
-        for (var launch : DebugPlugin.getDefault().getLaunchManager().getLaunches()) {
-            if (!(launch instanceof GdbLaunch gdb) || launch.isTerminated()) continue;
-            try {
-                String project = launch.getLaunchConfiguration()
-                        .getAttribute(ZephyrLaunchDelegate.PROJECT, "");
-                if (project.isBlank() || (selectedProjectName != null
-                        && !selectedProjectName.equals(project))) continue;
-                if (!DsfSession.isSessionActive(gdb.getSession().getId())) continue;
-                if (unique != null) return null; // ambiguous; require explicit Debug selection
-                unique = gdb;
-            } catch (org.eclipse.core.runtime.CoreException unavailable) {
-                // Not a usable Zephyr launch.
-            }
+        var decision = DebugSessionSelection.choose(selectedProjectName,
+                selected == null ? null : selected.getSessionId(), candidates);
+        if (decision.state() != DebugSessionSelection.State.RESOLVED) {
+            debugResolution = switch (decision.state()) {
+                case AMBIGUOUS -> "Ambiguous native GDB sessions; select one halted thread/frame.";
+                case FOREIGN_PROJECT -> "Unresolved: selected debug frame belongs to another Zephyr project.";
+                default -> "Unresolved: no matching active Zephyr GDB session.";
+            };
+            return null;
         }
-        return unique;
+        DsfSession session = DsfSession.getSession(decision.sessionId());
+        if (session == null) {
+            debugResolution = "Unresolved: matching GDB session has ended.";
+            return null;
+        }
+        debugResolution = "Native GDB session " + session.getId() + " selected.";
+        return new DebugTarget(session, selected);
     }
 
     private void refresh() {
@@ -888,8 +876,7 @@ public final class SocRegistersView extends ViewPart {
         if (targets.size() > 64) { status.setText("Refresh is limited to 64 watches. Remove some watches first."); return; }
         DebugTarget target = debugTarget();
         if (target == null) {
-            status.setText("No unambiguous native GDB session. Start Zephyr Debug, or select a suspended "
-                    + "frame in Debug when multiple targets are present.");
+            status.setText(debugResolution + " No peripheral registers were read.");
             return;
         }
         DsfSession session = target.session();
@@ -972,6 +959,11 @@ public final class SocRegistersView extends ViewPart {
                             if (suspended.isEmpty()) {
                                 finish(request, "Target is running. Suspend it in Debug; "
                                         + "the register explorer will not halt firmware automatically.");
+                                return;
+                            }
+                            if (!DebugSessionSelection.uniqueHaltedThread(suspended.size())) {
+                                finish(request, "Ambiguous halted GDB threads; select the exact suspended "
+                                        + "thread or frame in Debug. No peripheral registers were read.");
                                 return;
                             }
                             readFromThreads(session, stack, run, expressions,
