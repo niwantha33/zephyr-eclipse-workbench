@@ -53,6 +53,15 @@ public final class ZephyrFlashShortcut extends ZephyrDebugShortcut {
         copy.setAttribute(ZephyrLaunchDelegate.PROJECT, project.getName());
         copy.setAttribute(ZephyrLaunchDelegate.ACTION, "flash");
         copy.setAttribute(ZephyrLaunchDelegate.DEBUG_AFTER_FLASH, debugAfterFlash);
+        try {
+            // Pin the profile chosen when Flash was clicked, before Eclipse queues the launch.
+            copy.setAttribute(ZephyrLaunchDelegate.SELECTED_PROFILE,
+                    ProjectContext.profileIdentity(ProjectContext.settings(project)));
+        } catch (Exception error) {
+            throw new org.eclipse.core.runtime.CoreException(new org.eclipse.core.runtime.Status(
+                    org.eclipse.core.runtime.IStatus.ERROR, Activator.ID,
+                    "Cannot pin selected Flash profile: " + error.getMessage(), error));
+        }
         copy.setAttribute(org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.ATTR_BUILD_BEFORE_LAUNCH,
                 org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.BUILD_BEFORE_LAUNCH_DISABLED);
         copy.setMappedResources(new IResource[] {project});
