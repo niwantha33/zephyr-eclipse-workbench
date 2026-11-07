@@ -113,7 +113,7 @@ class TraceRegressionHarnessTests(unittest.TestCase):
         timeline = thread_timeline.build_intervals(trace)
         self.assertTrue(timeline.incomplete)
         self.assertEqual([(r.start_ns, r.end_ns, r.state) for r in timeline.intervals],
-                         [(100, 300, "Running")])
+                         [(100, 300, "Running"), (300, 400, "Unknown")])
         cpu = cpu_analysis.account(trace, idle_thread_id="idle")
         self.assertEqual(cpu["status"], "unavailable")
         self.assertIsNone(cpu["cpu_busy_percent"])
