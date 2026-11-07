@@ -39,11 +39,20 @@ public final class ZephyrFlashShortcut extends ZephyrDebugShortcut {
         var type = manager.getLaunchConfigurationType(ZephyrLaunchDelegate.TYPE);
         if (type == null) throw new org.eclipse.core.runtime.CoreException(new org.eclipse.core.runtime.Status(
                 org.eclipse.core.runtime.IStatus.ERROR, Activator.ID, "Zephyr launch extension is not installed."));
+        final String targetIdentity;
+        try {
+            targetIdentity = ProjectContext.profileIdentity(ProjectContext.settings(project));
+        } catch (Exception error) {
+            throw new org.eclipse.core.runtime.CoreException(new org.eclipse.core.runtime.Status(
+                    org.eclipse.core.runtime.IStatus.ERROR, Activator.ID,
+                    "Cannot determine selected Flash profile: " + error.getMessage(), error));
+        }
         ILaunchConfiguration config = null;
         for (var candidate : manager.getLaunchConfigurations(type)) {
             if (project.getName().equals(candidate.getAttribute(ZephyrLaunchDelegate.PROJECT, ""))
                     && "flash".equals(candidate.getAttribute(ZephyrLaunchDelegate.ACTION, ""))
-                    && debugAfterFlash == candidate.getAttribute(ZephyrLaunchDelegate.DEBUG_AFTER_FLASH, false)) {
+                    && debugAfterFlash == candidate.getAttribute(ZephyrLaunchDelegate.DEBUG_AFTER_FLASH, false)
+                    && targetIdentity.equals(candidate.getAttribute(ZephyrLaunchDelegate.SELECTED_PROFILE, ""))) {
                 config = candidate;
                 break;
             }
@@ -53,15 +62,9 @@ public final class ZephyrFlashShortcut extends ZephyrDebugShortcut {
         copy.setAttribute(ZephyrLaunchDelegate.PROJECT, project.getName());
         copy.setAttribute(ZephyrLaunchDelegate.ACTION, "flash");
         copy.setAttribute(ZephyrLaunchDelegate.DEBUG_AFTER_FLASH, debugAfterFlash);
-        try {
-            // Pin the profile chosen when Flash was clicked, before Eclipse queues the launch.
-            copy.setAttribute(ZephyrLaunchDelegate.SELECTED_PROFILE,
-                    ProjectContext.profileIdentity(ProjectContext.settings(project)));
-        } catch (Exception error) {
-            throw new org.eclipse.core.runtime.CoreException(new org.eclipse.core.runtime.Status(
-                    org.eclipse.core.runtime.IStatus.ERROR, Activator.ID,
-                    "Cannot pin selected Flash profile: " + error.getMessage(), error));
-        }
+        // Each profile has a separate saved launch configuration, so a queued launch
+        // cannot inherit another profile's later selection.
+        copy.setAttribute(ZephyrLaunchDelegate.SELECTED_PROFILE, targetIdentity);
         copy.setAttribute(org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.ATTR_BUILD_BEFORE_LAUNCH,
                 org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants.BUILD_BEFORE_LAUNCH_DISABLED);
         copy.setMappedResources(new IResource[] {project});
