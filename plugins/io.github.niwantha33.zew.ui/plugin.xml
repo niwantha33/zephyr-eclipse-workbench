@@ -200,6 +200,7 @@
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.traceConsole" name="Open Debug Trace Console" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.liveTraceStreaming" name="Start Live Trace (not yet available)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.threadTimeline" name="Open Zephyr Thread Timeline" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.contentionReport" name="Open Zephyr Contention Report" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tracepointPlot" name="Open Zephyr Tracepoint Plot" categoryId="io.github.niwantha33.zew.commands"/>
@@ -248,6 +249,7 @@
       </activeWhen>
     </handler>
     <handler commandId="io.github.niwantha33.zew.traceConsole" class="io.github.niwantha33.zew.ui.ZephyrTraceConsoleHandler"/>
+    <handler commandId="io.github.niwantha33.zew.liveTraceStreaming" class="io.github.niwantha33.zew.ui.LiveTraceStreamingHandler"/>
     <handler commandId="io.github.niwantha33.zew.threadTimeline" class="io.github.niwantha33.zew.ui.ThreadTimelineHandler"/>
     <handler commandId="io.github.niwantha33.zew.contentionReport" class="io.github.niwantha33.zew.ui.ZephyrContentionHandler"/>
     <handler commandId="io.github.niwantha33.zew.tracepointPlot" class="io.github.niwantha33.zew.ui.TracepointPlotHandler"/>
@@ -316,6 +318,7 @@
         </menu>
         <menu id="io.github.niwantha33.zew.menu.capture" label="Capture &amp; Analyse">
           <command commandId="io.github.niwantha33.zew.traceConsole" label="Debug Trace Console..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.liveTraceStreaming" label="Start Live Trace (not yet available)" style="push"/>
           <command commandId="io.github.niwantha33.zew.threadTimeline" label="Zephyr Thread Timeline..." style="push"/>
           <command commandId="io.github.niwantha33.zew.contentionReport" label="Zephyr Contention Report..." style="push"/>
           <command commandId="io.github.niwantha33.zew.tracepointPlot" label="Zephyr Tracepoint Plot..." style="push"/>
