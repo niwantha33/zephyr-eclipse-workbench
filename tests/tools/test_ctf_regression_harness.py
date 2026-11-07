@@ -38,21 +38,21 @@ FILES = (
 MODULE_FEATURES = {
     "analyze_trace": "Offline CTF summary",
     "capture_snapshot": "RAM CTF snapshot capture",
-    "contention_detector": "Contention report",
-    "contention_report": "Contention report",
+    "contention_detector": "Priority inversion detection",
+    "contention_report": "Long resource contention detection",
     "coredump_offline": "Offline core-dump assessment",
-    "cpu_analysis": "CPU load",
+    "cpu_analysis": "CPU load view",
     "investigation": "Offline investigation report",
-    "memory_profile_report": "Memory profile",
-    "memory_profiler": "Memory profile",
+    "memory_profile_report": "Memory allocation profiling",
+    "memory_profiler": "Memory allocation profiling",
     "semantic_trace": "CTF semantic normalization",
     "serial_console": "Debug serial console",
     "thread_event_log": "Thread event log",
-    "thread_timeline": "Thread timeline",
+    "thread_timeline": "Thread state timeline",
     "timing_analysis": "Timing analysis",
     "trace_compass_bridge": "Trace Compass handoff",
-    "tracepoint_config": "Tracepoint plot",
-    "tracepoint_samples": "Tracepoint plot",
+    "tracepoint_config": "Custom tracepoint plotting",
+    "tracepoint_samples": "Custom tracepoint plotting",
 }
 
 
@@ -170,7 +170,8 @@ class TraceRegressionHarnessTests(unittest.TestCase):
                          "Add every new trace-analysis Python module to MODULE_FEATURES")
         markdown = CAPABILITIES.read_text(encoding="utf-8")
         rows = [line for line in markdown.splitlines()
-                if line.startswith("| ") and not line.startswith("|---")]
+                if line.startswith("| ") and not line.startswith("|---")
+                and not line.startswith("| ---")]
         header = [c.strip() for c in rows[0].strip("|").split("|")]
         self.assertEqual(header, [
             "Feature", "Status (Implemented / Partial / Not implemented)", "Data source",
@@ -179,12 +180,18 @@ class TraceRegressionHarnessTests(unittest.TestCase):
         self.assertTrue(all(len(row) == 5 for row in entries))
         names = [row[0] for row in entries]
         self.assertEqual(len(names), len(set(names)), "No duplicate feature rows")
-        self.assertEqual(set(names), set(MODULE_FEATURES.values()) | {"Live CTF streaming"})
+        self.assertEqual(set(names), set(MODULE_FEATURES.values()) | {
+            "Live streaming", "Custom trace event injection",
+            "Hardware validation breadth", "Licensing model", "Runs inside the IDE",
+        })
         self.assertTrue(all(row[1] in {"Implemented", "Partial", "Not implemented"}
                             and row[2] and row[3] and row[4] == "No" for row in entries),
                         "No feature may acquire an untested hardware Yes claim")
-        self.assertEqual(next(row[1] for row in entries if row[0] == "Live CTF streaming"),
+        self.assertEqual(next(row[1] for row in entries if row[0] == "Live streaming"),
                          "Not implemented")
+        memory_status = next(row[1] for row in entries if row[0] == "Memory allocation profiling")
+        comparison = (ROOT / "docs/TRACEALYZER_COMPARISON.md").read_text(encoding="utf-8")
+        self.assertIn(f"| Memory allocation profiling | {memory_status};", comparison)
 
     def test_single_source_of_truth_is_cross_referenced(self):
         doc = CAPABILITIES.read_text(encoding="utf-8")
