@@ -186,7 +186,15 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
                 throw new IOException("Board or build configuration changed during preparation; Flash cancelled.");
             var plan = TargetOperations.prepare(
                     ProjectContext.buildDirectory(project, settings), board, "flash", "");
-            io.github.niwantha33.zew.core.BuildConfiguration.fromId(buildConfiguration).verify(plan.buildDirectory());
+            // The just-completed builder verifies named Kconfig and compiler macros.
+            // Verify that exact profile again before starting a physical flash.
+            String namedId = settings.getProperty("zew.profileId", "");
+            if (namedId.isBlank())
+                io.github.niwantha33.zew.core.BuildConfiguration
+                        .fromId(settings.getProperty("zew.buildConfiguration")).verify(plan.buildDirectory());
+            else
+                io.github.niwantha33.zew.core.BuildProfile.read(
+                        project.getLocation().toFile().toPath(), namedId).verify(plan.buildDirectory());
             plan = OpenOcdFlashPreparation.prepare(plan, settings, monitor, stream::println);
             var command = new ArrayList<>(plan.command(settings.getProperty("python")));
             if (EspressifFlashSafety.isEsp32Runner(plan.buildDirectory())) {
