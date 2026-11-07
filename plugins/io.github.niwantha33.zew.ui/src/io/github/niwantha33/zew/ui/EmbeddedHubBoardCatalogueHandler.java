@@ -10,10 +10,11 @@ import org.eclipse.ui.handlers.HandlerUtil;
 public final class EmbeddedHubBoardCatalogueHandler extends AbstractHandler {
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
         try {
+            // Capture selection before showView potentially transfers Eclipse focus.
+            var project = SelectedProject.from(event);
             var view = (EmbeddedHubBoardCatalogueView) HandlerUtil
                     .getActiveWorkbenchWindowChecked(event).getActivePage()
                     .showView(EmbeddedHubBoardCatalogueView.ID);
-            var project = SelectedProject.from(event);
             if (project != null && ZephyrProjectLifecycle.canInspect(project))
                 view.displayProject(project);
         } catch (Exception error) {
