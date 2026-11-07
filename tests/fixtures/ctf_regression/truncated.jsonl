@@ -1,0 +1,5 @@
+{"kind":"event","stream":0,"name":"thread_switched_in","timestamp_ns":100,"thread_id":"worker","thread_name":"worker","priority":"3"}
+{"kind":"event","stream":0,"name":"thread_switched_out","timestamp_ns":300,"thread_id":"worker","thread_name":"worker","priority":"3"}
+{"kind":"event","stream":0,"name":"heap_sys_k_malloc_exit","timestamp_ns":350,"id":"heap0","ret":"0x120","size_bytes":32}
+{"kind":"event","stream":0,"name":"thread_switched_in","timestamp_ns":400,"thread_id":"worker","thread_name":"worker","priority":"3"}
+{"fixture_decoder_error":"truncated CTF packet while advancing the decoder"}

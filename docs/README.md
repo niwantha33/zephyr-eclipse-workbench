@@ -85,3 +85,5 @@ using a report to assess current implementation.
 - [Build report](reports/BUILD_REPORT.md)
 - [Tools build report](reports/TOOLS_BUILD_REPORT.md)
 - [Update build report](reports/UPDATE_BUILD_REPORT.md)
+
+Trace-analysis support and validation claims are governed by the [single capability table](TRACE_ANALYSIS_CAPABILITIES.md).

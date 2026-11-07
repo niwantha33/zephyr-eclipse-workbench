@@ -88,3 +88,5 @@ References:
 - [Trace Compass downloads and Eclipse plug-ins](https://eclipse.dev/tracecompass/download.html)
 - [Trace Compass data-driven analysis](https://help.eclipse.org/latest/topic/org.eclipse.tracecompass.doc.user/doc/Data-driven-analysis.html)
 - [Tracealyzer for Zephyr](https://percepio.com/tracealyzer/tracealyzer-for-zephyr/)
+
+For the **current** implementation and physical-hardware validation boundaries, consult the [trace-analysis capability table](TRACE_ANALYSIS_CAPABILITIES.md) as the single source of truth; roadmap items are not proof of support.
