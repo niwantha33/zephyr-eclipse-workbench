@@ -925,8 +925,10 @@ public final class SocRegistersView extends ViewPart {
                     }
                     return;
                 }
-                var thread = DMContexts.getAncestorOfType(selected, IProcesses.IThreadDMContext.class);
-                if (thread instanceof IRunControl.IExecutionDMContext execution) {
+                var execution = DMContexts.getAncestorOfType(
+                        selected, IRunControl.IExecutionDMContext.class);
+                if (execution != null
+                        && !(execution instanceof IRunControl.IContainerDMContext)) {
                     if (!run.isSuspended(execution)) {
                         finish(request, "Selected debug thread is running; halt it before Refresh.");
                     } else {
