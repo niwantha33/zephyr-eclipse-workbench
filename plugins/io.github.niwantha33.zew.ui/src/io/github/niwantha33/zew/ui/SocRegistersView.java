@@ -833,6 +833,27 @@ public final class SocRegistersView extends ViewPart {
 
     private DebugTarget debugTarget() {
         IDMContext selected = debugContext();
+        var decision = DebugSessionSelection.choose(selectedProjectName,
+                selected == null ? null : selected.getSessionId(), zephyrCandidates());
+        if (decision.state() != DebugSessionSelection.State.RESOLVED) {
+            debugResolution = switch (decision.state()) {
+                case AMBIGUOUS -> "Ambiguous native GDB sessions; select one halted thread/frame.";
+                case FOREIGN_PROJECT -> "Unresolved: selected debug frame belongs to another Zephyr project.";
+                default -> "Unresolved: no matching active Zephyr GDB session.";
+            };
+            return null;
+        }
+        DsfSession session = DsfSession.getSession(decision.sessionId());
+        if (session == null) {
+            debugResolution = "Unresolved: matching GDB session has ended.";
+            return null;
+        }
+        debugResolution = "Native GDB session " + session.getId() + " selected.";
+        return new DebugTarget(session, selected);
+    }
+
+    /** Inventory only project-labelled live DSF GDB sessions; no register access. */
+    private List<DebugSessionSelection.Candidate> zephyrCandidates() {
         var candidates = new ArrayList<DebugSessionSelection.Candidate>();
         for (var launch : DebugPlugin.getDefault().getLaunchManager().getLaunches()) {
             if (!(launch instanceof GdbLaunch gdb) || launch.isTerminated()
@@ -849,23 +870,26 @@ public final class SocRegistersView extends ViewPart {
                 // Launch metadata without a proven project is unusable here.
             }
         }
-        var decision = DebugSessionSelection.choose(selectedProjectName,
-                selected == null ? null : selected.getSessionId(), candidates);
-        if (decision.state() != DebugSessionSelection.State.RESOLVED) {
-            debugResolution = switch (decision.state()) {
-                case AMBIGUOUS -> "Ambiguous native GDB sessions; select one halted thread/frame.";
-                case FOREIGN_PROJECT -> "Unresolved: selected debug frame belongs to another Zephyr project.";
-                default -> "Unresolved: no matching active Zephyr GDB session.";
-            };
-            return null;
+        return candidates;
+    }
+
+    /**
+     * Keep the existing installed-Eclipse remote-debug smoke contract intact.
+     * This helper only identifies a uniquely project-matching active launch;
+     * it uses the same fail-closed policy as the real context resolution.
+     * It is NOT a second register-read path.
+     */
+    private GdbLaunch uniqueZephyrLaunch() {
+        var decision = DebugSessionSelection.choose(selectedProjectName, null, zephyrCandidates());
+        if (decision.state() != DebugSessionSelection.State.RESOLVED) return null;
+        for (var launch : DebugPlugin.getDefault().getLaunchManager().getLaunches()) {
+            if (launch instanceof GdbLaunch gdb && !launch.isTerminated()
+                    && gdb.getSession() != null
+                    && DsfSession.isSessionActive(gdb.getSession().getId())
+                    && decision.sessionId().equals(gdb.getSession().getId()))
+                return gdb;
         }
-        DsfSession session = DsfSession.getSession(decision.sessionId());
-        if (session == null) {
-            debugResolution = "Unresolved: matching GDB session has ended.";
-            return null;
-        }
-        debugResolution = "Native GDB session " + session.getId() + " selected.";
-        return new DebugTarget(session, selected);
+        return null;
     }
 
     private void refresh() {
