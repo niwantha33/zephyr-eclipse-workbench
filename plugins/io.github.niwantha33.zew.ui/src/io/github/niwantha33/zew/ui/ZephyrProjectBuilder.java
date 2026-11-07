@@ -60,6 +60,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                         || path.startsWith("dts/") || path.startsWith("modules/")
                         || path.equals("prj.conf") || path.equals("CMakeLists.txt")
                         || path.equals("Kconfig") || (path.equals(".zew/project.properties") || path.equals(".zew/project.json"))
+                        || path.startsWith(".zew/profiles/")
                         || path.endsWith(".overlay") || path.endsWith(".conf"))) changed[0] = true;
             return !changed[0];
         });
