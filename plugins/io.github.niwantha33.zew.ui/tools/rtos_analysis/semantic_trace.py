@@ -70,6 +70,9 @@ class SemanticTrace:
     # Preserves non-event decoder messages (including reported loss) for
     # existing evidence-qualified analysis without changing its API.
     raw_records: list[dict] = field(default_factory=list)
+    # Loss notifications are evidence for memory-profile completeness, but
+    # must not silently change existing RTOS analysis output contracts.
+    loss_reported: bool = False
     tracepoint_sample_counts: dict[str, int] = field(default_factory=dict)
     missing_tracepoints: list[str] = field(default_factory=list)
     sample_errors: list[str] = field(default_factory=list)
@@ -391,10 +394,9 @@ class SemanticTraceParser:
                     trace.raw_records.append(raw)
                     if raw.get("kind") in ("discarded_events", "discarded_packets"):
                         # These are loss notifications, not CTF events.
-                        # Byte totals/imbalance cannot be trusted after loss.
-                        trace.incomplete = True
-                        if not trace.error:
-                            trace.error = "CTF discarded events or packets were reported"
+                        # Keep their original raw-record evidence for existing
+                        # analyzers. Memory profiling separately checks loss.
+                        trace.loss_reported = True
                         continue
                     name = _text(raw.get("name"))
                     simple_name = name.rsplit(":", 1)[-1]
