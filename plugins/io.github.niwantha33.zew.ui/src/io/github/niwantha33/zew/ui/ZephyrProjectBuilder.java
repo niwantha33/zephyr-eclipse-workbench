@@ -128,6 +128,11 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             Path project = getProject().getLocation().toFile().toPath().toRealPath();
             String board = settings.getProperty("board");
             var configuration = io.github.niwantha33.zew.core.BuildConfiguration.fromId(settings.getProperty("zew.buildConfiguration"));
+            String namedId = settings.getProperty("zew.profileId", "");
+            var namedProfile = namedId.isBlank() ? null
+                    : io.github.niwantha33.zew.core.BuildProfile.read(project, namedId);
+            String profileLabel = namedProfile == null ? configuration.label() : namedProfile.label();
+            String profileIdentity = namedProfile == null ? configuration.id() : "profile-" + namedProfile.id();
             Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
             if (expectedBuild != null && !buildDirectory.toAbsolutePath().normalize().equals(Path.of(expectedBuild)))
                 throw new java.io.IOException("The build profile changed while investigation was queued. Select the current build and retry.");
@@ -154,7 +159,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             else command.addAll(List.of("--board", board, WestCommands.cmakePath(paths.application()), "--", "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON",
                     "-DCMAKE_MAKE_PROGRAM:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("tools.ninja")),
                     "-DPython3_EXECUTABLE:FILEPATH=" + WestCommands.cmakePath(settings.getProperty("python"))));
-            if (!clean) command.addAll(configuration.cmakeArguments());
+            if (!clean) command.addAll(namedProfile == null ? configuration.cmakeArguments() : namedProfile.cmakeArguments(project));
             // Explicit extra overlays are opt-in. With no selection file,
             // preserve Zephyr's automatic board/SoC/app.overlay discovery and
             // all existing project CMake-cache overrides unchanged.
@@ -187,7 +192,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 }
             }
             stream.println("Workbench " + Activator.getDefault().getBundle().getVersion() + " | " + getProject().getName());
-            stream.println("Exact board target: " + board + " | configuration: " + configuration.label() + " | independent output: " + buildDirectory);
+            stream.println("Exact board target: " + board + " | configuration: " + profileLabel + " | independent output: " + buildDirectory);
             monitor.setTaskName(clean ? "Clean Zephyr project" : "Build Zephyr project");
             BuildDiagnostics.clear(getProject());
             var runner = new ProcessRunner();
@@ -197,7 +202,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             Path buildLog = BuildFailureLogs.create(project, buildDirectory);
             stream.println("Complete build log: " + buildLog);
             try (var savedLog = Files.newBufferedWriter(buildLog, StandardCharsets.UTF_8)) {
-                String identity = "Board: " + board + " | profile: " + configuration.label()
+                String identity = "Board: " + board + " | profile: " + profileLabel
                     + " | build: " + buildDirectory;
                 savedLog.write(identity);
                 savedLog.newLine();
@@ -295,7 +300,8 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 stage[0] = "Verify configured firmware outputs";
                 if (!clean) {
                     BuildArtifacts.verify(buildDirectory);
-                    configuration.verify(buildDirectory);
+                    if (namedProfile == null) configuration.verify(buildDirectory);
+                    else namedProfile.verify(buildDirectory);
                 }
                 if (!clean) {
                     Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
@@ -306,7 +312,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     // retroactively claim the firmware build failed.
                     try {
                         var receipt = ConfigurationEvidenceReceipt.capture(project,
-                                buildDirectory, board, configuration.id());
+                                buildDirectory, board, profileIdentity);
                         stream.println("Configuration provenance: " + receipt.state()
                                 + " — " + receipt.detail());
                     } catch (java.io.IOException receiptError) {
