@@ -181,6 +181,10 @@
           name="Zephyr YAML Structure (Read-only)"
           class="io.github.niwantha33.zew.ui.YamlStructureView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.embeddedHubBoards"
+          name="EmbeddedHub Board Discovery"
+          class="io.github.niwantha33.zew.ui.EmbeddedHubBoardCatalogueView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.configurationHome"
           name="Zephyr Configuration Studio"
           class="io.github.niwantha33.zew.ui.ConfigurationHomeView"
@@ -208,6 +212,7 @@
     <command id="io.github.niwantha33.zew.snapshotProject" name="Snapshot Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.verifyProject" name="Verify Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.embeddedHubBoards" name="Open EmbeddedHub Board Discovery" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.traceConsole" name="Open Debug Trace Console" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.liveTraceStreaming" name="Start Live Trace (not yet available)" categoryId="io.github.niwantha33.zew.commands"/>
@@ -249,6 +254,7 @@
     <handler commandId="io.github.niwantha33.zew.snapshotProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.verifyProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.planProjectUpgrade" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
+    <handler commandId="io.github.niwantha33.zew.embeddedHubBoards" class="io.github.niwantha33.zew.ui.EmbeddedHubBoardCatalogueHandler"/>
     <handler commandId="io.github.niwantha33.zew.configurationStudio" class="io.github.niwantha33.zew.ui.ConfigurationStudioHandler"/>
     <handler commandId="org.eclipse.ui.project.buildProject" class="io.github.niwantha33.zew.ui.ZephyrBuildHandler">
       <activeWhen>
@@ -305,6 +311,10 @@
           <command commandId="io.github.niwantha33.zew.snapshotProject" label="Snapshot Project Environment..." style="push"/>
           <command commandId="io.github.niwantha33.zew.verifyProject" label="Verify Project Environment..." style="push"/>
           <command commandId="io.github.niwantha33.zew.planProjectUpgrade" label="Preview Upgrade Using Another Setup..." style="push"/>
+        </menu>
+        <menu id="io.github.niwantha33.zew.menu.ecosystem" label="EmbeddedHub">
+          <command commandId="io.github.niwantha33.zew.embeddedHubBoards"
+                   label="Board Discovery (Local Zephyr Catalogue)..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.build" label="Configure &amp; Build">
           <command commandId="io.github.niwantha33.zew.investigateBuildFailure" label="Investigate Build Failure…" style="push"/>
