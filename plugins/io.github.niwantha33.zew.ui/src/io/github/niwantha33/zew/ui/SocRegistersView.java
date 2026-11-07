@@ -18,12 +18,17 @@ import org.eclipse.cdt.dsf.datamodel.IDMContext;
 import org.eclipse.cdt.dsf.debug.service.IExpressions;
 import org.eclipse.cdt.dsf.debug.service.IFormattedValues;
 import org.eclipse.cdt.dsf.debug.service.IRunControl;
+import org.eclipse.cdt.dsf.debug.service.IProcesses;
+import org.eclipse.cdt.dsf.debug.service.IStack;
+import org.eclipse.cdt.dsf.gdb.launching.GdbLaunch;
+import org.eclipse.cdt.dsf.gdb.service.IGDBControl;
 import org.eclipse.cdt.dsf.debug.service.ICachingService;
 import org.eclipse.cdt.dsf.service.DsfServicesTracker;
 import org.eclipse.cdt.dsf.service.DsfSession;
 import org.eclipse.cdt.dsf.service.DsfServiceEventHandler;
 import org.eclipse.cdt.dsf.ui.viewmodel.datamodel.IDMVMContext;
 import org.eclipse.core.runtime.IAdaptable;
+import org.eclipse.debug.core.DebugPlugin;
 import org.eclipse.debug.ui.DebugUITools;
 import org.eclipse.debug.ui.contexts.IDebugContextListener;
 import org.eclipse.jface.viewers.IStructuredSelection;
@@ -507,13 +512,17 @@ public final class SocRegistersView extends ViewPart {
     private void contextChanged() {
         quietUntil = System.currentTimeMillis() + 1500;
         generation++; busy = false; values.clear(); errors.clear(); render();
-        var context = debugContext();
-        var selectedSession = context == null ? null : DsfSession.getSession(context.getSessionId());
+        var target = debugTarget();
+        var selectedSession = target == null ? null : target.session();
         listenTo(selectedSession);
         contextInfo.setText(selectedSession == null
-                ? "No selected DSF frame. Select a suspended stack frame in Debug to read values."
-                : "Native debug session " + selectedSession.getId() + "; selected context: "
-                    + context.getClass().getSimpleName() + ". Reads require a halted execution context.");
+                ? "No unambiguous native debug session. Start Zephyr Debug or select a stack frame; "
+                    + "multiple active targets require an explicit selection."
+                : "Native debug session " + selectedSession.getId()
+                    + (target.context() == null
+                        ? "; no frame selected — Refresh resolves a suspended GDB thread without halting the CPU."
+                        : "; selected context: " + target.context().getClass().getSimpleName()
+                            + ". Refresh uses its suspended frame/thread."));
         contextInfo.getParent().layout(true, true);
         status.setText(device == null ? discoveryExplanation
                 : "Exact SVD model " + device.name()
@@ -649,9 +658,8 @@ public final class SocRegistersView extends ViewPart {
     }
     private void toggleLiveWatch() {
         if (liveWatch) { stopLiveWatch(); status.setText("Live Watch stopped."); return; }
-        if (device == null || watches.isEmpty() || watches.size() > 8 || debugContext() == null
-                || listenedSession == null) {
-            status.setText("Load an exact SVD; watch 1–8 safe registers; select a suspended DSF stack frame.");
+        if (device == null || watches.isEmpty() || watches.size() > 8 || debugTarget() == null) {
+            status.setText("Load an exact SVD; watch 1–8 safe registers; start a unique native GDB session and halt the target.");
             return;
         }
         liveWatch = true;
@@ -672,8 +680,7 @@ public final class SocRegistersView extends ViewPart {
                 status.setText("Live Watch stopped: watch count outside 1–8.");
                 return;
             }
-            if (!busy && listenedSession != null && debugContext() != null
-                    && System.currentTimeMillis() >= quietUntil) refresh();
+            if (!busy && debugTarget() != null && System.currentTimeMillis() >= quietUntil) refresh();
             scheduleWatch(epoch);
         });
     }
@@ -811,6 +818,60 @@ public final class SocRegistersView extends ViewPart {
         }
         return null;
     }
+
+    /** A selected CDT frame wins; otherwise only a unique Zephyr GDB launch may be inferred. */
+    private record DebugTarget(DsfSession session, IDMContext context) {}
+
+    private DebugTarget debugTarget() {
+        IDMContext selected = debugContext();
+        if (selected != null) {
+            DsfSession session = DsfSession.getSession(selected.getSessionId());
+            if (session != null && (selectedProjectName == null
+                    || launchMatchesProject(session, selectedProjectName))) {
+                return new DebugTarget(session, selected);
+            }
+        }
+        GdbLaunch launch = uniqueZephyrLaunch();
+        return launch == null ? null : new DebugTarget(launch.getSession(), null);
+    }
+
+    private static boolean launchMatchesProject(DsfSession session, String projectName) {
+        for (var launch : DebugPlugin.getDefault().getLaunchManager().getLaunches()) {
+            if (!(launch instanceof GdbLaunch gdb) || launch.isTerminated()
+                    || gdb.getSession() != session) continue;
+            try {
+                return projectName.equals(launch.getLaunchConfiguration()
+                        .getAttribute(ZephyrLaunchDelegate.PROJECT, ""));
+            } catch (org.eclipse.core.runtime.CoreException unavailable) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Never take an arbitrary GDB session when several targets are attached.
+     * The project filter also avoids reading a different chip with this view's SVD.
+     */
+    private GdbLaunch uniqueZephyrLaunch() {
+        GdbLaunch unique = null;
+        for (var launch : DebugPlugin.getDefault().getLaunchManager().getLaunches()) {
+            if (!(launch instanceof GdbLaunch gdb) || launch.isTerminated()) continue;
+            try {
+                String project = launch.getLaunchConfiguration()
+                        .getAttribute(ZephyrLaunchDelegate.PROJECT, "");
+                if (project.isBlank() || (selectedProjectName != null
+                        && !selectedProjectName.equals(project))) continue;
+                if (!DsfSession.isSessionActive(gdb.getSession().getId())) continue;
+                if (unique != null) return null; // ambiguous; require explicit Debug selection
+                unique = gdb;
+            } catch (org.eclipse.core.runtime.CoreException unavailable) {
+                // Not a usable Zephyr launch.
+            }
+        }
+        return unique;
+    }
+
     private void refresh() {
         if (device == null) {
             status.setText("Load the exact chip's vendor SVD first. Native CPU registers do not require an SVD; use the Registers view.");
@@ -818,29 +879,146 @@ public final class SocRegistersView extends ViewPart {
         }
         if (busy) { status.setText("A register refresh is already in progress."); return; }
         var chosen = selected();
-        var targets = device.registers().stream().filter(r -> watches.contains(r.key()) || r.equals(chosen)).toList();
+        var targets = device.registers().stream()
+                .filter(r -> watches.contains(r.key()) || r.equals(chosen)).toList();
         if (targets.isEmpty()) { status.setText("Select a register or add a watch first."); return; }
         if (targets.size() > 64) { status.setText("Refresh is limited to 64 watches. Remove some watches first."); return; }
-        var context = debugContext();
-        var session = context == null ? null : DsfSession.getSession(context.getSessionId());
-        if (session == null) { status.setText("Select a suspended stack frame in the native Debug view."); return; }
-        busy = true; long request = ++generation;
-        status.setText("Reading selected register and watches…");
+        DebugTarget target = debugTarget();
+        if (target == null) {
+            status.setText("No unambiguous native GDB session. Start Zephyr Debug, or select a suspended "
+                    + "frame in Debug when multiple targets are present.");
+            return;
+        }
+        DsfSession session = target.session();
+        listenTo(session);
+        busy = true;
+        long request = ++generation;
+        status.setText("Resolving suspended GDB frame for read-only register snapshot…");
         try {
-            session.getExecutor().execute(() -> {
-                var tracker = new DsfServicesTracker(Activator.getDefault().getBundle().getBundleContext(), session.getId());
-                var run = tracker.getService(IRunControl.class);
-                var expressions = tracker.getService(IExpressions.class);
-                var execution = DMContexts.getAncestorOfType(context, IRunControl.IExecutionDMContext.class);
-                if (run == null || expressions == null || execution == null || !run.isSuspended(execution)) {
-                    tracker.dispose(); finish(request, "Target must be halted; select a suspended stack frame."); return;
+            session.getExecutor().execute(() -> resolveReadFrame(session, target.context(), targets, request));
+        } catch (RejectedExecutionException ended) {
+            finish(request, "Debug session ended before register refresh.");
+        }
+    }
+
+    /** DSF services and frame enumeration must run only on the session's executor. */
+    private void resolveReadFrame(DsfSession session, IDMContext selected,
+            java.util.List<Register> targets, long request) {
+        var tracker = new DsfServicesTracker(Activator.getDefault().getBundle()
+                .getBundleContext(), session.getId());
+        try {
+            var run = tracker.getService(IRunControl.class);
+            var expressions = tracker.getService(IExpressions.class);
+            var stack = tracker.getService(IStack.class);
+            if (run == null || expressions == null || stack == null) {
+                finish(request, "Native GDB run-control, expressions or stack service unavailable.");
+                return;
+            }
+            if (selected != null) {
+                var frame = DMContexts.getAncestorOfType(selected, IStack.IFrameDMContext.class);
+                if (frame != null) {
+                    var thread = DMContexts.getAncestorOfType(frame, IRunControl.IExecutionDMContext.class);
+                    if (thread == null || !run.isSuspended(thread)) {
+                        finish(request, "Selected debug frame is running; halt the target before Refresh.");
+                    } else {
+                        readInFrame(session, expressions, run, thread, frame, targets, request);
+                    }
+                    return;
                 }
-                tracker.dispose();
-                // Drop DSF expression caches so repeated reads observe the target.
-                if (expressions instanceof ICachingService cache) cache.flushCache(context);
-                readNext(session, expressions, run, execution, context, targets, 0, request);
+                var thread = DMContexts.getAncestorOfType(selected, IProcesses.IThreadDMContext.class);
+                if (thread instanceof IRunControl.IExecutionDMContext execution) {
+                    if (!run.isSuspended(execution)) {
+                        finish(request, "Selected debug thread is running; halt it before Refresh.");
+                    } else {
+                        readFromThreads(session, stack, run, expressions,
+                                java.util.List.of(execution), 0, targets, request);
+                    }
+                    return;
+                }
+            }
+            // Selecting a launch/container (or nothing) is normal in the Debug perspective.
+            // Discover the one connected inferior, then borrow a suspended thread's frame.
+            // Peripheral MMIO addresses are absolute, not local variables in that frame.
+            var control = tracker.getService(IGDBControl.class);
+            var processes = tracker.getService(IProcesses.class);
+            if (control == null || processes == null) {
+                finish(request, "Cannot enumerate native GDB threads. Select a halted stack frame.");
+                return;
+            }
+            processes.getProcessesBeingDebugged(control.getContext(),
+                    new DataRequestMonitor<IDMContext[]>(session.getExecutor(), null) {
+                @Override protected void handleCompleted() {
+                    if (request != generation || closed) return;
+                    if (!isSuccess() || getData() == null || getData().length != 1
+                            || !(getData()[0] instanceof IRunControl.IContainerDMContext container)) {
+                        finish(request, "GDB inferior is missing or ambiguous. Select a halted stack frame.");
+                        return;
+                    }
+                    run.getExecutionContexts(container,
+                            new DataRequestMonitor<IRunControl.IExecutionDMContext[]>(session.getExecutor(), null) {
+                        @Override protected void handleCompleted() {
+                            if (request != generation || closed) return;
+                            if (!isSuccess() || getData() == null) {
+                                finish(request, "Cannot enumerate GDB threads. Select a halted stack frame.");
+                                return;
+                            }
+                            var suspended = java.util.Arrays.stream(getData())
+                                    .filter(run::isSuspended).toList();
+                            if (suspended.isEmpty()) {
+                                finish(request, "Target is running. Suspend it in Debug; "
+                                        + "the register explorer will not halt firmware automatically.");
+                                return;
+                            }
+                            readFromThreads(session, stack, run, expressions,
+                                    suspended, 0, targets, request);
+                        }
+                    });
+                }
             });
-        } catch (RejectedExecutionException ex) { finish(request, "Debug session has ended."); }
+        } finally {
+            tracker.dispose();
+        }
+    }
+
+    /** A stopped multi-thread inferior may have several threads; find a usable top frame. */
+    private void readFromThreads(DsfSession session, IStack stack, IRunControl run,
+            IExpressions expressions, java.util.List<IRunControl.IExecutionDMContext> threads,
+            int index, java.util.List<Register> targets, long request) {
+        if (closed || request != generation) return;
+        if (index >= threads.size()) {
+            finish(request, "No suspended GDB thread supplies a stack frame. "
+                    + "Select a halted thread in Debug and retry.");
+            return;
+        }
+        var execution = threads.get(index);
+        if (!run.isSuspended(execution)) {
+            readFromThreads(session, stack, run, expressions, threads, index + 1, targets, request);
+            return;
+        }
+        stack.getFrames(execution, 0, 0,
+                new DataRequestMonitor<IStack.IFrameDMContext[]>(session.getExecutor(), null) {
+            @Override protected void handleCompleted() {
+                if (closed || request != generation) return;
+                if (isSuccess() && getData() != null && getData().length > 0) {
+                    readInFrame(session, expressions, run, execution, getData()[0], targets, request);
+                } else {
+                    readFromThreads(session, stack, run, expressions,
+                            threads, index + 1, targets, request);
+                }
+            }
+        });
+    }
+
+    private void readInFrame(DsfSession session, IExpressions expressions, IRunControl run,
+            IRunControl.IExecutionDMContext execution, IStack.IFrameDMContext frame,
+            java.util.List<Register> targets, long request) {
+        if (closed || request != generation) return;
+        if (!run.isSuspended(execution)) {
+            finish(request, "Target resumed while resolving its frame; no registers were read.");
+            return;
+        }
+        if (expressions instanceof ICachingService cache) cache.flushCache(frame);
+        readNext(session, expressions, run, execution, frame, targets, 0, request);
     }
     private void readNext(DsfSession session, IExpressions expressions, IRunControl run,
             IRunControl.IExecutionDMContext execution, IDMContext context, java.util.List<Register> targets,
