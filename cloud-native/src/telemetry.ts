@@ -47,8 +47,8 @@ export class PrivateBuildTelemetry {
   preview(): TelemetrySummary {
     const counts = [...this.buckets].sort(([a], [b]) => a.localeCompare(b)).map(([key, count]) => {
       const [family, sdkVersion, toolchain, compilerVersion, outcome] = key.split('|');
-      return { family: family as BuildObservation['family'], sdkVersion,
-               toolchain: toolchain as BuildObservation['toolchain'], compilerVersion,
+      return { family: family as BuildObservation['family'], sdkVersion: sdkVersion!,
+               toolchain: toolchain as BuildObservation['toolchain'], compilerVersion: compilerVersion!,
                outcome: outcome as BuildObservation['outcome'], count };
     });
     return { schemaVersion: 1, counts };

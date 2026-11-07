@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: Apache-2.0
+syntax = "proto3";
+package zew.cloud.lab.v1;
+
+// HTTPS/2 gRPC with mTLS on agent connections. Caller identity comes from
+// validated gateway authentication, never from a user-supplied protobuf field.
+service HardwareLab {
+  rpc ListBoards(ListBoardsRequest) returns (ListBoardsReply);
+  rpc Acquire(AcquireRequest) returns (LeaseReply);
+  rpc Release(LeaseRequest) returns (ReleaseReply);
+  rpc Flash(FlashRequest) returns (stream FlashEvent);
+  rpc StartDebug(StartDebugRequest) returns (DebugEndpoint);
+  rpc StreamSerial(SerialRequest) returns (stream SerialChunk);
+  rpc StopDebug(LeaseRequest) returns (ReleaseReply);
+}
+message ListBoardsRequest { string family_filter = 1; }
+message Board {
+  string board_id = 1;
+  string zephyr_board = 2;
+  string mcu_family = 3;
+  bool available = 4;
+  repeated string capabilities = 5;
+}
+message ListBoardsReply { repeated Board boards = 1; }
+message AcquireRequest { string board_id = 1; uint32 lease_seconds = 2; }
+message LeaseReply { string lease_id = 1; string board_id = 2; int64 expires_unix_ms = 3; }
+message LeaseRequest { string lease_id = 1; string board_id = 2; }
+message ReleaseReply { bool released = 1; }
+message FlashRequest {
+  string lease_id = 1;
+  string board_id = 2;
+  string artifact_sha256 = 3;
+  // Immutable server-side uploaded artifact ID; never a host filesystem path.
+  string artifact_id = 4;
+}
+message FlashEvent {
+  enum Kind { KIND_UNSPECIFIED = 0; START = 1; PROGRESS = 2; COMPLETE = 3; FAILED = 4; }
+  Kind kind = 1;
+  string message = 2;
+  uint32 progress_percent = 3;
+  int64 monotonic_event_seq = 4;
+}
+message StartDebugRequest {
+  string lease_id = 1;
+  string board_id = 2;
+  string artifact_sha256 = 3;
+  string architecture = 4;
+}
+message DebugEndpoint {
+  string debug_session_id = 1;
+  // Opaque gateway route. Never expose remote OpenOCD/GDB ports to internet.
+  string gateway_route = 2;
+  int64 expires_unix_ms = 3;
+}
+message SerialRequest {
+  string lease_id = 1;
+  string board_id = 2;
+  uint32 requested_baud = 3;
+}
+message SerialChunk {
+  bytes data = 1;
+  int64 monotonic_event_seq = 2;
+  bool overflow_before_this_chunk = 3;
+  string encoding = 4;
+}
