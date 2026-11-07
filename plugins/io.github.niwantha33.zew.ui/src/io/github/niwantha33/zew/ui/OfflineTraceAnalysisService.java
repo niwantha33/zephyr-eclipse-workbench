@@ -20,7 +20,7 @@ public final class OfflineTraceAnalysisService {
         private final ContentionResult contention;
 
         AnalysisFailure(ErrorKind kind, String message, CpuLoadResult cpu, ContentionResult contention) {
-            super(message);
+            super(bounded(message));
             this.kind = kind;
             this.cpu = cpu;
             this.contention = contention;
@@ -37,14 +37,46 @@ public final class OfflineTraceAnalysisService {
     }
 
     public record CpuThread(String name, long runningNs, BigDecimal percentage) {}
+    public enum ObservedState { SCHEDULED, READY, BLOCKED, SLEEPING, UNKNOWN }
+    /** Scheduled intervals include preempting ISR time; CPU rows exclude it. */
+    public record CpuStateInterval(String name, ObservedState state, long startNs,
+                                   long endNs, boolean scheduledIncludesIsr) {}
     public record CpuLoadResult(Path trace, Path build, String status, boolean incomplete, String reason,
                                 Long firstNs, Long lastNs, Long startNs, Long endNs,
                                 int schedulerEvents, String cpuStatus, BigDecimal cpuBusyPercent,
-                                Long unknownNs, List<CpuThread> rows, Long isrNs, BigDecimal isrPercentage) {
-        public CpuLoadResult { rows = List.copyOf(rows); }
+                                Long unknownNs, List<CpuThread> rows, Long isrNs, BigDecimal isrPercentage,
+                                List<CpuStateInterval> stateIntervals) {
+        public CpuLoadResult {
+            rows = List.copyOf(rows);
+            stateIntervals = List.copyOf(stateIntervals);
+        }
+        /** Source-compatible constructor for older saved-CTF reports and tests. */
+        public CpuLoadResult(Path trace, Path build, String status, boolean incomplete, String reason,
+                             Long firstNs, Long lastNs, Long startNs, Long endNs,
+                             int schedulerEvents, String cpuStatus, BigDecimal cpuBusyPercent,
+                             Long unknownNs, List<CpuThread> rows, Long isrNs, BigDecimal isrPercentage) {
+            this(trace, build, status, incomplete, reason, firstNs, lastNs, startNs, endNs,
+                    schedulerEvents, cpuStatus, cpuBusyPercent, unknownNs, rows,
+                    isrNs, isrPercentage, List.of());
+        }
+    }
+    /** Explicit ownership state; unknown is not represented by an invented name. */
+    public enum HolderState { KNOWN, UNKNOWN }
+    public record Holder(HolderState state, String name) {
+        public Holder {
+            if (state == null || (state == HolderState.KNOWN && (name == null || name.isBlank()))
+                    || (state == HolderState.UNKNOWN && name != null))
+                throw new IllegalArgumentException("Invalid observed holder state.");
+        }
     }
     public record ContentionFinding(String kind, String object, String waiter, String holder,
-                                    boolean holderUnknown, long durationNs, String explanation) {}
+                                    boolean holderUnknown, long durationNs, String explanation) {
+        /** Typed projection preserves the existing JSON/constructor compatibility. */
+        public Holder owner() {
+            return holderUnknown ? new Holder(HolderState.UNKNOWN, null)
+                    : new Holder(HolderState.KNOWN, holder);
+        }
+    }
     public record ContentionResult(Path trace, Path build, boolean incomplete, String reason,
                                    long thresholdUs, boolean inversionEnabled, int resourceEvents,
                                    List<ContentionFinding> findings) {
@@ -66,6 +98,8 @@ public final class OfflineTraceAnalysisService {
             throws AnalysisFailure {
         if ((startNs == null) != (endNs == null))
             throw failure(ErrorKind.MODULE_FAILED, "Both time window boundaries are required.");
+        if (startNs != null && startNs >= endNs)
+            throw failure(ErrorKind.MODULE_FAILED, "End of CPU window must be greater than start.");
         CacheKey key = key(trace, build, "cpu", startNs, endNs, 1000);
         Object cached = cache.get(key);
         CpuLoadResult result;
@@ -80,6 +114,20 @@ public final class OfflineTraceAnalysisService {
                         integer(fields, at + "running_ns"), decimal(fields, at + "percentage")));
                 if (i >= 10000) throw failure(ErrorKind.MODULE_FAILED, "CPU row limit exceeded.");
             }
+            List<CpuStateInterval> states = new ArrayList<>();
+            for (int i = 0; fields.containsKey("cpu.thread_states[" + i + "].state"); i++) {
+                if (i >= 10000) throw failure(ErrorKind.MODULE_FAILED, "CPU state interval limit exceeded.");
+                String at = "cpu.thread_states[" + i + "].";
+                final ObservedState state;
+                try {
+                    state = ObservedState.valueOf(string(fields, at + "state").toUpperCase(java.util.Locale.ROOT));
+                } catch (IllegalArgumentException invalid) {
+                    throw failure(ErrorKind.MODULE_FAILED, "Unsupported observed thread state.");
+                }
+                states.add(new CpuStateInterval(string(fields, at + "name"), state,
+                        integer(fields, at + "start_ns"), integer(fields, at + "end_ns"),
+                        booleanField(fields, at + "scheduled_includes_isr")));
+            }
             result = new CpuLoadResult(key.trace, key.build, string(fields, "status"),
                     booleanField(fields, "incomplete"), string(fields, "reason"),
                     nullableInteger(fields, "first_timestamp_ns"), nullableInteger(fields, "last_timestamp_ns"),
@@ -87,7 +135,9 @@ public final class OfflineTraceAnalysisService {
                     intField(fields, "scheduler_events"), string(fields, "cpu.status"),
                     nullableDecimal(fields, "cpu.cpu_busy_percent"),
                     nullableInteger(fields, "cpu.unknown_ns"), rows,
-                    nullableInteger(fields, "cpu.isr_ns"), nullableDecimal(fields, "cpu.isr_percentage"));
+                    nullableInteger(fields, "cpu.isr_ns"), nullableDecimal(fields, "cpu.isr_percentage"),
+                    states);
+            validateCpu(result);
             store(key, result);
         }
         if (result.incomplete()) throw new AnalysisFailure(ErrorKind.INCOMPLETE,
@@ -115,8 +165,12 @@ public final class OfflineTraceAnalysisService {
                     throw failure(ErrorKind.MODULE_FAILED, "Unknown contention finding kind.");
                 boolean unknown = booleanField(fields, at + "holder_unknown");
                 String holder = nullableString(fields, at + "holder");
-                if (unknown && holder != null && !holder.isBlank())
-                    throw failure(ErrorKind.MODULE_FAILED, "Unproven holder was supplied as a name.");
+                if (unknown && holder != null)
+                    throw failure(ErrorKind.MODULE_FAILED, "Unknown holder must have a null name.");
+                if (!unknown && (holder == null || holder.isBlank()))
+                    throw failure(ErrorKind.MODULE_FAILED, "Known holder must have an observed name.");
+                if (integer(fields, at + "duration_ns") < 0)
+                    throw failure(ErrorKind.MODULE_FAILED, "Negative contention duration.");
                 findings.add(new ContentionFinding(kind, string(fields, at + "object"),
                         string(fields, at + "waiter"), holder, unknown,
                         integer(fields, at + "duration_ns"), string(fields, at + "explanation")));
@@ -165,8 +219,8 @@ public final class OfflineTraceAnalysisService {
         try {
             json = bridge.invoke(request);
         } catch (Exception error) {
-            throw failure(ErrorKind.MODULE_FAILED, "Offline Python analysis failed (stderr/tool output): "
-                    + error.getMessage());
+            throw failure(ErrorKind.MODULE_FAILED, "Offline Python analysis failed: "
+                    + bounded(error.getMessage()));
         }
         try {
             Map<String, String> fields = new HashMap<>();
@@ -183,6 +237,81 @@ public final class OfflineTraceAnalysisService {
         } catch (IllegalArgumentException error) {
             throw failure(ErrorKind.MODULE_FAILED, "Invalid offline analysis JSON: " + error.getMessage());
         }
+    }
+
+    private static void validateCpu(CpuLoadResult result) throws AnalysisFailure {
+        if (!List.of("ok", "incomplete", "no_scheduler").contains(result.status())
+                || result.schedulerEvents() < 0
+                || ("ok".equals(result.status()) && result.schedulerEvents() == 0)
+                || ("no_scheduler".equals(result.status()) && result.schedulerEvents() != 0)
+                || ("incomplete".equals(result.status()) && !result.incomplete()))
+            throw failure(ErrorKind.MODULE_FAILED, "Inconsistent scheduler coverage status.");
+        if (!"ok".equals(result.status())) {
+            // Partial and no-scheduler reports must not advertise numerical estimates.
+            if (!result.rows().isEmpty() || result.isrPercentage() != null
+                    || !result.stateIntervals().isEmpty())
+                throw failure(ErrorKind.MODULE_FAILED, "Unavailable CPU evidence contains percentages.");
+            return;
+        }
+        if (result.incomplete() || result.startNs() == null || result.endNs() == null
+                || result.endNs() <= result.startNs()
+                || result.unknownNs() == null || result.unknownNs() < 0
+                || result.isrNs() == null || result.isrNs() < 0
+                || result.isrPercentage() == null)
+            throw failure(ErrorKind.MODULE_FAILED, "Missing exclusive CPU window evidence.");
+        long total = 0;
+        for (CpuThread row : result.rows()) {
+            if (row.runningNs() < 0 || !percentage(row.percentage()))
+                throw failure(ErrorKind.MODULE_FAILED, "Invalid observed CPU thread segment.");
+            try { total = Math.addExact(total, row.runningNs()); }
+            catch (ArithmeticException overflow) {
+                throw failure(ErrorKind.MODULE_FAILED, "CPU segment duration exceeds limits.");
+            }
+        }
+        long length;
+        try {
+            total = Math.addExact(Math.addExact(total, result.isrNs()), result.unknownNs());
+            length = Math.subtractExact(result.endNs(), result.startNs());
+        } catch (ArithmeticException overflow) {
+            throw failure(ErrorKind.MODULE_FAILED, "CPU window duration exceeds limits.");
+        }
+        if (total != length || !percentage(result.isrPercentage())
+                || (result.cpuBusyPercent() != null && !percentage(result.cpuBusyPercent())))
+            throw failure(ErrorKind.MODULE_FAILED, "Exclusive CPU segments do not cover the window.");
+        for (CpuThread row : result.rows())
+            if (!matchesObservedPercentage(row.runningNs(), length, row.percentage()))
+                throw failure(ErrorKind.MODULE_FAILED, "Thread CPU percentage disagrees with observed time.");
+        if (!matchesObservedPercentage(result.isrNs(), length, result.isrPercentage()))
+            throw failure(ErrorKind.MODULE_FAILED, "ISR CPU percentage disagrees with exclusive ISR time.");
+        for (CpuStateInterval state : result.stateIntervals()) {
+            if (state.startNs() >= state.endNs() || state.startNs() < result.startNs()
+                    || state.endNs() > result.endNs()
+                    || (state.scheduledIncludesIsr() != (state.state() == ObservedState.SCHEDULED)))
+                throw failure(ErrorKind.MODULE_FAILED, "Invalid scheduled/observed thread state boundary.");
+        }
+    }
+
+    private static boolean matchesObservedPercentage(long duration, long window, BigDecimal reported) {
+        if (window <= 0 || duration < 0 || !percentage(reported)) return false;
+        // Python's report rounds to four decimal places; tolerate its
+        // last-decimal floating-point tie without allowing false CPU shares.
+        BigDecimal expected = BigDecimal.valueOf(duration).multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(window), 4, java.math.RoundingMode.HALF_UP);
+        return expected.subtract(reported).abs().compareTo(new BigDecimal("0.0001")) <= 0;
+    }
+
+    private static boolean percentage(BigDecimal percent) {
+        return percent != null && percent.compareTo(BigDecimal.ZERO) >= 0
+                && percent.compareTo(BigDecimal.valueOf(100)) <= 0;
+    }
+
+    private static String bounded(String message) {
+        if (message == null || message.isBlank()) return "no diagnostic supplied";
+        if (message.contains("Traceback") || message.contains("\\n\\tat ")
+                || message.contains("\\n  at "))
+            return "Offline analysis module failed; no stack trace is displayed.";
+        String flat = message.replaceAll("[\\p{Cntrl}]", " ").strip();
+        return flat.length() <= 240 ? flat : flat.substring(0, 240) + "…";
     }
 
     private void store(CacheKey key, Object result) {

@@ -35,7 +35,8 @@ public final class ZephyrCpuLoadView extends ViewPart {
     private boolean settingWindow;
     private Label disclaimer, banner, status, provenance;
     private Text windowStart, windowEnd;
-    private Table table;
+    private Table table, stateTable;
+    private Label stateExplanation;
 
     @Override public void createPartControl(Composite parent) {
         parent.setLayout(new GridLayout(1, false));
@@ -86,6 +87,22 @@ public final class ZephyrCpuLoadView extends ViewPart {
             column.setWidth(header.equals("Thread Name") ? 310 : 170);
         }
         table.setVisible(false);
+        stateExplanation = new Label(parent, SWT.WRAP);
+        stateExplanation.setText("Thread states are observed intervals. Scheduled time includes ISR preemption; CPU percentages above exclude ISR time. Per-ISR identity is unavailable.");
+        stateExplanation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        stateExplanation.setVisible(false);
+        stateTable = new Table(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.V_SCROLL);
+        stateTable.setHeaderVisible(true);
+        stateTable.setLinesVisible(true);
+        var statesLayout = new GridData(SWT.FILL, SWT.FILL, true, false);
+        statesLayout.heightHint = 145;
+        stateTable.setLayoutData(statesLayout);
+        for (String heading : new String[] {"Thread", "Observed state", "From ns", "To ns"}) {
+            TableColumn col = new TableColumn(stateTable, SWT.LEFT);
+            col.setText(heading);
+            col.setWidth(heading.equals("Thread") ? 220 : 160);
+        }
+        stateTable.setVisible(false);
         apply.setData("cpu.apply", Boolean.TRUE);
         apply.addListener(SWT.Selection, e -> {}); // no startup action
         this.applyButton = apply;
@@ -151,6 +168,9 @@ public final class ZephyrCpuLoadView extends ViewPart {
         status.setText("Reading saved CTF with offline Python; no target access.");
         table.setVisible(false);
         table.removeAll();
+        stateTable.removeAll();
+        stateTable.setVisible(false);
+        stateExplanation.setVisible(false);
         showBanner(false);
         Path trace = selectedTrace, build = selectedBuild;
         OfflineTraceAnalysisService current = service;
@@ -188,6 +208,9 @@ public final class ZephyrCpuLoadView extends ViewPart {
         var model = OfflineTraceViewModels.cpu(result);
         showBanner(model.incomplete());
         table.removeAll();
+        stateTable.removeAll();
+        stateTable.setVisible(false);
+        stateExplanation.setVisible(false);
         if (result.startNs() != null && result.endNs() != null) {
             settingWindow = true;
             try {
@@ -210,6 +233,17 @@ public final class ZephyrCpuLoadView extends ViewPart {
             item.setText(new String[] {row.threadName(), row.runningUs(), row.percentage()});
         }
         table.setVisible(!model.rows().isEmpty());
+        if (!model.incomplete()) {
+            for (var interval : result.stateIntervals()) {
+                var item = new TableItem(stateTable, SWT.NONE);
+                String state = interval.state() == OfflineTraceAnalysisService.ObservedState.SCHEDULED
+                        ? "Scheduled (ISR-inclusive)" : interval.state().name();
+                item.setText(new String[] {interval.name().isBlank() ? "(unknown)" : interval.name(),
+                        state, Long.toString(interval.startNs()), Long.toString(interval.endNs())});
+            }
+            stateTable.setVisible(stateTable.getItemCount() != 0);
+            stateExplanation.setVisible(stateTable.getItemCount() != 0);
+        }
         status.setText(model.message().isBlank()
                 ? "Observed exclusive thread/ISR percentages; unknown intervals remain unassigned."
                 : model.message() + " Only observed intervals are represented.");
@@ -220,6 +254,9 @@ public final class ZephyrCpuLoadView extends ViewPart {
         if (loadJob != null) loadJob.cancel();
         table.removeAll();
         table.setVisible(false);
+        stateTable.removeAll();
+        stateTable.setVisible(false);
+        stateExplanation.setVisible(false);
         showBanner(false);
         status.setText(message);
     }

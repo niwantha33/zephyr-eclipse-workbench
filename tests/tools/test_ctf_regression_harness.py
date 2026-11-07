@@ -194,6 +194,26 @@ class TraceRegressionHarnessTests(unittest.TestCase):
         comparison = (ROOT / "docs/TRACEALYZER_COMPARISON.md").read_text(encoding="utf-8")
         self.assertIn(f"| Memory allocation profiling | {memory_status};", comparison)
 
+    def test_offline_json_adapter_and_cpu_command_are_guarded(self):
+        source = CAPABILITIES.read_text(encoding="utf-8")
+        cpu_row = next(line for line in source.splitlines()
+                       if line.startswith("| Zephyr CPU Load view |"))
+        contention_row = next(line for line in source.splitlines()
+                              if line.startswith("| Zephyr Contention Report view |"))
+        self.assertIn("offline_trace_json.py", cpu_row)
+        self.assertIn("OfflineTraceAnalysisService.java", cpu_row)
+        self.assertIn("ZephyrCpuLoadView.java", cpu_row)
+        self.assertIn("offline_trace_json.py", contention_row)
+        self.assertIn("OfflineTraceAnalysisService.java", contention_row)
+        self.assertIn("per-ISR identity cannot be determined", cpu_row)
+        ui = (ROOT / "plugins/io.github.niwantha33.zew.ui/plugin.xml").read_text(
+            encoding="utf-8")
+        self.assertIn('id="io.github.niwantha33.zew.ui.cpuLoad"', ui)
+        self.assertIn('commandId="io.github.niwantha33.zew.cpuLoad" '
+                      'label="Zephyr CPU Load (Saved CTF)..."', ui)
+        self.assertIn('commandId="io.github.niwantha33.zew.cpuLoad" '
+                      'class="io.github.niwantha33.zew.ui.ZephyrCpuLoadHandler"', ui)
+
     def test_single_source_of_truth_is_cross_referenced(self):
         doc = CAPABILITIES.read_text(encoding="utf-8")
         self.assertIn("This table is the single source of truth. Do not describe a feature "

@@ -8,6 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -140,6 +143,31 @@ public record BuildProfile(String id, String label, BuildConfiguration optimizat
                     values.getProperty("defines", ""), Files.readString(conf, StandardCharsets.UTF_8));
         } catch (IllegalArgumentException ex) {
             throw new IOException("Invalid profile " + id + ": " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Canonical SHA-256 digest of the selected profile identity, display name,
+     * optimization choice, requested C definitions, and Kconfig settings.
+     * This is an unsigned fingerprint, not proof of firmware identity or signing.
+     */
+    public String fingerprintSha256() {
+        var normalizedDefinitions = parseDefinitions(definitions).stream().sorted().toList();
+        var normalizedConfig = new java.util.TreeMap<>(parseConfig(kconfig));
+        StringBuilder canonical = new StringBuilder("ZEW-PROFILE-METADATA-1\n")
+                .append("id=").append(id).append('\n')
+                .append("name=").append(label).append('\n')
+                .append("optimization=").append(optimization.id()).append('\n');
+        for (String define : normalizedDefinitions)
+            canonical.append("D:").append(define).append('\n');
+        for (var setting : normalizedConfig.entrySet())
+            canonical.append("K:").append(setting.getKey()).append('=')
+                    .append(setting.getValue()).append('\n');
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 unavailable", impossible);
         }
     }
 

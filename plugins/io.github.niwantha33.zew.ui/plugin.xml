@@ -334,6 +334,7 @@
           <command commandId="io.github.niwantha33.zew.traceConsole" label="Debug Trace Console..." style="push"/>
           <command commandId="io.github.niwantha33.zew.liveTraceStreaming" label="Start Live Trace (not yet available)" style="push"/>
           <command commandId="io.github.niwantha33.zew.threadTimeline" label="Zephyr Thread Timeline..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.cpuLoad" label="Zephyr CPU Load (Saved CTF)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.contentionReport" label="Zephyr Contention Report..." style="push"/>
           <command commandId="io.github.niwantha33.zew.memoryProfile" label="Zephyr Memory Profile..." style="push"/>
           <command commandId="io.github.niwantha33.zew.tracepointPlot" label="Zephyr Tracepoint Plot..." style="push"/>

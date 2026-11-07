@@ -37,6 +37,65 @@ class OfflineTraceJsonTests(unittest.TestCase):
         self.assertEqual([row["running_ns"] for row in report["cpu"]["rows"]], [5000, 3000])
         self.assertIsNone(report["cpu"]["cpu_busy_percent"])
 
+    def test_nested_isr_is_exclusive_across_window_boundaries(self):
+        # 0..10us worker, with two nested ISRs occupying 2..5us.
+        trace = self.trace(raw("thread_switched_in", 0),
+                           raw("isr_enter", 2000),
+                           raw("isr_enter", 3000),
+                           raw("isr_exit", 4000),
+                           raw("isr_exit", 5000),
+                           raw("thread_switched_out", 10000))
+        for start, end, thread_ns, irq_ns in (
+                (0, 10000, 7000, 3000),
+                (1000, 9000, 5000, 3000),
+                (2500, 4500, 0, 2000),
+                (4000, 7000, 2000, 1000)):
+            with self.subTest(window=(start, end)):
+                report = cpu_report(trace, start, end)
+                self.assertEqual(report["status"], "ok")
+                rows = report["cpu"]["rows"]
+                self.assertEqual(sum(r["running_ns"] for r in rows), thread_ns)
+                self.assertEqual(report["cpu"]["isr_ns"], irq_ns)
+                self.assertEqual(sum(r["running_ns"] for r in rows)
+                                 + irq_ns + report["cpu"]["unknown_ns"], end - start)
+                self.assertLessEqual(sum(r["percentage"] for r in rows)
+                                     + report["cpu"]["isr_percentage"], 100.0001)
+
+    def test_state_intervals_keep_scheduled_time_distinct_from_cpu_time(self):
+        trace = self.trace(raw("thread_switched_in", 0),
+                           raw("thread_ready", 1000, "other"),
+                           raw("thread_pending", 2000, "other"),
+                           raw("thread_sleep_enter", 3000, "other"),
+                           raw("isr_enter", 4000),
+                           raw("isr_exit", 5000),
+                           raw("thread_ready", 8000, "other"),
+                           raw("thread_switched_out", 10000))
+        result = cpu_report(trace, 1500, 9000)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["cpu"]["isr_ns"], 1000)
+        self.assertEqual(result["cpu"]["rows"][0]["running_ns"], 6500)
+        self.assertEqual([(s["state"], s["start_ns"], s["end_ns"]) for s in
+                          result["cpu"]["thread_states"] if s["name"] == "other"],
+                         [("Ready", 1500, 2000), ("Blocked", 2000, 3000),
+                          ("Sleeping", 3000, 8000)])
+        scheduled = [s for s in result["cpu"]["thread_states"]
+                     if s["state"] == "Scheduled"]
+        self.assertEqual(len(scheduled), 1)
+        self.assertTrue(scheduled[0]["scheduled_includes_isr"])
+        self.assertEqual((scheduled[0]["start_ns"], scheduled[0]["end_ns"]), (1500, 9000))
+        self.assertEqual(result["cpu"]["per_isr_status"], "identity_unavailable")
+        self.assertEqual(result["cpu"]["per_isr_rows"], [])
+
+    def test_unpaired_isr_transition_never_emits_cpu_percentages(self):
+        trace = self.trace(raw("thread_switched_in", 0),
+                           raw("isr_exit", 2000),
+                           raw("thread_switched_out", 10000))
+        report = cpu_report(trace)
+        self.assertEqual(report["status"], "incomplete")
+        self.assertTrue(report["incomplete"])
+        self.assertEqual(report["cpu"]["rows"], [])
+        self.assertIsNone(report["cpu"]["isr_percentage"])
+
     def test_no_scheduler_is_not_empty_success_table(self):
         trace = self.trace(raw("thread_ready", 100))
         report = cpu_report(trace)

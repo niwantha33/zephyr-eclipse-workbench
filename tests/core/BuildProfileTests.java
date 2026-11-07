@@ -22,6 +22,16 @@ public final class BuildProfileTests {
         var p = new BuildProfile("debug-rtt", "RTT Debug",
                 BuildConfiguration.DEBUG, "APP_DIAGNOSTICS=1,APP_TRACE_ENABLED",
                 "CONFIG_LOG=y\nCONFIG_LOG_DEFAULT_LEVEL=4\n# CONFIG_SHELL is not set\n");
+        check(p.fingerprintSha256().matches("[0-9a-f]{64}"), "named profile has SHA-256 metadata fingerprint");
+        var reOrdered = new BuildProfile("debug-rtt", "RTT Debug",
+                BuildConfiguration.DEBUG, "APP_TRACE_ENABLED,APP_DIAGNOSTICS=1",
+                "# CONFIG_SHELL is not set\nCONFIG_LOG_DEFAULT_LEVEL=4\nCONFIG_LOG=y\n");
+        check(p.fingerprintSha256().equals(reOrdered.fingerprintSha256()),
+                "equivalent key flags have the same canonical fingerprint");
+        var renamed = new BuildProfile("debug-rtt", "Renamed RTT Debug",
+                BuildConfiguration.DEBUG, p.definitions(), p.kconfig());
+        check(!p.fingerprintSha256().equals(renamed.fingerprintSha256()),
+                "profile label is covered by the fingerprint");
         p.save(app);
         check(BuildProfile.list(app).size() == 1, "one discoverable profile");
         check(BuildProfile.read(app, "debug-rtt").equals(p), "profile metadata and Kconfig roundtrip");

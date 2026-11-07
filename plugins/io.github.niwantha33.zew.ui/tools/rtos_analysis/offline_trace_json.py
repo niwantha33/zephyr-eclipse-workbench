@@ -78,6 +78,7 @@ def cpu_report(trace, start_ns=None, end_ns=None):
         status, reason = "incomplete", trace.error or "Some trace transitions or packets are missing."
 
     rows = []
+    states = []
     isr_ns = isr_pct = unknown_ns = None
     if status == "ok":
         running, names, isr_ns, unknown_ns = _window_exclusive(trace, start, end)
@@ -86,13 +87,23 @@ def cpu_report(trace, start_ns=None, end_ns=None):
                  "running_ns": duration, "percentage": round(100 * duration / window, 4)}
                 for tid, duration in running.items()]
         rows.sort(key=lambda row: (-row["percentage"], row["name"]))
+        # A paired Running interval is scheduled wall-clock time; it can
+        # INCLUDE ISR preemption. It is not the exclusive CPU row above.
+        for observed in timeline.intervals:
+            begin, finish = max(start, observed.start_ns), min(end, observed.end_ns)
+            if begin >= finish:
+                continue
+            state = "Scheduled" if observed.state == "Running" else observed.state
+            states.append({"name": observed.thread_name, "state": state,
+                           "start_ns": begin, "end_ns": finish,
+                           "scheduled_includes_isr": state == "Scheduled"})
         isr_pct = round(100 * isr_ns / window, 4)
         # Whole-trace results must exactly agree with the existing CPU function.
         if start == first and end == last:
             if (running != full["thread_exclusive_ns"]
                     or isr_ns != full["isr_ns"] or unknown_ns != full["unknown_ns"]):
                 status, reason, incomplete = "incomplete", "Exclusive CPU accounting disagrees.", True
-                rows, isr_ns, isr_pct, unknown_ns = [], None, None, None
+                rows, states, isr_ns, isr_pct, unknown_ns = [], [], None, None, None
 
     return {"schema_version": 1, "kind": "cpu", "status": status,
             "incomplete": incomplete, "reason": reason,
@@ -102,7 +113,11 @@ def cpu_report(trace, start_ns=None, end_ns=None):
                     "cpu_busy_percent": full.get("cpu_busy_percent"),
                     "unknown_ns": unknown_ns,
                     "rows": rows, "isr_ns": isr_ns,
-                    "isr_percentage": isr_pct}}
+                    "isr_percentage": isr_pct, "thread_states": states,
+                    # Zephyr's standard CTF ISR transitions provide no
+                    # reliable interrupt identity; only total exclusive ISR
+                    # duration is reportable. Do not fabricate per-ISR rows.
+                    "per_isr_status": "identity_unavailable", "per_isr_rows": []}}
 
 
 def contention_report(trace, threshold_us=DEFAULT_THRESHOLD_US):
