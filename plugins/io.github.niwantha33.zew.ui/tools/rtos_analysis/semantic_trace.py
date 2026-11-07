@@ -50,6 +50,13 @@ class SemanticEvent:
     # Resource identifiers and phases remain separate from human-readable names.
     object_id: str | None = None
     resource_phase: str = ""
+    # Memory evidence is stored separately from generic object/tracepoint
+    # semantics. None means the CTF event did not supply a usable field.
+    memory_phase: str = ""  # attempt | allocated | freed | failed | ignored
+    memory_family: str = ""  # heap | slab
+    memory_pool: str = ""
+    allocation_id: str | None = None
+    allocation_size_bytes: int | None = None
 
 
 @dataclass
@@ -108,8 +115,15 @@ RAW_EVENT_KINDS: dict[str, EventKind] = {
     "semaphore_give_enter": EventKind.SEM_GIVE,
     "semaphore_give_exit": EventKind.SEM_GIVE,
     "sem_give": EventKind.SEM_GIVE,
-    "mem_alloc": EventKind.MEM_ALLOC,
-    "mem_free": EventKind.MEM_FREE,
+    # Only names verified in Zephyr CTF metadata, not speculative API names:
+    "heap_sys_k_malloc_enter": EventKind.MEM_ALLOC,
+    "heap_sys_k_malloc_exit": EventKind.MEM_ALLOC,
+    "heap_sys_k_free_enter": EventKind.MEM_FREE,
+    "heap_sys_k_free_exit": EventKind.MEM_FREE,
+    "mem_slab_alloc_enter": EventKind.MEM_ALLOC,
+    "mem_slab_alloc_exit": EventKind.MEM_ALLOC,
+    "mem_slab_free_enter": EventKind.MEM_FREE,
+    "mem_slab_free_exit": EventKind.MEM_FREE,
 }
 
 
@@ -143,6 +157,93 @@ def _resource_phase(name: str, raw: Mapping) -> str:
             return "failed"
         return "acquired" if phase == "result" else "released"
     return phase
+
+
+# Verified against Zephyr subsys/tracing/ctf/tsdl/metadata. The
+# heap_sys_k_malloc_exit event contains id and ret (the returned pointer)
+# but NO requested size; slab_alloc_exit contains id, timeout and ret
+# (status), with NO block pointer or block size. Free events similarly
+# omit a size. Do not assume size from a pointer, pool or slab identity.
+MEMORY_NATIVE_EVENT_PHASES = {
+    "heap_sys_k_malloc_enter": ("heap", "attempt"),
+    "heap_sys_k_malloc_exit": ("heap", "alloc_result"),
+    "heap_sys_k_free_enter": ("heap", "attempt"),
+    "heap_sys_k_free_exit": ("heap", "freed"),
+    "mem_slab_alloc_enter": ("slab", "attempt"),
+    "mem_slab_alloc_exit": ("slab", "alloc_result"),
+    "mem_slab_free_enter": ("slab", "attempt"),
+    "mem_slab_free_exit": ("slab", "freed"),
+}
+
+# Intentionally not mapped: literal k_malloc/k_free,
+# k_mem_slab_alloc/k_mem_slab_free, mem_alloc/mem_free — none were found
+# as CTF event names in Zephyr's versioned metadata.
+UNVERIFIED_MEMORY_NAMES = (
+    "k_malloc", "k_free", "k_mem_slab_alloc", "k_mem_slab_free",
+    "mem_alloc", "mem_free",
+)
+
+
+def _memory_int(value):
+    if type(value) is int:
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value, 0) if value.startswith(("0x", "-0x", "+0x")) else int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _memory_ptr(value):
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+    number = _memory_int(value)
+    if number is not None:
+        return None if number == 0 else str(number)
+    return str(value) if isinstance(value, str) else None
+
+
+def _memory_evidence(name: str, raw: Mapping):
+    """Return (phase,family,pool,allocation_id,size) with no inferred size."""
+    spec = MEMORY_NATIVE_EVENT_PHASES.get(name)
+    if spec is None:
+        return "", "", "", None, None
+    family, phase = spec
+    pool_name = _first(raw, "pool_name", "slab_name", "heap_name", "object_name")
+    pool_id = _first(raw, "object_id", "id")
+    pool = (str(pool_name) if pool_name is not None else
+            f"{family} ID {pool_id} (name unavailable)" if pool_id is not None else
+            f"unattributed {family}")
+    allocation_id = None
+    if name == "heap_sys_k_malloc_exit":
+        allocation_id = _memory_ptr(_first(raw, "allocation_id", "ptr", "ret"))
+        phase = "allocated" if allocation_id is not None else "failed"
+    elif name == "heap_sys_k_free_exit":
+        allocation_id = _memory_ptr(_first(raw, "allocation_id", "ptr", "heap_ref"))
+        phase = "freed" if allocation_id is not None else "ignored"
+    elif name == "mem_slab_alloc_exit":
+        result = _memory_int(raw.get("ret"))
+        phase = "allocated" if result == 0 else "failed"
+        allocation_id = _memory_ptr(_first(raw, "allocation_id", "ptr"))
+    elif name == "mem_slab_free_exit":
+        phase = "freed"
+        allocation_id = _memory_ptr(_first(raw, "allocation_id", "ptr"))
+    size = None
+    if phase == "allocated":
+        # Optional richer CTF metadata/explicit normalized source may carry
+        # sizes. Stock Zephyr CTF events listed above never do.
+        for field in ("size_bytes", "allocation_size", "size"):
+            if raw.get(field) is not None:
+                candidate = _memory_int(raw[field])
+                if candidate is not None and 0 <= candidate <= (1 << 63) - 1:
+                    size = candidate
+                break
+    return phase, family, pool, allocation_id, size
 
 
 def _text(value) -> str:
@@ -246,6 +347,11 @@ def decode_ctf(path: Path):
                 "mutex_name": get("mutex_name"),
                 "semaphore_name": get("semaphore_name"),
                 "pool_name": get("pool_name"),
+                "slab_name": get("slab_name"), "heap_name": get("heap_name"),
+                "allocation_id": get("allocation_id"), "ptr": get("ptr"),
+                "heap_ref": get("heap_ref"),
+                "size_bytes": get("size_bytes"),
+                "allocation_size": get("allocation_size"), "size": get("size"),
                 "next_tid": get("next_tid"),
                 "next_comm": get("next_comm"),
                 "next_prio": get("next_prio"),
@@ -285,6 +391,10 @@ class SemanticTraceParser:
                     trace.raw_records.append(raw)
                     if raw.get("kind") in ("discarded_events", "discarded_packets"):
                         # These are loss notifications, not CTF events.
+                        # Byte totals/imbalance cannot be trusted after loss.
+                        trace.incomplete = True
+                        if not trace.error:
+                            trace.error = "CTF discarded events or packets were reported"
                         continue
                     name = _text(raw.get("name"))
                     simple_name = name.rsplit(":", 1)[-1]
@@ -322,6 +432,8 @@ class SemanticTraceParser:
                     priority = _first(raw, "next_prio", "priority", "prio") if sched else _first(raw, "priority", "prio")
                     object_name = _first(raw, "object_name", "mutex_name", "semaphore_name",
                                          "pool_name", "heap_name")
+                    memory_phase, memory_family, memory_pool, allocation_id, allocation_size = (
+                        _memory_evidence(simple_name, raw))
                     event = SemanticEvent(
                         timestamp_ns=timestamp, kind=kind, thread_name=_text(thread_name),
                         thread_priority=None if priority is None else str(priority),
@@ -331,7 +443,10 @@ class SemanticTraceParser:
                         object_id=None if raw.get("object_id") is None else str(raw["object_id"]),
                         resource_phase=_resource_phase(simple_name, raw),
                         tracepoint_name=declared_name if kind == EventKind.VALUE_SAMPLE else "",
-                        value=sample_value if kind == EventKind.VALUE_SAMPLE else None)
+                        value=sample_value if kind == EventKind.VALUE_SAMPLE else None,
+                        memory_phase=memory_phase, memory_family=memory_family,
+                        memory_pool=memory_pool, allocation_id=allocation_id,
+                        allocation_size_bytes=allocation_size)
                     if not name:
                         trace.incomplete = True
                 trace.events.append(event)
