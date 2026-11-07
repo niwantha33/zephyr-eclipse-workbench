@@ -211,7 +211,7 @@ public final class ZephyrCpuLoadView extends ViewPart {
         }
         table.setVisible(!model.rows().isEmpty());
         status.setText(model.message().isBlank()
-                ? "Observed interval percentages; ISR row may overlap thread intervals, so do not sum rows."
+                ? "Observed exclusive thread/ISR percentages; unknown intervals remain unassigned."
                 : model.message() + " Only observed intervals are represented.");
         table.getParent().layout(true, true);
     }
