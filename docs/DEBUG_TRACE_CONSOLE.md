@@ -93,3 +93,12 @@ separately for each Eclipse project. These are only dialog defaults; users
 must reconfirm the port, baud, duration and capture each time. Existing UART
 capture still uses its bounded process and Eclipse Console and does not share
 RTT's TCP connection.
+
+## Not supported
+
+- **Live CTF streaming to the IDE is not supported**, whether over RTT,
+  UART/USB or network. The menu item **Start Live Trace (not yet available)**
+  only displays a message; it does not connect, sample, append to the offline
+  CTF parser or create a background job. The existing UART/RTT **text**
+  receivers and the RAM CTF **snapshot** action are different, already
+  documented features. See [design proposal](LIVE_TRACE_STREAMING_DESIGN.md).
