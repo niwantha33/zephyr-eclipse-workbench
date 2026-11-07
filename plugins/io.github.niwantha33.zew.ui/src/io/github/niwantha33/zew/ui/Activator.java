@@ -14,6 +14,8 @@ public final class Activator extends AbstractUIPlugin {
         org.eclipse.core.resources.ResourcesPlugin.getWorkspace().addResourceChangeListener(projects,
                 org.eclipse.core.resources.IResourceChangeEvent.PRE_BUILD);
         getPreferenceStore().setDefault(UpdateConnection.AUTO, true);
+        getPreferenceStore().setDefault(WorkbenchPreferences.ENABLE_CPU_VIEW, true);
+        getPreferenceStore().setDefault(WorkbenchPreferences.ENABLE_CONTENTION_VIEW, true);
     }
     @Override public void stop(BundleContext context) throws Exception {
         org.eclipse.core.resources.ResourcesPlugin.getWorkspace().removeResourceChangeListener(projects);
