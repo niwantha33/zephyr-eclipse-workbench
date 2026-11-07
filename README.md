@@ -192,3 +192,7 @@ Bug reports, documentation, hardware evidence and focused pull requests are
 welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and use
 [Issues](https://github.com/niwantha33/zephyr-eclipse-workbench/issues)
 or [Pull Requests](https://github.com/niwantha33/zephyr-eclipse-workbench/pulls).
+
+## Not supported
+
+- **Live CTF streaming into the IDE is not supported.** The **Zephyr → Capture & Analyse → Start Live Trace (not yet available)** menu entry is an informational stub only; it starts no transport, parser or background worker. See [Live CTF streaming design (proposal only)](docs/LIVE_TRACE_STREAMING_DESIGN.md). Existing offline CTF snapshots and independently configured text console receivers do not make live binary CTF streaming available.
