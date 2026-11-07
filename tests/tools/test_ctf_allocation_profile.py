@@ -136,8 +136,10 @@ class MemoryTraceTests(unittest.TestCase):
              "id": "0x10", "ret": "0x100", "size_bytes": 100},
             {"kind": "discarded_packets", "count": 2},
         ])
-        self.assertTrue(t.incomplete)
+        self.assertTrue(t.loss_reported)
+        self.assertFalse(t.incomplete)
         p = MemoryProfiler().calculate(t)
+        self.assertTrue(p.incomplete)
         self.assertEqual(p.current_bytes, 100)
         self.assertEqual(p.imbalance_line, "")
         self.assertEqual(p.message, INCOMPLETE)
