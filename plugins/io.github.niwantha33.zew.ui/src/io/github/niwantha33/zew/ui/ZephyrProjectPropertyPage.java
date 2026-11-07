@@ -43,6 +43,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
     private Label current;
     private String originalBoard = "";
     private List<String[]> hardware = List.of();
+    private List<io.github.niwantha33.zew.core.BuildProfile> namedProfiles = List.of();
 
     @Override protected Control createContents(Composite parent) {
         project = getElement() instanceof IProject selected ? selected : getElement().getAdapter(IProject.class);
@@ -92,18 +93,24 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
         new Label(panel, SWT.NONE).setText("Build configuration");
         buildConfiguration = new Combo(panel, SWT.READ_ONLY);
         buildConfiguration.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        var profiles = io.github.niwantha33.zew.core.BuildConfiguration.values();
-        buildConfiguration.setItems(java.util.Arrays.stream(profiles).map(p -> p.label()).toArray(String[]::new));
         try {
-            var selectedProfile = io.github.niwantha33.zew.core.BuildConfiguration.fromId(
-                    project.getPersistentProperty(ProjectContext.BUILD_CONFIGURATION));
-            buildConfiguration.select(selectedProfile.ordinal());
+            refreshBuildProfiles(null);
         } catch (Exception error) {
-            setErrorMessage("Invalid build configuration: " + error.getMessage());
+            setErrorMessage("Cannot read build profiles: " + error.getMessage());
             setValid(false);
             return panel;
         }
-        new Label(panel, SWT.NONE);
+        Button manageProfiles = new Button(panel, SWT.PUSH);
+        manageProfiles.setText("Manage profiles...");
+        manageProfiles.addListener(SWT.Selection, event -> {
+            var editor = new ZephyrProfileStudioDialog(getShell(), project);
+            editor.open();
+            try { refreshBuildProfiles(editor.lastEditedId()); }
+            catch (Exception error) {
+                MessageDialog.openError(getShell(), "Profiles unavailable", error.getMessage());
+                setValid(false);
+            }
+        });
         new Label(panel, SWT.NONE).setText("Chip vendor");
         vendor = new Combo(panel, SWT.READ_ONLY);
         vendor.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -129,7 +136,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
             column.setWidth(header.equals("Exact build target") ? 320 : 125);
         }
         var information = new Label(panel, SWT.WRAP);
-        information.setText("Each configuration has its own build folder. Application settings keeps your existing build; Debug selects -Og, Release selects -O2. Build to generate the selected configuration. Project source is preserved.");
+        information.setText("Built-in and named profiles use independent board-specific build folders. Named profiles may add Kconfig fragments and C/C++ macros. Build to verify the selected profile. Other application files are preserved.");
         information.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1));
         vendor.addListener(SWT.Selection, e -> { fillSocs(); filterTargets(); });
         soc.addListener(SWT.Selection, e -> filterTargets());
@@ -138,6 +145,32 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
         setValid(false);
         panel.getDisplay().asyncExec(() -> { if (!panel.isDisposed()) loadHardware(); });
         return panel;
+    }
+
+    /** Preserve the legacy three selections and append project-owned profiles. */
+    private void refreshBuildProfiles(String preferred) throws Exception {
+        var builtin = io.github.niwantha33.zew.core.BuildConfiguration.values();
+        namedProfiles = io.github.niwantha33.zew.core.BuildProfile.list(
+                project.getLocation().toFile().toPath());
+        var choices = new ArrayList<String>();
+        for (var profile : builtin) choices.add(profile.label());
+        for (var profile : namedProfiles) choices.add("Profile: " + profile.label());
+        buildConfiguration.setItems(choices.toArray(String[]::new));
+        String active = preferred != null ? preferred
+                : project.getPersistentProperty(ProjectContext.NAMED_PROFILE);
+        if (active != null && !active.isBlank()) {
+            for (int i = 0; i < namedProfiles.size(); i++) {
+                if (namedProfiles.get(i).id().equals(active)) {
+                    buildConfiguration.select(builtin.length + i);
+                    return;
+                }
+            }
+            throw new java.io.IOException("Selected profile '" + active
+                    + "' is missing. Restore it or choose a different profile.");
+        }
+        var legacy = io.github.niwantha33.zew.core.BuildConfiguration.fromId(
+                project.getPersistentProperty(ProjectContext.BUILD_CONFIGURATION));
+        buildConfiguration.select(legacy.ordinal());
     }
 
     private void loadHardware() {
@@ -235,7 +268,11 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
         String selected = ((String[]) targets.getSelection()[0].getData())[6];
         int selectedIndex = buildConfiguration.getSelectionIndex();
         if (selectedIndex < 0) return false;
-        var configuration = io.github.niwantha33.zew.core.BuildConfiguration.values()[selectedIndex];
+        var builtins = io.github.niwantha33.zew.core.BuildConfiguration.values();
+        String namedId = selectedIndex >= builtins.length
+                ? namedProfiles.get(selectedIndex - builtins.length).id() : null;
+        var configuration = namedId == null ? builtins[selectedIndex]
+                : namedProfiles.get(selectedIndex - builtins.length).optimization();
         try {
             Path application = project.getLocation().toFile().toPath();
             ResourcesPlugin.getWorkspace().run(monitor -> {
@@ -252,6 +289,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
                     }
                     ZephyrProjectImport.bind(application, project.getName(), selected, loadedEnvironment, monitor);
                     project.setPersistentProperty(ProjectContext.BUILD_CONFIGURATION, configuration.id());
+                    project.setPersistentProperty(ProjectContext.NAMED_PROFILE, namedId);
                     ZephyrProjectLifecycle.configure(project, monitor);
                     project.refreshLocal(IResource.DEPTH_INFINITE, monitor);
                 } catch (Exception error) {

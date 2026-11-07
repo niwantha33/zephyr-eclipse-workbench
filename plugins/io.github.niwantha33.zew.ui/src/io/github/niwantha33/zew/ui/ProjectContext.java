@@ -11,6 +11,7 @@ import io.github.niwantha33.zew.core.WestCommands;
 
 final class ProjectContext {
     static final QualifiedName BUILD_CONFIGURATION = new QualifiedName(Activator.ID, "buildConfiguration");
+    static final QualifiedName NAMED_PROFILE = new QualifiedName(Activator.ID, "namedBuildProfile");
 
     static Properties settings(IProject project) throws Exception {
         String root = project.getPersistentProperty(new QualifiedName(Activator.ID, "setupRoot"));
@@ -20,6 +21,12 @@ final class ProjectContext {
         settings.setProperty("zew.buildConfiguration", io.github.niwantha33.zew.core.BuildConfiguration
                 .fromId(project.getPersistentProperty(BUILD_CONFIGURATION)).id());
         Path application = project.getLocation().toFile().toPath();
+        String profileId = project.getPersistentProperty(NAMED_PROFILE);
+        if (profileId != null && !profileId.isBlank()) {
+            var profile = io.github.niwantha33.zew.core.BuildProfile.read(application, profileId);
+            settings.setProperty("zew.profileId", profile.id());
+            settings.setProperty("zew.buildConfiguration", profile.optimization().id());
+        }
         if (Files.isRegularFile(application.resolve(".zew/project.json"))) {
             settings.setProperty("board", ProjectProfile.read(application).board());
             settings.setProperty("application", application.toString());
@@ -43,6 +50,13 @@ final class ProjectContext {
     static Path buildDirectory(IProject project, Properties settings) throws Exception {
         Path application = project.getLocation().toFile().toPath();
         var profile = io.github.niwantha33.zew.core.BuildConfiguration.fromId(settings.getProperty("zew.buildConfiguration"));
+        String named = settings.getProperty("zew.profileId", "");
+        if (!named.isBlank()) {
+            var boardConfig = new io.github.niwantha33.zew.core.WorkbenchConfig(
+                    Path.of(settings.getProperty("python")), Path.of(settings.getProperty("workspace")), application, settings.getProperty("board"));
+            return io.github.niwantha33.zew.core.BuildProfile.read(application, named)
+                    .buildDirectory(WestCommands.buildDirectory(boardConfig));
+        }
         if (profile == io.github.niwantha33.zew.core.BuildConfiguration.DEFAULT
                 && !Files.isRegularFile(application.resolve(".zew/project.json"))
                 && Files.isRegularFile(application.resolve(".zew-build/first/CMakeCache.txt"))) return application.resolve(".zew-build/first");

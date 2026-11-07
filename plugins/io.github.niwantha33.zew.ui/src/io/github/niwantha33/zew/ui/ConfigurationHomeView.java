@@ -504,7 +504,9 @@ public final class ConfigurationHomeView extends ViewPart {
                     try {
                         settings = ProjectContext.settings(selected);
                         board = settings.getProperty("board", "Not selected");
-                        profile = settings.getProperty("zew.buildConfiguration", "default");
+                        profile = settings.getProperty("zew.profileId", "").isBlank()
+                                ? settings.getProperty("zew.buildConfiguration", "default")
+                                : "profile-" + settings.getProperty("zew.profileId");
                         build = ProjectContext.buildDirectory(selected, settings);
                     } catch (Exception unavailable) {
                         warning = "Project environment: " + unavailable.getMessage();
