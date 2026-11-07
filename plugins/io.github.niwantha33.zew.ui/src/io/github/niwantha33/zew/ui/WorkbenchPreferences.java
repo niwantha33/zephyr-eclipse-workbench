@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.ui;
 
+import org.eclipse.jface.preference.BooleanFieldEditor;
 import org.eclipse.jface.preference.DirectoryFieldEditor;
 import org.eclipse.jface.preference.FieldEditorPreferencePage;
 import org.eclipse.jface.preference.FileFieldEditor;
@@ -9,6 +10,8 @@ import org.eclipse.ui.IWorkbench;
 import org.eclipse.ui.IWorkbenchPreferencePage;
 
 public final class WorkbenchPreferences extends FieldEditorPreferencePage implements IWorkbenchPreferencePage {
+    public static final String ENABLE_CPU_VIEW = "trace.cpuLoad.enabled";
+    public static final String ENABLE_CONTENTION_VIEW = "trace.contention.enabled";
     public static final String PYTHON = "python";
     public static final String WORKSPACE = "workspace";
     public static final String APPLICATION = "application";
@@ -27,5 +30,7 @@ public final class WorkbenchPreferences extends FieldEditorPreferencePage implem
         application.setEmptyStringAllowed(true);
         addField(application);
         addField(new StringFieldEditor(BOARD, "Exact board target:", getFieldEditorParent()));
+        addField(new BooleanFieldEditor(ENABLE_CPU_VIEW, "Enable Zephyr CPU Load view", getFieldEditorParent()));
+        addField(new BooleanFieldEditor(ENABLE_CONTENTION_VIEW, "Enable Zephyr Contention Report view", getFieldEditorParent()));
     }
 }
