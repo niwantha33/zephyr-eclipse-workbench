@@ -18,14 +18,26 @@ physical chip before reading.
 The native tree shows peripherals, registers, bitfields, addresses, access,
 reset values and values from the selected CDT DSF-GDB debug session. Search by
 peripheral, register, field or description. Select a register (or one of its
-fields), halt the target, select a suspended frame in Debug, then click
-**Refresh Live Values**. **Watch / unwatch** includes a register in later
+fields), halt the target in Debug, then click **Refresh Live Values**.
+An explicit suspended frame or thread is used when selected. If none is selected,
+the explorer can resolve the unique active native Zephyr GDB launch for its
+selected project, enumerate the connected inferior's suspended threads, and
+borrow a top frame for memory-mapped register reads. Peripheral MMIO addresses
+are global, not thread-local. It does not switch the active debug selection.
+If multiple sessions/targets are ambiguous, it refuses to guess and asks for
+an explicit frame. A running target is never stopped automatically.
+
+**Watch / unwatch** includes a register in later
 refreshes, including when filtered out of the tree. Values differing from the
 SVD reset value within its reset mask are marked. An unspecified reset value
 is shown as unavailable, not assumed to be zero.
 
 Reads use the existing debug session: no second GDB connection, server launch,
-firmware write, halt or resume is issued by this view. GDB handles target byte
+firmware write, halt or resume is issued by this view. The fallback frame
+lookup executes asynchronously through CDT DSF services and only succeeds for
+a suspended execution context. The view still requires an explicit selected
+register or watch; opening/expanding the tree never reads hardware.
+GDB handles target byte
 order; the expression checks the target C type width before dereferencing an
 8-, 16- or 32-bit address. Refresh drops the DSF expression cache. Reads are
 serial and capped at 64 registers per refresh. Values are explicit snapshots,
