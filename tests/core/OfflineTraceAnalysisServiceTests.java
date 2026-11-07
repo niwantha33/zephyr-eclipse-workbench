@@ -55,6 +55,24 @@ public final class OfflineTraceAnalysisServiceTests {
                     && cpu.cpuBusyPercent() == null, "typed CPU JSON and withheld busy percent");
             check(service.analyseCpu(ctf, build, null, null) == cpu && calls.get() == 1,
                     "same trace/build/window served from cache");
+            String stateJson = CPU.replace("\"isr_percentage\":10.0}",
+                    "\"isr_percentage\":10.0,\"thread_states\":["
+                    + "{\"name\":\"worker\",\"state\":\"Scheduled\",\"start_ns\":0,"
+                    + "\"end_ns\":350000,\"scheduled_includes_isr\":true},"
+                    + "{\"name\":\"idle\",\"state\":\"Sleeping\",\"start_ns\":0,"
+                    + "\"end_ns\":350000,\"scheduled_includes_isr\":false}]}");
+            var states = new OfflineTraceAnalysisService(request -> stateJson)
+                    .analyseCpu(ctf, build, null, null).stateIntervals();
+            check(states.size() == 2 && states.getFirst().state()
+                    == OfflineTraceAnalysisService.ObservedState.SCHEDULED
+                    && states.getFirst().scheduledIncludesIsr()
+                    && states.getLast().state() == OfflineTraceAnalysisService.ObservedState.SLEEPING,
+                    "typed observed states distinguish ISR-inclusive schedule from exclusive CPU time");
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> stateJson.replace(
+                            "\"end_ns\":350000,\"scheduled_includes_isr\":true",
+                            "\"end_ns\":350000,\"scheduled_includes_isr\":false"))
+                            .analyseCpu(ctf, build, null, null));
             Files.writeString(stream, "changed stream with a different size");
             service.analyseCpu(ctf, build, null, null);
             check(calls.get() == 2, "changed stream fingerprint invalidates cache");
