@@ -42,5 +42,5 @@ for term in ("NOT SUPPORTED", "RTT", "UART", "Network", "target RAM",
 for path in (ROOT / "README.md", ROOT / "docs/DEBUG_TRACE_CONSOLE.md"):
     content = path.read_text(encoding="utf-8")
     assert "## Not supported" in content
-    assert "live CTF streaming" in content.lower(), path
+    assert "live ctf streaming" in content.lower(), path
 print("PASS: disabled live CTF menu stub, design and unsupported documentation")
