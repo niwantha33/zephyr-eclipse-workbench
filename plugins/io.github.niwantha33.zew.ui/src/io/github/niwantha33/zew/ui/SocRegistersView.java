@@ -811,10 +811,13 @@ public final class SocRegistersView extends ViewPart {
         var selection = DebugUITools.getDebugContextManager().getContextService(getSite().getWorkbenchWindow())
                 .getActiveContext();
         Object element = selection instanceof IStructuredSelection s ? s.getFirstElement() : null;
+        if (element instanceof IDMContext dm) return dm;
         if (element instanceof IDMVMContext vm) return vm.getDMContext();
         if (element instanceof IAdaptable adaptable) {
             var vm = adaptable.getAdapter(IDMVMContext.class);
             if (vm != null) return vm.getDMContext();
+            var dm = adaptable.getAdapter(IDMContext.class);
+            if (dm != null) return dm;
         }
         return null;
     }
