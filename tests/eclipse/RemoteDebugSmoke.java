@@ -83,6 +83,8 @@ public final class RemoteDebugSmoke {
         check(type != null, "test-only remote GDB launch type registered");
         var working = type.newInstance(null, manager.generateLaunchConfigurationName("Remote thread reliability smoke"));
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROJECT_NAME, "HelloZephyrEditorSmoke");
+        // Exercise register-explorer fallback when no DSF frame was clicked in Debug.
+        working.setAttribute("io.github.niwantha33.zew.ui.launch.project", "HelloZephyrEditorSmoke");
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROGRAM_NAME, fixture.resolve("remote-threads").toString());
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_BUILD_BEFORE_LAUNCH, ICDTLaunchConfigurationConstants.BUILD_BEFORE_LAUNCH_DISABLED);
         working.setAttribute(ICDTLaunchConfigurationConstants.ATTR_DEBUGGER_START_MODE, IGDBLaunchConfigurationConstants.DEBUGGER_MODE_REMOTE);
@@ -107,6 +109,23 @@ public final class RemoteDebugSmoke {
             check(launch.getLaunchConfiguration().getAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_UPDATE_THREADLIST_ON_SUSPEND, false),
                     "saved launch now refreshes threads at every halt");
             var session = launch.getSession();
+            // The SVD explorer must recognize a unique live GdbLaunch even if the
+            // Debug view's active context is unset. Never bind a different project.
+            var viewType = Platform.getBundle("io.github.niwantha33.zew.ui")
+                    .loadClass("io.github.niwantha33.zew.ui.SocRegistersView");
+            var registerView = viewType.getConstructor().newInstance();
+            var resolveLaunch = viewType.getDeclaredMethod("uniqueZephyrLaunch");
+            resolveLaunch.setAccessible(true);
+            check(resolveLaunch.invoke(registerView) == launch,
+                    "register explorer discovers unique native Zephyr GDB session without selected frame");
+            var projectField = viewType.getDeclaredField("selectedProjectName");
+            projectField.setAccessible(true);
+            projectField.set(registerView, "DifferentTarget");
+            check(resolveLaunch.invoke(registerView) == null,
+                    "register explorer rejects mismatched SoC project sessions");
+            projectField.set(registerView, "HelloZephyrEditorSmoke");
+            check(resolveLaunch.invoke(registerView) == launch,
+                    "register explorer matches the loaded SVD's project to the native session");
             services = new DsfServicesTracker(FrameworkUtil.getBundle(RemoteDebugSmoke.class).getBundleContext(), session.getId());
             final var tracker = services;
             IDMContext[] containers = ask(session, result -> {
