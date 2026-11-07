@@ -9,7 +9,7 @@ from pathlib import Path
 
 from cpu_analysis import account
 from contention_detector import ContentionDetector, DEFAULT_THRESHOLD_US
-from semantic_trace import SemanticTraceParser
+from semantic_trace import EventKind, SemanticTraceParser
 from thread_timeline import build_intervals
 
 
@@ -18,8 +18,44 @@ def _bounds(trace):
     return (min(stamps), max(stamps)) if stamps else (None, None)
 
 
+def _window_exclusive(trace, start_ns, end_ns):
+    """Clip the same exclusive event segments that cpu_analysis.account accounts.
+
+    Only the existing semantic switch/ISR transitions are used. There is no
+    synthetic switch event at a window boundary and no guessed idle thread.
+    """
+    active = None
+    irq_depth = 0
+    last = trace.events[0].timestamp_ns
+    running = {}
+    names = {}
+    irq_ns = unknown_ns = 0
+    for event in trace.events:
+        stamp = event.timestamp_ns
+        overlap = max(0, min(end_ns, stamp) - max(start_ns, last))
+        if overlap:
+            if irq_depth:
+                irq_ns += overlap
+            elif active is None:
+                unknown_ns += overlap
+            else:
+                running[active] = running.get(active, 0) + overlap
+        if event.thread_id is not None and event.thread_name:
+            names[str(event.thread_id)] = event.thread_name
+        if event.kind == EventKind.THREAD_SWITCHED_IN:
+            active = str(event.thread_id)
+        elif event.kind == EventKind.THREAD_SWITCHED_OUT:
+            active = None
+        elif event.kind == EventKind.ISR_ENTER:
+            irq_depth += 1
+        elif event.kind == EventKind.ISR_EXIT:
+            irq_depth -= 1
+        last = stamp
+    return running, names, irq_ns, unknown_ns
+
+
 def cpu_report(trace, start_ns=None, end_ns=None):
-    """Use cpu_analysis for evidence qualification and observed timeline for clipped shares."""
+    """Qualify with cpu_analysis.account and clip its exclusive event segments."""
     full = account(trace)
     timeline = build_intervals(trace)
     first, last = _bounds(trace)
@@ -42,25 +78,21 @@ def cpu_report(trace, start_ns=None, end_ns=None):
         status, reason = "incomplete", trace.error or "Some trace transitions or packets are missing."
 
     rows = []
-    isr = 0
-    if start is not None and end is not None and end > start and status != "no_scheduler":
-        running = {}
-        for interval in timeline.intervals:
-            overlap = max(0, min(end, interval.end_ns) - max(start, interval.start_ns))
-            if not overlap:
-                continue
-            if interval.state == "Running":
-                running[interval.thread_name] = running.get(interval.thread_name, 0) + overlap
-            elif interval.state == "ISR":
-                isr += overlap
+    isr_ns = isr_pct = unknown_ns = None
+    if status == "ok":
+        running, names, isr_ns, unknown_ns = _window_exclusive(trace, start, end)
         window = end - start
-        rows = [{"name": name, "running_ns": duration,
-                 "percentage": round(100 * duration / window, 4)}
-                for name, duration in running.items()]
+        rows = [{"name": names.get(tid, f"thread ID {tid} (name unavailable)"),
+                 "running_ns": duration, "percentage": round(100 * duration / window, 4)}
+                for tid, duration in running.items()]
         rows.sort(key=lambda row: (-row["percentage"], row["name"]))
-        isr_pct = round(100 * isr / window, 4)
-    else:
-        isr_pct = None
+        isr_pct = round(100 * isr_ns / window, 4)
+        # Whole-trace results must exactly agree with the existing CPU function.
+        if start == first and end == last:
+            if (running != full["thread_exclusive_ns"]
+                    or isr_ns != full["isr_ns"] or unknown_ns != full["unknown_ns"]):
+                status, reason, incomplete = "incomplete", "Exclusive CPU accounting disagrees.", True
+                rows, isr_ns, isr_pct, unknown_ns = [], None, None, None
 
     return {"schema_version": 1, "kind": "cpu", "status": status,
             "incomplete": incomplete, "reason": reason,
@@ -68,8 +100,8 @@ def cpu_report(trace, start_ns=None, end_ns=None):
             "start_ns": start, "end_ns": end, "scheduler_events": timeline.scheduler_events,
             "cpu": {"status": full.get("status", "unavailable"),
                     "cpu_busy_percent": full.get("cpu_busy_percent"),
-                    "unknown_ns": full.get("unknown_ns"),
-                    "rows": rows, "isr_ns": isr if isr_pct is not None else None,
+                    "unknown_ns": unknown_ns,
+                    "rows": rows, "isr_ns": isr_ns,
                     "isr_percentage": isr_pct}}
 
 
