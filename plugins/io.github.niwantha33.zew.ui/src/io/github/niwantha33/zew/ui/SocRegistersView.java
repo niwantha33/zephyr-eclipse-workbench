@@ -881,7 +881,8 @@ public final class SocRegistersView extends ViewPart {
         if (targets.size() > 64) { status.setText("Refresh is limited to 64 watches. Remove some watches first."); return; }
         DebugTarget target = debugTarget();
         if (target == null) {
-            status.setText(debugResolution + " No peripheral registers were read.");
+            status.setText(debugResolution + " Select a suspended thread/frame in Debug; "
+                    + "no peripheral registers were read.");
             return;
         }
         DsfSession session = target.session();
