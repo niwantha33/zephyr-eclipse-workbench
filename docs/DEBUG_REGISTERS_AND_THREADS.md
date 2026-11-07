@@ -395,3 +395,27 @@ snapshots**, not hardware trace, simultaneous state or CPU utilisation.
 Synthetic core projection tests cover missing values, session boundaries and
 bounded history. Installed Eclipse/real probe stepping stress acceptance is
 still pending and must not be claimed from source tests alone.
+
+## Native DSF frame selection and ambiguity safeguards
+
+The read-only **Zephyr Hardware Register Explorer** uses Eclipse CDT DSF
+run-control, stack and expression services; it never suspends or resumes a target
+in order to sample peripheral registers. Clicking **Refresh Live Values**
+resolves the active debug selection to the suspended GDB frame before evaluating
+a memory-mapped-register expression. Both a directly selected DSF stack frame
+and a selected native execution/thread context are accepted.
+
+If only a launch or inferior is selected, the explorer can resolve its top
+frame **only when there is exactly one active matching Zephyr debug session,
+one inferior, and one suspended thread**. Zero suspended threads means no
+read. Multiple suspended threads or sessions are explicitly marked ambiguous:
+select a particular halted thread/frame in Eclipse Debug and refresh again.
+It does not choose the first suspended thread as a proxy for the target.
+
+A view associated with a specific imported project does not resolve a
+selected session belonging to another project, even if a matching fallback
+launch happens to exist. A stale, unrecognized or foreign direct selection
+fails closed without issuing a register read. Register values remain
+snapshots and are invalidated on resume, step and context changes. These
+guards do not establish physical-register accuracy or substitute for an
+exactly matched device SVD.
