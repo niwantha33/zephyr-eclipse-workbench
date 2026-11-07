@@ -20,18 +20,34 @@ public final class MemoryProfilerJson {
 
     private MemoryProfilerJson() {}
 
-    public static List<Row> parse(String json) {
+    /** Reuse the bounded JSON tokenizer for other explicit report schemas. */
+    public static List<Row> parseFields(String json) {
         if (json == null || json.length() > MAX_CHARACTERS)
             throw new IllegalArgumentException("JSON report is missing or exceeds 8 MiB");
         Parser parser = new Parser(json);
         parser.space();
         if (!parser.peek('{'))
-            throw new IllegalArgumentException("Memory report must be a JSON object");
+            throw new IllegalArgumentException("JSON report must be an object");
         parser.value("", 0);
         parser.space();
         if (parser.pos != json.length())
             throw new IllegalArgumentException("Unexpected data after JSON report");
-        List<Row> rows = List.copyOf(parser.rows);
+        return List.copyOf(parser.rows);
+    }
+
+    /** Decode one JSON string token, rejecting trailing content. */
+    public static String unquote(String token) {
+        Parser parser = new Parser(token);
+        parser.space();
+        String value = parser.quoted();
+        parser.space();
+        if (parser.pos != token.length())
+            throw new IllegalArgumentException("Invalid JSON string token");
+        return value;
+    }
+
+    public static List<Row> parse(String json) {
+        List<Row> rows = parseFields(json);
         if (!has(rows, "schema_version", "1")
                 || !exists(rows, "status") || !exists(rows, "mpu.status")
                 || !existsPrefix(rows, "memory_regions")

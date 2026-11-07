@@ -35,13 +35,10 @@ import io.github.niwantha33.zew.core.ProcessRunner;
  */
 public final class ZephyrContentionView extends ViewPart {
     public static final String ID = Activator.ID + ".contentionReport";
-    public static final String DISCLAIMER =
-            "Findings are inferred from trace events. A reported priority inversion means "
-            + "the pattern was observed in the event stream; it does not prove that a deadline was missed.";
+    public static final String DISCLAIMER = OfflineTraceViewModels.CONTENTION_DISCLAIMER;
     public static final String NO_TRACE =
             "No trace loaded. Select an imported Zephyr project and open a saved CTF trace.";
-    public static final String NO_PRIORITIES =
-            "Pattern A disabled: no numeric thread priorities were observed in this trace.";
+    public static final String NO_PRIORITIES = OfflineTraceViewModels.NO_PRIORITIES;
     public static final long DEFAULT_THRESHOLD_US = 1000L;
     private static final long MAX_THRESHOLD_US = 86_400_000_000L;
 
@@ -49,7 +46,9 @@ public final class ZephyrContentionView extends ViewPart {
     private volatile Job loadJob;
     private IProject contextProject;
     private Path selectedTrace;
-    private ContentionReport.Snapshot displayed;
+    private OfflineTraceAnalysisService.ContentionResult displayed;
+    private OfflineTraceAnalysisService service;
+    private Path selectedBuild;
     private Text threshold;
     private Label status, priorities, incomplete, disclaimer;
     private Table table;
@@ -111,6 +110,7 @@ public final class ZephyrContentionView extends ViewPart {
             column.setText(columns[i]);
             column.setWidth(widths[i]);
         }
+        table.setVisible(false);
         // Creating or showing the view never reads CTF, starts a Job, or polls a target.
     }
 
@@ -152,7 +152,7 @@ public final class ZephyrContentionView extends ViewPart {
             generation.incrementAndGet();
             if (loadJob != null) loadJob.cancel();
             displayed = null;
-            if (table != null && !table.isDisposed()) table.removeAll();
+            if (table != null && !table.isDisposed()) { table.removeAll(); table.setVisible(false); }
             if (status != null && !status.isDisposed())
                 status.setText("Enter a valid nonnegative threshold in microseconds.");
             return;
@@ -161,17 +161,15 @@ public final class ZephyrContentionView extends ViewPart {
     }
 
     private void load(Path selected) {
+        if (!Activator.getDefault().getPreferenceStore().getBoolean(WorkbenchPreferences.ENABLE_CONTENTION_VIEW)) {
+            status.setText("Zephyr Contention Report view is disabled in Zephyr Workbench preferences.");
+            table.removeAll();
+            table.setVisible(false);
+            return;
+        }
         Long thresholdUs = currentThreshold();
         if (thresholdUs == null) {
             status.setText("Enter a valid nonnegative threshold in microseconds.");
-            return;
-        }
-        Path ctf = (Files.isDirectory(selected.resolve("ctf")) ? selected.resolve("ctf") : selected)
-                .toAbsolutePath().normalize();
-        if (Files.isSymbolicLink(ctf)
-                || !Files.isRegularFile(ctf.resolve("metadata"), LinkOption.NOFOLLOW_LINKS)
-                || !Files.isRegularFile(ctf.resolve("channel0_0"), LinkOption.NOFOLLOW_LINKS)) {
-            status.setText("Select a saved CTF directory containing metadata and channel0_0.");
             return;
         }
         IProject project = selectedProject();
@@ -179,63 +177,40 @@ public final class ZephyrContentionView extends ViewPart {
             status.setText("Select an imported Zephyr project in Project Explorer first.");
             return;
         }
-        final java.util.Properties settings;
+        final Path build;
         try {
-            settings = ProjectContext.settings(project);
-            if (settings.getProperty("python") == null || settings.getProperty("workspace") == null)
-                throw new IOException("Managed project Python/Zephyr workspace is not configured");
+            var settings = ProjectContext.settings(project);
+            build = ProjectContext.buildDirectory(project, settings);
+            if (service == null || !build.equals(selectedBuild))
+                service = new OfflineTraceAnalysisService(new OfflineTracePythonBridge(project, settings));
         } catch (Exception error) {
-            status.setText("Cannot analyze saved CTF: " + error.getMessage());
+            status.setText("Cannot select build: " + error.getMessage());
             return;
         }
-        selectedTrace = ctf;
+        selectedBuild = build;
+        selectedTrace = selected.toAbsolutePath().normalize();
         int ticket = generation.incrementAndGet();
         if (loadJob != null) loadJob.cancel();
         displayed = null;
         table.removeAll();
+        table.setVisible(false);
         priorities.setText("");
         showIncomplete(false);
-        status.setText("Analyzing saved CTF resource events with the offline semantic detector...");
+        status.setText("Reading saved CTF resource events with offline Python...");
+        OfflineTraceAnalysisService current = service;
+        Path source = selectedTrace;
         loadJob = new Job("Review saved Zephyr contention events") {
             @Override protected IStatus run(IProgressMonitor monitor) {
-                Path temporary = null;
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                OfflineTraceAnalysisService.ContentionResult result = null;
+                OfflineTraceAnalysisService.AnalysisFailure failure = null;
                 try {
-                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
-                    temporary = Files.createTempDirectory("zew-contention-");
-                    for (String name : List.of("semantic_trace.py", "contention_detector.py",
-                                               "contention_report.py")) {
-                        var entry = Activator.getDefault().getBundle()
-                                .getEntry("tools/rtos_analysis/" + name);
-                        if (entry == null) throw new IOException("Bundled tool missing: " + name);
-                        try (var input = entry.openStream()) {
-                            Files.copy(input, temporary.resolve(name));
-                        }
-                    }
-                    var command = List.of(settings.getProperty("python"),
-                            temporary.resolve("contention_report.py").toString(),
-                            "--ctf", ctf.toString(),
-                            "--threshold-us", Long.toString(thresholdUs));
-                    String output = new ProcessRunner().run(command,
-                            project.getLocation().toFile().toPath(),
-                            Duration.ofSeconds(45), monitor::isCanceled,
-                            ignored -> {}, ProjectContext.environment(settings))
-                            .requireCompleteOutput();
-                    ContentionReport.Snapshot report = ContentionReport.parse(output);
-                    if (!monitor.isCanceled()) present(ticket, report, null);
-                } catch (InterruptedException error) {
-                    Thread.currentThread().interrupt();
-                    return Status.CANCEL_STATUS;
-                } catch (Exception error) {
-                    if (!monitor.isCanceled())
-                        present(ticket, null, "Saved trace analysis failed: " + error.getMessage());
-                } finally {
-                    if (temporary != null) {
-                        try (var files = Files.walk(temporary)) {
-                            for (Path file : files.sorted(Comparator.reverseOrder()).toList())
-                                Files.deleteIfExists(file);
-                        } catch (IOException ignored) { /* best-effort temporary tool cleanup */ }
-                    }
+                    result = current.analyseContention(source, build, thresholdUs);
+                } catch (OfflineTraceAnalysisService.AnalysisFailure error) {
+                    failure = error;
+                    result = error.contention();
                 }
+                if (!monitor.isCanceled()) present(ticket, result, failure);
                 return Status.OK_STATUS;
             }
         };
@@ -243,56 +218,45 @@ public final class ZephyrContentionView extends ViewPart {
         loadJob.schedule();
     }
 
-    private void present(int ticket, ContentionReport.Snapshot report, String error) {
+    private void present(int ticket, OfflineTraceAnalysisService.ContentionResult report,
+                         OfflineTraceAnalysisService.AnalysisFailure failure) {
         org.eclipse.swt.widgets.Display.getDefault().asyncExec(() -> {
             if (generation.get() != ticket || table == null || table.isDisposed()) return;
-            render(report, error);
+            render(report, failure);
         });
     }
 
-    /** UI-thread-only rendering, exercised by installed Eclipse smoke tests. */
-    private void render(ContentionReport.Snapshot report, String error) {
-        if (table == null || table.isDisposed()) return;
+    /** UI-thread-only rendering of the typed JSON analysis result. */
+    private void render(OfflineTraceAnalysisService.ContentionResult report,
+                        OfflineTraceAnalysisService.AnalysisFailure failure) {
         displayed = report;
         table.removeAll();
+        table.setVisible(false);
         priorities.setText("");
         showIncomplete(report != null && report.incomplete());
-        if (error != null) {
-            status.setText(error);
+        if (report == null) {
+            status.setText(failure == null ? "Offline contention analysis unavailable."
+                    : failure.kind() + ": " + failure.getMessage());
             return;
         }
-        if (report.decoderUnavailable()) {
-            status.setText("CTF decoder unavailable. Install Babeltrace 2 bt2 for the managed Python. "
-                    + report.error());
-            return;
-        }
-        if (!report.inversionEnabled())
-            priorities.setText(NO_PRIORITIES);
-        else
-            priorities.setText("Pattern A requires observed priorities for the holder, waiter and running medium thread.");
+        var model = OfflineTraceViewModels.contention(report);
+        if (model.noPriorities()) priorities.setText(NO_PRIORITIES);
         table.setRedraw(false);
         try {
-            for (ContentionReport.Finding finding : report.findings()) {
+            for (var finding : model.rows()) {
                 TableItem row = new TableItem(table, SWT.NONE);
-                row.setText(new String[] {
-                        finding.kind(), finding.objectName(), finding.waiter(),
-                        finding.holder(), finding.durationUs(), finding.explanation(),
-                });
+                row.setText(new String[] {finding.kind(), finding.object(), finding.waiter(),
+                        finding.holder(), finding.durationUs(), finding.explanation()});
             }
-        } finally {
-            table.setRedraw(true);
-        }
-        if (report.resourceEvents() == 0)
-            status.setText("No mutex or semaphore events were observed in this trace. "
-                    + "Resource tracing may not have been enabled.");
-        else if (report.findings().isEmpty())
-            status.setText("No supported inversion or wait-above-threshold patterns found. "
-                    + "This does not prove that resource contention never occurred.");
-        else
-            status.setText("Showing " + table.getItemCount()
-                    + " observed patterns at " + threshold.getText()
-                    + " us long-wait threshold."
-                    + (report.error().isEmpty() ? "" : " " + report.error()));
+        } finally { table.setRedraw(true); }
+        table.setVisible(!model.rows().isEmpty());
+        if (model.rows().isEmpty()) status.setText(OfflineTraceViewModels.CONTENTION_EMPTY
+                + " Saved CTF: " + report.trace());
+        else status.setText("Observed patterns: " + model.rows().size()
+                + " | Threshold: " + report.thresholdUs() + " us"
+                + " | Saved CTF: " + report.trace() + " | Selected build: " + report.build());
+        if (report.incomplete()) status.setText(status.getText() + " | Trace incomplete.");
+        table.getParent().layout(true, true);
     }
 
     private void showIncomplete(boolean visible) {
