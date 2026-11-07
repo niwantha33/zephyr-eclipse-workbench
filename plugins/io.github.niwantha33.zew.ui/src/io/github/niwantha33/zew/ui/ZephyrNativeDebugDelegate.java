@@ -245,7 +245,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                         + ", TCL=" + configuration.getAttribute(TCL_PORT, 6333)
                         + ", Telnet=" + configuration.getAttribute(TELNET_PORT, 4444));
                 info.println("Symbols: " + params.elf() + " | target: " + params.plan().board()
-                        + " | profile: " + params.settings().getProperty("zew.buildConfiguration", "default")
+                        + " | profile: " + ProjectContext.profileIdentity(params.settings())
                         + ". Debug attaches without flashing; use Flash when the device firmware differs from this build.");
                 if (configuration.getAttribute(FLASH_BUILD, java.util.Map.<String, String>of()).isEmpty())
                     info.println("TARGET IMAGE NOT VERIFIED: switching Build configuration to Debug (-Og) "
@@ -351,7 +351,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         var expected = configuration.getAttribute(FLASH_BUILD, java.util.Map.<String, String>of());
         if (!expected.isEmpty()) {
             io.github.niwantha33.zew.core.FlashDebugBuild.verifyAttributes(expected, params.plan().buildDirectory(),
-                    params.settings().getProperty("board"), params.settings().getProperty("zew.buildConfiguration", "default"));
+                    params.settings().getProperty("board"), ProjectContext.profileIdentity(params.settings()));
         }
     }
 
