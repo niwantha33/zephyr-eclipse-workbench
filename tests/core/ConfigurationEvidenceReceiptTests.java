@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt.State;
+import io.github.niwantha33.zew.core.BuildProfile;
+import io.github.niwantha33.zew.core.BuildConfiguration;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -65,7 +67,8 @@ public final class ConfigurationEvidenceReceiptTests {
         var receipt = ConfigurationEvidenceReceipt.receiptPath(f.build());
         check(Files.isRegularFile(receipt)
                 && !Files.exists(f.app().resolve(".zew"))
-                && Files.readString(receipt).contains("ZEW-CONFIG-RECEIPT-1"),
+                && Files.readString(receipt).contains("ZEW-CONFIG-RECEIPT-1")
+                && Files.readString(receipt).matches("(?s).*\\nF\\t[0-9a-f]{64}\\n.*"),
                 "only build-local receipt written; application left untouched");
 
         Files.writeString(f.conf(), "CONFIG_GPIO=n\n", StandardCharsets.UTF_8);
@@ -153,6 +156,48 @@ public final class ConfigurationEvidenceReceiptTests {
                 "persistent partial receipts retain a specific reason for the Studio to display");
         check(Files.readString(incomplete.conf()).equals("CONFIG_GPIO=y\n"),
                 "collecting partial evidence never edits configuration sources");
+
+        var named = fixture();
+        var namedProfile = new BuildProfile("debug-rtt", "RTT Debug",
+                BuildConfiguration.DEBUG, "APP_TRACE_ENABLED=1",
+                "CONFIG_LOG=y\nCONFIG_LOG_DEFAULT_LEVEL=4\n");
+        namedProfile.save(named.app());
+        Files.writeString(named.build().resolve("CMakeCache.txt"),
+                "BOARD:STRING=example/qualifier\nCONF_FILE:STRING=prj.conf\n"
+                + "EXTRA_CONF_FILE:STRING="
+                + named.app().resolve(".zew/profiles/debug-rtt.conf") + "\n",
+                StandardCharsets.UTF_8);
+        // Simulate a completed configuration after the profile sources were saved.
+        var configuredAt = FileTime.from(Instant.now().plusSeconds(30));
+        Files.setLastModifiedTime(named.build().resolve("CMakeCache.txt"), configuredAt);
+        Files.setLastModifiedTime(named.generatedConfig(), configuredAt);
+        var namedCaptured = ConfigurationEvidenceReceipt.capture(
+                named.app(), named.build(), "example/qualifier", "profile-debug-rtt");
+        check(namedCaptured.state() == State.CURRENT,
+                "named profile participates in complete build-local provenance");
+        Path namedReceipt = ConfigurationEvidenceReceipt.receiptPath(named.build());
+        check(Files.readString(namedReceipt).contains(
+                "F\t" + namedProfile.fingerprintSha256() + "\n"),
+                "receipt stores digest of named profile name and key flags");
+        check(ConfigurationEvidenceReceipt.inspect(named.app(), named.build(),
+                "example/qualifier", "profile-debug-rtt").state() == State.CURRENT,
+                "matching profile metadata verifies against saved receipt");
+        new BuildProfile("debug-rtt", "Updated RTT Debug", BuildConfiguration.DEBUG,
+                "APP_TRACE_ENABLED=1", namedProfile.kconfig()).save(named.app());
+        check(ConfigurationEvidenceReceipt.inspect(named.app(), named.build(),
+                "example/qualifier", "profile-debug-rtt").state() == State.CHANGED,
+                "changing only named profile metadata invalidates provenance");
+        namedProfile.save(named.app());
+        check(ConfigurationEvidenceReceipt.inspect(named.app(), named.build(),
+                "example/qualifier", "profile-debug-rtt").state() == State.CURRENT,
+                "restoring original profile bytes revalidates fingerprint");
+        String tampered = Files.readString(namedReceipt).replace(
+                "F\t" + namedProfile.fingerprintSha256(),
+                "F\t" + "0".repeat(64));
+        Files.writeString(namedReceipt, tampered);
+        check(ConfigurationEvidenceReceipt.inspect(named.app(), named.build(),
+                "example/qualifier", "profile-debug-rtt").state() == State.CHANGED,
+                "receipt profile fingerprint must be checked, not merely present");
 
         System.out.println("PASS configuration provenance receipt: " + checks);
     }

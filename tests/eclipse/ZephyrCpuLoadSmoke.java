@@ -48,8 +48,9 @@ public final class ZephyrCpuLoadSmoke {
         var present = view.getClass().getDeclaredMethod("present", result, failure);
         present.setAccessible(true);
         present.invoke(view, cpu, null);
-        check(banner.isVisible() && table.isVisible() && table.getItemCount() == 2,
-                "incomplete saved trace displays banner and evidenced rows");
+        check(banner.isVisible() && !table.isVisible() && table.getItemCount() == 0
+                && status.getText().contains("CPU percentages are unavailable"),
+                "incomplete saved trace suppresses derived CPU percentages");
         Object noScheduler = result.getConstructor(Path.class, Path.class, String.class, boolean.class,
                 String.class, Long.class, Long.class, Long.class, Long.class, int.class,
                 String.class, BigDecimal.class, Long.class, List.class, Long.class, BigDecimal.class)
@@ -59,6 +60,30 @@ public final class ZephyrCpuLoadSmoke {
         present.invoke(view, noScheduler, null);
         check(!table.isVisible() && status.getText().contains("No scheduler events found"),
                 "no scheduler events hide the table and show explicit reason");
+        Table stateTable = (Table) field(view, "stateTable");
+        check(!stateTable.isVisible(), "no scheduler data never creates fake state rows");
+
+        Class<?> stateClass = bundle.loadClass(
+                "io.github.niwantha33.zew.ui.OfflineTraceAnalysisService$CpuStateInterval");
+        Class<?> stateType = bundle.loadClass(
+                "io.github.niwantha33.zew.ui.OfflineTraceAnalysisService$ObservedState");
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Object scheduled = stateClass.getConstructor(String.class, stateType,
+                long.class, long.class, boolean.class).newInstance("worker",
+                Enum.valueOf((Class) stateType, "SCHEDULED"), 0L, 10000L, true);
+        Object validThread = row.getConstructor(String.class, long.class, BigDecimal.class)
+                .newInstance("worker", 9000L, new BigDecimal("90"));
+        Object complete = result.getConstructor(Path.class, Path.class, String.class, boolean.class,
+                String.class, Long.class, Long.class, Long.class, Long.class, int.class,
+                String.class, BigDecimal.class, Long.class, List.class, Long.class, BigDecimal.class,
+                List.class).newInstance(Path.of("ctf"), Path.of("build"), "ok", false, "",
+                        0L, 10000L, 0L, 10000L, 2, "partial", null, 0L,
+                        List.of(validThread), 1000L, new BigDecimal("10"), List.of(scheduled));
+        present.invoke(view, complete, null);
+        check(table.isVisible() && table.getItemCount() == 2
+                && stateTable.isVisible() && stateTable.getItemCount() == 1
+                && stateTable.getItem(0).getText(1).equals("Scheduled (ISR-inclusive)"),
+                "complete CPU view distinguishes exclusive ISR and inclusive scheduler intervals");
         page.hideView(view);
         System.out.println("PASS ZephyrCpuLoadSmoke");
     }

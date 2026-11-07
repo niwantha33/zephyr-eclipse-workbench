@@ -55,12 +55,34 @@ public final class OfflineTraceAnalysisServiceTests {
                     && cpu.cpuBusyPercent() == null, "typed CPU JSON and withheld busy percent");
             check(service.analyseCpu(ctf, build, null, null) == cpu && calls.get() == 1,
                     "same trace/build/window served from cache");
+            String stateJson = CPU.replace("\"isr_percentage\":10.0}",
+                    "\"isr_percentage\":10.0,\"thread_states\":["
+                    + "{\"name\":\"worker\",\"state\":\"Scheduled\",\"start_ns\":0,"
+                    + "\"end_ns\":350000,\"scheduled_includes_isr\":true},"
+                    + "{\"name\":\"idle\",\"state\":\"Sleeping\",\"start_ns\":0,"
+                    + "\"end_ns\":350000,\"scheduled_includes_isr\":false}]}");
+            var states = new OfflineTraceAnalysisService(request -> stateJson)
+                    .analyseCpu(ctf, build, null, null).stateIntervals();
+            check(states.size() == 2 && states.getFirst().state()
+                    == OfflineTraceAnalysisService.ObservedState.SCHEDULED
+                    && states.getFirst().scheduledIncludesIsr()
+                    && states.getLast().state() == OfflineTraceAnalysisService.ObservedState.SLEEPING,
+                    "typed observed states distinguish ISR-inclusive schedule from exclusive CPU time");
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> stateJson.replace(
+                            "\"end_ns\":350000,\"scheduled_includes_isr\":true",
+                            "\"end_ns\":350000,\"scheduled_includes_isr\":false"))
+                            .analyseCpu(ctf, build, null, null));
             Files.writeString(stream, "changed stream with a different size");
             service.analyseCpu(ctf, build, null, null);
             check(calls.get() == 2, "changed stream fingerprint invalidates cache");
             var report = service.analyseContention(ctf, build, 1000);
             check(!report.inversionEnabled() && report.findings().size() == 1,
                     "typed contention finding with no numeric priorities");
+            check(report.findings().getFirst().owner().state()
+                    == OfflineTraceAnalysisService.HolderState.UNKNOWN
+                    && report.findings().getFirst().owner().name() == null,
+                    "holder is a typed, explicit unknown");
             var projection = OfflineTraceViewModels.contention(report);
             check(projection.noPriorities() && projection.rows().size() == 1
                     && projection.rows().getFirst().holder().equals("unknown")
@@ -74,6 +96,34 @@ public final class OfflineTraceAnalysisServiceTests {
                     "CPU table sorts descending and labels the separate ISR row");
             expect(OfflineTraceAnalysisService.ErrorKind.TRACE_UNREADABLE,
                     () -> service.analyseCpu(root.resolve("absent"), build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> service.analyseCpu(ctf, build, 10L, 10L));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CPU
+                            .replace("\"running_ns\":650000", "\"running_ns\":850000"))
+                            .analyseCpu(ctf, build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CPU
+                            .replace("\"percentage\":25.0", "\"percentage\":75.0"))
+                            .analyseCpu(ctf, build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CPU
+                            .replace("\"isr_percentage\":10.0", "\"isr_percentage\":100.0"))
+                            .analyseCpu(ctf, build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CPU
+                            .replace("\"scheduler_events\":4", "\"scheduler_events\":0"))
+                            .analyseCpu(ctf, build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CONTENTION
+                            .replace("\"holder\":null,\"holder_unknown\":true",
+                                    "\"holder\":\"invented\",\"holder_unknown\":true"))
+                            .analyseContention(ctf, build, 1000));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CONTENTION
+                            .replace("\"holder\":null,\"holder_unknown\":true",
+                                    "\"holder\":null,\"holder_unknown\":false"))
+                            .analyseContention(ctf, build, 1000));
             var failed = new OfflineTraceAnalysisService(request -> {
                 throw new java.io.IOException("stderr: Python module failure");
             });
@@ -85,8 +135,26 @@ public final class OfflineTraceAnalysisServiceTests {
                         && error.getMessage().contains("stderr: Python module failure"),
                         "module stderr retained as typed error");
             }
-            String truncated = CPU.replace("\"status\":\"ok\",\"incomplete\":false",
-                    "\"status\":\"incomplete\",\"incomplete\":true");
+            var traceback = new OfflineTraceAnalysisService(
+                    request -> { throw new IllegalStateException(
+                            "Traceback (most recent call last):\n  at module.py:10\n"
+                                    + "x".repeat(4096)); });
+            try {
+                traceback.analyseCpu(ctf, build, null, null);
+                throw new AssertionError("traceback should become a typed error");
+            } catch (OfflineTraceAnalysisService.AnalysisFailure error) {
+                check(error.kind() == OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED
+                        && error.getMessage().length() < 241
+                        && !error.getMessage().contains("module.py"),
+                        "raw stack trace must never escape the typed UI service");
+            }
+            String truncated = """
+                    {"schema_version":1,"kind":"cpu","status":"incomplete","incomplete":true,
+                     "reason":"truncated","first_timestamp_ns":0,"last_timestamp_ns":1000000,
+                     "start_ns":0,"end_ns":1000000,"scheduler_events":4,
+                     "cpu":{"status":"unavailable","cpu_busy_percent":null,"unknown_ns":null,
+                       "rows":[],"isr_ns":null,"isr_percentage":null}}
+                    """;
             var partial = new OfflineTraceAnalysisService(request -> truncated);
             try {
                 partial.analyseCpu(ctf, build, null, null);
@@ -97,8 +165,14 @@ public final class OfflineTraceAnalysisServiceTests {
                         "typed incomplete error retains observed data for warning banner");
                 check(OfflineTraceViewModels.cpu(error.cpu()).incomplete(), "CPU banner state");
             }
-            String noEvents = CPU.replace("\"status\":\"ok\"", "\"status\":\"no_scheduler\"")
-                    .replace("\"scheduler_events\":4", "\"scheduler_events\":0");
+            String noEvents = """
+                    {"schema_version":1,"kind":"cpu","status":"no_scheduler","incomplete":false,
+                     "reason":"No recognized scheduler transitions","first_timestamp_ns":0,
+                     "last_timestamp_ns":1000000,"start_ns":0,"end_ns":1000000,
+                     "scheduler_events":0,"cpu":{"status":"unavailable",
+                     "cpu_busy_percent":null,"unknown_ns":null,"rows":[],
+                     "isr_ns":null,"isr_percentage":null}}
+                    """;
             var empty = new OfflineTraceAnalysisService(request -> noEvents)
                     .analyseCpu(ctf, build, null, null);
             var noScheduler = OfflineTraceViewModels.cpu(empty);
