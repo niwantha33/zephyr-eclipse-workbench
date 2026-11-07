@@ -220,6 +220,8 @@ class MemoryProfiler:
                     peak = known_bytes
                     peak_time = timestamp
             if state.bytes_complete and count_complete:
+                # A fully sized pool remains locally exact even if a
+                # different pool has unknown-size allocations.
                 state.peak_known_bytes = max(state.peak_known_bytes, state.current_known_bytes)
 
         # Once the history has any unsized/ambiguous operation, the WHOLE
@@ -230,10 +232,8 @@ class MemoryProfiler:
         pool_list = [
             PoolProfile(name, s.alloc_count, s.free_count,
                         s.current_count if count_complete else None,
-                        s.current_known_bytes if s.bytes_complete and count_complete
-                        and bytes_complete else None,
-                        s.peak_known_bytes if s.bytes_complete and count_complete
-                        and bytes_complete else None)
+                        s.current_known_bytes if s.bytes_complete and count_complete else None,
+                        s.peak_known_bytes if s.bytes_complete and count_complete else None)
             for name, s in sorted(pools.items())
         ]
         return MemoryProfile(
