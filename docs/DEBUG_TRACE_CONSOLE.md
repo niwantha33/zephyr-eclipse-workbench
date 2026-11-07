@@ -102,3 +102,5 @@ RTT's TCP connection.
   CTF parser or create a background job. The existing UART/RTT **text**
   receivers and the RAM CTF **snapshot** action are different, already
   documented features. See [design proposal](LIVE_TRACE_STREAMING_DESIGN.md).
+
+For current feature status and hardware-validation claims, see the [single-source-of-truth trace analysis capabilities table](TRACE_ANALYSIS_CAPABILITIES.md). Implementation guidance here does not supersede its status.

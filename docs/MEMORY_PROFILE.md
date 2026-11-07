@@ -66,3 +66,5 @@ or duplicate live pointer prevents reliable balance reporting.
 The profiler neither estimates missing sizes nor extrapolates beyond
 observed events. See the [Zephyr tracing guide](https://docs.zephyrproject.org/latest/services/tracing/index.html)
 for obtaining a saved CTF capture and matching metadata.
+
+For current feature status and hardware-validation claims, see the [single-source-of-truth trace analysis capabilities table](TRACE_ANALYSIS_CAPABILITIES.md). Implementation guidance here does not supersede its status.

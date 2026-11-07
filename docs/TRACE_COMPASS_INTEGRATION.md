@@ -90,3 +90,5 @@ calibration; nested interrupts and SMP synchronization; UI XML registration.
 References: [Zephyr tracing](https://docs.zephyrproject.org/latest/services/tracing/index.html),
 [Zephyr CTF sample](https://docs.zephyrproject.org/latest/samples/subsys/tracing/basic/README.html),
 [Trace Compass standalone CLI](https://archive.eclipse.org/tracecompass/doc/stable/org.eclipse.tracecompass.rcp.doc.user/User-Guide.html).
+
+For current feature status and hardware-validation claims, see the [single-source-of-truth trace analysis capabilities table](TRACE_ANALYSIS_CAPABILITIES.md). Implementation guidance here does not supersede its status.
