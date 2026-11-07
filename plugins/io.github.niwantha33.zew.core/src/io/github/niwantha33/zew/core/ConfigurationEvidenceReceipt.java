@@ -59,7 +59,7 @@ public final class ConfigurationEvidenceReceipt {
             return unknown(State.UNVERIFIED, "Application directory is unavailable.");
         Path app = application.toRealPath();
         Path root = build.toRealPath();
-        InputSet sources = findInputs(app, root);
+        InputSet sources = findInputs(app, root, profile);
         String configHash = hash(root.resolve("zephyr/.config"));
         String dtsHash = hash(root.resolve("zephyr/zephyr.dts"));
         String cacheHash = hash(root.resolve("CMakeCache.txt"));
@@ -85,7 +85,7 @@ public final class ConfigurationEvidenceReceipt {
                 // Devicetree. Comparing CMakeLists.txt against zephyr.dts
                 // incorrectly marks a successful rebuild incomplete forever.
                 String sourceName = source.getFileName().toString();
-                Path target = sourceName.equals("CMakeLists.txt")
+                Path target = sourceName.equals("CMakeLists.txt") || sourceName.endsWith(".profile")
                         ? root.resolve("CMakeCache.txt")
                         : sourceName.endsWith(".conf") || sourceName.equals("Kconfig")
                             || sourceName.startsWith("Kconfig.")
@@ -237,7 +237,7 @@ public final class ConfigurationEvidenceReceipt {
         }
     }
 
-    private static InputSet findInputs(Path app, Path build) throws IOException {
+    private static InputSet findInputs(Path app, Path build, String profile) throws IOException {
         var found = new LinkedHashSet<Path>();
         boolean complete = true;
         String limitation = "";
@@ -245,6 +245,13 @@ public final class ConfigurationEvidenceReceipt {
             found.add(app.resolve("CMakeLists.txt").toRealPath());
         if (Files.isRegularFile(app.resolve("Kconfig"), LinkOption.NOFOLLOW_LINKS))
             found.add(app.resolve("Kconfig").toRealPath());
+        // A named profile can change C compiler macros without changing prj.conf.
+        // Its project-owned manifest must therefore participate in build freshness.
+        if (profile != null && profile.startsWith("profile-")) {
+            String id = profile.substring("profile-".length());
+            BuildProfile.read(app, id); // fail closed on missing or invalid profile
+            found.add(app.resolve(".zew/profiles").resolve(id + ".profile").toRealPath());
+        }
 
         Path cache = build.resolve("CMakeCache.txt");
         if (!Files.isRegularFile(cache, LinkOption.NOFOLLOW_LINKS)
