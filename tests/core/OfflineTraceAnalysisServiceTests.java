@@ -104,6 +104,14 @@ public final class OfflineTraceAnalysisServiceTests {
                             .analyseCpu(ctf, build, null, null));
             expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
                     () -> new OfflineTraceAnalysisService(request -> CPU
+                            .replace("\"percentage\":25.0", "\"percentage\":75.0"))
+                            .analyseCpu(ctf, build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CPU
+                            .replace("\"isr_percentage\":10.0", "\"isr_percentage\":100.0"))
+                            .analyseCpu(ctf, build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CPU
                             .replace("\"scheduler_events\":4", "\"scheduler_events\":0"))
                             .analyseCpu(ctf, build, null, null));
             expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
