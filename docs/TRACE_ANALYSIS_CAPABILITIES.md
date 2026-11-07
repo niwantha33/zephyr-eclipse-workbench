@@ -3,7 +3,7 @@
 
 > This table is the single source of truth. Do not describe a feature as supported in any other document unless it appears here with status Implemented.
 
-Scope: offline CTF analysis plus its immediate capture, investigation, console and handoff helpers in `plugins/io.github.niwantha33.zew.ui/tools/rtos_analysis/`. **Implemented** means a functioning code path exists, not that it is hardware-qualified; **Partial** means an evidence-limited code path exists; **Not implemented** means there is no working capability. **No** means this change did not personally test that feature on a physical device. Historical claims, synthetic tests and installed-Eclipse smoke do not turn No into Yes. The memory profiler currently belongs to draft PR #196 (not merged into main).
+Scope: offline CTF analysis plus its immediate capture, investigation, console and handoff helpers in `plugins/io.github.niwantha33.zew.ui/tools/rtos_analysis/`. **Implemented** means a functioning code path exists, not that it is hardware-qualified; **Partial** means an evidence-limited code path exists; **Not implemented** means there is no working capability. **No** means this change did not personally test that feature on a physical device. Historical claims, synthetic tests and installed-Eclipse smoke do not turn No into Yes. The memory profiler was merged to main in PR #196; its existence does not imply hardware validation.
 
 | Feature | Status (Implemented / Partial / Not implemented) | Data source | Known limitations | Validated against real hardware (Yes / No) |
 |---|---|---|---|---|
@@ -13,7 +13,7 @@ Scope: offline CTF analysis plus its immediate capture, investigation, console a
 | CPU load | Partial | Single-stream switches, nested ISR, explicit idle ID; `cpu_analysis.py` | Busy percent withheld for gaps, unknown idle, losses, multi-stream or ambiguous events; no WCET | No |
 | Tracepoint plot | Partial | Declared project tracepoints plus CTF `named_event`; `tracepoint_config.py`, `tracepoint_samples.py` | Timestamp/value table with statistics, not a drawn curve; values require declared types; no missing-sample inference | No |
 | Contention report | Partial | Mutex/semaphore phases and numeric thread priorities; `contention_detector.py`, `contention_report.py` | Only explicitly observed long waits and inversion patterns; no finding does not imply no contention or missed deadline | No |
-| Memory profile | Partial | Heap/slab CTF outcomes; `memory_profiler.py`, `memory_profile_report.py` (draft PR #196) | Stock CTF lacks sizes; byte totals/peaks often unavailable; imbalance is not a leak; loss prevents a final verdict | No |
+| Memory profile | Partial | Heap/slab CTF outcomes; `memory_profiler.py`, `memory_profile_report.py` | Stock CTF lacks sizes; byte totals/peaks often unavailable; imbalance is not a leak; loss prevents a final verdict | No |
 | Timing analysis | Partial | Semantic scheduler and ISR transitions; `timing_analysis.py` | Observed maxima and deadline comparisons only; not WCET or calibrated real-world timing | No |
 | Thread event log | Partial | Decoder event names and observed payloads; `thread_event_log.py` | Bounded list; unknown states/source locations remain unknown; no missing-event inference | No |
 | Offline investigation report | Partial | Saved capture, trace summary and receipts; `investigation.py` | Requires valid saved artifacts; provenance does not prove flashed image or complete capture | No |

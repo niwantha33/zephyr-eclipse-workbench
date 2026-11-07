@@ -99,3 +99,5 @@ numeric payloads are **preserved as UNKNOWN**, not silently ignored.
 References: [Zephyr tracing guide](https://docs.zephyrproject.org/latest/services/tracing/index.html),
 [Zephyr named-event API](https://docs.zephyrproject.org/latest/doxygen/html/group__subsys__tracing__apis__named.html),
 [Zephyr CTF metadata](https://github.com/zephyrproject-rtos/zephyr/blob/main/subsys/tracing/ctf/tsdl/metadata).
+
+For current feature status and hardware-validation claims, see the [single-source-of-truth trace analysis capabilities table](TRACE_ANALYSIS_CAPABILITIES.md). Implementation guidance here does not supersede its status.

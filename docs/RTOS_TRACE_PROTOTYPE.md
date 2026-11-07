@@ -50,3 +50,5 @@ trace build, tool and probe selection, explicit flashing, server lifecycle,
 cancellation and cleanup, firmware/ELF matching, fullness and trace-loss
 reporting, metadata discovery, automated viewer import, richer scheduling and
 interrupt analysis, Windows integration tests and real MSPM0/ESP32 hardware tests.
+
+For current feature status and hardware-validation claims, see the [single-source-of-truth trace analysis capabilities table](TRACE_ANALYSIS_CAPABILITIES.md). Implementation guidance here does not supersede its status.

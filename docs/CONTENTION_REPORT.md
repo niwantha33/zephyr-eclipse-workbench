@@ -68,3 +68,5 @@ The top-of-view disclaimer reads:
 > Findings are inferred from trace events. A reported priority inversion means the pattern was observed in the event stream; it does not prove that a deadline was missed.
 
 The report includes no CPU percentages or timeline visualization.
+
+For current feature status and hardware-validation claims, see the [single-source-of-truth trace analysis capabilities table](TRACE_ANALYSIS_CAPABILITIES.md). Implementation guidance here does not supersede its status.

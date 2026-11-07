@@ -93,3 +93,5 @@ separately for each Eclipse project. These are only dialog defaults; users
 must reconfirm the port, baud, duration and capture each time. Existing UART
 capture still uses its bounded process and Eclipse Console and does not share
 RTT's TCP connection.
+
+For current feature status and hardware-validation claims, see the [single-source-of-truth trace analysis capabilities table](TRACE_ANALYSIS_CAPABILITIES.md). Implementation guidance here does not supersede its status.

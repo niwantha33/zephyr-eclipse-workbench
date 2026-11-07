@@ -103,3 +103,5 @@ GitHub Actions additionally compiles the native Eclipse plug-in, captures
 installed-UI smoke evidence and runs pinned Windows firmware builds.
 Passing firmware compilation **does not** prove every target's RTOS trace
 transport, hardware exception decoder or CPU profile.
+
+For current feature status and hardware-validation claims, see the [single-source-of-truth trace analysis capabilities table](TRACE_ANALYSIS_CAPABILITIES.md). Implementation guidance here does not supersede its status.
