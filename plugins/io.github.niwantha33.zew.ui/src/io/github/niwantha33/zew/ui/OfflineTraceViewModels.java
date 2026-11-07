@@ -46,8 +46,8 @@ public final class OfflineTraceViewModels {
             rows.add(new CpuRow(thread.name().isBlank() ? "(unnamed thread)" : thread.name(),
                     micros(thread.runningNs()), percent(thread.percentage())));
         if (result.isrNs() != null && result.isrPercentage() != null) {
-            // ISR is separate and may overlap scheduler-derived Running intervals.
-            rows.add(new CpuRow("ISR (separate; may overlap threads)",
+            // The JSON adapter accounts ISR spans exclusively from thread execution.
+            rows.add(new CpuRow("ISR (exclusive)",
                     micros(result.isrNs()), percent(result.isrPercentage())));
         }
         rows.sort(Comparator.comparing((CpuRow row) -> new BigDecimal(row.percentage().replace("%", "")))
