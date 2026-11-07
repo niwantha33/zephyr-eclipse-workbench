@@ -195,6 +195,14 @@ class TraceRegressionHarnessTests(unittest.TestCase):
                       (ROOT / "docs/RTOS_ANALYSIS_ROADMAP.md").read_text(encoding="utf-8"))
         self.assertIn("TRACE_ANALYSIS_CAPABILITIES.md",
                       (ROOT / "docs/README.md").read_text(encoding="utf-8"))
+        for name in (
+            "CONTENTION_REPORT.md", "MEMORY_PROFILE.md", "USER_TRACEPOINTS.md",
+            "TRACE_COMPASS_INTEGRATION.md", "RTOS_TRACE_PROTOTYPE.md",
+            "RTOS_INVESTIGATION_GUIDE.md", "DEBUG_TRACE_CONSOLE.md",
+        ):
+            with self.subTest(guide=name):
+                self.assertIn("TRACE_ANALYSIS_CAPABILITIES.md",
+                              (ROOT / "docs" / name).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
