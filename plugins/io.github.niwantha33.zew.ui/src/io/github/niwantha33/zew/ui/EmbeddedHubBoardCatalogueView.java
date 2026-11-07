@@ -77,6 +77,7 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
         });
         inspect = new Button(controls, SWT.PUSH);
         inspect.setText("Open Configuration Studio");
+        inspect.setToolTipText("Opens the current project's configuration, not the browsed catalogue target.");
         inspect.setEnabled(false);
         inspect.addListener(SWT.Selection, event -> inspectProject());
 
@@ -166,7 +167,11 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
                             entries = discovered;
                             activeTarget = target;
                             source.setText("Source: selected local Zephyr checkout: " + zephyr);
-                            status.setText(discovered.size() + " exact targets discovered. This catalogue does not measure hardware compatibility.");
+                            boolean targetListed = EmbeddedHubBoardCatalogue.exact(discovered, target).isPresent();
+                            status.setText(discovered.size() + " exact targets discovered."
+                                    + (targetListed ? " Current project's target found."
+                                        : " Current project's target was not found in this checkout.")
+                                    + " Hardware compatibility is not measured.");
                             filterRows();
                         }
                     });
@@ -197,9 +202,13 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
         table.setRedraw(false);
         try {
             table.removeAll();
-            var filtered = EmbeddedHubBoardCatalogue.filter(entries, search.getText());
+            var filtered = new ArrayList<>(EmbeddedHubBoardCatalogue.filter(entries, search.getText()));
+            // Keep the active project's exact target visible even in a large catalogue.
+            filtered.sort(java.util.Comparator.comparingInt(
+                    row -> row.exactTarget().equals(activeTarget) ? 0 : 1));
+            final int visible = Math.min(1_500, filtered.size());
             int highlighted = -1;
-            for (int i = 0; i < filtered.size(); i++) {
+            for (int i = 0; i < visible; i++) {
                 var entry = filtered.get(i);
                 TableItem item = new TableItem(table, SWT.NONE);
                 item.setText(new String[] {entry.chipVendor(), entry.boardManufacturer(), entry.soc(),
@@ -211,7 +220,9 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
             details.setText(filtered.isEmpty()
                     ? "No matching targets. Search operates only on the selected checkout."
                     : (highlighted >= 0 ? "Current project's exact target is highlighted."
-                       : "Select a target to view its discovery evidence; selection does not modify the project."));
+                       : "Select a target to view its discovery evidence; selection does not modify the project.")
+                    + (filtered.size() > visible
+                        ? " Displaying first " + visible + " of " + filtered.size() + "; narrow your search." : ""));
             if (highlighted >= 0) showSelectedRow();
         } finally {
             table.setRedraw(true);
