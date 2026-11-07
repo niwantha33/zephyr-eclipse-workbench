@@ -40,6 +40,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
     public static final String PROJECT = Activator.ID + ".launch.project";
     public static final String ACTION = Activator.ID + ".launch.action";
     public static final String DEBUG_AFTER_FLASH = Activator.ID + ".launch.debugAfterFlash";
+    public static final String SELECTED_PROFILE = Activator.ID + ".launch.profileIdentity";
 
     @Override public boolean buildForLaunch(ILaunchConfiguration configuration, String mode,
                                             IProgressMonitor monitor) throws CoreException {
@@ -61,6 +62,10 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
         if (!project.isAccessible()) throw failure("Select an open imported Zephyr project.", null);
         try {
             var settings = ProjectContext.settings(project);
+            String requestedProfile = configuration.getAttribute(SELECTED_PROFILE, "");
+            if (!requestedProfile.isBlank() && !requestedProfile.equals(ProjectContext.profileIdentity(settings)))
+                throw new IOException("Flash launch profile no longer matches the selected project profile. "
+                        + "Select Flash again for the intended profile.");
             if (monitor.isCanceled()) return;
             var lease = TargetOperationGuard.acquire(action);
             Process process = null;
@@ -76,7 +81,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
                     command = prepared.command();
                     if (debugAfterFlash) debugBuild = io.github.niwantha33.zew.core.FlashDebugBuild.capture(
                             ProjectContext.buildDirectory(project, settings), settings.getProperty("board"),
-                            settings.getProperty("zew.buildConfiguration", "default"));
+                            ProjectContext.profileIdentity(settings));
                 } else {
                     Path output = ProjectContext.buildDirectory(project, settings);
                     var plan = TargetOperations.prepare(
@@ -150,7 +155,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
     private FlashPlan prepareFlash(IProject project, Properties settings,
                                   IProgressMonitor monitor, boolean debugAfterFlash) throws Exception {
         String board = settings.getProperty("board");
-        String buildConfiguration = settings.getProperty("zew.buildConfiguration");
+        String buildConfiguration = ProjectContext.profileIdentity(settings);
         var shell = new AtomicReference<Shell>();
         var confirmed = new AtomicBoolean();
         PlatformUI.getWorkbench().getDisplay().syncExec(() -> {
@@ -177,7 +182,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
             if (monitor.isCanceled()) return null;
             settings = ProjectContext.settings(project);
             if (!board.equals(settings.getProperty("board"))
-                    || !buildConfiguration.equals(settings.getProperty("zew.buildConfiguration")))
+                    || !buildConfiguration.equals(ProjectContext.profileIdentity(settings)))
                 throw new IOException("Board or build configuration changed during preparation; Flash cancelled.");
             var plan = TargetOperations.prepare(
                     ProjectContext.buildDirectory(project, settings), board, "flash", "");
@@ -206,7 +211,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
         var verified = ProjectContext.settings(project);
         Path build = ProjectContext.buildDirectory(project, verified).toRealPath();
         String board = verified.getProperty("board");
-        String profile = verified.getProperty("zew.buildConfiguration", "default");
+        String profile = ProjectContext.profileIdentity(verified);
         flashed.verify(build, board, profile);
         PlatformUI.getWorkbench().getDisplay().asyncExec(() -> {
             var window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
@@ -214,7 +219,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
             try {
                 var current = ProjectContext.settings(project);
                 if (!board.equals(current.getProperty("board"))
-                        || !profile.equals(current.getProperty("zew.buildConfiguration", "default"))
+                        || !profile.equals(ProjectContext.profileIdentity(current))
                         || !build.equals(ProjectContext.buildDirectory(project, current).toRealPath()))
                     throw new IOException("Target or build profile changed after Flash; Debug was not started.");
                 // No second build: it could replace the image just verified by Flash.
