@@ -20,7 +20,7 @@ public final class OfflineTraceAnalysisService {
         private final ContentionResult contention;
 
         AnalysisFailure(ErrorKind kind, String message, CpuLoadResult cpu, ContentionResult contention) {
-            super(message);
+            super(bounded(message));
             this.kind = kind;
             this.cpu = cpu;
             this.contention = contention;
@@ -307,6 +307,9 @@ public final class OfflineTraceAnalysisService {
 
     private static String bounded(String message) {
         if (message == null || message.isBlank()) return "no diagnostic supplied";
+        if (message.contains("Traceback") || message.contains("\\n\\tat ")
+                || message.contains("\\n  at "))
+            return "Offline analysis module failed; no stack trace is displayed.";
         String flat = message.replaceAll("[\\p{Cntrl}]", " ").strip();
         return flat.length() <= 240 ? flat : flat.substring(0, 240) + "…";
     }
