@@ -41,7 +41,14 @@ public final class ZephyrFlashShortcut extends ZephyrDebugShortcut {
                 org.eclipse.core.runtime.IStatus.ERROR, Activator.ID, "Zephyr launch extension is not installed."));
         final String targetIdentity;
         try {
-            targetIdentity = ProjectContext.profileIdentity(ProjectContext.settings(project));
+            // Launch metadata can be prepared before the managed environment is installed.
+            // Resolve the project-owned selection here; the actual Flash launch still
+            // requires ProjectContext.settings() and full preflight validation.
+            targetIdentity = io.github.niwantha33.zew.core.BuildProfileChoices.selected(
+                    io.github.niwantha33.zew.core.BuildProfileChoices.available(
+                            project.getLocation().toFile().toPath()),
+                    project.getPersistentProperty(ProjectContext.BUILD_CONFIGURATION),
+                    project.getPersistentProperty(ProjectContext.NAMED_PROFILE)).identity();
         } catch (Exception error) {
             throw new org.eclipse.core.runtime.CoreException(new org.eclipse.core.runtime.Status(
                     org.eclipse.core.runtime.IStatus.ERROR, Activator.ID,
