@@ -278,12 +278,26 @@ public final class OfflineTraceAnalysisService {
         if (total != length || !percentage(result.isrPercentage())
                 || (result.cpuBusyPercent() != null && !percentage(result.cpuBusyPercent())))
             throw failure(ErrorKind.MODULE_FAILED, "Exclusive CPU segments do not cover the window.");
+        for (CpuThread row : result.rows())
+            if (!matchesObservedPercentage(row.runningNs(), length, row.percentage()))
+                throw failure(ErrorKind.MODULE_FAILED, "Thread CPU percentage disagrees with observed time.");
+        if (!matchesObservedPercentage(result.isrNs(), length, result.isrPercentage()))
+            throw failure(ErrorKind.MODULE_FAILED, "ISR CPU percentage disagrees with exclusive ISR time.");
         for (CpuStateInterval state : result.stateIntervals()) {
             if (state.startNs() >= state.endNs() || state.startNs() < result.startNs()
                     || state.endNs() > result.endNs()
                     || (state.scheduledIncludesIsr() != (state.state() == ObservedState.SCHEDULED)))
                 throw failure(ErrorKind.MODULE_FAILED, "Invalid scheduled/observed thread state boundary.");
         }
+    }
+
+    private static boolean matchesObservedPercentage(long duration, long window, BigDecimal reported) {
+        if (window <= 0 || duration < 0 || !percentage(reported)) return false;
+        // Python's report rounds to four decimal places; tolerate its
+        // last-decimal floating-point tie without allowing false CPU shares.
+        BigDecimal expected = BigDecimal.valueOf(duration).multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(window), 4, java.math.RoundingMode.HALF_UP);
+        return expected.subtract(reported).abs().compareTo(new BigDecimal("0.0001")) <= 0;
     }
 
     private static boolean percentage(BigDecimal percent) {
