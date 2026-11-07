@@ -676,3 +676,36 @@ causality, vendor/package pin ownership, general AI client integration and full
 native visual editing remain incomplete or unknown as detailed in the table.
 Native installed desktop acceptance, exact remote-head CI, Windows managed
 firmware and physical hardware checks remain unverified. **G0 remains OPEN.**
+
+## EmbeddedHub Board Discovery — Eclipse CDT feasibility increment (draft PR #206, 2026-11-07)
+
+**Scope and gate:** Native Eclipse RCP/CDT, offline-first read-only local
+hardware discovery. This is an EmbeddedHub ecosystem proof of concept, not a
+new IDE, vendor marketplace, physical-board certification or product release.
+Evidence Engine **G0 remains OPEN**; no later release gate is advanced.
+
+**Code:** `EmbeddedHubBoardCatalogue` parses and validates the existing
+`tools/hardware_catalog.py` seven-column Zephyr HWMv2 output. Native
+`EmbeddedHubBoardCatalogueView` and handler provide exact-target searching,
+project-bound selection highlighting and a link to the existing Configuration
+Studio. The implementation performs no automatic build, flash, source edits,
+network access or telemetry.
+
+**Truth boundary:** A discovered board/SoC/qualifier record means that the
+selected checkout supplies metadata. It does **not** establish compile,
+runner, debug, physical pin, vendor-certified hardware or electrical support.
+Architecture, full product documentation, sample importing and upstream
+hardware verification report linking are future, separately reviewed work.
+
+**Tests:** The core's positive/negative metadata fixtures are registered in
+`scripts/test_core.py`. Mandatory acceptance is JDK 21 headless tests,
+exact-head Tycho and installed UI smoke, Windows firmware matrix, and review
+of source preservation. An installed UI interaction with a genuine Zephyr
+checkout has not been manually qualified in this PR. Passing synthetic tests
+is not evidence of physical hardware operation.
+
+**Documentation:** `docs/EMBEDDEDHUB_BOARD_DISCOVERY.md` and proposed
+`docs/adr/0008-embeddedhub-board-discovery.md`.
+
+**Merge status:** Draft, pending exact-head CI and human review. No wider
+EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.

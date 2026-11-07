@@ -47,6 +47,7 @@ sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33
             root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/DevicetreeEditorDiagnostics.java']
 subprocess.run([tool('javac'), '--release', '21', '--add-modules', 'jdk.httpserver', '-encoding', 'UTF-8', '-d', str(out), *map(str, sources)], check=True, cwd=root)
 subprocess.run([tool('java'), '-cp', str(out), 'CoreTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'EmbeddedHubBoardCatalogueTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '--add-modules', 'jdk.httpserver', '-cp', str(out), 'UpdateTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SetupTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ProjectFilesTests'], check=True, cwd=root, timeout=90)
