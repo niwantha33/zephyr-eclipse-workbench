@@ -61,6 +61,10 @@ public final class OfflineTraceAnalysisServiceTests {
             var report = service.analyseContention(ctf, build, 1000);
             check(!report.inversionEnabled() && report.findings().size() == 1,
                     "typed contention finding with no numeric priorities");
+            check(report.findings().getFirst().owner().state()
+                    == OfflineTraceAnalysisService.HolderState.UNKNOWN
+                    && report.findings().getFirst().owner().name() == null,
+                    "holder is a typed, explicit unknown");
             var projection = OfflineTraceViewModels.contention(report);
             check(projection.noPriorities() && projection.rows().size() == 1
                     && projection.rows().getFirst().holder().equals("unknown")
@@ -74,6 +78,26 @@ public final class OfflineTraceAnalysisServiceTests {
                     "CPU table sorts descending and labels the separate ISR row");
             expect(OfflineTraceAnalysisService.ErrorKind.TRACE_UNREADABLE,
                     () -> service.analyseCpu(root.resolve("absent"), build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> service.analyseCpu(ctf, build, 10L, 10L));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CPU
+                            .replace("\"running_ns\":650000", "\"running_ns\":850000"))
+                            .analyseCpu(ctf, build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CPU
+                            .replace("\"scheduler_events\":4", "\"scheduler_events\":0"))
+                            .analyseCpu(ctf, build, null, null));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CONTENTION
+                            .replace("\"holder\":null,\"holder_unknown\":true",
+                                    "\"holder\":\"invented\",\"holder_unknown\":true"))
+                            .analyseContention(ctf, build, 1000));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CONTENTION
+                            .replace("\"holder\":null,\"holder_unknown\":true",
+                                    "\"holder\":null,\"holder_unknown\":false"))
+                            .analyseContention(ctf, build, 1000));
             var failed = new OfflineTraceAnalysisService(request -> {
                 throw new java.io.IOException("stderr: Python module failure");
             });
@@ -85,8 +109,13 @@ public final class OfflineTraceAnalysisServiceTests {
                         && error.getMessage().contains("stderr: Python module failure"),
                         "module stderr retained as typed error");
             }
-            String truncated = CPU.replace("\"status\":\"ok\",\"incomplete\":false",
-                    "\"status\":\"incomplete\",\"incomplete\":true");
+            String truncated = """
+                    {"schema_version":1,"kind":"cpu","status":"incomplete","incomplete":true,
+                     "reason":"truncated","first_timestamp_ns":0,"last_timestamp_ns":1000000,
+                     "start_ns":0,"end_ns":1000000,"scheduler_events":4,
+                     "cpu":{"status":"unavailable","cpu_busy_percent":null,"unknown_ns":null,
+                       "rows":[],"isr_ns":null,"isr_percentage":null}}
+                    """;
             var partial = new OfflineTraceAnalysisService(request -> truncated);
             try {
                 partial.analyseCpu(ctf, build, null, null);
@@ -97,8 +126,14 @@ public final class OfflineTraceAnalysisServiceTests {
                         "typed incomplete error retains observed data for warning banner");
                 check(OfflineTraceViewModels.cpu(error.cpu()).incomplete(), "CPU banner state");
             }
-            String noEvents = CPU.replace("\"status\":\"ok\"", "\"status\":\"no_scheduler\"")
-                    .replace("\"scheduler_events\":4", "\"scheduler_events\":0");
+            String noEvents = """
+                    {"schema_version":1,"kind":"cpu","status":"no_scheduler","incomplete":false,
+                     "reason":"No recognized scheduler transitions","first_timestamp_ns":0,
+                     "last_timestamp_ns":1000000,"start_ns":0,"end_ns":1000000,
+                     "scheduler_events":0,"cpu":{"status":"unavailable",
+                     "cpu_busy_percent":null,"unknown_ns":null,"rows":[],
+                     "isr_ns":null,"isr_percentage":null}}
+                    """;
             var empty = new OfflineTraceAnalysisService(request -> noEvents)
                     .analyseCpu(ctf, build, null, null);
             var noScheduler = OfflineTraceViewModels.cpu(empty);
