@@ -376,6 +376,8 @@
         <command commandId="org.eclipse.ui.project.buildProject"
             icon="platform:/plugin/org.eclipse.cdt.ui/icons/elcl16/build_exec.png"
             label="Build Project" tooltip="Build selected project using its Eclipse builder" style="push"/>
+        <control id="io.github.niwantha33.zew.ui.profileQuickSelect"
+            class="io.github.niwantha33.zew.ui.ZephyrProfileToolbarContribution"/>
         <command commandId="io.github.niwantha33.zew.flash" icon="icons/flash.png"
             label="Flash Zephyr firmware" tooltip="Build and flash the selected Zephyr project" style="push"/>
       </toolbar>

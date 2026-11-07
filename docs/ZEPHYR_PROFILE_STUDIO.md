@@ -108,3 +108,32 @@ profile input and rejection of missing/deleted profiles.
 **Follow-up milestones:** per-profile overlay sets; dedicated app-only C macro
 injection without global CMake compiler flags; profile comparison and artifact
 hash view; active profile toolbar selector; debug backend capability preflight.
+
+## Toolbar quick profile selection (Build and Flash)
+
+The main Eclipse toolbar now shows the existing **Build Project** and **Flash**
+buttons with a compact **Profile: <name>** drop-down between them:
+
+- Select one imported Zephyr project or open one of its C/C++ editors.
+- Open **Profile:** and choose a built-in or named profile. The selection is
+  stored on that project, and remains active for subsequent Build, Flash and
+  Debug operations. It does **not** modify `prj.conf` or program the target.
+- Use the existing **Build Project** or **Flash** button as usual. The quick
+  popup also has explicit **Build selected profile** and
+  **Flash selected profile...** actions, plus a route to Project Properties.
+- The popup is project-specific; it does not reuse the last selected profile
+  when another project or a multi-selection is active. Missing profiles are
+  reported rather than silently replaced by a different configuration.
+- Flash retains its own confirmation, build, runner and hardware safety checks.
+  A Flash command is bound to the exact profile identity captured when clicked;
+  if the selected profile changes before or during preparation, flashing is
+  cancelled instead of using a different firmware image.
+- A scheduled **Build** also captures its expected board/profile build folder,
+  preventing a queued job from switching to a different profile's build folder.
+- Flash/Debug build identity uses named profile IDs (for example
+  `profile-debug-rtt`) rather than merely their shared Debug/Release
+  optimization setting.
+
+The toolbar is a shortcut for the existing profile and West builder workflow.
+It is not a new build engine or a guarantee that a particular logging transport
+or target debugger is supported.

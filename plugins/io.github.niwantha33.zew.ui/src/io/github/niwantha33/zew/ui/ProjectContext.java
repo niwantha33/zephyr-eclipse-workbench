@@ -47,6 +47,14 @@ final class ProjectContext {
                 "qemu_x86/atom".equals(settings.getProperty("board")) ? "true" : "false");
         return settings;
     }
+    /** Stable identity is the named profile ID, not merely its optimisation setting. */
+    static String profileIdentity(Properties settings) {
+        String named = settings.getProperty("zew.profileId", "");
+        return named.isBlank()
+                ? settings.getProperty("zew.buildConfiguration", "default")
+                : "profile-" + named;
+    }
+
     static Path buildDirectory(IProject project, Properties settings) throws Exception {
         Path application = project.getLocation().toFile().toPath();
         var profile = io.github.niwantha33.zew.core.BuildConfiguration.fromId(settings.getProperty("zew.buildConfiguration"));

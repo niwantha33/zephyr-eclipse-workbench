@@ -38,7 +38,7 @@ public final class ZephyrDebugHandler extends AbstractHandler {
         try {
             var settings = ProjectContext.settings(project);
             board = settings.getProperty("board");
-            buildConfiguration = settings.getProperty("zew.buildConfiguration");
+            buildConfiguration = ProjectContext.profileIdentity(settings);
         } catch (Exception ex) {
             MessageDialog.openError(shell, "Zephyr Debug", "Project setup is incomplete: " + ex.getMessage());
             return;
@@ -53,7 +53,7 @@ public final class ZephyrDebugHandler extends AbstractHandler {
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     var settings = ProjectContext.settings(project);
                     if (!board.equals(settings.getProperty("board"))
-                            || !buildConfiguration.equals(settings.getProperty("zew.buildConfiguration")))
+                            || !buildConfiguration.equals(ProjectContext.profileIdentity(settings)))
                         throw new java.io.IOException("Board or build configuration changed during build; select Debug again.");
                     io.github.niwantha33.zew.core.TargetOperations.prepare(
                         ProjectContext.buildDirectory(project, settings), board, "debugserver", "");
