@@ -213,6 +213,11 @@ public final class SocRegistersView extends ViewPart {
      */
     public void useLaunchProject(IProject project) {
         if (project == null || !project.isAccessible()) return;
+        // Invalidate any asynchronous DSF reads from the previous project
+        // before replacing its SVD and session association.
+        generation++;
+        busy = false;
+        listenTo(null);
         stopLiveWatch();
         selectedProjectName = project.getName();
         selectedBoard = null;
