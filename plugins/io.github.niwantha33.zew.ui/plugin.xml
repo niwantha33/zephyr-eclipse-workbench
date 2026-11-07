@@ -153,6 +153,11 @@
           category="org.eclipse.debug.ui"
           class="io.github.niwantha33.zew.ui.ThreadTimelineView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.cpuLoad"
+          name="Zephyr CPU Load"
+          category="org.eclipse.debug.ui"
+          class="io.github.niwantha33.zew.ui.ZephyrCpuLoadView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.contentionReport"
           name="Zephyr Contention Report"
           category="org.eclipse.debug.ui"
@@ -207,6 +212,7 @@
     <command id="io.github.niwantha33.zew.traceConsole" name="Open Debug Trace Console" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.liveTraceStreaming" name="Start Live Trace (not yet available)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.threadTimeline" name="Open Zephyr Thread Timeline" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.cpuLoad" name="Open Zephyr CPU Load" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.contentionReport" name="Open Zephyr Contention Report" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.memoryProfile" name="Open Zephyr Memory Profile" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tracepointPlot" name="Open Zephyr Tracepoint Plot" categoryId="io.github.niwantha33.zew.commands"/>
@@ -257,6 +263,7 @@
     <handler commandId="io.github.niwantha33.zew.traceConsole" class="io.github.niwantha33.zew.ui.ZephyrTraceConsoleHandler"/>
     <handler commandId="io.github.niwantha33.zew.liveTraceStreaming" class="io.github.niwantha33.zew.ui.LiveTraceStreamingHandler"/>
     <handler commandId="io.github.niwantha33.zew.threadTimeline" class="io.github.niwantha33.zew.ui.ThreadTimelineHandler"/>
+    <handler commandId="io.github.niwantha33.zew.cpuLoad" class="io.github.niwantha33.zew.ui.ZephyrCpuLoadHandler"/>
     <handler commandId="io.github.niwantha33.zew.contentionReport" class="io.github.niwantha33.zew.ui.ZephyrContentionHandler"/>
     <handler commandId="io.github.niwantha33.zew.memoryProfile" class="io.github.niwantha33.zew.ui.ZephyrMemoryProfileHandler"/>
     <handler commandId="io.github.niwantha33.zew.tracepointPlot" class="io.github.niwantha33.zew.ui.TracepointPlotHandler"/>
