@@ -244,9 +244,11 @@ class MemoryProfiler:
             current_bytes=known_bytes if bytes_complete and count_complete else None,
             peak_bytes=peak if bytes_complete and count_complete and events > 0 else None,
             peak_timestamp_ns=peak_time if bytes_complete and count_complete else None,
-            incomplete=trace.incomplete,
+            incomplete=trace.incomplete or trace.loss_reported,
             count_complete=count_complete,
             bytes_complete=bytes_complete and count_complete,
             decoder_unavailable=trace.decoder_unavailable,
-            diagnostics=([trace.error] if trace.error else []) + notes,
+            diagnostics=([trace.error] if trace.error else [])
+                    + (["CTF discarded event/packet notification was observed"]
+                       if trace.loss_reported else []) + notes,
         )
