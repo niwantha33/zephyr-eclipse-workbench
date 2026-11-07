@@ -135,6 +135,19 @@ public final class OfflineTraceAnalysisServiceTests {
                         && error.getMessage().contains("stderr: Python module failure"),
                         "module stderr retained as typed error");
             }
+            var traceback = new OfflineTraceAnalysisService(
+                    request -> { throw new IllegalStateException(
+                            "Traceback (most recent call last):\n  at module.py:10\n"
+                                    + "x".repeat(4096)); });
+            try {
+                traceback.analyseCpu(ctf, build, null, null);
+                throw new AssertionError("traceback should become a typed error");
+            } catch (OfflineTraceAnalysisService.AnalysisFailure error) {
+                check(error.kind() == OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED
+                        && error.getMessage().length() < 241
+                        && !error.getMessage().contains("module.py"),
+                        "raw stack trace must never escape the typed UI service");
+            }
             String truncated = """
                     {"schema_version":1,"kind":"cpu","status":"incomplete","incomplete":true,
                      "reason":"truncated","first_timestamp_ns":0,"last_timestamp_ns":1000000,
