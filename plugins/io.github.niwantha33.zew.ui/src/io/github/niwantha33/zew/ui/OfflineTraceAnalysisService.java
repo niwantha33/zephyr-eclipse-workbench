@@ -37,11 +37,28 @@ public final class OfflineTraceAnalysisService {
     }
 
     public record CpuThread(String name, long runningNs, BigDecimal percentage) {}
+    public enum ObservedState { SCHEDULED, READY, BLOCKED, SLEEPING, UNKNOWN }
+    /** Scheduled intervals include preempting ISR time; CPU rows exclude it. */
+    public record CpuStateInterval(String name, ObservedState state, long startNs,
+                                   long endNs, boolean scheduledIncludesIsr) {}
     public record CpuLoadResult(Path trace, Path build, String status, boolean incomplete, String reason,
                                 Long firstNs, Long lastNs, Long startNs, Long endNs,
                                 int schedulerEvents, String cpuStatus, BigDecimal cpuBusyPercent,
-                                Long unknownNs, List<CpuThread> rows, Long isrNs, BigDecimal isrPercentage) {
-        public CpuLoadResult { rows = List.copyOf(rows); }
+                                Long unknownNs, List<CpuThread> rows, Long isrNs, BigDecimal isrPercentage,
+                                List<CpuStateInterval> stateIntervals) {
+        public CpuLoadResult {
+            rows = List.copyOf(rows);
+            stateIntervals = List.copyOf(stateIntervals);
+        }
+        /** Source-compatible constructor for older saved-CTF reports and tests. */
+        public CpuLoadResult(Path trace, Path build, String status, boolean incomplete, String reason,
+                             Long firstNs, Long lastNs, Long startNs, Long endNs,
+                             int schedulerEvents, String cpuStatus, BigDecimal cpuBusyPercent,
+                             Long unknownNs, List<CpuThread> rows, Long isrNs, BigDecimal isrPercentage) {
+            this(trace, build, status, incomplete, reason, firstNs, lastNs, startNs, endNs,
+                    schedulerEvents, cpuStatus, cpuBusyPercent, unknownNs, rows,
+                    isrNs, isrPercentage, List.of());
+        }
     }
     /** Explicit ownership state; unknown is not represented by an invented name. */
     public enum HolderState { KNOWN, UNKNOWN }
@@ -97,6 +114,20 @@ public final class OfflineTraceAnalysisService {
                         integer(fields, at + "running_ns"), decimal(fields, at + "percentage")));
                 if (i >= 10000) throw failure(ErrorKind.MODULE_FAILED, "CPU row limit exceeded.");
             }
+            List<CpuStateInterval> states = new ArrayList<>();
+            for (int i = 0; fields.containsKey("cpu.thread_states[" + i + "].state"); i++) {
+                if (i >= 10000) throw failure(ErrorKind.MODULE_FAILED, "CPU state interval limit exceeded.");
+                String at = "cpu.thread_states[" + i + "].";
+                final ObservedState state;
+                try {
+                    state = ObservedState.valueOf(string(fields, at + "state").toUpperCase(java.util.Locale.ROOT));
+                } catch (IllegalArgumentException invalid) {
+                    throw failure(ErrorKind.MODULE_FAILED, "Unsupported observed thread state.");
+                }
+                states.add(new CpuStateInterval(string(fields, at + "name"), state,
+                        integer(fields, at + "start_ns"), integer(fields, at + "end_ns"),
+                        booleanField(fields, at + "scheduled_includes_isr")));
+            }
             result = new CpuLoadResult(key.trace, key.build, string(fields, "status"),
                     booleanField(fields, "incomplete"), string(fields, "reason"),
                     nullableInteger(fields, "first_timestamp_ns"), nullableInteger(fields, "last_timestamp_ns"),
@@ -104,7 +135,8 @@ public final class OfflineTraceAnalysisService {
                     intField(fields, "scheduler_events"), string(fields, "cpu.status"),
                     nullableDecimal(fields, "cpu.cpu_busy_percent"),
                     nullableInteger(fields, "cpu.unknown_ns"), rows,
-                    nullableInteger(fields, "cpu.isr_ns"), nullableDecimal(fields, "cpu.isr_percentage"));
+                    nullableInteger(fields, "cpu.isr_ns"), nullableDecimal(fields, "cpu.isr_percentage"),
+                    states);
             validateCpu(result);
             store(key, result);
         }
@@ -216,7 +248,8 @@ public final class OfflineTraceAnalysisService {
             throw failure(ErrorKind.MODULE_FAILED, "Inconsistent scheduler coverage status.");
         if (!"ok".equals(result.status())) {
             // Partial and no-scheduler reports must not advertise numerical estimates.
-            if (!result.rows().isEmpty() || result.isrPercentage() != null)
+            if (!result.rows().isEmpty() || result.isrPercentage() != null
+                    || !result.stateIntervals().isEmpty())
                 throw failure(ErrorKind.MODULE_FAILED, "Unavailable CPU evidence contains percentages.");
             return;
         }
@@ -245,6 +278,12 @@ public final class OfflineTraceAnalysisService {
         if (total != length || !percentage(result.isrPercentage())
                 || (result.cpuBusyPercent() != null && !percentage(result.cpuBusyPercent())))
             throw failure(ErrorKind.MODULE_FAILED, "Exclusive CPU segments do not cover the window.");
+        for (CpuStateInterval state : result.stateIntervals()) {
+            if (state.startNs() >= state.endNs() || state.startNs() < result.startNs()
+                    || state.endNs() > result.endNs()
+                    || (state.scheduledIncludesIsr() != (state.state() == ObservedState.SCHEDULED)))
+                throw failure(ErrorKind.MODULE_FAILED, "Invalid scheduled/observed thread state boundary.");
+        }
     }
 
     private static boolean percentage(BigDecimal percent) {
