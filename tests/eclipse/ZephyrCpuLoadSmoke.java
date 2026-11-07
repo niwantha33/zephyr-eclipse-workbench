@@ -48,8 +48,9 @@ public final class ZephyrCpuLoadSmoke {
         var present = view.getClass().getDeclaredMethod("present", result, failure);
         present.setAccessible(true);
         present.invoke(view, cpu, null);
-        check(banner.isVisible() && table.isVisible() && table.getItemCount() == 2,
-                "incomplete saved trace displays banner and evidenced rows");
+        check(banner.isVisible() && !table.isVisible() && table.getItemCount() == 0
+                && status.getText().contains("CPU percentages are unavailable"),
+                "incomplete saved trace suppresses derived CPU percentages");
         Object noScheduler = result.getConstructor(Path.class, Path.class, String.class, boolean.class,
                 String.class, Long.class, Long.class, Long.class, Long.class, int.class,
                 String.class, BigDecimal.class, Long.class, List.class, Long.class, BigDecimal.class)
