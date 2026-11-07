@@ -63,6 +63,7 @@ public final class ConfigurationEvidenceReceipt {
         String configHash = hash(root.resolve("zephyr/.config"));
         String dtsHash = hash(root.resolve("zephyr/zephyr.dts"));
         String cacheHash = hash(root.resolve("CMakeCache.txt"));
+        String profileHash = profileFingerprint(app, profile);
 
         var entries = new ArrayList<Entry>();
         var known = new HashSet<Path>();
@@ -107,6 +108,7 @@ public final class ConfigurationEvidenceReceipt {
         output.append("P\t").append(encode(profile)).append('\n');
         output.append("A\t").append(encode(app.toString())).append('\n');
         output.append("C\t").append(complete ? '1' : '0').append('\n');
+        output.append("F\t").append(profileHash).append('\n');
         // Keep the original bounded reason in the build-local receipt so a
         // later Studio refresh can explain persistent UNVERIFIED state.
         if (!complete) {
@@ -182,11 +184,18 @@ public final class ConfigurationEvidenceReceipt {
             if (!complete && !"C\t0".equals(lines.get(4)))
                 return unknown(State.UNVERIFIED, "Unrecognized receipt coverage state.");
             int outputs = 0, sources = 0;
-            String configHash = "", dtsHash = "", incompleteReason = "";
+            String configHash = "", dtsHash = "", incompleteReason = "", recordedProfileHash = null;
             Set<String> seen = new HashSet<>();
             for (int i = 5; i < lines.size(); i++) {
                 String[] fields = lines.get(i).split("\t", -1);
                 if (fields.length == 1 && fields[0].isEmpty() && i == lines.size() - 1) continue;
+                if ("F".equals(fields[0])) {
+                    if (recordedProfileHash != null || fields.length != 2
+                            || !fields[1].matches("[0-9a-f]{64}"))
+                        return unknown(State.UNVERIFIED, "Malformed profile metadata fingerprint.");
+                    recordedProfileHash = fields[1];
+                    continue;
+                }
                 if ("L".equals(fields[0])) {
                     if (complete || fields.length != 2 || !incompleteReason.isEmpty())
                         return unknown(State.UNVERIFIED, "Malformed input coverage reason.");
@@ -223,6 +232,10 @@ public final class ConfigurationEvidenceReceipt {
             if (outputs != 3 || configHash.isEmpty() || dtsHash.isEmpty()
                     || !seen.contains("O" + root.resolve("CMakeCache.txt")))
                 return unknown(State.UNVERIFIED, "Incomplete generated-output provenance.");
+            if (recordedProfileHash == null)
+                return unknown(State.UNVERIFIED, "Receipt lacks selected profile metadata fingerprint.");
+            if (!recordedProfileHash.equals(profileFingerprint(app, profile)))
+                return unknown(State.CHANGED, "Selected profile metadata no longer matches the build receipt.");
             if (!complete) return new Result(State.UNVERIFIED,
                     "Input coverage was incomplete at capture"
                         + (incompleteReason.isBlank() ? "." : ": " + incompleteReason)
@@ -316,6 +329,26 @@ public final class ConfigurationEvidenceReceipt {
             complete = false; limitation = "Too many tracked input files.";
         }
         return new InputSet(List.copyOf(found), complete, limitation);
+    }
+
+    /**
+     * Hash the selected profile contract, including its flags and name.
+     * Built-in profiles have no project-owned metadata file, so their fixed
+     * optimization policy and identifier form the canonical input.
+     */
+    private static String profileFingerprint(Path application, String profile) throws IOException {
+        if (profile != null && profile.startsWith("profile-"))
+            return BuildProfile.read(application, profile.substring("profile-".length()))
+                    .fingerprintSha256();
+        BuildConfiguration selection = BuildConfiguration.fromId(profile);
+        String canonical = "ZEW-BUILTIN-PROFILE-1\n" + selection.id()
+                + "\n" + String.join(",", selection.cmakeArguments()) + "\n";
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 unavailable", impossible);
+        }
     }
 
     private static String hash(Path file) throws IOException {
