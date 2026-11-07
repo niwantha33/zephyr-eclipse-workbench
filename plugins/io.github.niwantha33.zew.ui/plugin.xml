@@ -158,6 +158,11 @@
           category="org.eclipse.debug.ui"
           class="io.github.niwantha33.zew.ui.ZephyrContentionView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.memoryProfile"
+          name="Zephyr Memory Profile"
+          category="org.eclipse.debug.ui"
+          class="io.github.niwantha33.zew.ui.ZephyrMemoryProfileView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.tracepointPlot"
           name="Zephyr Tracepoint Plot"
           category="org.eclipse.debug.ui"
@@ -202,6 +207,7 @@
     <command id="io.github.niwantha33.zew.traceConsole" name="Open Debug Trace Console" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.threadTimeline" name="Open Zephyr Thread Timeline" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.contentionReport" name="Open Zephyr Contention Report" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.memoryProfile" name="Open Zephyr Memory Profile" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tracepointPlot" name="Open Zephyr Tracepoint Plot" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.trace" name="Capture RTOS Trace" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.rtosInvestigation" name="Review Saved RTOS Capture" categoryId="io.github.niwantha33.zew.commands"/>
@@ -250,6 +256,7 @@
     <handler commandId="io.github.niwantha33.zew.traceConsole" class="io.github.niwantha33.zew.ui.ZephyrTraceConsoleHandler"/>
     <handler commandId="io.github.niwantha33.zew.threadTimeline" class="io.github.niwantha33.zew.ui.ThreadTimelineHandler"/>
     <handler commandId="io.github.niwantha33.zew.contentionReport" class="io.github.niwantha33.zew.ui.ZephyrContentionHandler"/>
+    <handler commandId="io.github.niwantha33.zew.memoryProfile" class="io.github.niwantha33.zew.ui.ZephyrMemoryProfileHandler"/>
     <handler commandId="io.github.niwantha33.zew.tracepointPlot" class="io.github.niwantha33.zew.ui.TracepointPlotHandler"/>
     <handler commandId="io.github.niwantha33.zew.trace" class="io.github.niwantha33.zew.ui.ZephyrTraceHandler"/>
     <handler commandId="io.github.niwantha33.zew.rtosInvestigation" class="io.github.niwantha33.zew.ui.RtosInvestigationHandler"/>
@@ -318,6 +325,7 @@
           <command commandId="io.github.niwantha33.zew.traceConsole" label="Debug Trace Console..." style="push"/>
           <command commandId="io.github.niwantha33.zew.threadTimeline" label="Zephyr Thread Timeline..." style="push"/>
           <command commandId="io.github.niwantha33.zew.contentionReport" label="Zephyr Contention Report..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.memoryProfile" label="Zephyr Memory Profile..." style="push"/>
           <command commandId="io.github.niwantha33.zew.tracepointPlot" label="Zephyr Tracepoint Plot..." style="push"/>
           <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace (Preview)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.rtosInvestigation" label="Review Saved RTOS Capture (Offline)..." style="push"/>
