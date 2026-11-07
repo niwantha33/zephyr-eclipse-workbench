@@ -154,15 +154,15 @@ public record BuildProfile(String id, String label, BuildConfiguration optimizat
     public String fingerprintSha256() {
         var normalizedDefinitions = parseDefinitions(definitions).stream().sorted().toList();
         var normalizedConfig = new java.util.TreeMap<>(parseConfig(kconfig));
-        StringBuilder canonical = new StringBuilder("ZEW-PROFILE-METADATA-1\\n")
-                .append("id=").append(id).append('\\n')
-                .append("name=").append(label).append('\\n')
-                .append("optimization=").append(optimization.id()).append('\\n');
+        StringBuilder canonical = new StringBuilder("ZEW-PROFILE-METADATA-1\n")
+                .append("id=").append(id).append('\n')
+                .append("name=").append(label).append('\n')
+                .append("optimization=").append(optimization.id()).append('\n');
         for (String define : normalizedDefinitions)
-            canonical.append("D:").append(define).append('\\n');
+            canonical.append("D:").append(define).append('\n');
         for (var setting : normalizedConfig.entrySet())
             canonical.append("K:").append(setting.getKey()).append('=')
-                    .append(setting.getValue()).append('\\n');
+                    .append(setting.getValue()).append('\n');
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(canonical.toString().getBytes(StandardCharsets.UTF_8)));
