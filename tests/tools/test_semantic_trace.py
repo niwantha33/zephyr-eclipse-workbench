@@ -28,7 +28,7 @@ class SemanticTraceTests(unittest.TestCase):
             raw("mutex_unlock", 25, mutex_name="guard"),
             raw("semaphore_take", 26, semaphore_name="semA"),
             raw("sem_give", 27, semaphore_name="semA"),
-            raw("mem_alloc", 28, pool_name="heap0"),
+            raw("heap_sys_k_malloc_exit", 28, pool_name="heap0", id="heap0", ret=0xA001),
         ]
         result = subject.SemanticTraceParser().parse(records)
         self.assertEqual(len(result.events), 10)
@@ -46,6 +46,9 @@ class SemanticTraceTests(unittest.TestCase):
         self.assertEqual(result.events[3].thread_name, "")
         self.assertEqual(result.events[5].object_name, "guard")
         self.assertEqual(result.events[5].raw_event_name, "zephyr:mutex_lock")
+        self.assertEqual(result.events[-1].memory_phase, "allocated")
+        self.assertEqual(result.events[-1].allocation_id, str(0xA001))
+        self.assertIsNone(result.events[-1].allocation_size_bytes)
         self.assertEqual(result.unknown_count, 0)
         self.assertFalse(result.incomplete)
         self.assertTrue(result.input_out_of_order)
@@ -96,10 +99,10 @@ class SemanticTraceTests(unittest.TestCase):
         result = subject.SemanticTraceParser().parse([
             raw(name, index) for index, name in enumerate(raw_names)])
         self.assertEqual(len(result.events), len(raw_names))
-        self.assertEqual(result.unknown_count, 6)
+        self.assertEqual(result.unknown_count, 7)
         self.assertEqual(
             [event.raw_event_name for event in result.events if event.kind == subject.EventKind.UNKNOWN],
-            raw_names[-6:])
+            raw_names[-7:])
 
     def test_equal_timestamps_preserve_source_order(self):
         result = subject.SemanticTraceParser().parse([
