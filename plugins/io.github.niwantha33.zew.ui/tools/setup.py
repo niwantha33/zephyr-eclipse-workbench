@@ -47,6 +47,75 @@ def valid_cache(path, artifact):
     return path.is_file() and path.stat().st_size == artifact['size'] and digest(path) == artifact['sha256']
 
 
+def ci_sdk_asset_api_fetch(artifact, cache):
+    """CI-only secondary route for the SAME Zephyr SDK 1.0.1 release bytes.
+
+    GitHub documents Accept: application/octet-stream on its release asset API
+    as an alternative to the browser download URL. No untrusted mirrors, no
+    version upgrades, and no bypass of the reviewed size or SHA-256 values.
+    The caller enables this only in the native Windows qualification job.
+    """
+    path_prefix = '/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/'
+    parsed = urllib.parse.urlparse(artifact['url'])
+    if (parsed.scheme != 'https' or parsed.netloc != 'github.com'
+            or parsed.path != path_prefix + artifact['file']
+            or parsed.params or parsed.query or parsed.fragment):
+        raise ValueError('CI release API fallback is allowed only for the pinned Zephyr SDK')
+    api_root = 'https://api.github.com/repos/zephyrproject-rtos/sdk-ng'
+    headers = {'Accept': 'application/vnd.github+json',
+               'User-Agent': 'Zephyr-Workbench-CI-SDK-Asset',
+               'X-GitHub-Api-Version': '2022-11-28'}
+    request = urllib.request.Request(api_root + '/releases/tags/v1.0.1', headers=headers)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        if urllib.parse.urlparse(response.url).hostname != 'api.github.com':
+            raise OSError('SDK release metadata did not come from GitHub API')
+        metadata_bytes = response.read(4 * 1024 * 1024 + 1)
+        if len(metadata_bytes) > 4 * 1024 * 1024:
+            raise OSError('SDK release metadata exceeded response limit')
+    try:
+        release = json.loads(metadata_bytes)
+    except (ValueError, UnicodeDecodeError) as error:
+        raise OSError('SDK release API did not return valid metadata') from error
+    candidates = [item for item in release.get('assets', [])
+                  if isinstance(item, dict) and item.get('name') == artifact['file']]
+    if len(candidates) != 1:
+        raise OSError('Pinned SDK asset not found uniquely in GitHub release API')
+    asset = candidates[0]
+    if (type(asset.get('id')) is not int or asset['id'] <= 0
+            or asset.get('size') != artifact['size']
+            or asset.get('state') != 'uploaded'):
+        raise ValueError('GitHub release asset metadata differs from pinned SDK')
+    if asset.get('digest') not in (None, '', 'sha256:' + artifact['sha256']):
+        raise ValueError('GitHub release asset digest differs from pinned SDK')
+    target = cache / artifact['file']
+    temporary = target.with_name(target.name + '.partial')
+    headers['Accept'] = 'application/octet-stream'
+    request = urllib.request.Request(
+        api_root + '/releases/assets/' + str(asset['id']), headers=headers)
+    temporary.unlink(missing_ok=True)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response, temporary.open('wb') as output:
+            if urllib.parse.urlparse(response.url).scheme != 'https':
+                raise OSError('Insecure GitHub SDK asset API redirect')
+            # The GitHub API may return metadata JSON instead of a binary on
+            # some clients; treat this as an unavailable route, not as an asset.
+            if getattr(response, 'headers', {}).get('Content-Type', '').startswith('application/json'):
+                raise OSError('SDK release API did not stream binary content')
+            count = 0
+            while block := response.read(262144):
+                count += len(block)
+                if count > artifact['size']:
+                    raise ValueError('CI SDK asset exceeds reviewed size')
+                output.write(block)
+        if not valid_cache(temporary, artifact):
+            raise ValueError('CI SDK asset size or SHA-256 mismatch')
+        temporary.replace(target)
+        log('CI GitHub API SDK asset accepted with pinned size and SHA-256: ' + artifact['file'])
+        return target
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def fetch(artifact, cache):
     """Reuse only complete verified artifacts; bound transient gateway retries."""
     url = urllib.parse.urlparse(artifact['url'])
@@ -86,6 +155,19 @@ def fetch(artifact, cache):
         except (OSError, ValueError, http.client.HTTPException) as error:
             temporary.unlink(missing_ok=True)
             gateway_failure = isinstance(error, urllib.error.HTTPError) and error.code in (502, 503, 504)
+            # Only the CI Windows firmware matrix opts into this secondary
+            # transport. The shipped installer retains its previous behaviour.
+            if (gateway_failure and attempt == 1
+                    and os.environ.get('ZEW_CI_SDK_ASSET_API') == '1'
+                    and artifact['url'].startswith(
+                        'https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/')):
+                log('CI: GitHub browser download returned a gateway error; trying official release asset API.')
+                try:
+                    return ci_sdk_asset_api_fetch(artifact, cache)
+                except (OSError, http.client.HTTPException) as api_error:
+                    log('CI: alternate GitHub SDK asset route unavailable ('
+                        + type(api_error).__name__ + '); retrying pinned browser URL.')
+                # Integrity and unexpected metadata errors deliberately propagate.
             limit = 6 if gateway_failure else 3
             if attempt >= limit:
                 raise
