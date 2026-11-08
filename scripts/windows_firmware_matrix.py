@@ -8,6 +8,7 @@ subprocess limit, bounded verified archives, no user keys or hardware access.
 import argparse
 import base64
 import hashlib
+import http.client
 import importlib.util
 import json
 import os
@@ -15,7 +16,9 @@ from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
+import urllib.error
 import urllib.request
+import time
 import zipfile
 
 REPO = Path(__file__).resolve().parents[1]
@@ -36,6 +39,48 @@ def run(args, root, env, timeout=2700, capture=False):
     return result.stdout if capture else None
 
 
+def download_verified_bootstrap(archive, name, url, size, digest, *, attempts=5,
+                                pause=time.sleep):
+    """Fetch a pinned CI bootstrap archive despite transient upstream 5xx errors.
+
+    Only retry transport failures. A complete but wrong-size/hash response is
+    a permanent integrity failure, never accepted or retried as a valid asset.
+    This routine is CI-only and never replaces the managed end-user downloader.
+    """
+    transient_http = {429, 500, 502, 503, 504}
+    for attempt in range(1, attempts + 1):
+        staging = archive.with_name(archive.name + '.part')
+        staging.unlink(missing_ok=True)
+        try:
+            print(f'CI pinned bootstrap {name}: attempt {attempt}/{attempts}', flush=True)
+            request = urllib.request.Request(url, headers={'User-Agent': 'Zephyr-Workbench-CI'})
+            total = 0
+            sha = hashlib.sha256()
+            with urllib.request.urlopen(request, timeout=60) as response, staging.open('wb') as output:
+                while block := response.read(262144):
+                    total += len(block)
+                    if total > size:
+                        raise ValueError('Bootstrap download exceeds reviewed size: ' + name)
+                    sha.update(block)
+                    output.write(block)
+            if total != size or sha.hexdigest() != digest:
+                raise ValueError('Bootstrap integrity mismatch: ' + name)
+            staging.replace(archive)
+            return
+        except (urllib.error.URLError, TimeoutError, ConnectionError,
+                http.client.IncompleteRead) as error:
+            # HTTPError subclasses URLError; do not retry hard HTTP failures.
+            if isinstance(error, urllib.error.HTTPError) and error.code not in transient_http:
+                raise
+            if attempt == attempts:
+                raise
+            print(f'CI pinned bootstrap {name}: transient transport failure, '
+                  f'retrying ({type(error).__name__})', flush=True)
+            pause(min(3 * 2 ** (attempt - 1), 30))
+        finally:
+            staging.unlink(missing_ok=True)
+
+
 def bootstrap(root):
     if root.exists():
         raise ValueError('CI matrix requires a fresh directory; existing data was preserved')
@@ -44,16 +89,7 @@ def bootstrap(root):
     (root / '.zew-managed').write_text('first-build-win-x64-v1\n')
     for name, url, size, digest in BOOTSTRAP:
         archive = root / 'cache' / (name + '.zip')
-        request = urllib.request.Request(url, headers={'User-Agent': 'Zephyr-Workbench-CI'})
-        with urllib.request.urlopen(request, timeout=60) as response, archive.open('wb') as output:
-            total = 0
-            while block := response.read(262144):
-                total += len(block)
-                if total > size:
-                    raise ValueError('Bootstrap download exceeds reviewed size')
-                output.write(block)
-        if archive.stat().st_size != size or hashlib.sha256(archive.read_bytes()).hexdigest() != digest:
-            raise ValueError('Bootstrap integrity mismatch: ' + name)
+        download_verified_bootstrap(archive, name, url, size, digest)
         with zipfile.ZipFile(archive) as source:
             expanded = 0
             for entry in source.infolist():
