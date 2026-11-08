@@ -134,6 +134,9 @@ jobs:
     env:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: utf-8
+      # CI-only official GitHub release-asset API fallback for verified SDK binaries.
+      # Never set for a user-managed IDE environment or production installer.
+      ZEW_CI_SDK_ASSET_API: '1'
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
