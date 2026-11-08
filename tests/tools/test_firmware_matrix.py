@@ -32,6 +32,51 @@ class FirmwareMatrixTests(unittest.TestCase):
             self.assertEqual(archive.read_bytes(), payload)
             self.assertFalse((Path(folder) / 'pinned.zip.part').exists())
 
+    def test_ci_bootstrap_uses_mirror_only_after_transient_primary_exhaustion(self):
+        payload = b'exact-release-bytes'
+        digest = hashlib.sha256(payload).hexdigest()
+        gateway = lambda: urllib.error.HTTPError(
+            'https://example.invalid/release', 504, 'gateway timeout', {}, None)
+        downloads = [gateway(), gateway(), io.BytesIO(payload)]
+        with tempfile.TemporaryDirectory() as folder:
+            archive = Path(folder) / 'git.zip'
+            with mock.patch.object(matrix.urllib.request, 'urlopen',
+                                   side_effect=downloads) as fetch:
+                matrix.download_verified_bootstrap(
+                    archive, 'git', 'https://example.invalid/release',
+                    len(payload), digest, attempts=2, pause=lambda _: None,
+                    fallback_url='https://mirror.example.invalid/release')
+            self.assertEqual(fetch.call_count, 3)
+            self.assertEqual(fetch.call_args_list[0].args[0].full_url,
+                             'https://example.invalid/release')
+            self.assertEqual(fetch.call_args_list[1].args[0].full_url,
+                             'https://example.invalid/release')
+            self.assertEqual(fetch.call_args_list[2].args[0].full_url,
+                             'https://mirror.example.invalid/release')
+            self.assertEqual(archive.read_bytes(), payload)
+
+    def test_ci_bootstrap_mirror_cannot_bypass_sha256(self):
+        payload = b'valid-bytes'
+        bad = b'wrong-bytes'
+        self.assertEqual(len(payload), len(bad))
+        with tempfile.TemporaryDirectory() as folder:
+            archive = Path(folder) / 'git.zip'
+            with mock.patch.object(matrix.urllib.request, 'urlopen',
+                                   side_effect=[
+                                       urllib.error.HTTPError(
+                                           'https://example.invalid/release',
+                                           504, 'gateway timeout', {}, None),
+                                       io.BytesIO(bad)
+                                   ]) as fetch:
+                with self.assertRaisesRegex(ValueError, 'integrity mismatch'):
+                    matrix.download_verified_bootstrap(
+                        archive, 'git', 'https://example.invalid/release',
+                        len(payload), hashlib.sha256(payload).hexdigest(),
+                        attempts=1, fallback_url='https://mirror.example.invalid/release')
+            self.assertEqual(fetch.call_count, 2)
+            self.assertFalse(archive.exists())
+            self.assertFalse((Path(folder) / 'git.zip.part').exists())
+
     def test_ci_bootstrap_refuses_nontransient_http_and_cleans_partial(self):
         with tempfile.TemporaryDirectory() as folder:
             archive = Path(folder) / 'pinned.zip'
