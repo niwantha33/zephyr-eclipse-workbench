@@ -63,6 +63,70 @@ class CIReleaseApiTests(unittest.TestCase):
             self.assertEqual(pause.call_count, 0)
             self.assertFalse((Path(directory) / 'test-sdk.7z.partial').exists())
 
+    def test_ci_large_toolchain_read_timeout_uses_release_api(self):
+        # The real Windows TI matrix failed with "The read operation timed out"
+        # before HTTP returned an error code. Read timeout must reach the same
+        # exact-byte-verified API path as an HTTP 504.
+        artifact = self.fixture()
+        seen = []
+        def respond(request, timeout=None):
+            url = request.full_url
+            seen.append(url)
+            if url == SOURCE:
+                raise TimeoutError('The read operation timed out')
+            if url == META:
+                return self.metadata(artifact)
+            if url == ASSET:
+                return Response(b'good', 'https://release-assets.githubusercontent.com/fixture')
+            raise AssertionError('unexpected URL: ' + url)
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \
+                    patch.object(setup.urllib.request, 'urlopen', side_effect=respond), \
+                    patch.object(setup.time, 'sleep') as pause:
+                target = setup.fetch(artifact, Path(directory))
+            self.assertEqual(target.read_bytes(), b'good')
+            self.assertEqual(seen, [SOURCE, META, ASSET])
+            self.assertEqual(pause.call_count, 0)
+
+    def test_ci_urlerror_wrapped_socket_timeout_uses_release_api(self):
+        artifact = self.fixture()
+        seen = []
+        def respond(request, timeout=None):
+            url = request.full_url
+            seen.append(url)
+            if url == SOURCE:
+                raise urllib.error.URLError(TimeoutError('read timeout'))
+            if url == META:
+                return self.metadata(artifact)
+            if url == ASSET:
+                return Response(b'good', 'https://release-assets.githubusercontent.com/fixture')
+            raise AssertionError('unexpected URL')
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \
+                    patch.object(setup.urllib.request, 'urlopen', side_effect=respond), \
+                    patch.object(setup.time, 'sleep') as pause:
+                target = setup.fetch(artifact, Path(directory))
+            self.assertEqual(target.read_bytes(), b'good')
+            self.assertEqual(seen, [SOURCE, META, ASSET])
+            self.assertEqual(pause.call_count, 0)
+
+    def test_ci_timeout_without_opt_in_uses_existing_retries(self):
+        artifact = self.fixture()
+        urls = []
+        def respond(request, timeout=None):
+            urls.append(request.full_url)
+            if len(urls) == 1:
+                raise TimeoutError('The read operation timed out')
+            return Response(b'good', SOURCE)
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '0'}), \
+                    patch.object(setup.urllib.request, 'urlopen', side_effect=respond), \
+                    patch.object(setup.time, 'sleep') as pause:
+                target = setup.fetch(artifact, Path(directory))
+            self.assertEqual(target.read_bytes(), b'good')
+            self.assertEqual(urls, [SOURCE, SOURCE])
+            self.assertEqual(pause.call_count, 1)
+
     def test_ci_release_metadata_disagreement_fails_closed(self):
         artifact = self.fixture()
         def respond(request, timeout=None):
