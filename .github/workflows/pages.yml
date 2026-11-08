@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Publish marketing website
+
+on:
+  pull_request:
+    paths:
+      - docs/index.html
+      - docs/marketing.css
+      - docs/marketing.js
+      - docs/marketing-icon.svg
+      - .github/workflows/pages.yml
+  push:
+    branches: [main]
+    paths:
+      - docs/index.html
+      - docs/marketing.css
+      - docs/marketing.js
+      - docs/marketing-icon.svg
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketing-pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate static website
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Validate marketing assets and catalogue
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          from xml.etree import ElementTree
+
+          root = Path("docs")
+          page = (root / "index.html").read_text(encoding="utf-8")
+          css = (root / "marketing.css").read_text(encoding="utf-8")
+          js = (root / "marketing.js").read_text(encoding="utf-8")
+
+          class Page(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.rows = 0
+                  self.refs = []
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag == "tr" and "data-status" in attrs:
+                      self.rows += 1
+                      assert attrs["data-status"] in ("Preview", "Limited", "Roadmap")
+                  if tag in ("link", "script"):
+                      self.refs.append(attrs.get("href") or attrs.get("src"))
+
+          parsed = Page()
+          parsed.feed(page)
+          assert parsed.rows >= 40, f"Expected full feature table, found {parsed.rows}"
+          for ref in parsed.refs:
+              if ref and ref.startswith("./"):
+                  assert (root / ref[2:]).is_file(), ref
+          assert "#feature-rows" in js
+          assert ".feature-table" in css
+          ElementTree.parse(root / "marketing-icon.svg")
+          print(f"Marketing site OK: {parsed.rows} feature rows, local assets resolved")
+          PY
+
+  publish:
+    name: Deploy GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload static website
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Zephyr Workbench">
+  <title>Zephyr Workbench</title>
+  <defs><linearGradient id="a" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#22c7ba"/><stop offset="1" stop-color="#8bf5d8"/></linearGradient></defs>
+  <rect width="64" height="64" rx="16" fill="#0a2030"/>
+  <rect x="5" y="5" width="54" height="54" rx="13" fill="url(#a)"/>
+  <path d="M19 22h27v5L28 43h18v5H18v-5l18-16H19z" fill="#0a2937"/>
+  <path d="M45 14v9M40.5 18.5h9" stroke="#0a2937" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

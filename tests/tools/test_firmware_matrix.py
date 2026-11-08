@@ -13,6 +13,77 @@ matrix = importlib.util.module_from_spec(spec); spec.loader.exec_module(matrix)
 
 
 class FirmwareMatrixTests(unittest.TestCase):
+    def test_bootstrap_transient_504_retries_then_checks_exact_hash(self):
+        expected = b'pinned-ci-archive'
+        digest = hashlib.sha256(expected).hexdigest()
+        unavailable = urllib.error.HTTPError('https://example.invalid/test.zip', 504, 'temporary', {}, None)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'bootstrap.zip'
+            with mock.patch.object(matrix.urllib.request, 'urlopen',
+                                   side_effect=[unavailable, io.BytesIO(expected)]) as open_url, \
+                 mock.patch.object(matrix.time, 'sleep') as sleep:
+                matrix.fetch_pinned_archive('python', 'https://example.invalid/test.zip',
+                                            len(expected), digest, output)
+            self.assertEqual(output.read_bytes(), expected)
+            self.assertEqual(open_url.call_count, 2)
+            sleep.assert_called_once_with(1)
+
+    def test_bootstrap_fails_closed_on_permanent_404(self):
+        failure = urllib.error.HTTPError('https://example.invalid/test.zip', 404, 'not found', {}, None)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'bootstrap.zip'
+            with mock.patch.object(matrix.urllib.request, 'urlopen', side_effect=failure) as open_url, \
+                 mock.patch.object(matrix.time, 'sleep') as sleep:
+                with self.assertRaises(urllib.error.HTTPError):
+                    matrix.fetch_pinned_archive('python', 'https://example.invalid/test.zip',
+                                                3, '0' * 64, output)
+            open_url.assert_called_once()
+            sleep.assert_not_called()
+            self.assertFalse(output.exists())
+
+    def test_bootstrap_fails_closed_on_corrupted_successful_download(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'bootstrap.zip'
+            with mock.patch.object(matrix.urllib.request, 'urlopen',
+                                   return_value=io.BytesIO(b'bad-data')) as open_url, \
+                 mock.patch.object(matrix.time, 'sleep') as sleep:
+                with self.assertRaisesRegex(ValueError, 'integrity mismatch'):
+                    matrix.fetch_pinned_archive('git', 'https://example.invalid/test.zip',
+                                                8, hashlib.sha256(b'expected').hexdigest(), output)
+            open_url.assert_called_once()
+            sleep.assert_not_called()
+            self.assertFalse(output.exists())
+
+    def test_bootstrap_retries_exhaustion_and_discards_partial(self):
+        failure = urllib.error.HTTPError('https://example.invalid/test.zip', 503, 'temporary', {}, None)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'bootstrap.zip'
+            with mock.patch.object(matrix.urllib.request, 'urlopen', side_effect=failure) as open_url, \
+                 mock.patch.object(matrix.time, 'sleep') as sleep:
+                with self.assertRaises(urllib.error.HTTPError):
+                    matrix.fetch_pinned_archive('git', 'https://example.invalid/test.zip',
+                                                3, '0' * 64, output)
+            self.assertEqual(open_url.call_count, 4)
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 4])
+            self.assertFalse(output.exists())
+
+    def test_bootstrap_retry_replaces_interrupted_partial_file(self):
+        class InterruptedStream(io.BytesIO):
+            def read(self, count=-1):
+                if self.tell():
+                    raise ConnectionResetError('socket disconnected')
+                return super().read(3)
+
+        expected = b'recovered-bytes'
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'bootstrap.zip'
+            with mock.patch.object(matrix.urllib.request, 'urlopen',
+                                   side_effect=[InterruptedStream(b'partial'), io.BytesIO(expected)]), \
+                 mock.patch.object(matrix.time, 'sleep'):
+                matrix.fetch_pinned_archive('python', 'https://example.invalid/test.zip',
+                                            len(expected), hashlib.sha256(expected).hexdigest(), output)
+            self.assertEqual(output.read_bytes(), expected)
+
     def test_ci_bootstrap_retries_gateway_timeout_then_verifies_exact_hash(self):
         payload = b'CI pinned archive bytes'
         digest = hashlib.sha256(payload).hexdigest()

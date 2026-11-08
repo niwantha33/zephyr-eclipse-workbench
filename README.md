@@ -13,7 +13,7 @@ native debugging and offline evidence in one embedded C/C++ workflow.
 [![GitHub stars](https://img.shields.io/github/stars/niwantha33/zephyr-eclipse-workbench)](https://github.com/niwantha33/zephyr-eclipse-workbench/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/niwantha33/zephyr-eclipse-workbench)](https://github.com/niwantha33/zephyr-eclipse-workbench/issues)
 
-**[Download releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases) · [Install on Windows](docs/FRESH_INSTALL.md) · [Beginner guide](docs/BEGINNER_SETUP.md) · [Report an issue](https://github.com/niwantha33/zephyr-eclipse-workbench/issues)**
+**🌐 [Explore the website & feature catalogue](https://niwantha33.github.io/zephyr-eclipse-workbench/)** · **[Download releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases) · [Install on Windows](docs/FRESH_INSTALL.md) · [Beginner guide](docs/BEGINNER_SETUP.md) · [Report an issue](https://github.com/niwantha33/zephyr-eclipse-workbench/issues)**
 
 ## Screenshots
 
