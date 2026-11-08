@@ -2,6 +2,13 @@
 name: Publish marketing website
 
 on:
+  pull_request:
+    paths:
+      - docs/index.html
+      - docs/marketing.css
+      - docs/marketing.js
+      - docs/marketing-icon.svg
+      - .github/workflows/pages.yml
   push:
     branches: [main]
     paths:
@@ -14,36 +21,30 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: marketing-pages
+  group: marketing-pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  publish:
+  validate:
+    name: Validate static website
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Check required marketing assets
+      - name: Validate marketing assets and catalogue
         run: |
           python - <<'PY'
           from pathlib import Path
           from html.parser import HTMLParser
           from xml.etree import ElementTree
-          import re
 
           root = Path("docs")
           page = (root / "index.html").read_text(encoding="utf-8")
           css = (root / "marketing.css").read_text(encoding="utf-8")
           js = (root / "marketing.js").read_text(encoding="utf-8")
-          for path in ("marketing.css", "marketing.js", "marketing-icon.svg"):
-              assert (root / path).is_file(), path
+
           class Page(HTMLParser):
               def __init__(self):
                   super().__init__()
@@ -56,6 +57,7 @@ jobs:
                       assert attrs["data-status"] in ("Preview", "Limited", "Roadmap")
                   if tag in ("link", "script"):
                       self.refs.append(attrs.get("href") or attrs.get("src"))
+
           parsed = Page()
           parsed.feed(page)
           assert parsed.rows >= 40, f"Expected full feature table, found {parsed.rows}"
@@ -67,6 +69,22 @@ jobs:
           ElementTree.parse(root / "marketing-icon.svg")
           print(f"Marketing site OK: {parsed.rows} feature rows, local assets resolved")
           PY
+
+  publish:
+    name: Deploy GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload static website
