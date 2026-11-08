@@ -50,7 +50,8 @@ generated `zephyr/runners.yaml` to find supported runners for flash/debug.
 
 The **Build Outputs** entry under each managed Zephyr application is a
 visible, ordinary **Eclipse linked folder**, pointing to the existing
-`<application>/.zew-build/` directory. This is not a copy, and neither
+`<application>/.zew-build/` directory using Eclipse's portable
+`PROJECT_LOC/.zew-build` path variable. This is not a copy, and neither
 the link nor its refresh creates or verifies firmware. The link is created
 for imported/open projects even when no build exists yet (using Eclipse's
 `ALLOW_MISSING_LOCAL` feature), so empty contents mean **no generated
