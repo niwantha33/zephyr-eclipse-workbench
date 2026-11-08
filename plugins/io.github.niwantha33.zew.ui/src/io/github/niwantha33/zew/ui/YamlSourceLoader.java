@@ -12,6 +12,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
@@ -25,6 +26,12 @@ import java.util.function.BooleanSupplier;
 public final class YamlSourceLoader {
     public static final long MAX_SOURCE_BYTES = 256 * 1024;
     public static final long MAX_REPORT_BYTES = 4 * 1024 * 1024;
+    private static final long MAX_ERROR_BYTES = 4096;
+    private static final Set<String> SOURCE_REJECTIONS = Set.of(
+            "unsupported-or-unsafe-yaml-path", "unavailable-source-root",
+            "symlinked-source-not-allowed", "source-not-within-root",
+            "oversized-or-nonregular-yaml-source", "oversized-yaml-source",
+            "source-changed-during-reading", "source-unavailable-or-unsafe");
 
     public record Source(Path root, Path file, String relative, String kind) {
         public Source {
@@ -110,14 +117,16 @@ public final class YamlSourceLoader {
         String before = hash(source.file());
         long size = Files.size(source.file());
         Path output = Files.createTempFile("zew-yaml-observation-", ".json");
+        Path errors = null;
         Process process = null;
         try {
             ProcessBuilder command = new ProcessBuilder(managedPython.toString(),
                     bundledScript.toString(), "--root", source.root().toString(),
                     "--relative", source.relative(), "--source-root", source.kind());
+            errors = Files.createTempFile("zew-yaml-stderr-", ".txt");
             command.redirectInput(ProcessBuilder.Redirect.PIPE);
             command.redirectOutput(output.toFile());
-            command.redirectError(ProcessBuilder.Redirect.DISCARD);
+            command.redirectError(errors.toFile());
             process = command.start();
             long limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(25);
             while (true) {
@@ -127,8 +136,10 @@ public final class YamlSourceLoader {
                 if (System.nanoTime() > limit)
                     throw new IOException("Managed YAML inspection timed out.");
             }
-            if (process.exitValue() != 0 || Files.size(output) > MAX_REPORT_BYTES)
-                throw new IOException("Managed parser rejected the source or exceeded the output limit.");
+            if (process.exitValue() != 0)
+                throw new IOException(parserFailure(process.exitValue(), errors));
+            if (Files.size(output) > MAX_REPORT_BYTES)
+                throw new IOException("YAML observation is larger than the 4 MiB safety limit.");
             YamlDocumentModel.Snapshot snapshot = YamlDocumentModel.parse(
                     Files.readString(output, StandardCharsets.UTF_8));
             if (!source.kind().equals(snapshot.sourceRoot())
@@ -170,6 +181,33 @@ public final class YamlSourceLoader {
                 }
             }
             if (!removed) output.toFile().deleteOnExit();
+            if (errors != null) {
+                try {
+                    Files.deleteIfExists(errors);
+                } catch (java.nio.file.FileSystemException locked) {
+                    errors.toFile().deleteOnExit();
+                }
+            }
         }
+    }
+
+    /** Never publish arbitrary Python stderr (could contain private YAML). */
+    static String parserFailure(int exitCode, Path stderr) {
+        try {
+            if (stderr != null && Files.isRegularFile(stderr)
+                    && Files.size(stderr) <= MAX_ERROR_BYTES) {
+                String reason = Files.readString(stderr, StandardCharsets.UTF_8).strip();
+                if (SOURCE_REJECTIONS.contains(reason))
+                    return "YAML source was rejected: " + reason + ".";
+                if (reason.contains("No module named 'zew_evidence'"))
+                    return "Installed YAML helper modules could not be loaded.";
+                if (reason.contains("No module named 'yaml'"))
+                    return "Managed Python is missing PyYAML.";
+            }
+        } catch (IOException ignored) {
+            // A diagnostic cannot weaken the source identity or size checks.
+        }
+        return "Bundled YAML inspection process failed (exit " + exitCode
+                + "). Check the installed Workbench and its managed Python environment.";
     }
 }
