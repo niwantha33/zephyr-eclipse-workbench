@@ -94,7 +94,7 @@ def ci_sdk_asset_api_fetch(artifact, cache):
         api_root + '/releases/assets/' + str(asset['id']), headers=headers)
     temporary.unlink(missing_ok=True)
     try:
-        with urllib.request.urlopen(request, timeout=60) as response, temporary.open('wb') as output:
+        with urllib.request.urlopen(request, timeout=120) as response, temporary.open('wb') as output:
             if urllib.parse.urlparse(response.url).scheme != 'https':
                 raise OSError('Insecure GitHub SDK asset API redirect')
             # The GitHub API may return metadata JSON instead of a binary on
@@ -127,6 +127,13 @@ def fetch(artifact, cache):
     if valid_cache(target, artifact):
         log('Using verified cache: ' + target.name)
         return target
+    # The CI Windows qualification downloads large reviewed SDK toolchains;
+    # increase only its socket read timeout. This does not change the user's
+    # regular installer or relax its SHA-256/size checks.
+    ci_sdk_asset = (os.environ.get('ZEW_CI_SDK_ASSET_API') == '1'
+                    and artifact['url'].startswith(
+                        'https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/'))
+    socket_timeout = 120 if ci_sdk_asset else 30
     temporary = target.with_name(target.name + '.partial')
     # A release CDN can temporarily answer 502/503/504 even while other
     # dependencies download. Preserve the pinned URL, SHA-256 and size checks;
@@ -136,7 +143,7 @@ def fetch(artifact, cache):
             log(f'Downloading {target.name} (attempt {attempt})')
             request = urllib.request.Request(artifact['url'], headers={'User-Agent': 'Zephyr-Eclipse-Workbench-Setup'})
             count = 0
-            with urllib.request.urlopen(request, timeout=30) as response, temporary.open('wb') as output:
+            with urllib.request.urlopen(request, timeout=socket_timeout) as response, temporary.open('wb') as output:
                 if not response.url.startswith('https://'):
                     raise ValueError('Insecure package redirect')
                 report = 0
@@ -158,15 +165,18 @@ def fetch(artifact, cache):
             # A release CDN can time out while reading a large Zephyr toolchain
             # even when it never returns an HTTP 5xx. This was observed in
             # the seven-target Windows matrix on arm-zephyr-eabi assets.
-            transport_timeout = isinstance(error, TimeoutError) or (
-                isinstance(error, urllib.error.URLError)
-                and isinstance(error.reason, TimeoutError))
+            cause = error.reason if isinstance(error, urllib.error.URLError) else error
+            # SSL sockets on Windows may surface a read timeout as an OSError
+            # rather than the Python TimeoutError subtype.
+            transport_timeout = (isinstance(cause, TimeoutError)
+                                 or (isinstance(cause, OSError)
+                                     and ('timed out' in str(cause).lower()
+                                          or getattr(cause, 'winerror', None) == 10060)))
+            transport_interrupted = isinstance(cause, (ConnectionError, http.client.IncompleteRead))
             # Only the CI Windows firmware matrix opts into this secondary
-            # transport. The shipped installer retains its previous behaviour.
-            if ((gateway_failure or transport_timeout) and attempt == 1
-                    and os.environ.get('ZEW_CI_SDK_ASSET_API') == '1'
-                    and artifact['url'].startswith(
-                        'https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/')):
+            # transport. No unreviewed mirror, digest bypass or version change.
+            if (ci_sdk_asset and attempt == 1
+                    and (gateway_failure or transport_timeout or transport_interrupted)):
                 log('CI: GitHub release download had transient gateway/timeout failure; '
                     'trying official release asset API.')
                 try:
