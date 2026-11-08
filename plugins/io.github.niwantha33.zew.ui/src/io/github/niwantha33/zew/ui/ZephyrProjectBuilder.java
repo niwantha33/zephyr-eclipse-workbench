@@ -349,7 +349,22 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             if (!clean) notifyOpenConfigurationStudio(getProject());
         } catch (java.io.InterruptedIOException error) { throw new CoreException(Status.CANCEL_STATUS); }
         catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new CoreException(Status.CANCEL_STATUS); }
-        catch (Exception error) { throw new CoreException(new Status(IStatus.ERROR, Activator.ID, stage[0] + " failed: " + error.getMessage(), error)); }
+        catch (Exception error) {
+            // A failed configure may already have produced zephyr.dts, runners.yaml
+            // or diagnostics. Make those on-disk files visible without claiming
+            // firmware success, and never replace the original build failure.
+            try {
+                IProject failedProject = getProject();
+                if (failedProject.isAccessible() && failedProject.getLocation() != null
+                        && Files.isDirectory(failedProject.getLocation().toFile().toPath().resolve(".zew-build"))) {
+                    var refreshMonitor = new org.eclipse.core.runtime.NullProgressMonitor();
+                    failedProject.refreshLocal(IResource.DEPTH_INFINITE, refreshMonitor);
+                    ZephyrProjectLifecycle.revealBuildOutput(failedProject, refreshMonitor);
+                }
+            } catch (CoreException refreshFailure) { error.addSuppressed(refreshFailure); }
+            throw new CoreException(new Status(IStatus.ERROR, Activator.ID,
+                    stage[0] + " failed: " + error.getMessage(), error));
+        }
         finally { monitor.done(); }
     }
 }
