@@ -345,7 +345,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 throw new java.io.IOException(error.getMessage() + "\n" + diagnosis, error);
             }
             getProject().refreshLocal(IResource.DEPTH_INFINITE, monitor);
-            var output = getProject().getFolder(".zew-build"); if (output.exists()) output.setDerived(true, monitor);
+            ZephyrProjectLifecycle.revealBuildOutput(getProject(), monitor);
             if (!clean) notifyOpenConfigurationStudio(getProject());
         } catch (java.io.InterruptedIOException error) { throw new CoreException(Status.CANCEL_STATUS); }
         catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new CoreException(Status.CANCEL_STATUS); }
