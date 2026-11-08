@@ -7,6 +7,7 @@ import java.util.Arrays;
 import io.github.niwantha33.zew.ui.YamlSourceLoader;
 import io.github.niwantha33.zew.ui.YamlSourceLoader.Source;
 import io.github.niwantha33.zew.ui.YamlDocumentModel.Mapping;
+import io.github.niwantha33.zew.ui.YamlFlowGraph;
 
 /** Headless Java 21 security, path selection and actual managed Python tests. */
 public final class YamlSourceLoaderTests {
@@ -45,6 +46,16 @@ public final class YamlSourceLoaderTests {
             check("application".equals(appSource.kind())
                     && "tests/demo/sample.yaml".equals(appSource.relative()),
                     "application root and precise relative path selected");
+            // This is the real on-disk location behind Eclipse's linked
+            // Build Outputs folder, as shown in the reported screenshot.
+            Path generated = application.resolve(".zew-build/first/build_info.yml");
+            Files.createDirectories(generated.getParent());
+            Files.writeString(generated, "build:\\n  board: qemu_x86\\n  profile: debug\\n",
+                    StandardCharsets.UTF_8);
+            Source generatedSource = YamlSourceLoader.resolve(generated, application, zephyr);
+            check("application".equals(generatedSource.kind())
+                    && ".zew-build/first/build_info.yml".equals(generatedSource.relative()),
+                    "generated YAML from Build Outputs resolves to its physical managed application source");
             Source boardSource = YamlSourceLoader.resolve(boardFile, application, zephyr);
             check("zephyr".equals(boardSource.kind())
                     && "boards/ti/myboard/board.yml".equals(boardSource.relative()),
@@ -78,6 +89,12 @@ public final class YamlSourceLoaderTests {
                     "managed Python path is explicitly configured in core qualifier");
             Path script = Path.of("plugins/io.github.niwantha33.zew.ui/scripts/yaml_observe_file.py")
                     .toAbsolutePath();
+            var generatedSnapshot = YamlSourceLoader.inspect(Path.of(python), script,
+                    generatedSource, () -> false);
+            check(generatedSnapshot.parsed()
+                    && generatedSnapshot.sha256().equals(YamlSourceLoader.hash(generated))
+                    && !YamlFlowGraph.from(generatedSnapshot).edges().isEmpty(),
+                    "actual generated build_info.yml is parsed into connected syntax blocks");
             var snapshot = YamlSourceLoader.inspect(Path.of(python), script, appSource, () -> false);
             check(snapshot.parsed() && "twister-test".equals(snapshot.kind()),
                     "bundled Python produces a correctly typed Twister observation");
