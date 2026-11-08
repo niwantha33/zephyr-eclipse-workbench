@@ -42,7 +42,9 @@ public final class ZephyrProjectConfigurator implements ProjectConfigurator {
     }
     @Override public Set<IFolder> getFoldersToIgnore(IProject project, IProgressMonitor monitor) {
         Set<IFolder> folders = new LinkedHashSet<>();
-        for (String name : new String[] {".zew", ".zew-build", ".zew-traces", "build", ".git", ".venv"})
+        // Build output is not a source project, but must remain browsable in Project Explorer.
+        // Nested build roots are already rejected as separate project proposals above.
+        for (String name : new String[] {".zew", ".zew-traces", "build", ".git", ".venv"})
             folders.add(project.getFolder(name));
         return folders;
     }

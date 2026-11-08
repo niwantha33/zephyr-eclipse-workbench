@@ -6,11 +6,9 @@ Not an end-user installer. One fresh environment, sequential targets, a 45-minut
 subprocess limit, bounded verified archives, no user keys or hardware access.
 """
 import argparse
-import http.client
-import time
-import urllib.error
 import base64
 import hashlib
+import http.client
 import importlib.util
 import json
 import os
@@ -18,7 +16,9 @@ from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
+import urllib.error
 import urllib.request
+import time
 import zipfile
 
 REPO = Path(__file__).resolve().parents[1]
@@ -30,6 +30,14 @@ BOOTSTRAP = [
      '6f672aebe9e488a246efd6875f9197dbc0d9a40100e218acc3877cba2b206c45'),
 ]
 
+# CI-only failover for the exact byte-pinned MinGit 2.50.1 release asset.
+# This independent HTTPS mirror is never used for end-user installations.
+# Size and SHA-256 must match BOOTSTRAP before ZIP inspection or extraction.
+GIT_BOOTSTRAP_MIRROR = (
+    'https://mirrors.huaweicloud.com/repository/toolkit/git-for-windows/'
+    'v2.50.1.windows.1/MinGit-2.50.1-64-bit.zip'
+)
+
 
 def run(args, root, env, timeout=2700, capture=False):
     print('CI command:', *map(str, args[:5]), flush=True)
@@ -37,6 +45,61 @@ def run(args, root, env, timeout=2700, capture=False):
                             stdin=subprocess.DEVNULL, text=True,
                             stdout=subprocess.PIPE if capture else None)
     return result.stdout if capture else None
+
+
+def download_verified_bootstrap(archive, name, url, size, digest, *, attempts=5,
+                                pause=time.sleep, fallback_url=None):
+    """Download exact CI-pinned bytes, with a mirror only after transport failure.
+
+    Wrong size/hash, invalid archives and nontransient HTTP failures always
+    fail closed. A mirror never changes the reviewed version or digest.
+    """
+    transient_http = {429, 500, 502, 503, 504}
+    sources = [url]
+    if fallback_url is not None:
+        if not fallback_url.startswith('https://'):
+            raise ValueError('CI bootstrap mirror must use HTTPS')
+        sources.append(fallback_url)
+    staging = archive.with_name(archive.name + '.part')
+    for index, source in enumerate(sources):
+        for attempt in range(1, attempts + 1):
+            staging.unlink(missing_ok=True)
+            try:
+                origin = 'primary' if index == 0 else 'verified-byte mirror'
+                print(f'CI pinned bootstrap {name} ({origin}): attempt {attempt}/{attempts}',
+                      flush=True)
+                request = urllib.request.Request(
+                    source, headers={'User-Agent': 'Zephyr-Workbench-CI'})
+                total = 0
+                sha = hashlib.sha256()
+                with urllib.request.urlopen(request, timeout=60) as response, staging.open('wb') as output:
+                    while block := response.read(262144):
+                        total += len(block)
+                        if total > size:
+                            raise ValueError('Bootstrap download exceeds reviewed size: ' + name)
+                        sha.update(block)
+                        output.write(block)
+                if total != size or sha.hexdigest() != digest:
+                    raise ValueError('Bootstrap integrity mismatch: ' + name)
+                staging.replace(archive)
+                return
+            except (urllib.error.URLError, TimeoutError, ConnectionError,
+                    http.client.IncompleteRead) as error:
+                if isinstance(error, urllib.error.HTTPError) and error.code not in transient_http:
+                    raise
+                if attempt == attempts:
+                    if index == len(sources) - 1:
+                        raise
+                    print(f'CI pinned bootstrap {name}: primary transport exhausted; '
+                          'trying independently hosted mirror with original SHA-256',
+                          flush=True)
+                    break
+                print(f'CI pinned bootstrap {name}: transient transport failure, '
+                      f'retrying ({type(error).__name__})', flush=True)
+                pause(min(3 * 2 ** (attempt - 1), 30))
+            finally:
+                staging.unlink(missing_ok=True)
+
 
 
 def fetch_pinned_archive(name, url, size, digest, archive):
@@ -84,7 +147,13 @@ def bootstrap(root):
     (root / '.zew-managed').write_text('first-build-win-x64-v1\n')
     for name, url, size, digest in BOOTSTRAP:
         archive = root / 'cache' / (name + '.zip')
-        fetch_pinned_archive(name, url, size, digest, archive)
+        if name == 'git':
+            # MinGit fallback is CI-only; exact reviewed size/SHA-256 required.
+            download_verified_bootstrap(
+                archive, name, url, size, digest, fallback_url=GIT_BOOTSTRAP_MIRROR)
+        else:
+            # Preserve main's pinned Python bootstrap retry policy.
+            fetch_pinned_archive(name, url, size, digest, archive)
         with zipfile.ZipFile(archive) as source:
             expanded = 0
             for entry in source.infolist():

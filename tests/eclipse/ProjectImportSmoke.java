@@ -34,6 +34,8 @@ public final class ProjectImportSmoke {
         Files.writeString(folder.resolve(".cproject"), "<?xml version=\"1.0\"?><cproject/>");
         Files.createDirectories(folder.resolve("build/cmake.run.win32.x86_64.Local"));
         Files.writeString(folder.resolve("build/cmake.run.win32.x86_64.Local/CMakeCache.txt"), "old generic cache");
+        Path generated = Files.createDirectories(folder.resolve(".zew-build/test-profile/zephyr"));
+        Files.writeString(generated.resolve("runners.yaml"), "config: {}\n");
         String source = Files.readString(folder.resolve("CMakeLists.txt"));
         workspace.run(monitor -> {
             try {
@@ -44,6 +46,21 @@ public final class ProjectImportSmoke {
                 check(repaired.getBuildConfigs().length == 1 && repaired.getActiveBuildConfig().getName().equals("default"), "native build no longer selects cmake.run.win32 configuration");
                 check(repaired.getPersistentProperty(new QualifiedName(UI, "setupRoot")).equals(environment.toString()), "ready environment bound to project");
                 check(repaired.getDescription().getComment().equals("preserve my project comment"), "project comment preserved");
+                var output = repaired.getFolder(".zew-build");
+                check(output.exists() && !output.isDerived()
+                        && repaired.getFile(".zew-build/test-profile/zephyr/runners.yaml").exists(),
+                        "generated YAML remains an Eclipse resource after import");
+                var configurator = (org.eclipse.ui.wizards.datatransfer.ProjectConfigurator)
+                        ui.loadClass(UI + ".ZephyrProjectConfigurator").getDeclaredConstructor().newInstance();
+                check(configurator.getFoldersToIgnore(repaired, monitor).stream()
+                        .noneMatch(ignored -> ".zew-build".equals(ignored.getName())),
+                        "file-system importer does not deliberately exclude .zew-build");
+                // A workspace created by the old release can retain this hidden flag.
+                output.setDerived(true, monitor);
+                var configure = ui.loadClass(UI + ".ZephyrProjectLifecycle")
+                        .getMethod("configure", IProject.class, IProgressMonitor.class);
+                check((Boolean) configure.invoke(null, repaired, monitor) && !output.isDerived(),
+                        "opening a managed project migrates the old hidden build root");
                 check(Files.readString(folder.resolve(".zew/import-backup/.project")).equals(generic), "original CMake Eclipse metadata backed up");
                 check(Files.readString(folder.resolve("CMakeLists.txt")).equals(source)
                         && Files.readString(folder.resolve("prj.conf")).equals("# keep my config\n"), "CMake and application configuration unchanged");

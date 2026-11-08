@@ -68,6 +68,7 @@ public final class ZephyrProjectLifecycle implements IResourceChangeListener {
             project.setPersistentProperty(ZephyrProjectImport.SETUP, root.toString());
         try {
             ProjectContext.settings(project);
+            revealBuildOutput(project, monitor);
             project.deleteMarkers(MARKER, false, IResource.DEPTH_ZERO);
             return true;
         } catch (Exception missing) {
@@ -81,6 +82,19 @@ public final class ZephyrProjectLifecycle implements IResourceChangeListener {
             }
             return false;
         }
+    }
+
+    /** Restore build artifacts hidden by older releases' derived-resource flag.
+     *  Never create a build, modify generated files, or infer a different profile.
+     *  Project Explorer's user-selected dot-resource filter remains respected. */
+    static void revealBuildOutput(IProject project, IProgressMonitor monitor) throws CoreException {
+        if (project == null || !project.isAccessible() || project.getLocation() == null) return;
+        var output = project.getFolder(".zew-build");
+        // West writes outside Eclipse's resource API; discover the existing folder.
+        // Refresh only the directory, not the full generated build tree.
+        if (java.nio.file.Files.isDirectory(project.getLocation().toFile().toPath().resolve(".zew-build")))
+            output.refreshLocal(IResource.DEPTH_ZERO, monitor);
+        if (output.exists() && output.isDerived()) output.setDerived(false, monitor);
     }
 
     @Override public void resourceChanged(IResourceChangeEvent event) {

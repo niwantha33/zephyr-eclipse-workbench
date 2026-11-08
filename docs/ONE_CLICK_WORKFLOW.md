@@ -45,6 +45,34 @@ in the Zephyr Console and made available through Build and Show Firmware.
 
 The build is still standard `west build --build-dir ...`. West reads the
 generated `zephyr/runners.yaml` to find supported runners for flash/debug.
+
+### Seeing generated files in Eclipse Project Explorer
+
+The actual build directory uses the dot-prefixed `.zew-build` name,
+**not** `build` at the project root. Expand
+`<application>/.zew-build/<board-and-profile>/zephyr/` to find
+`runners.yaml`, `zephyr.dts`, and `.config` after the appropriate
+configuration/build step. Other generated YAML, such as `build_info.yml`
+or sysbuild's `domains.yaml`, is conditional on the selected build.
+
+The Workbench refreshes generated resources after a successful build and no
+longer explicitly ignores `.zew-build` during Eclipse file-system import.
+An older workspace folder marked **Derived** is restored to an ordinary
+resource during project configuration or build. The user's Project Explorer
+view filters still apply: if the folder is missing, open the Project Explorer
+view menu (**Filters and Customization...**) and uncheck `.* resources`
+and **Derived resources**, then press **F5** to refresh. The Workbench does
+not silently override global viewer filters. If the directory does not exist
+on disk, inspect the `independent output:` path printed in Zephyr Console
+and check whether configuration completed.
+
+Generated `runners.yaml`, `zephyr.dts`, and `.config` are build outputs:
+inspect them, but edit application inputs such as `prj.conf` and
+`app.overlay` rather than editing generated files. The separate
+**Zephyr YAML Structure (Read-only)** view is under
+**Window → Show View → Other...**; parsing a saved YAML document never
+establishes a valid hardware configuration or completed firmware build.
+
 This Workbench does not copy source into a vendor-owned project or replace the
 Zephyr build system.
 
