@@ -83,6 +83,7 @@ public final class ZephyrProjectImport {
         attach(project, monitor);
         project.setPersistentProperty(SETUP, environment.toString());
         project.refreshLocal(IResource.DEPTH_INFINITE, monitor);
+        ZephyrProjectLifecycle.revealBuildOutput(project, monitor);
         return project;
     }
 
