@@ -2,6 +2,9 @@
 """Fault injection for interrupted setup; no network or host installations."""
 import hashlib
 import http.client
+import io
+import json
+import os
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -32,6 +35,102 @@ class SetupRecoveryTests(unittest.TestCase):
             self.assertEqual(request.call_count, 3)
             self.assertEqual(target.read_bytes(), b'previous')
             self.assertFalse((root / 'a.whl.partial').exists())
+
+    def test_ci_large_sdk_read_timeout_uses_verified_github_asset_api(self):
+        # A Windows SSL socket can raise OSError rather than TimeoutError.
+        # Exercise the actual metadata+binary integrity gate, not a stub.
+        artifact = {
+            'file': 'toolchain_gnu_windows-x86_64_arm-zephyr-eabi.7z',
+            'size': 10,
+            'sha256': hashlib.sha256(b'validbytes').hexdigest(),
+            'url': ('https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/'
+                    'toolchain_gnu_windows-x86_64_arm-zephyr-eabi.7z'),
+        }
+        metadata = json.dumps({'assets': [
+            {'name': artifact['file'], 'id': 123, 'size': artifact['size'],
+             'state': 'uploaded', 'digest': 'sha256:' + artifact['sha256']}
+        ]}).encode()
+
+        class Response:
+            def __init__(self, url, payload, content_type='application/octet-stream'):
+                self.url, self.stream = url, io.BytesIO(payload)
+                self.headers = {'Content-Type': content_type}
+            def __enter__(self):
+                return self
+            def __exit__(self, *unused):
+                self.stream.close()
+            def read(self, count=-1):
+                return self.stream.read(count)
+
+        api = 'https://api.github.com/repos/zephyrproject-rtos/sdk-ng'
+        responses = [
+            OSError('The read operation timed out'),
+            Response(api + '/releases/tags/v1.0.1', metadata, 'application/json'),
+            Response(api + '/releases/assets/123', b'validbytes'),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory)
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \
+                 patch.object(setup.urllib.request, 'urlopen', side_effect=responses) as request, \
+                 patch.object(setup.time, 'sleep') as sleep:
+                downloaded = setup.fetch(artifact, cache)
+            self.assertEqual(downloaded.read_bytes(), b'validbytes')
+            self.assertEqual(request.call_count, 3)
+            self.assertEqual(request.call_args_list[0].kwargs['timeout'], 120)
+            self.assertEqual(request.call_args_list[2].kwargs['timeout'], 120)
+            sleep.assert_not_called()
+            self.assertFalse((cache / (artifact['file'] + '.partial')).exists())
+
+    def test_ci_sdk_rejects_forged_asset_digest_after_timeout(self):
+        artifact = {
+            'file': 'toolchain_gnu_windows-x86_64_arm-zephyr-eabi.7z',
+            'size': 4,
+            'sha256': hashlib.sha256(b'good').hexdigest(),
+            'url': ('https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/'
+                    'toolchain_gnu_windows-x86_64_arm-zephyr-eabi.7z'),
+        }
+        metadata = json.dumps({'assets': [
+            {'name': artifact['file'], 'id': 123, 'size': 4,
+             'state': 'uploaded', 'digest': 'sha256:' + ('0' * 64)}
+        ]}).encode()
+
+        class Response:
+            url = 'https://api.github.com/repos/zephyrproject-rtos/sdk-ng/releases/tags/v1.0.1'
+            def __enter__(self): return self
+            def __exit__(self, *unused): pass
+            def read(self, count=-1): return metadata
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \
+                 patch.object(setup.urllib.request, 'urlopen',
+                              side_effect=[OSError('The read operation timed out'), Response()]) as request, \
+                 patch.object(setup.time, 'sleep') as sleep:
+                with self.assertRaisesRegex(ValueError, 'digest differs'):
+                    setup.fetch(artifact, Path(directory))
+            self.assertEqual(request.call_count, 2)
+            sleep.assert_not_called()
+            self.assertFalse((Path(directory) / artifact['file']).exists())
+
+    def test_non_ci_sdk_read_timeout_keeps_standard_timeout_and_no_api_fallback(self):
+        artifact = {
+            'file': 'toolchain_gnu_windows-x86_64_arm-zephyr-eabi.7z',
+            'size': 4,
+            'sha256': hashlib.sha256(b'good').hexdigest(),
+            'url': ('https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/'
+                    'toolchain_gnu_windows-x86_64_arm-zephyr-eabi.7z'),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': ''}), \
+                 patch.object(setup.urllib.request, 'urlopen',
+                              side_effect=OSError('The read operation timed out')) as request, \
+                 patch.object(setup, 'ci_sdk_asset_api_fetch',
+                              side_effect=AssertionError('CI fallback must not be called')), \
+                 patch.object(setup.time, 'sleep'):
+                with self.assertRaisesRegex(OSError, 'timed out'):
+                    setup.fetch(artifact, Path(directory))
+            self.assertEqual(request.call_count, 3)
+            self.assertTrue(all(c.kwargs['timeout'] == 30 for c in request.call_args_list))
+            self.assertFalse((Path(directory) / artifact['file']).exists())
 
     def test_interrupted_starter_creation_never_activates_partial_application(self):
         with tempfile.TemporaryDirectory() as directory:
