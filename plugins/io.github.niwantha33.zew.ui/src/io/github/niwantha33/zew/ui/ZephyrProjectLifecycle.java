@@ -66,9 +66,11 @@ public final class ZephyrProjectLifecycle implements IResourceChangeListener {
         Path root = environment(project);
         if (root != null && !root.toString().equals(project.getPersistentProperty(ZephyrProjectImport.SETUP)))
             project.setPersistentProperty(ZephyrProjectImport.SETUP, root.toString());
+        // The generated output location is independent of setup readiness.
+        // Present it even when a new/imported project still needs an environment.
+        revealBuildOutput(project, monitor);
         try {
             ProjectContext.settings(project);
-            revealBuildOutput(project, monitor);
             project.deleteMarkers(MARKER, false, IResource.DEPTH_ZERO);
             return true;
         } catch (Exception missing) {
@@ -84,17 +86,70 @@ public final class ZephyrProjectLifecycle implements IResourceChangeListener {
         }
     }
 
-    /** Restore build artifacts hidden by older releases' derived-resource flag.
-     *  Never create a build, modify generated files, or infer a different profile.
-     *  Project Explorer's user-selected dot-resource filter remains respected. */
+    /**
+     * Eclipse can hide dot-prefixed resources independently of the Derived
+     * flag. A normal, non-dot linked folder exposes the existing managed
+     * output in Project Explorer without moving, copying or creating builds.
+     * The link may exist before West has generated its target directory.
+     */
     static void revealBuildOutput(IProject project, IProgressMonitor monitor) throws CoreException {
         if (project == null || !project.isAccessible() || project.getLocation() == null) return;
+        Path root = project.getLocation().toFile().toPath().toAbsolutePath().normalize();
+        Path generated = root.resolve(".zew-build");
         var output = project.getFolder(".zew-build");
-        // West writes outside Eclipse's resource API; discover the existing folder.
-        // Refresh only the directory, not the full generated build tree.
-        if (java.nio.file.Files.isDirectory(project.getLocation().toFile().toPath().resolve(".zew-build")))
+        if (java.nio.file.Files.isDirectory(generated, java.nio.file.LinkOption.NOFOLLOW_LINKS))
             output.refreshLocal(IResource.DEPTH_ZERO, monitor);
+        // Preserve the older migration for workspaces containing a Derived root.
         if (output.exists() && output.isDerived()) output.setDerived(false, monitor);
+
+        final String name = "Build Outputs";
+        var visible = project.getFolder(name);
+        if (java.nio.file.Files.isSymbolicLink(generated)) {
+            buildOutputWarning("Managed .zew-build is a filesystem link; not creating a second link: " + generated);
+            return;
+        }
+        if (!visible.exists()) {
+            // Never replace a real user folder or file called "Build Outputs".
+            if (java.nio.file.Files.exists(root.resolve(name), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                buildOutputWarning("Build Outputs already exists on disk; leaving it unchanged.");
+                return;
+            }
+            try {
+                visible.createLink(generated.toUri(), IResource.ALLOW_MISSING_LOCAL, monitor);
+            } catch (CoreException unsupported) {
+                // Some team providers forbid linked resources. Visibility is
+                // optional: inability to create the link must NOT fail a build.
+                buildOutputWarning("Linked build folders are unavailable for " + project.getName()
+                        + "; inspect " + generated + " directly. " + unsupported.getMessage());
+                return;
+            }
+        }
+        if (!visible.isLinked() || visible.getLocationURI() == null) {
+            buildOutputWarning("Build Outputs is a user-owned resource; leaving it unchanged.");
+            return;
+        }
+        try {
+            if (!java.nio.file.Path.of(visible.getLocationURI()).toAbsolutePath().normalize().equals(generated)) {
+                buildOutputWarning("Build Outputs points elsewhere; leaving its link target unchanged.");
+                return;
+            }
+        } catch (RuntimeException unsupportedScheme) {
+            buildOutputWarning("Build Outputs has a non-file link target; leaving it unchanged.");
+            return;
+        }
+        if (visible.isDerived()) visible.setDerived(false, monitor);
+        if (visible.isHidden()) visible.setHidden(false);
+        // After West has generated the folder, show existing board/profile
+        // directories. The builder performs the full recursive post-build
+        // refresh, avoiding a costly deep scan on every PRE_BUILD callback.
+        if (java.nio.file.Files.isDirectory(generated, java.nio.file.LinkOption.NOFOLLOW_LINKS))
+            visible.refreshLocal(IResource.DEPTH_ONE, monitor);
+    }
+
+    private static void buildOutputWarning(String message) {
+        var plugin = Activator.getDefault();
+        if (plugin != null) plugin.getLog().log(
+                new Status(IStatus.WARNING, Activator.ID, message));
     }
 
     @Override public void resourceChanged(IResourceChangeEvent event) {
