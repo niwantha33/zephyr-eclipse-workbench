@@ -16,9 +16,11 @@ public final class Activator extends AbstractUIPlugin {
         getPreferenceStore().setDefault(UpdateConnection.AUTO, true);
         getPreferenceStore().setDefault(WorkbenchPreferences.ENABLE_CPU_VIEW, true);
         getPreferenceStore().setDefault(WorkbenchPreferences.ENABLE_CONTENTION_VIEW, true);
+        getPreferenceStore().setDefault(WorkbenchPreferences.SMART_COMPLETION_ENABLED, true);
     }
     @Override public void stop(BundleContext context) throws Exception {
         org.eclipse.core.resources.ResourcesPlugin.getWorkspace().removeResourceChangeListener(projects);
+        SmartCompletionStartup.stop();
         WorkbenchHandler.cancelCurrent();
         org.eclipse.core.runtime.jobs.Job.getJobManager().cancel(UpdateController.FAMILY);
         instance = null;

@@ -128,6 +128,7 @@
     <builder hasNature="false"><run class="io.github.niwantha33.zew.ui.ZephyrProjectBuilder"/></builder>
   </extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.UpdateStartup"/></extension>
+  <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.SmartCompletionStartup"/></extension>
   <extension point="org.eclipse.ui.views">
     <view id="io.github.niwantha33.zew.ui.buildFailureInvestigation" name="Zephyr Build Failure Investigation"
           class="io.github.niwantha33.zew.ui.BuildFailureInvestigationView" restorable="true"/>
