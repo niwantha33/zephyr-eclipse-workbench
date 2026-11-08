@@ -20,7 +20,7 @@ class FirmwareMatrixTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'bootstrap.zip'
             with mock.patch.object(matrix.urllib.request, 'urlopen',
-                                   side_effect=[unavailable, io.BytesIO(expected)]) as open_url, \\
+                                   side_effect=[unavailable, io.BytesIO(expected)]) as open_url, \
                  mock.patch.object(matrix.time, 'sleep') as sleep:
                 matrix.fetch_pinned_archive('python', 'https://example.invalid/test.zip',
                                             len(expected), digest, output)
@@ -32,7 +32,7 @@ class FirmwareMatrixTests(unittest.TestCase):
         failure = urllib.error.HTTPError('https://example.invalid/test.zip', 404, 'not found', {}, None)
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'bootstrap.zip'
-            with mock.patch.object(matrix.urllib.request, 'urlopen', side_effect=failure) as open_url, \\
+            with mock.patch.object(matrix.urllib.request, 'urlopen', side_effect=failure) as open_url, \
                  mock.patch.object(matrix.time, 'sleep') as sleep:
                 with self.assertRaises(urllib.error.HTTPError):
                     matrix.fetch_pinned_archive('python', 'https://example.invalid/test.zip',
@@ -45,7 +45,7 @@ class FirmwareMatrixTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'bootstrap.zip'
             with mock.patch.object(matrix.urllib.request, 'urlopen',
-                                   return_value=io.BytesIO(b'bad-data')) as open_url, \\
+                                   return_value=io.BytesIO(b'bad-data')) as open_url, \
                  mock.patch.object(matrix.time, 'sleep') as sleep:
                 with self.assertRaisesRegex(ValueError, 'integrity mismatch'):
                     matrix.fetch_pinned_archive('git', 'https://example.invalid/test.zip',
@@ -58,7 +58,7 @@ class FirmwareMatrixTests(unittest.TestCase):
         failure = urllib.error.HTTPError('https://example.invalid/test.zip', 503, 'temporary', {}, None)
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'bootstrap.zip'
-            with mock.patch.object(matrix.urllib.request, 'urlopen', side_effect=failure) as open_url, \\
+            with mock.patch.object(matrix.urllib.request, 'urlopen', side_effect=failure) as open_url, \
                  mock.patch.object(matrix.time, 'sleep') as sleep:
                 with self.assertRaises(urllib.error.HTTPError):
                     matrix.fetch_pinned_archive('git', 'https://example.invalid/test.zip',
@@ -78,7 +78,7 @@ class FirmwareMatrixTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'bootstrap.zip'
             with mock.patch.object(matrix.urllib.request, 'urlopen',
-                                   side_effect=[InterruptedStream(b'partial'), io.BytesIO(expected)]), \\
+                                   side_effect=[InterruptedStream(b'partial'), io.BytesIO(expected)]), \
                  mock.patch.object(matrix.time, 'sleep'):
                 matrix.fetch_pinned_archive('python', 'https://example.invalid/test.zip',
                                             len(expected), hashlib.sha256(expected).hexdigest(), output)
