@@ -66,6 +66,12 @@ public final class ProjectImportSmoke {
                         && Files.readString(visible.getLocation().toFile().toPath()
                                 .resolve("test-profile/zephyr/runners.yaml")).equals("config: {}\n"),
                         "generated YAML accessible via visible link without copying files");
+                var isOutput = ui.loadClass(UI + ".ZephyrProjectBuilder")
+                        .getMethod("isBuildOutputResource", String.class);
+                check((Boolean) isOutput.invoke(null, ".zew-build/profiles/zephyr/runners.yaml")
+                        && (Boolean) isOutput.invoke(null, "Build Outputs/profiles/zephyr/settings.conf")
+                        && !(Boolean) isOutput.invoke(null, "src/application.conf"),
+                        "generated linked resources never trigger another automatic firmware build");
                 var configurator = (org.eclipse.ui.wizards.datatransfer.ProjectConfigurator)
                         ui.loadClass(UI + ".ZephyrProjectConfigurator").getDeclaredConstructor().newInstance();
                 check(configurator.getFoldersToIgnore(repaired, monitor).stream()
