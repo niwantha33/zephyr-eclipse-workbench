@@ -81,7 +81,7 @@ def bootstrap(root):
         raise ValueError('CI matrix requires a fresh directory; existing data was preserved')
     root.mkdir(parents=True)
     (root / 'cache').mkdir()
-    (root / '.zew-managed').write_text('first-build-win-x64-v1\\n')
+    (root / '.zew-managed').write_text('first-build-win-x64-v1\n')
     for name, url, size, digest in BOOTSTRAP:
         archive = root / 'cache' / (name + '.zip')
         fetch_pinned_archive(name, url, size, digest, archive)
@@ -90,11 +90,11 @@ def bootstrap(root):
             for entry in source.infolist():
                 path = PurePosixPath(entry.filename)
                 expanded += entry.file_size
-                if (path.is_absolute() or '..' in path.parts or ':' in entry.filename or '\\\\' in entry.filename
+                if (path.is_absolute() or '..' in path.parts or ':' in entry.filename or '\\' in entry.filename
                         or (entry.external_attr >> 16) & 0o170000 == 0o120000 or expanded > 1024**3):
                     raise ValueError('Unsafe bootstrap archive')
             source.extractall(root / name)
-    (root / 'python/python313._pth').write_text('python313.zip\\n.\\nLib/site-packages\\nimport site\\n')
+    (root / 'python/python313._pth').write_text('python313.zip\n.\nLib/site-packages\nimport site\n')
     shutil.copytree(TOOLS, root / 'installer')
     return root / 'python/python.exe'
 
