@@ -404,7 +404,7 @@ public final class YamlStructureView extends ViewPart {
         observedSha = null;
         observedSnapshot = null;
         tree.setInput(List.of());
-        graph.setObservation(null);
+        graph.setMessage("Loading observation", "Reading the selected saved JSON report.");
         status.setText("Loading saved YAML observation…");
         bindingDetails.setText("Binding intelligence unavailable for imported JSON without verified source context.");
         hardwareTree.setInput(List.of());
@@ -537,7 +537,7 @@ public final class YamlStructureView extends ViewPart {
         observedSha = null;
         observedSnapshot = null;
         tree.setInput(List.of());
-        graph.setObservation(null);
+        graph.setMessage("Reading selected YAML", "Inspecting the saved file with managed Python.");
         status.setText("Inspecting selected YAML with the project's managed Python…");
         bindingDetails.setText("Binding intelligence: inspecting only if this is a Devicetree binding.");
         hardwareTree.setInput(List.of());
@@ -689,7 +689,8 @@ public final class YamlStructureView extends ViewPart {
                         diagnosticStatus.setText("Diagnostics unavailable: source or checkout context unverified."
                                 + diagnosticsNotice);
                         tree.setInput(List.of());
-                        graph.setObservation(null);
+                        graph.setMessage("YAML inspection failed",
+                                "The file is still selected. Read the reason above, then retry after repairing the Workbench.");
                         return;
                     }
                     observedFile = file;
