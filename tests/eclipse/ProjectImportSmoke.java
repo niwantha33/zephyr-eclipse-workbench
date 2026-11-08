@@ -35,7 +35,7 @@ public final class ProjectImportSmoke {
         Files.createDirectories(folder.resolve("build/cmake.run.win32.x86_64.Local"));
         Files.writeString(folder.resolve("build/cmake.run.win32.x86_64.Local/CMakeCache.txt"), "old generic cache");
         Path generated = Files.createDirectories(folder.resolve(".zew-build/test-profile/zephyr"));
-        Files.writeString(generated.resolve("runners.yaml"), "config: {}\\n");
+        Files.writeString(generated.resolve("runners.yaml"), "config: {}\n");
         String source = Files.readString(folder.resolve("CMakeLists.txt"));
         workspace.run(monitor -> {
             try {
