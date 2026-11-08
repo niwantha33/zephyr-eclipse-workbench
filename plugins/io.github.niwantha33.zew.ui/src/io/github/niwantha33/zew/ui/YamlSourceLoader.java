@@ -120,9 +120,9 @@ public final class YamlSourceLoader {
         Path errors = null;
         Process process = null;
         try {
-            ProcessBuilder command = new ProcessBuilder(managedPython.toString(),
-                    bundledScript.toString(), "--root", source.root().toString(),
-                    "--relative", source.relative(), "--source-root", source.kind());
+            ProcessBuilder command = new ProcessBuilder(YamlPythonLaunch.command(managedPython, bundledScript,
+                    "--root", source.root().toString(),
+                    "--relative", source.relative(), "--source-root", source.kind()));
             errors = Files.createTempFile("zew-yaml-stderr-", ".txt");
             command.redirectInput(ProcessBuilder.Redirect.PIPE);
             command.redirectOutput(output.toFile());
