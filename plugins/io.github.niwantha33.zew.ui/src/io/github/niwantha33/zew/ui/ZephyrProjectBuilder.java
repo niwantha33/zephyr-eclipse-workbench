@@ -47,12 +47,18 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
         if (kind != AUTO_BUILD || sourceChanged()) run(false, "true".equals(arguments.get("zew.pristine")), "true".equals(arguments.get("zew.investigate")), arguments.get("zew.expectedBuild"), monitor);
         return new IProject[0];
     }
+    /** Build products are never source changes, including their visible alias. */
+    public static boolean isBuildOutputResource(String path) {
+        return path != null && (path.equals(".zew-build") || path.startsWith(".zew-build/")
+                || path.equals("Build Outputs") || path.startsWith("Build Outputs/"));
+    }
+
     private boolean sourceChanged() throws CoreException {
         var delta = getDelta(getProject()); if (delta == null) return false;
         boolean[] changed = {false};
         delta.accept(change -> {
             String path = change.getProjectRelativePath().toPortableString();
-            if (path.equals(".zew-build") || path.startsWith(".zew-build/")) return false;
+            if (isBuildOutputResource(path)) return false;
             boolean contentChange = change.getKind() != org.eclipse.core.resources.IResourceDelta.CHANGED
                     || (change.getFlags() & (org.eclipse.core.resources.IResourceDelta.CONTENT | org.eclipse.core.resources.IResourceDelta.REPLACED | org.eclipse.core.resources.IResourceDelta.ENCODING)) != 0;
             if (contentChange && change.getResource().getType() == IResource.FILE
