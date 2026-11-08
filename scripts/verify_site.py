@@ -133,6 +133,7 @@ for p in bundles:
                     raise SystemExit('Installed YAML evidence module differs from source: ' + module)
             for cls in ('YamlStructureView', 'YamlDocumentModel', 'YamlSourceLoader',
                         'YamlBundledScripts', 'YamlBundledScripts$Stage',
+                        'YamlPythonLaunch',
                         'YamlTreeProjection', 'YamlFlowGraph', 'YamlFlowCanvas',
                         'YamlBindingIntelligence', 'YamlHardwareModel',
                         'YamlTwisterModel', 'YamlDiagnosticModel', 'YamlDiagnosticMarkers',
