@@ -59,6 +59,7 @@ public final class YamlStructureView extends ViewPart {
 
     private final AtomicInteger generation = new AtomicInteger();
     private TreeViewer tree;
+    private YamlFlowCanvas graph;
     private Label status;
     private Text bindingDetails;
     private Label hardwareStatus;
@@ -100,7 +101,7 @@ public final class YamlStructureView extends ViewPart {
         parent.setLayout(layout);
 
         var header = new Label(parent, SWT.WRAP);
-        header.setText("ZEPHYR YAML STRUCTURE  /  INSPECT & VERIFY  /  PREVIEWED SCALAR EDITS");
+        header.setText("ZEPHYR YAML VISUAL STUDIO  /  CONNECTED GRAPH  /  SOURCE OUTLINE");
         header.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         var controls = new Composite(parent, SWT.NONE);
@@ -126,9 +127,48 @@ public final class YamlStructureView extends ViewPart {
         status.setText("Select a .yaml/.yml file in Project Explorer, or import a saved JSON observation. "
                 + "Select your managed Zephyr application first when inspecting checkout files.");
 
-        tree = new TreeViewer(parent, SWT.BORDER | SWT.FULL_SELECTION
+        // Graph is the primary view; the original precise source outline is
+        // retained as a separate tab for inspection and scalar-edit selection.
+        var visualizeTabs = new TabFolder(parent, SWT.NONE);
+        visualizeTabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        var diagramTab = new TabItem(visualizeTabs, SWT.NONE);
+        diagramTab.setText("Connected blocks");
+        var diagramPanel = new Composite(visualizeTabs, SWT.NONE);
+        var diagramLayout = new GridLayout(1, false);
+        diagramLayout.marginWidth = 3;
+        diagramLayout.marginHeight = 3;
+        diagramPanel.setLayout(diagramLayout);
+        diagramTab.setControl(diagramPanel);
+        var graphToolbar = new Composite(diagramPanel, SWT.NONE);
+        graphToolbar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        var toolbarLayout = new GridLayout(4, false);
+        toolbarLayout.marginWidth = 0;
+        toolbarLayout.marginHeight = 0;
+        graphToolbar.setLayout(toolbarLayout);
+        var smaller = new Button(graphToolbar, SWT.PUSH);
+        smaller.setText("−");
+        smaller.setToolTipText("Zoom out of YAML graph");
+        var reset = new Button(graphToolbar, SWT.PUSH);
+        reset.setText("100%");
+        reset.setToolTipText("Reset YAML graph zoom");
+        var larger = new Button(graphToolbar, SWT.PUSH);
+        larger.setText("+");
+        larger.setToolTipText("Zoom into YAML graph");
+        var graphLegend = new Label(graphToolbar, SWT.NONE);
+        graphLegend.setText("Blue: map  •  Purple: list  •  Green: value  |  Links: YAML parent → child");
+        graphLegend.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        graph = new YamlFlowCanvas(diagramPanel, SWT.NONE);
+        graph.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        graph.setNavigate((line, column) -> navigateToSource(line, column));
+        smaller.addListener(SWT.Selection, event -> graph.setZoom(graph.zoomPercent() - 10));
+        larger.addListener(SWT.Selection, event -> graph.setZoom(graph.zoomPercent() + 10));
+        reset.addListener(SWT.Selection, event -> graph.setZoom(100));
+
+        var outlineTab = new TabItem(visualizeTabs, SWT.NONE);
+        outlineTab.setText("Source outline");
+        tree = new TreeViewer(visualizeTabs, SWT.BORDER | SWT.FULL_SELECTION
                 | SWT.H_SCROLL | SWT.V_SCROLL | SWT.SINGLE);
-        tree.getTree().setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        outlineTab.setControl(tree.getTree());
         tree.getTree().setHeaderVisible(true);
         tree.getTree().setLinesVisible(true);
         tree.setContentProvider(new ITreeContentProvider() {
@@ -365,6 +405,7 @@ public final class YamlStructureView extends ViewPart {
         observedSha = null;
         observedSnapshot = null;
         tree.setInput(List.of());
+        graph.setObservation(null);
         status.setText("Loading saved YAML observation…");
         bindingDetails.setText("Binding intelligence unavailable for imported JSON without verified source context.");
         hardwareTree.setInput(List.of());
@@ -422,6 +463,7 @@ public final class YamlStructureView extends ViewPart {
             throw new IllegalStateException("YAML view updates require the UI thread");
         if (tree == null || tree.getTree().isDisposed()) return;
         tree.setInput(YamlTreeProjection.rows(snapshot));
+        graph.setObservation(snapshot);
         observedSnapshot = observedFile == null ? null : snapshot;
         if (snapshot == null) {
             bindingDetails.setText("Binding intelligence: no selected source.");
@@ -496,6 +538,7 @@ public final class YamlStructureView extends ViewPart {
         observedSha = null;
         observedSnapshot = null;
         tree.setInput(List.of());
+        graph.setObservation(null);
         status.setText("Inspecting selected YAML with the project's managed Python…");
         bindingDetails.setText("Binding intelligence: inspecting only if this is a Devicetree binding.");
         hardwareTree.setInput(List.of());
@@ -623,8 +666,15 @@ public final class YamlStructureView extends ViewPart {
                     Thread.currentThread().interrupt();
                     return Status.CANCEL_STATUS;
                 } catch (Exception exception) {
-                    failure = "YAML inspection unavailable: select a file within this managed "
-                            + "application or its exact Zephyr checkout, and check the Python setup. "
+                    // A generic message hid the cause (e.g. parser missing,
+                    // source outside the selected checkout, or no managed Python).
+                    // Display only bounded, single-line diagnostic text.
+                    String reason = exception.getMessage();
+                    if (reason == null || reason.isBlank()) reason = exception.getClass().getSimpleName();
+                    reason = reason.replace('\n', ' ').replace('\r', ' ').trim();
+                    if (reason.length() > 190) reason = reason.substring(0, 190) + "…";
+                    failure = "YAML inspection unavailable: " + reason
+                            + ". Check the selected file and managed Python (PyYAML). "
                             + "No file was modified.";
                 }
                 if (monitor.isCanceled() || request != generation.get()) return Status.CANCEL_STATUS;
@@ -658,6 +708,7 @@ public final class YamlStructureView extends ViewPart {
                         diagnosticStatus.setText("Diagnostics unavailable: source or checkout context unverified."
                                 + diagnosticsNotice);
                         tree.setInput(List.of());
+                        graph.setObservation(null);
                         return;
                     }
                     observedFile = file;

@@ -45,6 +45,15 @@ public final class YamlStructureSmoke {
         TabFolder tabs = (TabFolder) binding.getParent();
         check(!outline.getTree().isDisposed() && outline.getTree().getColumnCount() == 4,
                 "four-column source YAML syntax viewer exists");
+        TabFolder visualization = (TabFolder) outline.getTree().getParent();
+        check(visualization.getItemCount() == 2
+                && "Connected blocks".equals(visualization.getItem(0).getText())
+                && "Source outline".equals(visualization.getItem(1).getText())
+                && visualization.getSelectionIndex() == 0,
+                "native connected-block graph is the primary tab; source outline remains available");
+        Object graph = field(view, "graph");
+        check(graph instanceof org.eclipse.swt.widgets.Canvas canvas && !canvas.isDisposed(),
+                "connected YAML graph is an installed SWT canvas, not HTML or a fake placeholder");
         check(tabs.getItemCount() == 4
                 && List.of("Devicetree binding", "Hardware Model v2",
                         "Twister tests", "Diagnostics").equals(
@@ -81,6 +90,14 @@ public final class YamlStructureSmoke {
         check(outline.getTree().getItemCount() == 1
                 && outline.getTree().getItem(0).getText(0).equals("(document)"),
                 "real model is projected into the installed SWT outline");
+        Object graphLayout = graph.getClass().getMethod("layoutSnapshot").invoke(graph);
+        var visibleBlocks = (java.util.List<?>) graphLayout.getClass().getMethod("blocks").invoke(graphLayout);
+        var visibleEdges = (java.util.List<?>) graphLayout.getClass().getMethod("edges").invoke(graphLayout);
+        check(visibleBlocks.size() == 2 && visibleEdges.size() == 1,
+                "real observed YAML mapping renders as linked native blocks, not fabricated dependencies");
+        graph.getClass().getMethod("setZoom", int.class).invoke(graph, 130);
+        check((Integer) graph.getClass().getMethod("zoomPercent").invoke(graph) == 130,
+                "installed YAML diagram has working native zoom");
         check(field(view, "observedFile") == null && field(view, "observedSnapshot") == null,
                 "imported report cannot authenticate a writable source");
 
