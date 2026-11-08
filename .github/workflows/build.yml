@@ -11,6 +11,31 @@ concurrency:
   group: workbench-build-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  # Python 3.9 is no longer in the ubuntu-24.04 tool cache. setup-python
+  # fetched its release from GitHub twice and hit repeated 504 gateway errors.
+  # Test real CPython 3.9 without that GitHub release download, from a
+  # pinned, multi-platform Docker Official Image index.
+  evidence-pytest39:
+    name: Evidence CLI pytest (Python 3.9)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: python:3.9.25-slim-bookworm@sha256:a02e9c5406c416c504d6c9a1a306ff4080c3173f1008d192f953bd20382a2d5c
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Confirm CPython version
+        run: python -c "import sys; assert sys.version_info[:2] == (3, 9), sys.version"
+      - name: Install Evidence CLI package and pytest
+        run: python -m pip install --disable-pip-version-check -e . pytest==8.4.2
+      - name: Run synthetic Evidence CLI regression tests
+        run: |
+          python -m pytest -q tests/pytest/test_evidence_cli.py
+          zew --version
+          python zew.py --version
+
   evidence-pytest:
     name: Evidence CLI pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-24.04
@@ -18,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.9', '3.11', '3.13']
+        python-version: ['3.11', '3.13']
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -172,7 +197,7 @@ jobs:
   evidence-qualification-gate:
     name: Evidence qualification gate
     if: ${{ always() }}
-    needs: [package, windows-firmware, evidence-pytest]
+    needs: [package, windows-firmware, evidence-pytest, evidence-pytest39]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -181,9 +206,10 @@ jobs:
           PACKAGE_RESULT: ${{ needs.package.result }}
           WINDOWS_RESULT: ${{ needs.windows-firmware.result }}
           PYTEST_RESULT: ${{ needs.evidence-pytest.result }}
+          PY39_RESULT: ${{ needs.evidence-pytest39.result }}
         run: |
-          if [ "$PACKAGE_RESULT" != "success" ] || [ "$WINDOWS_RESULT" != "success" ] || [ "$PYTEST_RESULT" != "success" ]; then
-            echo "Not qualified: Linux=$PACKAGE_RESULT, Windows=$WINDOWS_RESULT, Python=$PYTEST_RESULT" >&2
+          if [ "$PACKAGE_RESULT" != "success" ] || [ "$WINDOWS_RESULT" != "success" ] || [ "$PYTEST_RESULT" != "success" ] || [ "$PY39_RESULT" != "success" ]; then
+            echo "Not qualified: Linux=$PACKAGE_RESULT, Windows=$WINDOWS_RESULT, Python matrix=$PYTEST_RESULT, Python 3.9=$PY39_RESULT" >&2
             exit 1
           fi
           echo "Packaging, Windows firmware, and Python matrix passed; no device or production approval is implied."
