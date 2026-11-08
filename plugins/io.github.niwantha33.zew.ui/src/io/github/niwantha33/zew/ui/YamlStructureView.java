@@ -671,7 +671,7 @@ public final class YamlStructureView extends ViewPart {
                     // Display only bounded, single-line diagnostic text.
                     String reason = exception.getMessage();
                     if (reason == null || reason.isBlank()) reason = exception.getClass().getSimpleName();
-                    reason = reason.replace('\\n', ' ').replace('\\r', ' ').trim();
+                    reason = reason.replace('\n', ' ').replace('\r', ' ').trim();
                     if (reason.length() > 190) reason = reason.substring(0, 190) + "…";
                     failure = "YAML inspection unavailable: " + reason
                             + ". Check the selected file and managed Python (PyYAML). "
