@@ -54,8 +54,8 @@ class CIReleaseApiTests(unittest.TestCase):
                 return Response(b'good', 'https://release-assets.githubusercontent.com/fixture')
             raise AssertionError('unexpected URL: ' + url)
         with tempfile.TemporaryDirectory() as directory:
-            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \\
-                    patch.object(setup.urllib.request, 'urlopen', side_effect=respond), \\
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \
+                    patch.object(setup.urllib.request, 'urlopen', side_effect=respond), \
                     patch.object(setup.time, 'sleep') as pause:
                 target = setup.fetch(artifact, Path(directory))
             self.assertEqual(target.read_bytes(), b'good')
@@ -72,7 +72,7 @@ class CIReleaseApiTests(unittest.TestCase):
                 return self.metadata(artifact, size=999)
             raise AssertionError('asset contents must not be fetched')
         with tempfile.TemporaryDirectory() as directory:
-            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \\
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \
                     patch.object(setup.urllib.request, 'urlopen', side_effect=respond):
                 with self.assertRaisesRegex(ValueError, 'metadata differs'):
                     setup.fetch(artifact, Path(directory))
@@ -89,7 +89,7 @@ class CIReleaseApiTests(unittest.TestCase):
                 return Response(b'evil', 'https://release-assets.githubusercontent.com/fixture')
             raise AssertionError('unexpected URL')
         with tempfile.TemporaryDirectory() as directory:
-            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \\
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \
                     patch.object(setup.urllib.request, 'urlopen', side_effect=respond):
                 with self.assertRaisesRegex(ValueError, 'SHA-256 mismatch'):
                     setup.fetch(artifact, Path(directory))
@@ -109,8 +109,8 @@ class CIReleaseApiTests(unittest.TestCase):
                 return Response(b'good', SOURCE)
             raise AssertionError('unexpected URL')
         with tempfile.TemporaryDirectory() as directory:
-            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \\
-                    patch.object(setup.urllib.request, 'urlopen', side_effect=respond), \\
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '1'}), \
+                    patch.object(setup.urllib.request, 'urlopen', side_effect=respond), \
                     patch.object(setup.time, 'sleep') as pause:
                 target = setup.fetch(artifact, Path(directory))
             self.assertEqual(target.read_bytes(), b'good')
@@ -126,8 +126,8 @@ class CIReleaseApiTests(unittest.TestCase):
                 raise urllib.error.HTTPError(SOURCE, 504, 'gateway timeout', {}, None)
             return Response(b'good', SOURCE)
         with tempfile.TemporaryDirectory() as directory:
-            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '0'}), \\
-                    patch.object(setup.urllib.request, 'urlopen', side_effect=respond), \\
+            with patch.dict(os.environ, {'ZEW_CI_SDK_ASSET_API': '0'}), \
+                    patch.object(setup.urllib.request, 'urlopen', side_effect=respond), \
                     patch.object(setup.time, 'sleep'):
                 target = setup.fetch(artifact, Path(directory))
             self.assertEqual(target.read_bytes(), b'good')
