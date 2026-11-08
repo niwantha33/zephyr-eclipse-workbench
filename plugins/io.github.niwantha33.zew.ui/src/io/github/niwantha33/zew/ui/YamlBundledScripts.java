@@ -79,17 +79,21 @@ public final class YamlBundledScripts {
 
     private static void cleanup(Path root) {
         if (root == null) return;
-        try (var paths = Files.walk(root)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException locked) {
-                    // Windows may delay releasing a Python process's handles.
-                    path.toFile().deleteOnExit();
-                }
-            });
+        List<Path> paths;
+        try (var walk = Files.walk(root)) {
+            // Close Windows directory enumeration handles before removing files.
+            paths = walk.sorted(Comparator.reverseOrder()).toList();
         } catch (IOException ignored) {
             root.toFile().deleteOnExit();
+            return;
+        }
+        for (Path path : paths) {
+            try {
+                Files.deleteIfExists(path);
+            } catch (IOException locked) {
+                // Windows may delay releasing a Python process's handles.
+                path.toFile().deleteOnExit();
+            }
         }
     }
 
