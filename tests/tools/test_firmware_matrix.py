@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 import importlib.util
+import hashlib
+import io
+import tempfile
+import urllib.error
+from unittest import mock
 from pathlib import Path
 import unittest
 
@@ -8,6 +13,58 @@ matrix = importlib.util.module_from_spec(spec); spec.loader.exec_module(matrix)
 
 
 class FirmwareMatrixTests(unittest.TestCase):
+    def test_ci_bootstrap_retries_gateway_timeout_then_verifies_exact_hash(self):
+        payload = b'CI pinned archive bytes'
+        digest = hashlib.sha256(payload).hexdigest()
+        failures = [urllib.error.HTTPError('https://example.invalid/pin', 504,
+                                          'gateway timeout', {}, None),
+                    io.BytesIO(payload)]
+        sleeps = []
+        with tempfile.TemporaryDirectory() as folder:
+            archive = Path(folder) / 'pinned.zip'
+            with mock.patch.object(matrix.urllib.request, 'urlopen',
+                                   side_effect=failures) as download:
+                matrix.download_verified_bootstrap(
+                    archive, 'test-pinned', 'https://example.invalid/pin',
+                    len(payload), digest, pause=sleeps.append)
+            self.assertEqual(download.call_count, 2)
+            self.assertEqual(sleeps, [3])
+            self.assertEqual(archive.read_bytes(), payload)
+            self.assertFalse((Path(folder) / 'pinned.zip.part').exists())
+
+    def test_ci_bootstrap_refuses_nontransient_http_and_cleans_partial(self):
+        with tempfile.TemporaryDirectory() as folder:
+            archive = Path(folder) / 'pinned.zip'
+            with mock.patch.object(matrix.urllib.request, 'urlopen',
+                                   side_effect=urllib.error.HTTPError(
+                                       'https://example.invalid/pin', 404, 'not found',
+                                       {}, None)) as download:
+                with self.assertRaises(urllib.error.HTTPError):
+                    matrix.download_verified_bootstrap(
+                        archive, 'test-pinned', 'https://example.invalid/pin',
+                        3, hashlib.sha256(b'abc').hexdigest(), pause=lambda _: None)
+            self.assertEqual(download.call_count, 1)
+            self.assertFalse(archive.exists())
+            self.assertFalse((Path(folder) / 'pinned.zip.part').exists())
+
+    def test_ci_bootstrap_never_accepts_truncated_or_wrong_hash_data(self):
+        with tempfile.TemporaryDirectory() as folder:
+            archive = Path(folder) / 'pinned.zip'
+            for payload, size, digest in [
+                (b'ab', 3, hashlib.sha256(b'abc').hexdigest()),
+                (b'abc', 3, hashlib.sha256(b'bad').hexdigest()),
+            ]:
+                with self.subTest(payload=payload):
+                    with mock.patch.object(matrix.urllib.request, 'urlopen',
+                                           return_value=io.BytesIO(payload)) as download:
+                        with self.assertRaisesRegex(ValueError, 'integrity mismatch'):
+                            matrix.download_verified_bootstrap(
+                                archive, 'test-pinned', 'https://example.invalid/pin',
+                                size, digest, pause=lambda _: None)
+                    self.assertEqual(download.call_count, 1)
+                    self.assertFalse(archive.exists())
+                    self.assertFalse((Path(folder) / 'pinned.zip.part').exists())
+
     def test_requested_soc_disambiguates_multi_soc_board(self):
         rows = [('nordic', 'nordic', soc, 'nrf52840dk', 'default', soc, 'nrf52840dk/' + soc)
                 for soc in ('nrf52811', 'nrf52840')]
