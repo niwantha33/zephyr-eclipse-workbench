@@ -116,7 +116,11 @@ public final class ZephyrProjectLifecycle implements IResourceChangeListener {
                 return;
             }
             try {
-                visible.createLink(generated.toUri(), IResource.ALLOW_MISSING_LOCAL, monitor);
+                // Store a portable project-relative link in .project, not an
+                // absolute machine-specific path; PROJECT_LOC is supplied
+                // by Eclipse for every project, including external imports.
+                visible.createLink(new org.eclipse.core.runtime.Path("PROJECT_LOC/.zew-build"),
+                        IResource.ALLOW_MISSING_LOCAL, monitor);
             } catch (CoreException unsupported) {
                 // Some team providers forbid linked resources. Visibility is
                 // optional: inability to create the link must NOT fail a build.
