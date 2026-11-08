@@ -59,6 +59,9 @@ public final class ProjectImportSmoke {
                 check(Path.of(visible.getLocationURI()).toAbsolutePath().normalize()
                         .equals(folder.resolve(".zew-build").toAbsolutePath().normalize()),
                         "Build Outputs points at the real managed .zew-build directory");
+                check(visible.getRawLocation() != null
+                        && "PROJECT_LOC/.zew-build".equals(visible.getRawLocation().toPortableString()),
+                        "visible build link uses portable PROJECT_LOC metadata");
                 check(visible.getFile("test-profile/zephyr/runners.yaml").exists()
                         && Files.readString(visible.getLocation().toFile().toPath()
                                 .resolve("test-profile/zephyr/runners.yaml")).equals("config: {}\n"),
