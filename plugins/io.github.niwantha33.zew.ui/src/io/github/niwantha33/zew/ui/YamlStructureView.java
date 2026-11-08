@@ -13,7 +13,6 @@ import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.Adapters;
-import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
@@ -566,27 +565,21 @@ public final class YamlStructureView extends ViewPart {
                 YamlDiagnosticModel.Summary diagnostics = null;
                 String markerNotice = "";
                 String failure = null;
-                try {
+                try (YamlBundledScripts.Stage bundled =
+                        YamlBundledScripts.stage(Activator.getDefault().getBundle())) {
                     Properties settings = ProjectContext.settings(context);
                     Path app = context.getLocation().toFile().toPath();
                     Path zephyr = Path.of(settings.getProperty("workspace"), "zephyr");
                     if (file.getLocation() == null)
                         throw new java.io.IOException("The selected YAML file has no local source path.");
                     source = YamlSourceLoader.resolve(file.getLocation().toFile().toPath(), app, zephyr);
-                    var entry = Activator.getDefault().getBundle().getEntry("scripts/yaml_observe_file.py");
-                    if (entry == null)
-                        throw new java.io.IOException("The packaged YAML source parser is missing.");
-                    Path script = Path.of(FileLocator.toFileURL(entry).toURI());
+                    Path script = bundled.script("yaml_observe_file.py");
                     snapshot = YamlSourceLoader.inspect(Path.of(settings.getProperty("python")),
                             script, source,
                             () -> monitor.isCanceled() || generation.get() != request);
-                    var diagnosticEntry = Activator.getDefault().getBundle().getEntry(
-                            "scripts/yaml_diagnostic_inspect.py");
-                    if (diagnosticEntry == null) {
-                        diagnostics = YamlDiagnosticModel.unavailable("inspector-not-installed");
-                    } else {
+                    {
                         try {
-                            Path diagnosticScript = Path.of(FileLocator.toFileURL(diagnosticEntry).toURI());
+                            Path diagnosticScript = bundled.script("yaml_diagnostic_inspect.py");
                             diagnostics = YamlDiagnosticModel.inspect(
                                     Path.of(settings.getProperty("python")), diagnosticScript,
                                     source, zephyr, app, () -> monitor.isCanceled()
@@ -600,12 +593,8 @@ public final class YamlStructureView extends ViewPart {
                             && !snapshot.sha256().equals(diagnostics.sourceSha256()))
                         throw new java.io.IOException("Diagnostic source and YAML observation hashes differ");
                     if (snapshot.parsed() && "devicetree-binding".equals(snapshot.kind())) {
-                        var bindingEntry = Activator.getDefault().getBundle().getEntry(
-                                "scripts/yaml_binding_inspect.py");
-                        if (bindingEntry == null) {
-                            binding = YamlBindingIntelligence.unavailable("inspector-not-installed");
-                        } else {
-                            Path bindingScript = Path.of(FileLocator.toFileURL(bindingEntry).toURI());
+                        {
+                            Path bindingScript = bundled.script("yaml_binding_inspect.py");
                             try {
                                 binding = YamlBindingIntelligence.inspect(
                                         Path.of(settings.getProperty("python")), bindingScript, source,
@@ -621,13 +610,9 @@ public final class YamlStructureView extends ViewPart {
                     }
                     if (snapshot.parsed() && ("hwmv2-board".equals(snapshot.kind())
                             || "hwmv2-soc".equals(snapshot.kind()))) {
-                        var hardwareEntry = Activator.getDefault().getBundle().getEntry(
-                                "scripts/yaml_hwmv2_inspect.py");
-                        if (hardwareEntry == null) {
-                            hardware = YamlHardwareModel.unavailable("hwmv2-resolver-not-installed");
-                        } else {
+                        {
                             try {
-                                Path hardwareScript = Path.of(FileLocator.toFileURL(hardwareEntry).toURI());
+                                Path hardwareScript = bundled.script("yaml_hwmv2_inspect.py");
                                 hardware = YamlHardwareModel.inspect(
                                         Path.of(settings.getProperty("python")), hardwareScript,
                                         source, zephyr, app, () -> monitor.isCanceled()
@@ -641,13 +626,9 @@ public final class YamlStructureView extends ViewPart {
                     }
                     if (snapshot.parsed() && ("twister-test".equals(snapshot.kind())
                             || "twister-config".equals(snapshot.kind()))) {
-                        var twisterEntry = Activator.getDefault().getBundle().getEntry(
-                                "scripts/yaml_twister_inspect.py");
-                        if (twisterEntry == null) {
-                            twister = YamlTwisterModel.unavailable("twister-inspector-not-installed");
-                        } else {
+                        {
                             try {
-                                Path twisterScript = Path.of(FileLocator.toFileURL(twisterEntry).toURI());
+                                Path twisterScript = bundled.script("yaml_twister_inspect.py");
                                 twister = YamlTwisterModel.inspect(
                                         Path.of(settings.getProperty("python")), twisterScript,
                                         source, zephyr, app, () -> monitor.isCanceled()
@@ -818,15 +799,14 @@ public final class YamlStructureView extends ViewPart {
                     if (monitor.isCanceled() || request != generation.get())
                         return Status.CANCEL_STATUS;
                     preview = YamlScalarEdit.prepare(source, snapshot, row, replacement);
-                    var entry = Activator.getDefault().getBundle().getEntry(
-                            "scripts/yaml_validate_patch.py");
-                    if (entry == null)
-                        throw new IOException("Managed candidate validator is not installed.");
-                    Path script = Path.of(FileLocator.toFileURL(entry).toURI());
-                    Properties settings = ProjectContext.settings(file.getProject());
-                    YamlPatchValidator.validate(Path.of(settings.getProperty("python")),
-                            script, preview, () -> monitor.isCanceled()
-                                    || generation.get() != request);
+                    try (YamlBundledScripts.Stage bundled =
+                            YamlBundledScripts.stage(Activator.getDefault().getBundle())) {
+                        Path script = bundled.script("yaml_validate_patch.py");
+                        Properties settings = ProjectContext.settings(file.getProject());
+                        YamlPatchValidator.validate(Path.of(settings.getProperty("python")),
+                                script, preview, () -> monitor.isCanceled()
+                                        || generation.get() != request);
+                    }
                 } catch (InterruptedException canceled) {
                     Thread.currentThread().interrupt();
                     return Status.CANCEL_STATUS;
