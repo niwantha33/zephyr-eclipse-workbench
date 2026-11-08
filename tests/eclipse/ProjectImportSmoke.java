@@ -61,7 +61,7 @@ public final class ProjectImportSmoke {
                         "Build Outputs points at the real managed .zew-build directory");
                 check(visible.getFile("test-profile/zephyr/runners.yaml").exists()
                         && Files.readString(visible.getLocation().toFile().toPath()
-                                .resolve("test-profile/zephyr/runners.yaml")).equals("config: {}\\n"),
+                                .resolve("test-profile/zephyr/runners.yaml")).equals("config: {}\n"),
                         "generated YAML accessible via visible link without copying files");
                 var configurator = (org.eclipse.ui.wizards.datatransfer.ProjectConfigurator)
                         ui.loadClass(UI + ".ZephyrProjectConfigurator").getDeclaredConstructor().newInstance();
