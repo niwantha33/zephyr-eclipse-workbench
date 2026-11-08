@@ -134,9 +134,6 @@ jobs:
     env:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: utf-8
-      # CI-only official GitHub release-asset API fallback for verified SDK binaries.
-      # Never set for a user-managed IDE environment or production installer.
-      ZEW_CI_SDK_ASSET_API: '1'
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -152,8 +149,12 @@ jobs:
       - name: Run Windows unit and fault-injection tests
         run: python scripts/test_core.py
       - name: Fresh pinned managed environment
+        env:
+          ZEW_CI_SDK_ASSET_API: '1'
         run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --setup-only
       - name: Cross-vendor managed firmware matrix including ADC diagnostic
+        env:
+          ZEW_CI_SDK_ASSET_API: '1'
         run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --run-only
       - name: Qualify all seven real firmware evidence reports
         run: python scripts/qualify_firmware_matrix.py --input windows-firmware-results.json --output windows-firmware-qualification.json
