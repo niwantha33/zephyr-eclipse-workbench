@@ -50,7 +50,7 @@ public final class YamlSourceLoaderTests {
             // Build Outputs folder, as shown in the reported screenshot.
             Path generated = application.resolve(".zew-build/first/build_info.yml");
             Files.createDirectories(generated.getParent());
-            Files.writeString(generated, "build:\\n  board: qemu_x86\\n  profile: debug\\n",
+            Files.writeString(generated, "build:\n  board: qemu_x86\n  profile: debug\n",
                     StandardCharsets.UTF_8);
             Source generatedSource = YamlSourceLoader.resolve(generated, application, zephyr);
             check("application".equals(generatedSource.kind())
