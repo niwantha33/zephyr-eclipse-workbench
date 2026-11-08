@@ -27,6 +27,8 @@ public final class YamlFlowCanvas extends Canvas {
     private int verticalOffset;
     private int zoom = 100;
     private int selected = -1;
+    private String emptyTitle = "Select a YAML file";
+    private String emptyDetail = "Choose a .yaml or .yml file in Project Explorer, then Inspect selected YAML.";
 
     private final Color background;
     private final Color cardBackground;
@@ -106,6 +108,29 @@ public final class YamlFlowCanvas extends Canvas {
     public void setObservation(YamlDocumentModel.Snapshot snapshot) {
         if (isDisposed()) return;
         graph = YamlFlowGraph.from(snapshot);
+        if (snapshot == null) {
+            emptyTitle = "Select a YAML file";
+            emptyDetail = "Choose a .yaml or .yml file in Project Explorer.";
+        } else if (!snapshot.parsed()) {
+            emptyTitle = "No diagram: YAML inspection " + snapshot.status();
+            emptyDetail = "Reason: " + snapshot.reason() + ". No source changes were made.";
+        } else {
+            emptyTitle = "This YAML document has no nodes";
+            emptyDetail = graph.reason();
+        }
+        selected = -1;
+        horizontalOffset = 0;
+        verticalOffset = 0;
+        updateScrollBars();
+        redraw();
+    }
+
+    /** Display real loading/errors, never misreport a selected file as absent. */
+    public void setMessage(String title, String detail) {
+        if (isDisposed()) return;
+        graph = YamlFlowGraph.from(null);
+        emptyTitle = title;
+        emptyDetail = detail;
         selected = -1;
         horizontalOffset = 0;
         verticalOffset = 0;
@@ -173,8 +198,8 @@ public final class YamlFlowCanvas extends Canvas {
         gc.fillRectangle(area);
         if (graph.blocks().isEmpty()) {
             gc.setForeground(muted);
-            gc.drawText("Select a .yaml or .yml file to inspect its connected structure.", 24, 26, true);
-            gc.drawText(graph.reason(), 24, 54, true);
+            gc.drawText(emptyTitle, 24, 26, true);
+            gc.drawText(emptyDetail, 24, 54, true);
             return;
         }
         // Only draw edges that derive from parent/child nesting in the
