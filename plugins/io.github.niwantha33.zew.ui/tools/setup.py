@@ -155,13 +155,20 @@ def fetch(artifact, cache):
         except (OSError, ValueError, http.client.HTTPException) as error:
             temporary.unlink(missing_ok=True)
             gateway_failure = isinstance(error, urllib.error.HTTPError) and error.code in (502, 503, 504)
+            # A release CDN can time out while reading a large Zephyr toolchain
+            # even when it never returns an HTTP 5xx. This was observed in
+            # the seven-target Windows matrix on arm-zephyr-eabi assets.
+            transport_timeout = isinstance(error, TimeoutError) or (
+                isinstance(error, urllib.error.URLError)
+                and isinstance(error.reason, TimeoutError))
             # Only the CI Windows firmware matrix opts into this secondary
             # transport. The shipped installer retains its previous behaviour.
-            if (gateway_failure and attempt == 1
+            if ((gateway_failure or transport_timeout) and attempt == 1
                     and os.environ.get('ZEW_CI_SDK_ASSET_API') == '1'
                     and artifact['url'].startswith(
                         'https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/')):
-                log('CI: GitHub browser download returned a gateway error; trying official release asset API.')
+                log('CI: GitHub release download had transient gateway/timeout failure; '
+                    'trying official release asset API.')
                 try:
                     return ci_sdk_asset_api_fetch(artifact, cache)
                 except (OSError, http.client.HTTPException) as api_error:
