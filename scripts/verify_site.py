@@ -132,7 +132,8 @@ for p in bundles:
                 if z.read(entry) != (root / 'zew_evidence' / module).read_bytes():
                     raise SystemExit('Installed YAML evidence module differs from source: ' + module)
             for cls in ('YamlStructureView', 'YamlDocumentModel', 'YamlSourceLoader',
-                        'YamlTreeProjection', 'YamlBindingIntelligence', 'YamlHardwareModel',
+                        'YamlTreeProjection', 'YamlFlowGraph', 'YamlFlowCanvas',
+                        'YamlBindingIntelligence', 'YamlHardwareModel',
                         'YamlTwisterModel', 'YamlDiagnosticModel', 'YamlDiagnosticMarkers',
                         'YamlScalarEdit', 'YamlPatchValidator'):
                 entry = 'io/github/niwantha33/zew/ui/' + cls + '.class'
