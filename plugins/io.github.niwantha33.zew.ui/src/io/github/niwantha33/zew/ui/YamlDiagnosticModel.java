@@ -141,11 +141,11 @@ public final class YamlDiagnosticModel {
         Path report = Files.createTempFile("zew-yaml-diagnostics-", ".txt");
         Process process = null;
         try {
-            process = new ProcessBuilder(managedPython.toString(), script.toString(),
+            process = new ProcessBuilder(YamlPythonLaunch.command(managedPython, script,
                     "--root", source.root().toString(),
                     "--relative", source.relative(),
                     "--source-root", source.kind(), "--zephyr", zephyr.toString(),
-                    "--application", application.toString())
+                    "--application", application.toString()))
                     .redirectInput(ProcessBuilder.Redirect.PIPE)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .redirectOutput(report.toFile()).start();

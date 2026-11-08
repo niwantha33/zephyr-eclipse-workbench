@@ -127,11 +127,13 @@ for p in bundles:
                 if z.read(entry) != upstream.read_bytes():
                     raise SystemExit('Installed YAML helper differs from source: ' + helper)
                 compile(z.read(entry), entry, 'exec')
-            for module in ('yaml_observation.py', 'yaml_classification.py'):
+            for module in ('__init__.py', 'yaml_observation.py', 'yaml_classification.py'):
                 entry = 'scripts/zew_evidence/' + module
                 if z.read(entry) != (root / 'zew_evidence' / module).read_bytes():
                     raise SystemExit('Installed YAML evidence module differs from source: ' + module)
             for cls in ('YamlStructureView', 'YamlDocumentModel', 'YamlSourceLoader',
+                        'YamlBundledScripts', 'YamlBundledScripts$Stage',
+                        'YamlPythonLaunch',
                         'YamlTreeProjection', 'YamlFlowGraph', 'YamlFlowCanvas',
                         'YamlBindingIntelligence', 'YamlHardwareModel',
                         'YamlTwisterModel', 'YamlDiagnosticModel', 'YamlDiagnosticMarkers',

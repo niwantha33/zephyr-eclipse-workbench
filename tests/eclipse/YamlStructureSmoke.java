@@ -3,6 +3,11 @@ package zew.smoke;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.function.BooleanSupplier;
 import java.util.List;
 
 import org.eclipse.jface.viewers.TreeViewer;
@@ -109,6 +114,61 @@ public final class YamlStructureSmoke {
                 "attempted edit of imported snapshot fails closed without a dialog");
         check(diagnostics.getTree().getItemCount() == 0,
                 "unverified imported data does not publish diagnostics");
+
+        // Unlike the original synthetic JSON smoke, this test launches
+        // the EXACT YAML parser extracted from the INSTALLED OSGi bundle.
+        // A lone script extracted from a JAR cannot import zew_evidence;
+        // exercising the packaged Python runtime catches that regression.
+        String python = System.getenv("ZEW_TEST_PYTHON");
+        check(python != null && !python.isBlank(),
+                "installed YAML parser smoke has an explicit Python interpreter");
+        Path sampleRoot = Files.createTempDirectory("zew-installed-yaml-");
+        try {
+            Path yaml = sampleRoot.resolve(".zew-build/first/build_info.yml");
+            Files.createDirectories(yaml.getParent());
+            Files.writeString(yaml,
+                    "cmake:\n  application:\n    source-dir: 'C:/Sandbox/demo'\n"
+                    + "board:\n  name: lp_mspm0g3507\n  qualifiers: mspm0g3507\n"
+                    + "devicetree:\n  bindings-dirs:\n    - 'C:/Sandbox/zephyr/dts/bindings'\n",
+                    StandardCharsets.UTF_8);
+            Class<?> stagedType = bundle.loadClass("io.github.niwantha33.zew.ui.YamlBundledScripts");
+            Object stage = stagedType.getMethod("stage", org.osgi.framework.Bundle.class)
+                    .invoke(null, bundle);
+            try {
+                Path bundledParser = (Path) stage.getClass()
+                        .getMethod("script", String.class).invoke(stage, "yaml_observe_file.py");
+                check(Files.isRegularFile(bundledParser)
+                        && Files.isRegularFile(bundledParser.getParent()
+                                .resolve("zew_evidence/yaml_observation.py")),
+                        "installed parser and dependency package are staged side by side");
+                Class<?> loader = bundle.loadClass("io.github.niwantha33.zew.ui.YamlSourceLoader");
+                Object source = loader.getMethod("resolve", Path.class, Path.class, Path.class)
+                        .invoke(null, yaml, sampleRoot, null);
+                Object loaded = loader.getMethod("inspect", Path.class, Path.class,
+                        bundle.loadClass("io.github.niwantha33.zew.ui.YamlSourceLoader$Source"),
+                        BooleanSupplier.class).invoke(null, Path.of(python), bundledParser,
+                                source, (BooleanSupplier) () -> false);
+                check((Boolean) loaded.getClass().getMethod("parsed").invoke(loaded),
+                        "actual generated build_info.yml parses using installed Python modules");
+                view.getClass().getMethod("displayObservation",
+                        bundle.loadClass("io.github.niwantha33.zew.ui.YamlDocumentModel$Snapshot"))
+                        .invoke(view, loaded);
+                Object installedLayout = graph.getClass().getMethod("layoutSnapshot").invoke(graph);
+                var installedBlocks = (java.util.List<?>) installedLayout.getClass()
+                        .getMethod("blocks").invoke(installedLayout);
+                var installedEdges = (java.util.List<?>) installedLayout.getClass()
+                        .getMethod("edges").invoke(installedLayout);
+                check(installedBlocks.size() >= 8 && installedEdges.size() >= 7,
+                        "installed generated-style YAML produces connected graph cards, not empty canvas");
+            } finally {
+                ((AutoCloseable) stage).close();
+            }
+        } finally {
+            try (var paths = Files.walk(sampleRoot)) {
+                for (Path path : paths.sorted(Comparator.reverseOrder()).toList())
+                    Files.deleteIfExists(path);
+            }
+        }
 
         window.getActivePage().hideView(view);
         System.out.println("PASS YAML INSTALLED UI: native view disposed cleanly");

@@ -29,9 +29,9 @@ public final class YamlPatchValidator {
             if (bytes.length > YamlSourceLoader.MAX_SOURCE_BYTES)
                 throw new IOException("Edited YAML exceeds the safe source limit.");
             Files.write(input, bytes, StandardOpenOption.TRUNCATE_EXISTING);
-            process = new ProcessBuilder(python.toString(), script.toString(),
+            process = new ProcessBuilder(YamlPythonLaunch.command(python, script,
                     "--source-root", "application",
-                    "--relative", preview.source().relative())
+                    "--relative", preview.source().relative()))
                     .redirectInput(input.toFile())
                     .redirectOutput(output.toFile())
                     .redirectError(ProcessBuilder.Redirect.DISCARD).start();

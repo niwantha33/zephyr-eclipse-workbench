@@ -3,10 +3,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 
 import io.github.niwantha33.zew.ui.YamlSourceLoader;
 import io.github.niwantha33.zew.ui.YamlSourceLoader.Source;
 import io.github.niwantha33.zew.ui.YamlDocumentModel.Mapping;
+import io.github.niwantha33.zew.ui.YamlPythonLaunch;
 import io.github.niwantha33.zew.ui.YamlFlowGraph;
 
 /** Headless Java 21 security, path selection and actual managed Python tests. */
@@ -89,6 +91,11 @@ public final class YamlSourceLoaderTests {
                     "managed Python path is explicitly configured in core qualifier");
             Path script = Path.of("plugins/io.github.niwantha33.zew.ui/scripts/yaml_observe_file.py")
                     .toAbsolutePath();
+            var invocation = YamlPythonLaunch.command(Path.of(python), script,
+                    "--root", application.toString(), "--relative", generatedSource.relative());
+            check(invocation.subList(1, 4).equals(List.of("-I", "-X", "utf8"))
+                    && invocation.get(5).contains("sys.path.insert(0,os.path.dirname(source))"),
+                    "managed YAML parser explicitly adds trusted helper path under isolated Python");
             var generatedSnapshot = YamlSourceLoader.inspect(Path.of(python), script,
                     generatedSource, () -> false);
             check(generatedSnapshot.parsed()
@@ -109,6 +116,21 @@ public final class YamlSourceLoaderTests {
             } catch (InterruptedException expected) {
                 check(true, "cancellation stops source inspection");
             }
+            Path parserError = application.resolve("yaml-error-diagnostic.txt");
+            var describeFailure = YamlSourceLoader.class.getDeclaredMethod(
+                    "parserFailure", int.class, Path.class);
+            describeFailure.setAccessible(true);
+            Files.writeString(parserError, "source-not-within-root", StandardCharsets.UTF_8);
+            check(((String) describeFailure.invoke(null, 2, parserError))
+                    .contains("source-not-within-root"),
+                    "known bounded source failure is explained without a Python traceback");
+            Files.writeString(parserError,
+                    "Traceback: Secret token SECRET-CANNOT-LEAK in private YAML",
+                    StandardCharsets.UTF_8);
+            String redacted = (String) describeFailure.invoke(null, 1, parserError);
+            check(!redacted.contains("SECRET-CANNOT-LEAK")
+                    && redacted.contains("exit 1"),
+                    "unexpected Python stderr never leaks private source or raw tracebacks");
             Files.writeString(appFile, "name: changed\n", StandardCharsets.UTF_8);
             check(!YamlSourceLoader.hash(appFile).equals(snapshot.sha256()),
                     "stale source detection distinguishes changed bytes");
