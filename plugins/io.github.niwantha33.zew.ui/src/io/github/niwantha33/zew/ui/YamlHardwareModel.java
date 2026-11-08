@@ -205,10 +205,10 @@ public final class YamlHardwareModel {
         Path output = Files.createTempFile("zew-hwmv2-", ".txt");
         Process process = null;
         try {
-            process = new ProcessBuilder(python.toString(), script.toString(),
+            process = new ProcessBuilder(YamlPythonLaunch.command(python, script,
                     "--root", source.root().toString(), "--relative", source.relative(),
                     "--source-root", source.kind(), "--zephyr", zephyr.toString(),
-                    "--application", application.toString())
+                    "--application", application.toString()))
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .redirectOutput(output.toFile()).start();
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(25);
