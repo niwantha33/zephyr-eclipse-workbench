@@ -104,6 +104,7 @@ public final class ZephyrProjectLifecycle implements IResourceChangeListener {
 
         final String name = "Build Outputs";
         var visible = project.getFolder(name);
+        try {
         if (java.nio.file.Files.isSymbolicLink(generated)) {
             buildOutputWarning("Managed .zew-build is a filesystem link; not creating a second link: " + generated);
             return;
@@ -144,6 +145,11 @@ public final class ZephyrProjectLifecycle implements IResourceChangeListener {
         // refresh, avoiding a costly deep scan on every PRE_BUILD callback.
         if (java.nio.file.Files.isDirectory(generated, java.nio.file.LinkOption.NOFOLLOW_LINKS))
             visible.refreshLocal(IResource.DEPTH_ONE, monitor);
+        } catch (CoreException visibilityFailure) {
+            // A navigator link is never required for a successful firmware build.
+            buildOutputWarning("Cannot refresh Build Outputs for " + project.getName()
+                    + ": " + visibilityFailure.getMessage());
+        }
     }
 
     private static void buildOutputWarning(String message) {
