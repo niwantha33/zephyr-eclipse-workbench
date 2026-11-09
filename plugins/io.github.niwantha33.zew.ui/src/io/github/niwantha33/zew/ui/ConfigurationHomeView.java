@@ -220,6 +220,9 @@ public final class ConfigurationHomeView extends ViewPart {
             if (node == null) return;
             controllerPath = node.path();
             step = 0;
+            if (project != null && evidence != null && evidence.build() != null)
+                ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
+                        .publish(project, evidence.build(), controllerPath, "configuration-hardware");
             renderGuide();
         });
         navigationEmpty = new Label(left, SWT.WRAP);
