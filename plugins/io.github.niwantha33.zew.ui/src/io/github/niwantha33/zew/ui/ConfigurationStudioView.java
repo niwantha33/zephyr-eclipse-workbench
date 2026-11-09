@@ -967,7 +967,7 @@ public final class ConfigurationStudioView extends ViewPart {
         actionsSize.heightHint = 56;
         actionsScroll.setLayoutData(actionsSize);
         var hardwareActions = new Composite(actionsScroll, SWT.NONE);
-        GridLayout actionsRow = new GridLayout(14, false);
+        GridLayout actionsRow = new GridLayout(15, false);
         actionsRow.marginWidth = 2;
         actionsRow.marginHeight = 2;
         hardwareActions.setLayout(actionsRow);
@@ -975,6 +975,8 @@ public final class ConfigurationStudioView extends ViewPart {
         action(hardwareActions, "Draw SoC memory map", this::openSocMemoryMap)
                 .setToolTipText("Draw RAM, flash, partitions and peripheral reg ranges from the exact generated DTS.");
         action(hardwareActions, "Reveal in source", this::revealHardwareSource);
+        action(hardwareActions, "DTS Graph Studio", this::openDtsGraph)
+                .setToolTipText("Explore observed parent-child and verified phandle connections for the selected board/profile.");
         action(hardwareActions, "Copy node path", this::copyHardwarePath);
         action(hardwareActions, "Diagnose selected", this::diagnoseConfiguration);
         action(hardwareActions, "Validate selected binding", () -> inspectSelectedBinding(false));
@@ -3000,6 +3002,27 @@ public final class ConfigurationStudioView extends ViewPart {
         if (hardwareParameters.getSelectionCount() == 0) return;
         var property = (DevicetreeParameters.Property) hardwareParameters.getSelection()[0].getData();
         revealHardwareLine(property.line(), property.path() + " · " + property.name());
+    }
+
+    /** Open the exact configured build's visual DTS topology, never guess a board. */
+    private void openDtsGraph() {
+        if (project == null || !project.isAccessible() || inspectionBuild == null) {
+            MessageDialog.openInformation(getSite().getShell(), "DTS Graph Studio",
+                    "Select a Zephyr application and board/profile first. Build to generate zephyr.dts.");
+            return;
+        }
+        String focus = null;
+        if (hardwareDevices != null && hardwareDevices.getSelectionCount() > 0
+                && hardwareDevices.getSelection()[0].getData() instanceof DevicetreeHardware.Device device)
+            focus = device.path();
+        try {
+            var part = getSite().getPage().showView(DtsGraphView.ID);
+            if (part instanceof DtsGraphView viewer)
+                viewer.displayProject(project, inspectionBuild, focus);
+        } catch (org.eclipse.ui.PartInitException error) {
+            MessageDialog.openError(getSite().getShell(), "DTS Graph Studio unavailable",
+                    error.getMessage());
+        }
     }
 
     private void openSocMemoryMap() {
