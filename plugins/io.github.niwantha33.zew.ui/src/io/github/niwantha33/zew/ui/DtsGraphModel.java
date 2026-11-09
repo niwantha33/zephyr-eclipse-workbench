@@ -172,8 +172,21 @@ public final class DtsGraphModel {
             }
         }
         for (Edge edge : snapshot.edges()) {
-            if (focus.equals(edge.source()) || columns.containsKey(edge.source())) {
+            // Only the focused consumer and its direct children get outgoing
+            // phandle expansion, not every unrelated ancestor in the tree.
+            if (focus.equals(edge.source()) || focus.equals(parent(edge.source()))) {
                 if (!columns.containsKey(edge.target())) {
+                    // Include actual ancestors of the referenced controller,
+                    // so a GPIO does not appear as a disconnected orphan.
+                    ArrayList<String> targetAncestors = new ArrayList<>();
+                    for (String p = parent(edge.target()); p != null && nodes.containsKey(p);
+                            p = parent(p)) targetAncestors.add(p);
+                    Collections.reverse(targetAncestors);
+                    for (String path : targetAncestors) {
+                        if (columns.containsKey(path)) continue;
+                        if (columns.size() >= MAX_VISIBLE) { limited = true; break; }
+                        columns.put(path, 2);
+                    }
                     if (columns.size() >= MAX_VISIBLE) { limited = true; break; }
                     columns.put(edge.target(), 3);
                 }
