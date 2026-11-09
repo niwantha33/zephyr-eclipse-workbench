@@ -218,6 +218,7 @@
     <command id="io.github.niwantha33.zew.debugWorkspace"
       name="Open Zephyr Hardware Debug Workspace"
       categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.targetMemory" name="Open Target Memory Browser" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugExpressionProbe" name="Inspect GDB Symbol (Read-only)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.socRegisters" name="Show Debug Data and Hardware Register Explorer" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.faultAnalysis" name="Investigate Fatal Log" categoryId="io.github.niwantha33.zew.commands"/>
@@ -262,6 +263,7 @@
     <handler commandId="io.github.niwantha33.zew.investigateBuildFailure" class="io.github.niwantha33.zew.ui.BuildFailureInvestigationHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugWorkspace"
       class="io.github.niwantha33.zew.ui.ZephyrDebugWorkspaceHandler"/>
+    <handler commandId="io.github.niwantha33.zew.targetMemory" class="io.github.niwantha33.zew.ui.ZephyrTargetMemoryHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugExpressionProbe" class="io.github.niwantha33.zew.ui.DebugExpressionProbeHandler"/>
     <handler commandId="io.github.niwantha33.zew.socRegisters" class="io.github.niwantha33.zew.ui.SocRegistersHandler"/>
     <handler commandId="io.github.niwantha33.zew.faultAnalysis" class="io.github.niwantha33.zew.ui.FaultAnalysisHandler"/>
@@ -343,6 +345,7 @@
         <menu id="io.github.niwantha33.zew.menu.runDebug" label="Run &amp; Debug">
           <command commandId="io.github.niwantha33.zew.debugWorkspace"
                    label="Open Zephyr Hardware Debug Workspace" style="push"/>
+          <command commandId="io.github.niwantha33.zew.targetMemory" label="Open Target Memory Browser" style="push"/>
           <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
           <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
           <command commandId="io.github.niwantha33.zew.flashDebug" label="Flash and Debug Application..." style="push"/>
