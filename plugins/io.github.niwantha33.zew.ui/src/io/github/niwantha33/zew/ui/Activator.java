@@ -17,6 +17,7 @@ public final class Activator extends AbstractUIPlugin {
         getPreferenceStore().setDefault(WorkbenchPreferences.ENABLE_CPU_VIEW, true);
         getPreferenceStore().setDefault(WorkbenchPreferences.ENABLE_CONTENTION_VIEW, true);
         getPreferenceStore().setDefault(WorkbenchPreferences.SMART_COMPLETION_ENABLED, true);
+        getPreferenceStore().setDefault(WorkbenchPreferences.ZEPHYR_DEBUG_PERSPECTIVE_ON_LAUNCH, false);
     }
     @Override public void stop(BundleContext context) throws Exception {
         org.eclipse.core.resources.ResourcesPlugin.getWorkspace().removeResourceChangeListener(projects);

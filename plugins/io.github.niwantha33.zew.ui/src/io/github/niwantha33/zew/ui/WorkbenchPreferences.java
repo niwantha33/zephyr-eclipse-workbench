@@ -13,6 +13,8 @@ public final class WorkbenchPreferences extends FieldEditorPreferencePage implem
     public static final String ENABLE_CPU_VIEW = "trace.cpuLoad.enabled";
     public static final String ENABLE_CONTENTION_VIEW = "trace.contention.enabled";
     public static final String SMART_COMPLETION_ENABLED = "editor.smartCompletion.enabled";
+    public static final String ZEPHYR_DEBUG_PERSPECTIVE_ON_LAUNCH =
+            "debug.zephyrPerspectiveOnLaunch";
     public static final String PYTHON = "python";
     public static final String WORKSPACE = "workspace";
     public static final String APPLICATION = "application";
@@ -35,5 +37,8 @@ public final class WorkbenchPreferences extends FieldEditorPreferencePage implem
         addField(new BooleanFieldEditor(ENABLE_CONTENTION_VIEW, "Enable Zephyr Contention Report view", getFieldEditorParent()));
         addField(new BooleanFieldEditor(SMART_COMPLETION_ENABLED,
                 "Automatically show C/C++ completions from the first letter", getFieldEditorParent()));
+        addField(new BooleanFieldEditor(ZEPHYR_DEBUG_PERSPECTIVE_ON_LAUNCH,
+                "Switch to Zephyr Hardware Debug perspective after a successful debug launch",
+                getFieldEditorParent()));
     }
 }

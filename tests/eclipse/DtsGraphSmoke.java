@@ -36,6 +36,9 @@ public final class DtsGraphSmoke {
         var view = page.showView("io.github.niwantha33.zew.ui.dtsGraph");
         check(view != null && view.getClass().getSimpleName().equals("DtsGraphView"),
                 "registered installed DTS Graph Studio opens");
+        check(PlatformUI.getWorkbench().getPerspectiveRegistry().findPerspectiveWithId(
+                "io.github.niwantha33.zew.ui.hardwareDebugPerspective") != null,
+                "separate Zephyr Hardware Debug perspective is registered");
         Button registerBridge = (Button) field(view, "openRegisters");
         Button memoryBridge = (Button) field(view, "openMemory");
         check(!registerBridge.getEnabled() && !memoryBridge.getEnabled(),
