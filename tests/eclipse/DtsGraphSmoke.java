@@ -37,6 +37,13 @@ public final class DtsGraphSmoke {
         var view = page.showView("io.github.niwantha33.zew.ui.dtsGraph");
         check(view != null && view.getClass().getSimpleName().equals("DtsGraphView"),
                 "registered installed DTS Graph Studio opens");
+        check(PlatformUI.getWorkbench().getPerspectiveRegistry().findPerspectiveWithId(
+                "io.github.niwantha33.zew.ui.hardwareDebugPerspective") != null,
+                "separate Zephyr Hardware Debug perspective is registered");
+        Button registerBridge = (Button) field(view, "openRegisters");
+        Button memoryBridge = (Button) field(view, "openMemory");
+        check(!registerBridge.getEnabled() && !memoryBridge.getEnabled(),
+                "cross-view hardware tools cannot open without exact selected project/build");
         var bundle = Platform.getBundle("io.github.niwantha33.zew.ui");
         check(bundle.getEntry("scripts/dts_graph_observe.py") != null,
                 "real DTS observer is in the packaged plugin");
@@ -68,8 +75,8 @@ public final class DtsGraphSmoke {
         page.hideView(view);
         check(((Canvas) canvas).isDisposed(), "native graph disposes SWT resources");
 
-        // Regression for the user's primary Configuration Studio screenshot:
-        // the Advanced toolbar alone is not discoverable from Home Hardware.
+        // Keep the merged Configuration Studio Hardware discoverability regression:
+        // the advanced menu is not the only path to DTS Graph Studio.
         var home = page.showView("io.github.niwantha33.zew.ui.configurationHome");
         check(home != null && home.getClass().getSimpleName().equals("ConfigurationHomeView"),
                 "primary Configuration Studio opens");

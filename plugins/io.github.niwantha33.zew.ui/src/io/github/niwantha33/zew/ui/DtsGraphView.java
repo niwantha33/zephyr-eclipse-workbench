@@ -3,6 +3,9 @@ package io.github.niwantha33.zew.ui;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -37,7 +40,7 @@ public final class DtsGraphView extends ViewPart {
     private DtsGraphCanvas graph;
     private Label status;
     private Text query, inspector;
-    private Button openSource;
+    private Button openSource, openRegisters, openMemory;
     private IProject project;
     private Path build;
     private DtsGraphModel.Snapshot snapshot;
@@ -80,6 +83,20 @@ public final class DtsGraphView extends ViewPart {
         button(toolbar, "?", () -> status.setText(
                 "Solid = parent-child in generated DTS. Dashed = upstream-resolved reference. "
                 + "Neither proves physical wiring or runtime use."));
+
+        var linkedTools = new Composite(parent, SWT.NONE);
+        linkedTools.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        linkedTools.setLayout(new GridLayout(3, false));
+        openRegisters = button(linkedTools, "Open Hardware Registers", this::openRegisterExplorer);
+        openRegisters.setToolTipText("Navigate to the exact project's SVD explorer; "
+                + "no register address is inferred and no target is read.");
+        openMemory = button(linkedTools, "Open SoC Memory Map", this::openMemoryMap);
+        openMemory.setToolTipText("Show build-only memory regions from the SHA-matched generated DTS.");
+        openRegisters.setEnabled(false);
+        openMemory.setEnabled(false);
+        var note = new Label(linkedTools, SWT.WRAP);
+        note.setText("Selection is build evidence, not runtime state.");
+        note.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         status = new Label(parent, SWT.WRAP);
         status.setText("Select a Zephyr application in Configuration Studio → Hardware, "
@@ -133,6 +150,8 @@ public final class DtsGraphView extends ViewPart {
         status.setText("Reading exact selected-build zephyr.dts with Zephyr dtlib/edtlib…");
         graph.message("Inspecting selected generated Devicetree…");
         openSource.setEnabled(false);
+        openRegisters.setEnabled(false);
+        openMemory.setEnabled(false);
         job = new Job("Inspect selected Zephyr Devicetree graph") {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 DtsGraphModel.Snapshot result;
@@ -173,6 +192,8 @@ public final class DtsGraphView extends ViewPart {
         snapshot = result;
         inspected = null;
         openSource.setEnabled(result != null && result.observed() && project != null);
+        openRegisters.setEnabled(false);
+        openMemory.setEnabled(false);
         graph.show(result, focus);
         if (result == null || !result.observed()) {
             status.setText("DTS graph unavailable: " + (result == null
@@ -232,6 +253,10 @@ public final class DtsGraphView extends ViewPart {
 
     private void inspectNode(DtsGraphModel.Node node) {
         inspected = node;
+        boolean available = project != null && build != null && snapshot != null
+                && snapshot.observed();
+        openRegisters.setEnabled(available);
+        openMemory.setEnabled(available);
         StringBuilder text = new StringBuilder("Generated DTS node: ").append(node.path())
                 .append("\nDTS status: ").append(node.status())
                 .append(" (not a runtime reading)")
@@ -273,6 +298,56 @@ public final class DtsGraphView extends ViewPart {
             try { inspectNode(node); }
             finally { receivingSelection = false; }
             return;
+        }
+    }
+
+    /** Explicit navigation, never a guessed DTS/SVD physical address match. */
+    private void openRegisterExplorer() {
+        if (inspected == null || project == null || build == null || snapshot == null
+                || !snapshot.observed()) return;
+        try {
+            var view = getSite().getPage().showView(SocRegistersHandler.VIEW_ID,
+                    null, org.eclipse.ui.IWorkbenchPage.VIEW_ACTIVATE);
+            if (view instanceof SocRegistersView registers)
+                registers.inspectDtsSelection(project, build, inspected.path());
+        } catch (org.eclipse.ui.PartInitException error) {
+            status.setText("Cannot open Hardware Register Explorer: " + error.getMessage());
+        }
+    }
+
+    /**
+     * Only hand build evidence to the memory map if the source is still byte-for-byte
+     * identical to the graph observation. Does not access MCU physical memory.
+     */
+    private void openMemoryMap() {
+        if (inspected == null || project == null || build == null || snapshot == null
+                || !snapshot.observed() || snapshot.generated() == null) return;
+        try {
+            Path root = project.getLocation().toFile().toPath().toRealPath();
+            Path built = build.toRealPath();
+            Path generated = snapshot.generated().toRealPath();
+            if (!built.startsWith(root) || !generated.startsWith(built.resolve("zephyr"))
+                    || !Files.isRegularFile(generated) || Files.size(generated) > 2_000_000)
+                throw new java.io.IOException("Generated DTS is outside the exact selected build or too large");
+            byte[] content = Files.readAllBytes(generated);
+            if (content.length > 2_000_000) throw new java.io.IOException("Generated DTS exceeds 2 MB");
+            String sha256 = HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(content));
+            if (!sha256.equals(snapshot.sha256())) {
+                status.setText("Generated DTS changed since the graph was observed. Refresh selected build first.");
+                return;
+            }
+            Path overlay = root.resolve("app.overlay");
+            boolean stale = Files.isRegularFile(overlay)
+                    && Files.getLastModifiedTime(overlay).compareTo(
+                            Files.getLastModifiedTime(generated)) > 0;
+            var view = getSite().getPage().showView(SocMemoryMapView.ID,
+                    null, org.eclipse.ui.IWorkbenchPage.VIEW_ACTIVATE);
+            if (view instanceof SocMemoryMapView memory)
+                memory.displayProject(project, new String(content, StandardCharsets.UTF_8),
+                        build, stale);
+        } catch (Exception error) {
+            status.setText("SoC Memory Map unavailable: " + error.getMessage());
         }
     }
 

@@ -198,6 +198,24 @@ public final class SocRegistersView extends ViewPart {
                 .subscribe(this::followContext);
     }
 
+    /** Explicit jump from DTS Graph. Does not infer an MMIO base or read a peripheral. */
+    public void inspectDtsSelection(org.eclipse.core.resources.IProject target,
+            Path selectedBuild, String nodePath) {
+        if (closed || target == null || !target.isAccessible() || selectedBuild == null
+                || nodePath == null || !nodePath.startsWith("/")) return;
+        var context = new io.github.niwantha33.zew.core.ZephyrSelectionIdentity(
+                target.getName(), selectedBuild, nodePath);
+        boolean different = !target.getName().equals(selectedProjectName)
+                || !context.buildDirectory().equals(selectedBuildContext);
+        selectedBuildContext = context.buildDirectory();
+        linkedSelection.setText("DTS node: " + nodePath + " | exact build: "
+                + selectedBuildContext.getFileName()
+                + ". Opened by explicit graph navigation. No SVD peripheral mapping "
+                + "or runtime register value is asserted.");
+        linkedSelection.getParent().layout(true, true);
+        if (different) useLaunchProject(target);
+    }
+
     private void followContext(ZephyrViewContextHub.Selection selection) {
         if (closed || pinViewSelection == null || pinViewSelection.isDisposed()
                 || pinViewSelection.getSelection() || !selection.project().isAccessible()) return;
