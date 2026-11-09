@@ -135,6 +135,7 @@ for p in bundles:
                         'YamlBundledScripts', 'YamlBundledScripts$Stage',
                         'YamlPythonLaunch',
                         'YamlTreeProjection', 'YamlFlowGraph', 'YamlFlowCanvas',
+                        'DtsGraphView', 'DtsGraphCanvas', 'DtsGraphModel', 'DtsGraphLoader',
                         'YamlBindingIntelligence', 'YamlHardwareModel',
                         'YamlTwisterModel', 'YamlDiagnosticModel', 'YamlDiagnosticMarkers',
                         'YamlScalarEdit', 'YamlPatchValidator'):
