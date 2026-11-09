@@ -55,7 +55,10 @@ def observed(zephyr: Path, application: Path, build: Path):
     if not cache.is_file() or not generated.is_file():
         return ("no-build", "", "Select and build the exact board/profile first.", [], [])
     config = checked(cache, MAX_CACHE_BYTES).decode("utf-8")
-    roots = re.findall(r"(?m)^ZEPHYR_BASE:[A-Z_]+=(.*)$", config)
+    # CMakeCache.txt uses CRLF on Windows; trim the captured record terminator.
+    # Retain interior spaces in paths such as "C:/Sandbox/Zephyr Setup".
+    roots = [value.strip() for value in
+             re.findall(r"(?m)^ZEPHYR_BASE:[A-Z_]+=(.*)$", config)]
     if len(roots) != 1 or Path(roots[0]).resolve(strict=False) != zephyr:
         return ("mismatch", "", "Selected build and Zephyr checkout disagree.", [], [])
     raw = checked(generated, MAX_DTS_BYTES)
