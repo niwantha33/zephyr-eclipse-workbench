@@ -362,6 +362,43 @@ def main():
                 if dts_hash != hashlib.sha256(generated_dts.read_bytes()).hexdigest():
                     raise ValueError('Read-only edtlib inspection changed generated DTS')
                 print('PASS: real MSPM0 edtlib generated-tree interpretation')
+                # Exercise the exact observer packaged in DTS Graph Studio
+                # against the REAL selected TI firmware build (not a mock).
+                graph_probe = subprocess.run([
+                    str(python), '-I', '-X', 'utf8', str(REPO /
+                        'plugins/io.github.niwantha33.zew.ui/scripts/dts_graph_observe.py'),
+                    '--build', str(build_arg), '--zephyr',
+                    str(Path(workspace_arg) / 'zephyr'), '--application', str(app)
+                ], cwd=REPO, env=env, text=True, encoding='utf-8',
+                   errors='replace', capture_output=True, timeout=180)
+                graph_lines = graph_probe.stdout.strip().splitlines()
+                if (graph_probe.returncode != 0 or not graph_lines
+                        or graph_lines[0] != 'ZEW-DTSGRAPH-1'):
+                    raise ValueError('Native DTS Graph observer unavailable on real MSPM0')
+                def graph_values(row):
+                    cells = row.split('\t')
+                    return (cells[0], *[base64.b64decode(cell, validate=True).decode('utf-8')
+                                        for cell in cells[1:]])
+                try:
+                    graph_records = [graph_values(row) for row in graph_lines[1:]]
+                except (ValueError, UnicodeError) as error:
+                    raise ValueError('Real DTS graph observer returned malformed evidence') from error
+                if not graph_records or graph_records[0][0] != 'S' or len(graph_records[0]) != 4:
+                    raise ValueError('Real DTS graph status record is missing')
+                state = graph_records[0]
+                if state[1] not in ('built', 'hierarchy-only') or state[2] != dts_hash:
+                    raise ValueError('Real generated DTS graph lacks matching selected-build SHA')
+                paths = {r[1] for r in graph_records if r[0] == 'N' and len(r) == 7}
+                if '/' not in paths or len(paths) < 10:
+                    raise ValueError('Real MSPM0 graph did not observe generated node hierarchy')
+                if any(r[0] not in ('S', 'N', 'E')
+                       or (r[0] == 'E' and (len(r) != 6
+                           or r[1] not in paths or r[2] not in paths))
+                       for r in graph_records):
+                    raise ValueError('Real DTS graph invented an unresolved hardware relation')
+                if hashlib.sha256(generated_dts.read_bytes()).hexdigest() != dts_hash:
+                    raise ValueError('Read-only DTS graph observer modified generated DTS')
+                print('PASS: native DTS Graph Studio observed real selected MSPM0 topology')
                 # Exercise the SAME Python bridge packaged in the native
                 # Configuration Studio, not only the headless evidence CLI.
                 ui_probe = subprocess.run([
