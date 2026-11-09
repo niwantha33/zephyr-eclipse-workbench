@@ -37,3 +37,19 @@ selection, and unpinning re-enables subsequent navigation.
   project isolation and rejection of malformed DTS paths.
 - Still required before production: Tycho compilation, packaged UI smoke, Windows
   target/profile switching, and physical-target integration checks.
+
+## Second increment — explicit DTS-to-debug and memory navigation
+From a selected node in DTS Graph, **Open Hardware Registers** opens the
+existing SVD-backed view for that project and build. It intentionally does not
+claim the node address equals any SVD base or issue an MMIO read. Real register
+reads still require an exact SVD and explicit user action in a halted session.
+
+**Open SoC Memory Map** uses the selected graph's generated DTS only if it
+remains inside the exact project/build directory and its SHA-256 matches the
+previous graph observation. The map is configuration evidence, **not** target
+memory contents. If bytes changed, refresh the graph instead of showing stale
+cross-view data.
+
+Installed SWT smoke asserts both new actions are initially disabled without
+an exact project/build. Real target integration and native toolbar acceptance
+remain required.

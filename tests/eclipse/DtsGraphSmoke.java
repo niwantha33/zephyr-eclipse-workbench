@@ -8,6 +8,7 @@ import java.util.Base64;
 
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.swt.widgets.Canvas;
+import org.eclipse.swt.widgets.Button;
 import org.eclipse.ui.PlatformUI;
 
 /** Installed p2/SWT smoke: real registered DTS graph and typed links. */
@@ -35,6 +36,10 @@ public final class DtsGraphSmoke {
         var view = page.showView("io.github.niwantha33.zew.ui.dtsGraph");
         check(view != null && view.getClass().getSimpleName().equals("DtsGraphView"),
                 "registered installed DTS Graph Studio opens");
+        Button registerBridge = (Button) field(view, "openRegisters");
+        Button memoryBridge = (Button) field(view, "openMemory");
+        check(!registerBridge.getEnabled() && !memoryBridge.getEnabled(),
+                "cross-view hardware tools cannot open without exact selected project/build");
         var bundle = Platform.getBundle("io.github.niwantha33.zew.ui");
         check(bundle.getEntry("scripts/dts_graph_observe.py") != null,
                 "real DTS observer is in the packaged plugin");
