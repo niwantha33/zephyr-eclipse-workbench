@@ -79,7 +79,7 @@ public final class ConfigurationHomeView extends ViewPart {
     private Text[] pageText;
     private Button previous, next, validateApply, example;
     private Composite hardwareAdvanced, systemAdvanced;
-    private Button showHardwareAdvanced, showSystemAdvanced;
+    private Button showHardwareAdvanced, showSystemAdvanced, dtsGraphButton;
     private Text buildDetails, kconfigOriginSymbol, kconfigOriginResult;
     private final AtomicInteger originGeneration = new AtomicInteger();
     private Job originJob;
@@ -264,6 +264,12 @@ public final class ConfigurationHomeView extends ViewPart {
             renderGuide();
         });
         validateApply = button(nav, "Open verified review…", this::reviewSelected);
+        // Main Hardware view is the default entry point. Make the graph
+        // discoverable here, not only in the separate Advanced Studio toolbar.
+        dtsGraphButton = button(right, "DTS Graph Studio — connected blocks",
+                this::openDtsGraph);
+        dtsGraphButton.setToolTipText("Visualize selected-build zephyr.dts nodes, "
+                + "hierarchy and verified phandle connections (read-only).");
         showHardwareAdvanced = button(right, "Show advanced tools", () -> {
             boolean visible = !hardwareAdvanced.getVisible();
             setPanelVisible(hardwareAdvanced, visible);
@@ -1122,6 +1128,37 @@ public final class ConfigurationHomeView extends ViewPart {
         } catch (PartInitException e) {
             MessageDialog.openError(getSite().getShell(), "Failed-build evidence",
                     e.getMessage());
+        }
+    }
+
+    /**
+     * Use the same exact selected board/profile build already inspected by
+     * Configuration Home. Do not recompute a generic build path or infer
+     * hardware edges from the selected controller's display name.
+     */
+    private void openDtsGraph() {
+        if (project == null || !project.isAccessible()) {
+            MessageDialog.openInformation(getSite().getShell(), "DTS Graph Studio",
+                    "Select a Zephyr application in Project Explorer first.");
+            return;
+        }
+        Evidence selected = evidence;
+        if (selected == null || selected.build() == null) {
+            MessageDialog.openInformation(getSite().getShell(), "DTS Graph Studio",
+                    "Project build context is not ready. Press Refresh, select a board/profile, "
+                    + "and configure or build to generate zephyr.dts.");
+            return;
+        }
+        String focus = selected.nodes().stream()
+                .anyMatch(node -> node.path().equals(controllerPath))
+                ? controllerPath : null;
+        try {
+            var part = getSite().getPage().showView(DtsGraphView.ID);
+            if (part instanceof DtsGraphView visualizer)
+                visualizer.displayProject(project, selected.build(), focus);
+        } catch (PartInitException e) {
+            MessageDialog.openError(getSite().getShell(), "DTS Graph Studio",
+                    "The graphical Devicetree view is not installed: " + e.getMessage());
         }
     }
 

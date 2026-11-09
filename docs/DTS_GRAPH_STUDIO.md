@@ -3,12 +3,24 @@
 
 ## Access
 
-With an imported Zephyr application and its target/profile selected, open
-**Zephyr → Configuration Studio → Hardware · Devicetree**, select a controller
-or consumer node, then click **DTS Graph Studio** on the scrolling Hardware
-toolbar. The view also appears under **Window → Show View → Other… →
-Zephyr Devicetree Graph Studio**, but must be given a project and build
-selection from Configuration Studio.
+With a Zephyr project and exact board/profile selected, open the standard
+**Zephyr → Configuration Studio → Hardware** tab. Select a controller if
+desired, then click the always-visible
+**DTS Graph Studio — connected blocks** button directly above
+**Show advanced tools**. This shortcut passes the same selected build path
+and controller to the graph view; no extra Advanced Studio navigation is
+required. The source files must already have been configured/built to produce
+`zephyr/zephyr.dts` before any hardware blocks appear.
+
+The advanced **Zephyr Advanced Configuration Studio → Hardware** toolbar
+also contains **DTS Graph Studio**. Opening the view through
+**Window → Show View → Other… → Zephyr Devicetree Graph Studio** opens its
+empty shell until a project/build is supplied by Configuration Studio.
+
+If the primary Hardware tab lacks the shortcut, your installed Workbench is
+older than this change. A merged PR alone does not update the Eclipse
+installation; install a subsequently published Workbench update and restart
+Eclipse.
 
 The graph opens the **exact current output folder** for the selected
 project/board/profile, not an arbitrary project-global `build` directory:
