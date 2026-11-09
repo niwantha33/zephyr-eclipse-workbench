@@ -8,6 +8,8 @@ import java.util.Base64;
 
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.swt.widgets.Canvas;
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.TabFolder;
 import org.eclipse.ui.PlatformUI;
 
 /** Installed p2/SWT smoke: real registered DTS graph and typed links. */
@@ -65,5 +67,19 @@ public final class DtsGraphSmoke {
                 "native DTS zoom controls are functional");
         page.hideView(view);
         check(((Canvas) canvas).isDisposed(), "native graph disposes SWT resources");
+
+        // Regression for the user's primary Configuration Studio screenshot:
+        // the Advanced toolbar alone is not discoverable from Home Hardware.
+        var home = page.showView("io.github.niwantha33.zew.ui.configurationHome");
+        check(home != null && home.getClass().getSimpleName().equals("ConfigurationHomeView"),
+                "primary Configuration Studio opens");
+        var tabs = (TabFolder) field(home, "primary");
+        tabs.setSelection(1); // Hardware
+        var graphShortcut = (Button) field(home, "dtsGraphButton");
+        check(graphShortcut != null && !graphShortcut.isDisposed()
+                && graphShortcut.isVisible()
+                && graphShortcut.getText().startsWith("DTS Graph Studio"),
+                "primary Hardware tab visibly advertises DTS Graph Studio without Advanced tools");
+        page.hideView(home);
     }
 }
