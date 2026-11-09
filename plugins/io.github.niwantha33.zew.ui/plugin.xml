@@ -182,6 +182,10 @@
           name="Zephyr YAML Structure (Read-only)"
           class="io.github.niwantha33.zew.ui.YamlStructureView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.dtsGraph"
+          name="Zephyr Devicetree Graph Studio"
+          class="io.github.niwantha33.zew.ui.DtsGraphView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.embeddedHubBoards"
           name="EmbeddedHub Board Discovery"
           class="io.github.niwantha33.zew.ui.EmbeddedHubBoardCatalogueView"
