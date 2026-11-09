@@ -112,6 +112,19 @@ class DtsObserverTests(unittest.TestCase):
         self.assertEqual(len(nodes), 5)
         self.assertIn("unavailable", reason)
 
+    def test_windows_crlf_cache_preserves_verified_selected_checkout(self):
+        # CMake writes CRLF cache records on Windows, with spaces supported
+        # in application/checkout paths. The trailing \r is NOT part of the path.
+        (self.build / "CMakeCache.txt").write_bytes(
+            ("ZEPHYR_BASE:PATH=" + str(self.zephyr)).encode("utf-8") + b"\r\n")
+        with self.library():
+            state, digest, reason, nodes, edges = graph.observed(
+                self.zephyr, self.application, self.build)
+        self.assertEqual(state, "built")
+        self.assertEqual(len(digest), 64)
+        self.assertIn(("/leds/my_red_led", "/soc/gpio@4000", "gpio", "gpios",
+                       "[0] pin=22"), edges)
+
     def test_wrong_checkout_does_not_show_other_board(self):
         (self.build / "CMakeCache.txt").write_text(
             "ZEPHYR_BASE:PATH=/other/checkout\n")
