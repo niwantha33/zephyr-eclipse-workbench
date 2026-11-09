@@ -25,6 +25,7 @@ public final class DtsGraphCanvas extends Canvas {
     private Consumer<DtsGraphModel.Node> onInspect = ignored -> {};
     private Consumer<DtsGraphModel.Node> onOpen = ignored -> {};
     private int zoom = 100, offsetX, offsetY;
+    private DtsGraphModel.Node lastClicked;
     private String emptyTitle = "Build the selected Zephyr board to inspect its Devicetree.";
     private final Color background, surface, foreground, muted, line, reference;
     private final Color enabled, disabled, selectedColor;
@@ -61,12 +62,18 @@ public final class DtsGraphCanvas extends Canvas {
             @Override public void mouseDown(MouseEvent event) {
                 DtsGraphModel.Card card = hit(event.x, event.y);
                 if (card == null || snapshot == null) return;
+                lastClicked = card.node();
                 onInspect.accept(card.node());
                 if (event.button == 1) focus(card.node().path());
             }
             @Override public void mouseDoubleClick(MouseEvent event) {
-                DtsGraphModel.Card card = hit(event.x, event.y);
-                if (card != null) onOpen.accept(card.node());
+                // A first click refocuses and moves cards. Keep the identity
+                // from the click rather than hit-testing the changed layout.
+                if (lastClicked != null) onOpen.accept(lastClicked);
+                else {
+                    DtsGraphModel.Card card = hit(event.x, event.y);
+                    if (card != null) onOpen.accept(card.node());
+                }
             }
         });
         addMouseMoveListener(event -> {
