@@ -44,6 +44,9 @@ public final class DtsGraphView extends ViewPart {
     private DtsGraphModel.Node inspected;
     private String desiredFocus;
     private Job job;
+    private AutoCloseable contextSubscription;
+    private Button followSelection, pinSelection;
+    private boolean receivingSelection;
     private final AtomicInteger generation = new AtomicInteger();
 
     @Override public void createPartControl(Composite parent) {
@@ -53,7 +56,7 @@ public final class DtsGraphView extends ViewPart {
         title.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         var toolbar = new Composite(parent, SWT.NONE);
         toolbar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        toolbar.setLayout(new GridLayout(8, false));
+        toolbar.setLayout(new GridLayout(10, false));
         Button refresh = button(toolbar, "Refresh selected build", () -> load());
         refresh.setToolTipText("Observe only the exact board/profile used by the selected project.");
         query = new Text(toolbar, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH);
@@ -68,6 +71,12 @@ public final class DtsGraphView extends ViewPart {
         button(toolbar, "+", () -> graph.zoom(graph.zoomPercent() + 10));
         openSource = button(toolbar, "Open DTS source", this::openSelectedSource);
         openSource.setEnabled(false);
+        followSelection = new Button(toolbar, SWT.CHECK);
+        followSelection.setText("Follow Selection");
+        followSelection.setSelection(true);
+        pinSelection = new Button(toolbar, SWT.CHECK);
+        pinSelection.setText("Pin Selection");
+        pinSelection.setToolTipText("Keep this graph on the current node, even when another view selects one.");
         button(toolbar, "?", () -> status.setText(
                 "Solid = parent-child in generated DTS. Dashed = upstream-resolved reference. "
                 + "Neither proves physical wiring or runtime use."));
@@ -86,6 +95,8 @@ public final class DtsGraphView extends ViewPart {
         inspector.setText("Click a block to inspect its exact generated DTS path, "
                 + "compatible/status, and typed references. Double-click to jump to the declaration.");
         sash.setWeights(new int[] {75, 25});
+        contextSubscription = ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
+                .subscribe(this::followContext);
     }
 
     private static Button button(Composite parent, String label, Runnable action) {
@@ -104,6 +115,8 @@ public final class DtsGraphView extends ViewPart {
         project = target;
         build = selectedBuild;
         desiredFocus = focus;
+        ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
+                .publish(target, selectedBuild, "", "dts-graph-open");
         load();
     }
 
@@ -237,6 +250,30 @@ public final class DtsGraphView extends ViewPart {
         if (count == 0) text.append("\n  None verified (not proof of no hardware links).");
         text.append("\n\nRead-only observed configuration; actual wiring, pinmux and driver state unverified.");
         inspector.setText(text.toString());
+        if (!receivingSelection && project != null && build != null
+                && snapshot != null && snapshot.observed())
+            ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
+                    .publish(project, build, node.path(), "dts-graph");
+    }
+
+    private void followContext(ZephyrViewContextHub.Selection selected) {
+        if (graph == null || graph.isDisposed() || !followSelection.getSelection()
+                || pinSelection.getSelection() || project == null || build == null
+                || snapshot == null || !snapshot.observed()
+                || !new io.github.niwantha33.zew.core.ZephyrSelectionIdentity(
+                        project.getName(), build, "").sameBuild(selected.identity())
+                || selected.identity().nodePath().isBlank()
+                || "dts-graph".equals(selected.origin())) return;
+        for (DtsGraphModel.Node node : snapshot.nodes()) {
+            if (!node.path().equals(selected.identity().nodePath())) continue;
+            desiredFocus = node.path();
+            graph.focus(desiredFocus);
+            query.setText(desiredFocus);
+            receivingSelection = true;
+            try { inspectNode(node); }
+            finally { receivingSelection = false; }
+            return;
+        }
     }
 
     private void openSelectedSource() {
@@ -288,6 +325,10 @@ public final class DtsGraphView extends ViewPart {
     @Override public void dispose() {
         generation.incrementAndGet();
         if (job != null) job.cancel();
+        if (contextSubscription != null) {
+            try { contextSubscription.close(); }
+            catch (Exception ignored) { /* UI-thread subscription has no I/O. */ }
+        }
         super.dispose();
     }
 }

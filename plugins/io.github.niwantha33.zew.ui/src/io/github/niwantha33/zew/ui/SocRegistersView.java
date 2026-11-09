@@ -97,6 +97,10 @@ public final class SocRegistersView extends ViewPart {
     private volatile boolean closed;
     private boolean busy;
     private IDebugContextListener contextListener;
+    private AutoCloseable contextSubscription;
+    private Button pinViewSelection;
+    private Label linkedSelection;
+    private Path selectedBuildContext;
 
     @Override public void init(IViewSite site, IMemento memento) throws PartInitException {
         super.init(site, memento);
@@ -118,7 +122,7 @@ public final class SocRegistersView extends ViewPart {
         });
         button(bar, "Refresh Live Values", this::refresh);
         var options = new Composite(parent, SWT.NONE);
-        options.setLayout(new GridLayout(5, false));
+        options.setLayout(new GridLayout(6, false));
         options.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(options, "Pin baseline", this::pinBaseline);
         button(options, "Export history CSV…", this::exportHistory);
@@ -136,6 +140,17 @@ public final class SocRegistersView extends ViewPart {
         search.setMessage("Find peripheral, register or field");
         search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         search.addModifyListener(e -> render());
+        pinViewSelection = new Button(options, SWT.CHECK);
+        pinViewSelection.setText("Pin Selection");
+        pinViewSelection.setToolTipText("Do not follow other views' project/build selections.");
+        pinViewSelection.addListener(SWT.Selection, e -> {
+            if (!pinViewSelection.getSelection())
+                ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
+                        .replay(this::followContext);
+        });
+        linkedSelection = new Label(parent, SWT.WRAP);
+        linkedSelection.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        linkedSelection.setText("No linked Devicetree selection. No hardware is read on selection.");
         status = new Label(parent, SWT.WRAP);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         status.setText("Automatically detecting exact vendor SVD from the selected Zephyr build. No generic MCU model is substituted.");
@@ -179,6 +194,22 @@ public final class SocRegistersView extends ViewPart {
                 .addDebugContextListener(contextListener);
         contextChanged();
         autoFindExistingDebugProject();
+        contextSubscription = ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
+                .subscribe(this::followContext);
+    }
+
+    private void followContext(ZephyrViewContextHub.Selection selection) {
+        if (closed || pinViewSelection == null || pinViewSelection.isDisposed()
+                || pinViewSelection.getSelection() || !selection.project().isAccessible()) return;
+        boolean different = !selection.project().getName().equals(selectedProjectName)
+                || !selection.identity().buildDirectory().equals(selectedBuildContext);
+        selectedBuildContext = selection.identity().buildDirectory();
+        linkedSelection.setText("Selected build: " + selectedBuildContext.getFileName()
+                + " | DTS node: " + (selection.identity().nodePath().isBlank()
+                        ? "none" : selection.identity().nodePath())
+                + ". Configuration selection only; no live peripheral registers read.");
+        linkedSelection.getParent().layout(true, true);
+        if (different) useLaunchProject(selection.project());
     }
 
     private void autoFindExistingDebugProject() {
@@ -1163,6 +1194,10 @@ public final class SocRegistersView extends ViewPart {
         listenTo(null);
         if (contextListener != null) DebugUITools.getDebugContextManager()
                 .getContextService(getSite().getWorkbenchWindow()).removeDebugContextListener(contextListener);
+        if (contextSubscription != null) {
+            try { contextSubscription.close(); }
+            catch (Exception ignored) { /* No I/O in UI subscription disposal. */ }
+        }
         super.dispose();
     }
 }
