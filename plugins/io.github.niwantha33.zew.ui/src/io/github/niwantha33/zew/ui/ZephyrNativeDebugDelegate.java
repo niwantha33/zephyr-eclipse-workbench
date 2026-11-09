@@ -332,6 +332,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                 SocRegistersHandler.showDebugDataOnLaunch(
                         ResourcesPlugin.getWorkspace().getRoot().getProject(
                                 configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, "")));
+                ZephyrDebugWorkspaceHandler.openOnLaunch();
             }
             if (monitor.isCanceled() || launch.isTerminated()) session.close();
         } catch (InterruptedException interrupted) {

@@ -53,3 +53,22 @@ cross-view data.
 Installed SWT smoke asserts both new actions are initially disabled without
 an exact project/build. Real target integration and native toolbar acceptance
 remain required.
+
+## Third increment — Zephyr Hardware Debug perspective
+Use **Zephyr → Run & Debug → Open Zephyr Hardware Debug Workspace** or choose
+**Zephyr Hardware Debug** from Eclipse's Perspective menu. Its initial layout
+contains Debug, native CPU Registers, Variables, Expressions, our read-only SVD
+Explorer and normal Console. Zephyr Trace Console, saved Thread Timeline and
+saved CPU Load are available as optional views rather than falsely implying
+live trace streaming.
+
+Existing Debug perspective settings remain intact. An optional, **off by
+default**, preference under **Window → Preferences → Zephyr Workbench** enables
+switching to this new perspective after a successful Zephyr GDB launch. The
+switch happens on the Eclipse UI thread and does not launch a second server,
+resume/halt the MCU, flash firmware or change breakpoints. Eclipse persists
+later user layout changes as usual. Opening the workspace when there is no
+active debug session does not claim live data.
+
+Installed SWT smoke checks perspective registration. CI/package and physical
+board validation remain separate qualification gates.
