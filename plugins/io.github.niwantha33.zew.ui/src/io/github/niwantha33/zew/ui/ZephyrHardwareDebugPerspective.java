@@ -26,6 +26,7 @@ public final class ZephyrHardwareDebugPerspective implements IPerspectiveFactory
         inspection.addView("org.eclipse.debug.ui.RegisterView");
         inspection.addView("org.eclipse.debug.ui.VariableView");
         inspection.addView("org.eclipse.debug.ui.ExpressionView");
+        inspection.addView(ZephyrTargetMemoryHandler.MEMORY_VIEW_ID);
 
         IFolderLayout output = layout.createFolder(
                 "zew.debug.output", IPageLayout.BOTTOM, 0.68f, editor);
@@ -37,6 +38,7 @@ public final class ZephyrHardwareDebugPerspective implements IPerspectiveFactory
         layout.addShowViewShortcut(SocRegistersHandler.VIEW_ID);
         layout.addShowViewShortcut("org.eclipse.debug.ui.RegisterView");
         layout.addShowViewShortcut("org.eclipse.debug.ui.VariableView");
+        layout.addShowViewShortcut(ZephyrTargetMemoryHandler.MEMORY_VIEW_ID);
         layout.addShowViewShortcut(ZephyrTraceConsoleView.ID);
         layout.addShowViewShortcut(Activator.ID + ".threadTimeline");
         layout.addShowViewShortcut(Activator.ID + ".cpuLoad");

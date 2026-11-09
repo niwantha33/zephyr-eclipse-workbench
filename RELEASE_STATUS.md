@@ -709,3 +709,19 @@ is not evidence of physical hardware operation.
 
 **Merge status:** Draft, pending exact-head CI and human review. No wider
 EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.
+
+
+## Target Memory Browser integration (development PR, 2026-11-09)
+
+- Added a Zephyr **Run & Debug → Open Target Memory Browser** entry. It opens
+  the installed CDT Memory Browser if available and falls back to Eclipse's
+  standard Memory view. No separate memory-read backend is implemented.
+- The separate Zephyr Hardware Debug perspective includes the standard Memory
+  view and a Show View shortcut. Existing Eclipse/CDT Debug layouts are unchanged.
+- The handler does not start GDB/OpenOCD, halt a target or issue reads/writes;
+  native memory contents remain dependent on the selected debug context.
+- Installed SWT smoke source now checks perspective registration and native
+  memory view instantiation. Exact-head CI, installed-packaging and physical
+  target memory tests are **pending**; this is not a verified hardware capability
+  and does not advance G0.
+- Acceptance and safety details: [Target Memory Browser](docs/TARGET_MEMORY_BROWSER.md).

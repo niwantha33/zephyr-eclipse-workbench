@@ -1237,6 +1237,18 @@ public final class EditorSmoke implements IApplication {
                     var resourcesPerspective = org.eclipse.ui.PlatformUI.getWorkbench()
                             .getPerspectiveRegistry().findPerspectiveWithId("org.eclipse.ui.resourcePerspective");
                     check(resourcesPerspective != null, "installed Eclipse has the resource perspective");
+                    // A standard native Memory view must be packaged and
+                    // available in our separate hardware debug perspective.
+                    var hardwareDebugPerspective = org.eclipse.ui.PlatformUI.getWorkbench()
+                            .getPerspectiveRegistry().findPerspectiveWithId(
+                                    "io.github.niwantha33.zew.ui.hardwareDebugPerspective");
+                    check(hardwareDebugPerspective != null,
+                            "Zephyr Hardware Debug perspective is installed");
+                    page.setPerspective(hardwareDebugPerspective);
+                    check(page.findViewReference("org.eclipse.debug.ui.MemoryView") != null,
+                            "native target Memory view is part of the hardware debug layout");
+                    check(page.showView("org.eclipse.debug.ui.MemoryView") != null,
+                            "native target Memory view can be opened without a debug session");
                     page.setPerspective(resourcesPerspective);
                     page.resetPerspective();
                     settleNativeStudioLayout();
