@@ -148,10 +148,58 @@ jobs:
           if-no-files-found: error
           retention-days: 2
 
+
+  # A successful Linux package is not sufficient for automatic publication.
+  # Run the same seven-scenario managed Windows qualification on the exact
+  # merged SHA. A missing/failed Windows observation leaves 'updates' intact.
+  windows_firmware_qualification:
+    name: Qualify native Windows firmware before publication
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    runs-on: windows-2025
+    timeout-minutes: 100
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
+    steps:
+      - name: Check out exact merged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Select runner JDK 21
+        shell: pwsh
+        run: |
+          "JAVA_HOME=$env:JAVA_HOME_21_X64" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$env:JAVA_HOME_21_X64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Install pinned test metadata dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3 west==1.5.0 kconfiglib==14.1.0 jsonschema==4.25.1
+      - name: Run Windows unit and fault-injection tests
+        run: python scripts/test_core.py
+      - name: Prepare pinned managed environment
+        env:
+          ZEW_CI_SDK_ASSET_API: '1'
+        run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --setup-only
+      - name: Build seven real firmware scenarios
+        env:
+          ZEW_CI_SDK_ASSET_API: '1'
+        run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --run-only
+      - name: Qualify exact Windows firmware evidence
+        run: python scripts/qualify_firmware_matrix.py --input windows-firmware-results.json --output windows-firmware-qualification.json
+      - name: Retain Windows firmware observations
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: publisher-windows-firmware-evidence
+          path: |
+            windows-firmware-results.json
+            windows-firmware-qualification.json
+          if-no-files-found: warn
+          retention-days: 7
+
   publish:
     name: Publish exact qualified release (write token only at push)
-    needs: build_and_verify
-    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    needs: [build_and_verify, windows_firmware_qualification]
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.build_and_verify.result == 'success' && needs.windows_firmware_qualification.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
