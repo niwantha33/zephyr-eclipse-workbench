@@ -2,6 +2,8 @@
 # Evidence Engine release status — 2026-10-30
 
 **Authoritative scope:** [Evidence Engine Program v2](docs/EVIDENCE_ENGINE_PROGRAM_V2.md). Earlier [16-area acceptance](docs/reports/COMMERCIAL_RELEASE_ACCEPTANCE.md) is historical, not the current release plan.
+
+**Current Eclipse-preview stabilisation checklist (2026-11-10):** [release stabilisation board](docs/RELEASE_STABILIZATION_2026-11-10.md). It distinguishes current exact-head CI from outstanding clean-host, hardware, licensing and release-asset acceptance; it does not close G0.
 **Gate G0:** OPEN. No evidence-engine installer, release, production or certification claim.
 
 ## Baseline
