@@ -130,6 +130,9 @@
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.UpdateStartup"/></extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.SmartCompletionStartup"/></extension>
   <extension point="org.eclipse.ui.views">
+    <view id="io.github.niwantha33.zew.ui.documentation"
+          name="Zephyr Documentation &amp; References"
+          class="io.github.niwantha33.zew.ui.ZephyrDocumentationView" restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.buildFailureInvestigation" name="Zephyr Build Failure Investigation"
           class="io.github.niwantha33.zew.ui.BuildFailureInvestigationView" restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.faultAnalysis" name="Zephyr Fault Investigation"
@@ -249,6 +252,7 @@
     <command id="io.github.niwantha33.zew.setup" name="Set Up Zephyr" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugTools" name="Manage Shared OpenOCD Debug Tools" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tools" name="Install / Manage Zephyr Tools" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.documentation" name="Open Zephyr Documentation and References" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.about" name="About Zephyr Workbench" categoryId="io.github.niwantha33.zew.commands"/>
     <category id="io.github.niwantha33.zew.commands" name="Zephyr Workbench"/>
     <command id="io.github.niwantha33.zew.checkUpdates" name="Check for Workbench Updates" categoryId="io.github.niwantha33.zew.commands"/>
@@ -304,6 +308,7 @@
     <handler commandId="io.github.niwantha33.zew.setup" class="io.github.niwantha33.zew.ui.SetupHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugTools" class="io.github.niwantha33.zew.ui.DebugToolsHandler"/>
     <handler commandId="io.github.niwantha33.zew.tools" class="io.github.niwantha33.zew.ui.ToolsHandler"/>
+    <handler commandId="io.github.niwantha33.zew.documentation" class="io.github.niwantha33.zew.ui.ZephyrDocumentationHandler"/>
     <handler commandId="io.github.niwantha33.zew.about" class="io.github.niwantha33.zew.ui.VersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.checkUpdates" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
     <handler commandId="io.github.niwantha33.zew.updateConnection" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
@@ -323,6 +328,7 @@
           <command commandId="io.github.niwantha33.zew.tools" label="Install / Manage Zephyr Tools..." style="push"/>
           <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
         </menu>
+        <command commandId="io.github.niwantha33.zew.documentation" label="Documentation &amp; References (Zephyr / TRMs)..." style="push"/>
         <menu id="io.github.niwantha33.zew.menu.versions" label="Project Environment &amp; Versions">
           <command commandId="io.github.niwantha33.zew.prepareParallelSources" label="Prepare Separate Zephyr Release Sources (Stage 1)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.snapshotProject" label="Snapshot Project Environment..." style="push"/>
