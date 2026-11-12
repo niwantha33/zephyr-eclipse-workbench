@@ -26,9 +26,24 @@ public final class ZephyrReferenceCatalogTests {
             check(ti.stream().anyMatch(link -> link.url().startsWith(
                     "https://docs.zephyrproject.org/4.4.0/")), "version-specific Zephyr links");
             check(ZephyrReferenceCatalog.forTarget("some_other_board", "4.4.0").stream()
-                    .noneMatch(link -> link.url().contains("ti.com")), "no guessed vendor matches");
+                    .noneMatch(link -> link.url().contains("slau846")),
+                    "unknown target must not inherit device-specific TRM");
             check(ZephyrReferenceCatalog.forTarget("lp_mspm0g3507_fake", "4.4.0").stream()
-                    .noneMatch(link -> link.url().contains("ti.com")), "no board-prefix collision");
+                    .noneMatch(link -> link.url().contains("slau846")),
+                    "no board-prefix collision");
+            for (String target : new String[] { "nrf54h20dk/nrf54h20/cpuapp",
+                    "esp32s3_devkitc/esp32s3/procpu", "nucleo_f446re/stm32f446xx",
+                    "some_other_board" }) {
+                var links = ZephyrReferenceCatalog.forTarget(target, "4.4.0");
+                check(links.stream().anyMatch(link -> link.title().contains("Devicetree")),
+                        "universal Zephyr documentation for " + target);
+                check(links.stream().anyMatch(link -> link.title().contains("Espressif")),
+                        "manufacturer portals for every board " + target);
+                check(links.stream().anyMatch(link -> link.title().contains("Nordic")),
+                        "all vendor portal support for " + target);
+                check(links.stream().noneMatch(link -> link.url().contains("slau846")),
+                        "never assign wrong TI TRM to " + target);
+            }
             check(ZephyrReferenceCatalog.forTarget("", "../../bad").stream()
                     .allMatch(link -> !link.url().contains("..")), "no URL path injection");
             Files.writeString(version, "VERSION_MAJOR = 4\nVERSION_MINOR = 5\nPATCHLEVEL = 99\n");
