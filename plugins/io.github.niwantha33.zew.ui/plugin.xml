@@ -416,6 +416,9 @@
             class="io.github.niwantha33.zew.ui.ZephyrProfileToolbarContribution"/>
         <command commandId="io.github.niwantha33.zew.flash" icon="icons/flash.png"
             label="Flash Zephyr firmware" tooltip="Build and flash the selected Zephyr project" style="push"/>
+        <command commandId="io.github.niwantha33.zew.debug" icon="icons/debug.png"
+            label="Debug Zephyr application"
+            tooltip="Build and debug the selected Zephyr project (does not flash)" style="push"/>
       </toolbar>
     </menuContribution>
   </extension>
