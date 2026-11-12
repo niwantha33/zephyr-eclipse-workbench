@@ -77,10 +77,25 @@ public final class OfflineTraceAnalysisService {
                     : new Holder(HolderState.KNOWN, holder);
         }
     }
+    /** Saved trace object activity, never live kernel state or reconstructed queue depth. */
+    public record SyncObjectActivity(String kind, String object, int takeGet, int givePut,
+                                     int failures, int blockingEvents, int pairedBlocks,
+                                     int longBlocks, Long maxBlockedNs, int unpairedBlocks) {}
     public record ContentionResult(Path trace, Path build, boolean incomplete, String reason,
                                    long thresholdUs, boolean inversionEnabled, int resourceEvents,
-                                   List<ContentionFinding> findings) {
-        public ContentionResult { findings = List.copyOf(findings); }
+                                   List<ContentionFinding> findings, List<SyncObjectActivity> objects,
+                                   int unattributedEvents) {
+        public ContentionResult {
+            findings = List.copyOf(findings);
+            objects = List.copyOf(objects);
+        }
+        /** Keep existing tests and report consumers source compatible. */
+        public ContentionResult(Path trace, Path build, boolean incomplete, String reason,
+                                long thresholdUs, boolean inversionEnabled, int resourceEvents,
+                                List<ContentionFinding> findings) {
+            this(trace, build, incomplete, reason, thresholdUs, inversionEnabled,
+                    resourceEvents, findings, List.of(), 0);
+        }
     }
 
     private record CacheKey(Path trace, long streamMtime, long streamSize, long metadataMtime,
@@ -176,10 +191,33 @@ public final class OfflineTraceAnalysisService {
                         integer(fields, at + "duration_ns"), string(fields, at + "explanation")));
                 if (i >= 5000) throw failure(ErrorKind.MODULE_FAILED, "Contention finding limit exceeded.");
             }
+            List<SyncObjectActivity> objects = new ArrayList<>();
+            for (int i = 0; fields.containsKey("objects[" + i + "].kind"); i++) {
+                if (i >= 1024) throw failure(ErrorKind.MODULE_FAILED, "Object activity limit exceeded.");
+                String at = "objects[" + i + "].";
+                String family = string(fields, at + "kind");
+                if (!List.of("Mutex", "Semaphore", "Message queue").contains(family))
+                    throw failure(ErrorKind.MODULE_FAILED, "Unknown synchronization object kind.");
+                int take = intField(fields, at + "take_get"), give = intField(fields, at + "give_put");
+                int failures = intField(fields, at + "failures");
+                int blocks = intField(fields, at + "blocking_events");
+                int paired = intField(fields, at + "paired_blocks");
+                int longBlocks = intField(fields, at + "long_blocks");
+                int unpaired = intField(fields, at + "unpaired_blocks");
+                Long maximum = nullableInteger(fields, at + "max_blocked_ns");
+                if (paired > blocks || unpaired != blocks - paired || longBlocks > paired
+                        || (paired == 0 && maximum != null)
+                        || (paired > 0 && (maximum == null || maximum < 0)))
+                    throw failure(ErrorKind.MODULE_FAILED, "Inconsistent observed blocking evidence.");
+                objects.add(new SyncObjectActivity(family, string(fields, at + "object"), take, give,
+                        failures, blocks, paired, longBlocks, maximum, unpaired));
+            }
+            int unattributed = fields.containsKey("unattributed_events")
+                    ? intField(fields, "unattributed_events") : 0;
             result = new ContentionResult(key.trace, key.build, booleanField(fields, "incomplete"),
                     string(fields, "reason"), integer(fields, "threshold_us"),
                     booleanField(fields, "inversion_enabled"), intField(fields, "resource_events"),
-                    findings);
+                    findings, objects, unattributed);
             store(key, result);
         }
         if (result.incomplete()) throw new AnalysisFailure(ErrorKind.INCOMPLETE,
