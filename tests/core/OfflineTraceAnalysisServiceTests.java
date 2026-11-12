@@ -22,7 +22,12 @@ public final class OfflineTraceAnalysisServiceTests {
              "threshold_us":1000,"inversion_enabled":false,"resource_events":2,
              "findings":[{"kind":"Long Wait","object":"lock_A","waiter":"high",
                           "holder":null,"holder_unknown":true,"duration_ns":1500000,
-                          "explanation":"Holder not observed"}]}
+                          "explanation":"Holder not observed"}],
+             "unattributed_events":2,
+             "objects":[{"kind":"Message queue","object":"object ID 0x40 (name unavailable)",
+               "take_get":2,"give_put":3,"failures":1,"blocking_events":2,
+               "paired_blocks":1,"long_blocks":1,"max_blocked_ns":2500000,
+               "unpaired_blocks":1}]}
             """;
     private static void check(boolean value, String message) {
         if (!value) throw new AssertionError(message);
@@ -83,6 +88,13 @@ public final class OfflineTraceAnalysisServiceTests {
                     == OfflineTraceAnalysisService.HolderState.UNKNOWN
                     && report.findings().getFirst().owner().name() == null,
                     "holder is a typed, explicit unknown");
+            check(report.unattributedEvents() == 2 && report.objects().size() == 1,
+                    "typed object activity and unattributed resource counts");
+            var queue = report.objects().getFirst();
+            check(queue.kind().equals("Message queue") && queue.takeGet() == 2
+                    && queue.givePut() == 3 && queue.longBlocks() == 1
+                    && queue.unpairedBlocks() == 1 && queue.maxBlockedNs() == 2500000,
+                    "explicit queue operation outcome and paired blocking evidence");
             var projection = OfflineTraceViewModels.contention(report);
             check(projection.noPriorities() && projection.rows().size() == 1
                     && projection.rows().getFirst().holder().equals("unknown")
@@ -123,6 +135,14 @@ public final class OfflineTraceAnalysisServiceTests {
                     () -> new OfflineTraceAnalysisService(request -> CONTENTION
                             .replace("\"holder\":null,\"holder_unknown\":true",
                                     "\"holder\":null,\"holder_unknown\":false"))
+                            .analyseContention(ctf, build, 1000));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CONTENTION
+                            .replace("\"unpaired_blocks\":1", "\"unpaired_blocks\":0"))
+                            .analyseContention(ctf, build, 1000));
+            expect(OfflineTraceAnalysisService.ErrorKind.MODULE_FAILED,
+                    () -> new OfflineTraceAnalysisService(request -> CONTENTION
+                            .replace("\"max_blocked_ns\":2500000", "\"max_blocked_ns\":null"))
                             .analyseContention(ctf, build, 1000));
             var failed = new OfflineTraceAnalysisService(request -> {
                 throw new java.io.IOException("stderr: Python module failure");
