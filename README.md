@@ -28,6 +28,31 @@ views to a native Eclipse debugging workspace.
 
 **🌐 [Explore the website & feature catalogue](https://niwantha33.github.io/zephyr-eclipse-workbench/)** · **[Download releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases) · [Install on Windows](docs/FRESH_INSTALL.md) · [Beginner guide](docs/BEGINNER_SETUP.md) · [Report an issue](https://github.com/niwantha33/zephyr-eclipse-workbench/issues)**
 
+## Installation direction — one HTTPS link
+
+**Release requirement (not yet available for first-time installation):**
+new users should install the Workbench into a compatible Eclipse IDE using
+**Help → Install New Software**, paste a public HTTPS p2 update-site URL,
+select **Zephyr Eclipse Workbench**, and complete Eclipse's normal licence/trust
+review. No manual ZIP/archive download, GitHub login, token, Maven build or
+repository checkout should be required for this path.
+
+The proposed public site location is
+`https://niwantha33.github.io/zephyr-eclipse-workbench/updates/`.
+**Do not treat this as a working installer URL yet.** The current `updates`
+branch contains versioned p2 artifacts for existing Workbench updates, but an
+anonymously accessible Eclipse-installable public site at this URL has **not
+been verified**. The [development-preview installation guide](docs/FRESH_INSTALL.md)
+documents the temporary ZIP fallback until URL installation is published and
+qualified.
+
+Before making URL installation the default, the release pipeline must publish
+a valid p2 repository at a stable HTTPS endpoint and pass a clean-Eclipse
+install, restart, feature/plug-in verification, upgrade and recovery smoke test
+on supported hosts. Never label an update manifest or successful package build
+as a proven first-time network installation. Keep Eclipse's normal trust and
+licence prompts; do not silently modify users' pinned Zephyr/SDK environments.
+
 ## Screenshots
 
 The following slots are reserved for **real screenshots of the installed Eclipse UI**.
@@ -224,15 +249,35 @@ For the larger searchable catalogue, see the
 | Evidence CLI | Read-only snapshot/compare/verify, guarded provenance and bounded sanitised bundles | Limited | [CLI reference](docs/CLI_REFERENCE.md) |
 | Updates and publishing | Eclipse p2 updates and separate package integrity/publication checks | Preview | [Publication design](docs/PRIVATE_UPDATE_PUBLISH.md) |
 
-## Quick start — Windows
+## Quick start — Windows (development preview)
+
+**Current status:** direct public URL installation is a release requirement,
+**not a verified installation method today**. The following archive steps are
+a temporary workaround for development previews; they must not be presented
+as the final user experience.
 
 1. Install [Eclipse IDE for Embedded C/C++ Developers](https://www.eclipse.org/downloads/packages/) on Windows x64, with its required Java runtime.
-2. Open [GitHub Releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases), read that release's `START_HERE` instructions and download the asset ending in `_p2.zip`. GitHub's generated source ZIP is not the Eclipse plug-in archive.
-3. In Eclipse, choose **Help → Install New Software → Add → Archive**, select the `_p2.zip` (without extracting it), finish installation and restart.
+2. **Temporary preview path only:** open [GitHub Releases](https://github.com/niwantha33/zephyr-eclipse-workbench/releases), read that release's `START_HERE` instructions and download the asset ending in `_p2.zip` (not GitHub's source-code ZIP).
+3. In Eclipse choose **Help → Install New Software → Add → Archive**, select that `_p2.zip` without extracting it, finish the licence/trust review and restart Eclipse.
 4. Choose **Zephyr → Set Up Zephyr** to prepare the managed toolchain and first workspace.
 5. Create a project with **File → New → Other → Zephyr → Zephyr Project**, or import one with **File → Import → Zephyr → Existing Zephyr Application**.
 6. Set the exact board/core under **Project → Properties → Zephyr**, select a built-in or named profile and **Build**. The quick **Profile** toolbar menu can also switch profiles; switching alone does not build or flash.
 7. Configure the runner/probe before using **Flash** or **Debug** on hardware.
+
+**Target first-time installation after qualification:** in Eclipse use
+**Help → Install New Software → Add**, enter the public Workbench HTTPS p2
+update-site URL (without **Archive**), select the Workbench feature, review
+the proposed installation and restart. Eclipse should subsequently check the
+same public channel for compatible updates, with user approval for
+installation and restart as required. The final verified URL will replace the
+temporary archive instructions above.
+
+**URL-install acceptance:** the site must be publicly readable without
+credentials; include correct p2 metadata and dependencies; be published only
+from verified artifacts; survive a clean Windows/Eclipse first installation,
+restart, update to a newer version and recovery from a failed update; and
+never require an archive, local source build or token. A working website or
+a populated `updates` Git branch alone is insufficient evidence.
 
 Follow the [full installation and update guide](docs/FRESH_INSTALL.md) for Eclipse/JDK
 versions, OpenOCD setup, release updates and trust prompts.
