@@ -74,7 +74,7 @@ public final class OpenOcdThreadCheck {
                             .append(regions.get(r).bytes()).append(" observed=").append(first.get(r)).append(';');
                 }
                 throw new IOException(detail + "." + guidance(region.bytes().get(mismatchByte),
-                        first.get(mismatchRegion).get(mismatchByte)) + repeated
+                        first.get(mismatchRegion).get(mismatchByte)) + asciiOffsetAdvice(regions, first) + repeated
                         + " GDB was not attached. Terminate old sessions and use Zephyr > Flash and Debug Application for this exact board/build, or Flash then retry Debug. "
                         + "If already flashed, investigate target reads/OpenOCD compatibility. "
                         + "No firmware or metadata was written by this check. Readback:" + summary);
@@ -88,6 +88,30 @@ public final class OpenOcdThreadCheck {
         if (observed == 0 && expected != 0)
             return " Readback zero may mean missing/uninitialised target data or the wrong image; compare independently without changing target memory.";
         return " Verify the ELF/board/profile, flashed image and OpenOCD access before assuming an ABI mismatch.";
+    }
+
+    /**
+     * Offsets are numeric structure fields, not human-readable format strings.
+     * A long printable run is useful evidence of a different image/layout or
+     * an unexpected address/read path, but cannot prove which one is wrong.
+     */
+    private static String asciiOffsetAdvice(List<Region> regions, List<List<Integer>> observed) {
+        for (int r = 0; r < regions.size(); r++) {
+            if (!regions.get(r).symbol().endsWith("_offsets")) continue;
+            int printableRun = 0;
+            for (int value : observed.get(r)) {
+                if (value >= 32 && value <= 126) {
+                    if (++printableRun >= 16)
+                        return " Target readback includes a long printable ASCII sequence inside the binary"
+                                + " thread-offset table. This suggests an image/layout or address/read mismatch,"
+                                + " not a proven size_t ABI change. Flash the exact ELF's firmware and verify"
+                                + " readback before diagnosing the RTOS decoder.";
+                } else {
+                    printableRun = 0;
+                }
+            }
+        }
+        return "";
     }
 
     private static List<List<Integer>> readRegions(Socket socket, List<Region> regions,
