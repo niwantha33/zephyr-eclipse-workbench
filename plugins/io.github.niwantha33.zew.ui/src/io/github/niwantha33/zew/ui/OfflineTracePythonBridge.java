@@ -29,7 +29,7 @@ final class OfflineTracePythonBridge implements OfflineTraceAnalysisService.Brid
         Path temporary = Files.createTempDirectory("zew-offline-trace-");
         try {
             for (String name : List.of("offline_trace_json.py", "semantic_trace.py", "cpu_analysis.py",
-                    "contention_detector.py", "thread_timeline.py")) {
+                    "contention_detector.py", "thread_timeline.py", "synchronization_analysis.py")) {
                 var entry = Activator.getDefault().getBundle().getEntry("tools/rtos_analysis/" + name);
                 if (entry == null) throw new IOException("Offline trace tool missing: " + name);
                 try (var input = entry.openStream()) {
