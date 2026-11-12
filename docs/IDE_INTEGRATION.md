@@ -7,13 +7,13 @@ Status: Eclipse launch integration implemented in this change; cross-IDE adapter
 | Task | Eclipse control | Behavior |
 |---|---|---|
 | Flash | Visible Flash button; also Run As > Zephyr Flash | Saved Run configuration; prepare/build exact selected target, confirmation, board runner and existing ESP32 selected-port/chip-match preflight |
-| Debug | Debug dropdown / Debug As > Zephyr Application | Saved native CDT DSF-GDB configuration, managed OpenOCD and exact ELF |
+| Debug | Dedicated Zephyr Debug toolbar icon; also Debug dropdown / Debug As > Zephyr Application | Zephyr icon builds the selected board/profile and launches native CDT DSF-GDB; Eclipse Debug uses normal history and shortcuts |
 | Build | Visible hammer / Project > Build Project | Existing Zephyr builder; compiler diagnostics in Problems |
 | Stop | Eclipse Terminate | Native launch process termination, owned child cleanup |
 
 The first launch may require choosing the named shortcut. Subsequent main-button behavior follows Eclipse's own launch preferences/history. A native launchable-selection adapter and shared project resolver cover resources, editors, managed launches, processes and Debug elements. The Run control is not globally rebound: other applications and QEMU configurations retain their own Run actions. Flash and Debug shortcuts find only configurations with the matching project and action. Flash is explicitly selected and confirmed; Debug does not implicitly program firmware.
 
-Both Zephyr menu Flash and native Run Flash enter the same native delegate, including repeated launches from Run history. Native Flash rebuilds before validating the build receipt and firmware artifacts. ESP32 serial selection and non-programming chip identity check run before any programming command. Other vendors retain their board-defined West runner. A visible Flash button enters that same native launch workflow. The hammer contributes Eclipse's standard Build Project command, using the native CDT image. A project-sensitive Zephyr handler resolves managed Debug-view selections; other projects retain the normal Eclipse Build handler. Debug stays on the standard green bug control. Existing configurations remain available.
+Both Zephyr menu Flash and native Run Flash enter the same native delegate, including repeated launches from Run history. Native Flash rebuilds before validating the build receipt and firmware artifacts. ESP32 serial selection and non-programming chip identity check run before any programming command. Other vendors retain their board-defined West runner. A visible Flash button enters that same native launch workflow. The hammer contributes Eclipse's standard Build Project command, using the native CDT image. A project-sensitive Zephyr handler resolves managed Debug-view selections; other projects retain the normal Eclipse Build handler. The dedicated Zephyr Debug icon invokes that handler for the selected project and builds before native attachment; Eclipse's standard green bug remains available for generic launch history. Neither action flashes implicitly. Existing configurations remain available.
 
 ## Host compatibility
 
