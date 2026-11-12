@@ -77,6 +77,17 @@ public final class OpenOcdThreadCheckTests {
         yes(commands.equals(List.of("wait_halt 5000")), "no metadata read before runner halt");
         String tables = exercise(List.of("", "15", "1 0 0 0", "15", "1 0 0 0"), List.of(size, offsets), new ArrayList<>());
         yes(tables.contains("_kernel_thread_info_offsets@0x1300"), "all selected tables included in mismatch evidence");
+        var unexpectedText = new Region("_kernel_thread_info_offsets", 0x1300,
+                java.util.Collections.nCopies(16, 0));
+        String textReadback = "114 48 47 97 49 58 32 32 48 120 37 48 56 120 32 32";
+        String asciiMismatch = exercise(List.of("", textReadback, textReadback),
+                List.of(unexpectedText), new ArrayList<>());
+        yes(asciiMismatch.contains("printable ASCII sequence")
+                && asciiMismatch.contains("not a proven size_t ABI change")
+                && asciiMismatch.contains("GDB was not attached"),
+                "readable text in numeric offset table gets a cautious evidence-based diagnostic");
+        yes(!tables.contains("printable ASCII sequence"),
+                "ordinary numeric metadata mismatch is not mislabelled as text");
         try { new Region("bad; flash erase_address 0 1000", 1, List.of(4)); throw new AssertionError("injection accepted"); }
         catch (IllegalArgumentException expected) { checks++; }
         try { new Region("_kernel_openocd_offsets", 1, List.of(256)); throw new AssertionError("invalid byte accepted"); }
