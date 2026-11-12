@@ -149,11 +149,16 @@ launching and launch history; the normal Debug button can repeat a saved launch.
 Eclipse's launch preference controls whether the main button follows the current
 selection or repeats the last launch, as it does for other CDT applications.
 
-The duplicate Debug button is removed. A visible native Build hammer and an
-explicit Flash button are contributed to the main toolbar in all perspectives.
-The Flash button and Run As > Zephyr Flash both use the same saved native launch. Other Run configurations retain their behavior, and Debug does not
-silently flash firmware. See [IDE integration](IDE_INTEGRATION.md) for the shared
-Flash preflight and cross-IDE compatibility boundaries.
+The main toolbar contributes Build, the active firmware Profile selector,
+Flash, and a dedicated Zephyr Debug icon (using the bundled `icons/debug.png`).
+The Debug button builds and attaches through the native CDT DSF-GDB launch
+without silently flashing. The Flash button and Run As > Zephyr Flash both use
+the same saved native Flash launch. When the target may contain a different
+firmware image, use **Zephyr > Run & Debug > Flash and Debug Application**,
+which explicitly programs the selected build before starting Debug. Other
+Run configurations retain their behavior. See
+[IDE integration](IDE_INTEGRATION.md) for the shared Flash preflight and
+cross-IDE compatibility boundaries.
 
 ## USB access denied after a previous successful session
 
