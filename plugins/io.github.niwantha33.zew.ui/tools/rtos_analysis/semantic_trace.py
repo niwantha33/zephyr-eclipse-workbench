@@ -27,6 +27,8 @@ class EventKind(str, Enum):
     MUTEX_GIVE = "MUTEX_GIVE"
     SEM_TAKE = "SEM_TAKE"
     SEM_GIVE = "SEM_GIVE"
+    MSGQ_PUT = "MSGQ_PUT"
+    MSGQ_GET = "MSGQ_GET"
     MEM_ALLOC = "MEM_ALLOC"
     MEM_FREE = "MEM_FREE"
     VALUE_SAMPLE = "VALUE_SAMPLE"
@@ -50,6 +52,7 @@ class SemanticEvent:
     # Resource identifiers and phases remain separate from human-readable names.
     object_id: str | None = None
     resource_phase: str = ""
+    resource_result_code: int | None = None
     # Memory evidence is stored separately from generic object/tracepoint
     # semantics. None means the CTF event did not supply a usable field.
     memory_phase: str = ""  # attempt | allocated | freed | failed | ignored
@@ -118,6 +121,16 @@ RAW_EVENT_KINDS: dict[str, EventKind] = {
     "semaphore_give_enter": EventKind.SEM_GIVE,
     "semaphore_give_exit": EventKind.SEM_GIVE,
     "sem_give": EventKind.SEM_GIVE,
+    # Exact Zephyr 4.4 CTF metadata names; no generic queue/FIFO assumption.
+    "msgq_put_enter": EventKind.MSGQ_PUT,
+    "msgq_put_blocking": EventKind.MSGQ_PUT,
+    "msgq_put_exit": EventKind.MSGQ_PUT,
+    "msgq_put_front_enter": EventKind.MSGQ_PUT,
+    "msgq_put_front_blocking": EventKind.MSGQ_PUT,
+    "msgq_put_front_exit": EventKind.MSGQ_PUT,
+    "msgq_get_enter": EventKind.MSGQ_GET,
+    "msgq_get_blocking": EventKind.MSGQ_GET,
+    "msgq_get_exit": EventKind.MSGQ_GET,
     # Only names verified in Zephyr CTF metadata, not speculative API names:
     "heap_sys_k_malloc_enter": EventKind.MEM_ALLOC,
     "heap_sys_k_malloc_exit": EventKind.MEM_ALLOC,
@@ -145,11 +158,20 @@ RESOURCE_EVENT_PHASES = {
     "semaphore_take_exit": "result",
     "semaphore_give": "released", "sem_give": "released",
     "semaphore_give_enter": "release_attempt", "semaphore_give_exit": "released",
+    "msgq_put_enter": "attempt", "msgq_put_blocking": "blocking",
+    "msgq_put_exit": "queue_result",
+    "msgq_put_front_enter": "attempt", "msgq_put_front_blocking": "blocking",
+    "msgq_put_front_exit": "queue_result",
+    "msgq_get_enter": "attempt", "msgq_get_blocking": "blocking",
+    "msgq_get_exit": "queue_result",
 }
 
 
 def _resource_phase(name: str, raw: Mapping) -> str:
     phase = RESOURCE_EVENT_PHASES.get(name, "")
+    if phase == "queue_result":
+        code = _memory_int(raw.get("ret"))
+        return "unknown_result" if code is None else ("completed" if code == 0 else "failed")
     if phase in ("result", "release_result"):
         result = raw.get("ret")
         try:
@@ -444,6 +466,7 @@ class SemanticTraceParser:
                         stream=raw.get("stream"),
                         object_id=None if raw.get("object_id") is None else str(raw["object_id"]),
                         resource_phase=_resource_phase(simple_name, raw),
+                        resource_result_code=_memory_int(raw.get("ret")),
                         tracepoint_name=declared_name if kind == EventKind.VALUE_SAMPLE else "",
                         value=sample_value if kind == EventKind.VALUE_SAMPLE else None,
                         memory_phase=memory_phase, memory_family=memory_family,
