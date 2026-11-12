@@ -209,11 +209,23 @@ for p in bundles:
             if flash.find("configurationType[@id='io.github.niwantha33.zew.ui.launchType']") is None or flash.find("contextualLaunch/enablement") is None:
                 raise SystemExit('Flash shortcut lacks managed configuration or project enablement')
             toolbar = plugin.findall("./extension[@point='org.eclipse.ui.menus']/menuContribution/toolbar/command")
-            if any(item.attrib.get('commandId') == 'io.github.niwantha33.zew.debug' for item in toolbar):
-                raise SystemExit('Duplicate Debug toolbar button; retain the native green bug control')
-            for command in ('org.eclipse.ui.project.buildProject', 'io.github.niwantha33.zew.flash'):
+            # The Zephyr-specific button is intentional: unlike Eclipse's generic
+            # Debug history control it builds the current Zephyr board/profile
+            # before attaching. Neither action silently flashes firmware.
+            for command in ('org.eclipse.ui.project.buildProject',
+                            'io.github.niwantha33.zew.flash',
+                            'io.github.niwantha33.zew.debug'):
                 if sum(item.attrib.get('commandId') == command for item in toolbar) != 1:
-                    raise SystemExit('Visible Build/Flash command missing or duplicated: ' + command)
+                    raise SystemExit('Visible Build/Flash/Zephyr Debug command missing or duplicated: ' + command)
+            debug_toolbar = next(item for item in toolbar
+                                 if item.attrib.get('commandId') == 'io.github.niwantha33.zew.debug')
+            if debug_toolbar.attrib.get('icon') != 'icons/debug.png' or debug_toolbar.attrib.get('style') != 'push':
+                raise SystemExit('Zephyr Debug toolbar must use the bundled icon and a push action')
+            handlers = plugin.findall("./extension[@point='org.eclipse.ui.handlers']/handler")
+            if sum(h.attrib.get('commandId') == 'io.github.niwantha33.zew.debug'
+                   and h.attrib.get('class', '').endswith('.ZephyrDebugHandler')
+                   for h in handlers) != 1:
+                raise SystemExit('Zephyr Debug toolbar must execute the managed native Debug handler')
             for adaptable in ('org.eclipse.core.resources.IResource', 'org.eclipse.debug.core.model.IDebugElement',
                               'org.eclipse.debug.core.ILaunch', 'org.eclipse.debug.core.model.IProcess'):
                 factory = plugin.find("./extension[@point='org.eclipse.core.runtime.adapters']/factory[@adaptableType='" + adaptable + "']")
