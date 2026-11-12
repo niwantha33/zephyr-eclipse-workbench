@@ -1727,8 +1727,8 @@ public final class EditorSmoke implements IApplication {
             var debugs = Arrays.asList(debugShortcut.getLaunchConfigurations(selection));
             check(flashes.contains(flashConfig) && !flashes.contains(debugConfig),
                     "Run Flash discovery excludes native Debug configurations");
-            check(debugs.contains(debugConfig) && !debugs.contains(flashConfig),
-                    "Debug discovery excludes firmware programming configurations");
+            check(debugs.isEmpty(),
+                    "native Debug As never reuses a saved attach-only configuration in place of verified Flash-and-Debug");
         } finally {
             if (flashConfig != null) flashConfig.delete();
             if (debugConfig != null) debugConfig.delete();
