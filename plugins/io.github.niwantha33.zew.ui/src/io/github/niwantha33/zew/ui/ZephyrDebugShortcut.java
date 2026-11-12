@@ -45,6 +45,11 @@ public class ZephyrDebugShortcut implements ILaunchShortcut2 {
     }
     private ILaunchConfiguration[] configurations(IProject project) {
         if (project == null) return new ILaunchConfiguration[0];
+        // Do not let Eclipse's Debug As shortcut silently reuse an old
+        // attach-only low-level GDB configuration. The explicit shortcut
+        // always enters the confirmed Flash-and-Debug workflow; advanced
+        // attach remains a separate Zephyr menu action.
+        if (ILaunchManager.DEBUG_MODE.equals(supportedMode())) return new ILaunchConfiguration[0];
         var manager = DebugPlugin.getDefault().getLaunchManager();
         try {
             return Arrays.stream(manager.getLaunchConfigurations(manager.getLaunchConfigurationType(ZephyrLaunchDelegate.TYPE)))

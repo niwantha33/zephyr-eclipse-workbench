@@ -1711,19 +1711,24 @@ public final class EditorSmoke implements IApplication {
             check(toolbarCommands.contains("org.eclipse.ui.project.buildProject")
                     && toolbarCommands.contains("io.github.niwantha33.zew.flash"),
                     "installed toolbar contributes visible native Build and explicit Flash commands");
-            check(java.util.Collections.frequency(toolbarCommands, "io.github.niwantha33.zew.debug") == 1,
-                    "installed toolbar contributes exactly one Zephyr-specific Debug action");
+            check(!toolbarCommands.contains("io.github.niwantha33.zew.debug"),
+                    "installed toolbar uses Eclipse's native Debug control without an extra icon");
             check(Arrays.stream(handlers).anyMatch(element -> element.getContributor().getName()
                             .equals("io.github.niwantha33.zew.ui")
                             && "io.github.niwantha33.zew.debug".equals(element.getAttribute("commandId"))
                             && "io.github.niwantha33.zew.ui.ZephyrDebugHandler".equals(element.getAttribute("class"))),
-                    "Zephyr Debug toolbar action resolves to the project-aware native Debug handler");
+                    "native Zephyr Debug menu action resolves to the project-aware handler");
+            check(Arrays.stream(handlers).anyMatch(element -> element.getContributor().getName()
+                            .equals("io.github.niwantha33.zew.ui")
+                            && "io.github.niwantha33.zew.attach".equals(element.getAttribute("commandId"))
+                            && "io.github.niwantha33.zew.ui.ZephyrDebugHandler".equals(element.getAttribute("class"))),
+                    "explicit attach-only menu action remains available for advanced users");
             var flashes = Arrays.asList(flashShortcut.getLaunchConfigurations(selection));
             var debugs = Arrays.asList(debugShortcut.getLaunchConfigurations(selection));
             check(flashes.contains(flashConfig) && !flashes.contains(debugConfig),
                     "Run Flash discovery excludes native Debug configurations");
-            check(debugs.contains(debugConfig) && !debugs.contains(flashConfig),
-                    "Debug discovery excludes firmware programming configurations");
+            check(debugs.isEmpty(),
+                    "native Debug As never reuses a saved attach-only configuration in place of verified Flash-and-Debug");
         } finally {
             if (flashConfig != null) flashConfig.delete();
             if (debugConfig != null) debugConfig.delete();

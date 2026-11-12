@@ -32,10 +32,17 @@ Zephyr's upstream commands. Hardware programming is an explicit, confirmed actio
 - **Zephyr > Flash Application**: show the selected board for user confirmation;
   prepare/build automatically, then flash using the selected Zephyr build's
   generated runner configuration and `west flash --no-rebuild`.
-- **Zephyr > Debug Application**: prepare/build automatically, then start a
-  real Eclipse CDT DSF-GDB session using the saved Debug Configuration. The initial managed native
-  debug backend remains **OpenOCD only**; unsupported debug runners are rejected,
-  not treated as universal.
+- **Eclipse native Debug As > Zephyr Application** (or **Zephyr > Debug Application**):
+  build the selected board/profile, ask for explicit permission to Flash, require
+  the board runner's programming verification, then start native CDT DSF-GDB with
+  that same ELF. If Flash fails or is cancelled, the debugger does not attach.
+  The available GDB-server backend depends on board-declared runners and supported
+  managed tools, not a universal probe assumption.
+- **Zephyr > Run & Debug > Attach Without Flashing (Advanced)**: separately build
+  and attach without programming. Use only when the device already has the
+  identical build; the OpenOCD metadata check will still reject conflicting data.
+  Launching an old saved low-level Debug configuration through Eclipse history
+  does not perform a fresh Flash.
 
 ## Build directory
 

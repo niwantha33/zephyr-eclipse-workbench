@@ -19,15 +19,26 @@ import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.handlers.HandlerUtil;
 
-/** Prepare the exact board automatically, then open native CDT DSF-GDB configuration. */
+/** Native Debug defaults to verified Flash-and-Debug; explicit attach-only remains available. */
 public final class ZephyrDebugHandler extends AbstractHandler {
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
         IProject project = SelectedProject.from(event);
-        start(project, HandlerUtil.getActiveShell(event));
+        if ((Activator.ID + ".attach").equals(event.getCommand().getId()))
+            startAttach(project, HandlerUtil.getActiveShell(event));
+        else
+            start(project, HandlerUtil.getActiveShell(event));
         return null;
     }
 
+    /** Native Debug As, green-bug shortcut and Zephyr Debug menu share the verified workflow. */
     static void start(IProject project, Shell shell) {
+        // This action asks for explicit permission before West programs flash.
+        // Cancellation or failed verification never reaches GDB.
+        ZephyrFlashShortcut.launchProject(project, shell, true);
+    }
+
+    /** Advanced, intentionally non-programming attach for already-matching firmware. */
+    static void startAttach(IProject project, Shell shell) {
         if (project == null || !project.isAccessible()) {
             MessageDialog.openInformation(shell, "Zephyr Debug",
                 "Select an imported Zephyr project or open one of its source files.");

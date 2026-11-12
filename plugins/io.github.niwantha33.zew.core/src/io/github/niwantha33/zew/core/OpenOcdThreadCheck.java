@@ -15,6 +15,18 @@ import java.util.List;
 /** Read-only check against the owned OpenOCD Tcl endpoint, before GDB symbol negotiation. */
 public final class OpenOcdThreadCheck {
     private OpenOcdThreadCheck() {}
+    /** Detailed evidence stays in the console; Eclipse's error dialog uses a concise summary. */
+    public static final class MetadataMismatchException extends IOException {
+        private final String summary;
+
+        public MetadataMismatchException(String evidence, String summary) {
+            super(evidence);
+            this.summary = summary;
+        }
+
+        public String summary() { return summary; }
+    }
+
     public record Region(String symbol, long address, List<Integer> bytes) {
         public Region {
             if (!symbol.matches("_kernel_(?:thread_info|openocd)_[a-z_]+") || address <= 0
@@ -73,11 +85,17 @@ public final class OpenOcdThreadCheck {
                             .append(Long.toHexString(regions.get(r).address())).append(" expected=")
                             .append(regions.get(r).bytes()).append(" observed=").append(first.get(r)).append(';');
                 }
-                throw new IOException(detail + "." + guidance(region.bytes().get(mismatchByte),
+                throw new MetadataMismatchException(detail + "." + guidance(region.bytes().get(mismatchByte),
                         first.get(mismatchRegion).get(mismatchByte)) + asciiOffsetAdvice(regions, first) + repeated
                         + " GDB was not attached. Terminate old sessions and use Zephyr > Flash and Debug Application for this exact board/build, or Flash then retry Debug. "
                         + "If already flashed, investigate target reads/OpenOCD compatibility. "
-                        + "No firmware or metadata was written by this check. Readback:" + summary);
+                        + "No firmware or metadata was written by this check. Readback:" + summary,
+                        "The selected Zephyr ELF does not match target thread metadata at 0x"
+                        + Long.toHexString(region.address() + mismatchByte) + " (expected "
+                        + region.bytes().get(mismatchByte) + ", observed "
+                        + first.get(mismatchRegion).get(mismatchByte) + "). GDB was not attached. "
+                        + "Use Debug As > Zephyr Application to build, confirm Flash, verify and attach. "
+                        + "See the Zephyr DSF-GDB console for the complete readback.");
             }
         }
     }

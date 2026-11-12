@@ -49,6 +49,9 @@ public final class OpenOcdThreadCheckTests {
         String mismatch = exercise(List.of("", "0", "0"), List.of(size), commands);
         yes(mismatch.contains("expected byte 4, target byte 0") && mismatch.contains("0x1280"), "report observed address, expected and actual value");
         yes(mismatch.contains("GDB was not attached") && mismatch.contains("No firmware or metadata was written"), "mismatch prevents false thread decoding without repairing RAM");
+        var concise = new OpenOcdThreadCheck.MetadataMismatchException("full readback", "short error");
+        yes("full readback".equals(concise.getMessage()) && "short error".equals(concise.summary()),
+                "mismatch diagnostics keep full evidence separate from the native error dialog");
         Path transcript = Files.createTempFile("zew-openocd-transcript-", ".tmp");
         Files.delete(transcript); // CREATE_NEW must not overwrite an existing file
         try {

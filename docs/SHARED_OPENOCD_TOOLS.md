@@ -149,16 +149,20 @@ launching and launch history; the normal Debug button can repeat a saved launch.
 Eclipse's launch preference controls whether the main button follows the current
 selection or repeats the last launch, as it does for other CDT applications.
 
-The main toolbar contributes Build, the active firmware Profile selector,
-Flash, and a dedicated Zephyr Debug icon (using the bundled `icons/debug.png`).
-The Debug button builds and attaches through the native CDT DSF-GDB launch
-without silently flashing. The Flash button and Run As > Zephyr Flash both use
-the same saved native Flash launch. When the target may contain a different
-firmware image, use **Zephyr > Run & Debug > Flash and Debug Application**,
-which explicitly programs the selected build before starting Debug. Other
-Run configurations retain their behavior. See
-[IDE integration](IDE_INTEGRATION.md) for the shared Flash preflight and
-cross-IDE compatibility boundaries.
+The Workbench does **not** contribute a second Debug toolbar icon. Use
+Eclipse's native green bug / **Debug As > Zephyr Application**. This entry
+builds the selected profile, asks for explicit Flash confirmation, validates
+programming/readback with the supported board runner, then starts native
+CDT DSF-GDB with the same ELF. A failed or cancelled Flash never starts GDB.
+
+For intentionally non-programming sessions choose **Zephyr > Run & Debug >
+Attach Without Flashing (Advanced)**; the physical target must already contain
+the exact selected image. Repeating a previously saved low-level Debug
+configuration through Eclipse history is also attach-only and should not be
+mistaken for a fresh Flash-and-Debug. The regular Flash button and
+**Run As > Zephyr Flash** keep their separate flash-only action.
+See [IDE integration](IDE_INTEGRATION.md) for the runner-specific verification
+boundaries and cross-IDE compatibility.
 
 ## USB access denied after a previous successful session
 
