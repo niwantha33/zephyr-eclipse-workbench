@@ -9,6 +9,7 @@ from pathlib import Path
 
 from cpu_analysis import account
 from contention_detector import ContentionDetector, DEFAULT_THRESHOLD_US
+from synchronization_analysis import summarize
 from semantic_trace import EventKind, SemanticTraceParser
 from thread_timeline import build_intervals
 
@@ -122,15 +123,24 @@ def cpu_report(trace, start_ns=None, end_ns=None):
 
 def contention_report(trace, threshold_us=DEFAULT_THRESHOLD_US):
     report = ContentionDetector().detect(trace, threshold_us)
+    activity = summarize(trace, threshold_us)
     first, last = _bounds(trace)
-    incomplete = bool(report.incomplete or trace.loss_reported or trace.input_out_of_order)
+    incomplete = bool(report.incomplete or activity.incomplete)
     return {"schema_version": 1, "kind": "contention",
             "status": "incomplete" if incomplete else "ok",
-            "incomplete": incomplete, "reason": report.error or
-            ("CTF loss or unordered input was observed." if incomplete else ""),
+            "incomplete": incomplete, "reason": report.error or activity.reason,
             "first_timestamp_ns": first, "last_timestamp_ns": last,
             "threshold_us": threshold_us, "inversion_enabled": report.inversion_enabled,
             "resource_events": report.observed_resource_events,
+            "sync_resource_events": activity.resource_events,
+            "unattributed_events": activity.unattributed_events,
+            "objects": [{"kind": obj.kind, "object": obj.object,
+                         "take_get": obj.take_get, "give_put": obj.give_put,
+                         "failures": obj.failures, "blocking_events": obj.blocking_events,
+                         "paired_blocks": obj.paired_blocks, "long_blocks": obj.long_blocks,
+                         "max_blocked_ns": obj.max_blocked_ns,
+                         "unpaired_blocks": obj.unpaired_blocks}
+                        for obj in activity.objects],
             "findings": [{"kind": f.kind, "object": f.object_name,
                           "waiter": f.waiter, "holder": None if f.holder_unknown else f.holder,
                           "holder_unknown": f.holder_unknown, "duration_ns": f.duration_ns,
