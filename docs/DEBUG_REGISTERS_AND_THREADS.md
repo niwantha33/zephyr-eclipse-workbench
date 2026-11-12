@@ -283,7 +283,7 @@ emulated Tcl peer; they do not establish MSPM0 hardware correctness.
 
 ### Flash and Debug
 
-Use **Zephyr > Flash and Debug Application…** when source changes need to be
+Use Eclipse's native **Debug As > Zephyr Application**, or **Zephyr > Flash and Debug Application…**, when source changes need to be
 programmed before debugging. It reuses Flash's existing board/profile
 confirmation, builds once, programs through the board runner, waits for success
 and owned-process cleanup, then starts native Debug without rebuilding a second
@@ -291,12 +291,22 @@ time. A failed or cancelled Flash never starts Debug. Before the handoff, hashes
 of the selected ELF, runner metadata and generated configuration must still match,
 and the selected board/profile/build directory must be unchanged.
 
-Plain **Debug Application** continues to build and attach without programming;
-plain **Flash Application** does not start Debug. The combined action uses a
-separate saved Run configuration so a later plain Flash click cannot silently
-inherit its Debug step. OpenOCD's metadata check remains active during native
-Debug. Success of a different runner is limited to that runner's own verification
-contract; this workflow does not invent universal probe or firmware attestation.
+**Debug Application** now uses that same explicitly confirmed Flash-and-Debug
+flow rather than compiling a new Debug ELF and attaching to older firmware.
+Eclipse's native Debug toolbar and Debug As entry do not add an extra custom
+icon. To attach without programming, use **Zephyr > Run & Debug > Attach
+Without Flashing (Advanced)**. Replaying a previously saved low-level Debug
+configuration from Eclipse history also remains attach-only; use Debug As to
+request a fresh image. **Flash Application** stays flash-only. The combined
+workflow preserves a separate saved Run configuration so normal Flash cannot
+silently inherit the Debug step.
+
+OpenOCD's byte-for-byte thread metadata guard remains active; it does not
+repair a mismatched target by editing ELF/metadata, and neither a successful
+Linux build nor launch tests establish hardware matching. The full mismatch
+readback is retained in the Zephyr DSF-GDB console, while the native error
+dialog shows a short summary rather than repeating the large offset table.
+Success of a different runner is limited to its own verification contract.
 
 The MSPM0 report showing the offset table shifted by four bytes was followed by
 the user's report that flashing restored Debug. This is user-reported hardware
