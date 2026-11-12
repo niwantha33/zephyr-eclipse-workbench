@@ -302,6 +302,11 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
                         }
                         io.github.niwantha33.zew.core.OpenOcdThreadCheck.verify(tclPort,
                                 params.threadMetadata(), transcript);
+                    } catch (io.github.niwantha33.zew.core.OpenOcdThreadCheck.MetadataMismatchException mismatch) {
+                        // Preserve the complete target bytes once, in the console.
+                        // Do not repeat a long binary table in Eclipse's error dialog.
+                        info.println("Thread metadata readback evidence: " + mismatch.getMessage());
+                        throw failure(mismatch.summary(), mismatch);
                     } catch (IOException error) {
                         info.println("Thread metadata verification failed: " + error.getMessage());
                         throw error;
