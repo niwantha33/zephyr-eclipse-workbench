@@ -25,10 +25,18 @@ public final class ZephyrProfileToolbarSmoke {
         try (var stream = extension.openStream()) {
             xml = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
         }
-        if (!xml.contains("class=\"io.github.niwantha33.zew.ui.ZephyrProfileToolbarContribution\"")
-                || !xml.contains("commandId=\"org.eclipse.ui.project.buildProject\"")
-                || !xml.contains("commandId=\"io.github.niwantha33.zew.flash\"")) {
-            throw new IllegalStateException("Profile selector or standard Build/Flash toolbar commands missing.");
+        int toolbarStart = xml.indexOf("<toolbar id=\"io.github.niwantha33.zew.ui.buildAndFlash\">");
+        int toolbarEnd = xml.indexOf("</toolbar>", toolbarStart);
+        if (toolbarStart < 0 || toolbarEnd < 0)
+            throw new IllegalStateException("Zephyr main-toolbar contribution is missing.");
+        String toolbarXml = xml.substring(toolbarStart, toolbarEnd);
+        if (!toolbarXml.contains("class=\"io.github.niwantha33.zew.ui.ZephyrProfileToolbarContribution\"")
+                || !toolbarXml.contains("commandId=\"org.eclipse.ui.project.buildProject\"")
+                || !toolbarXml.contains("commandId=\"io.github.niwantha33.zew.flash\"")
+                || !toolbarXml.contains("commandId=\"io.github.niwantha33.zew.debug\"")
+                || !toolbarXml.contains("icon=\"icons/debug.png\"")
+                || bundle.getEntry("icons/debug.png") == null) {
+            throw new IllegalStateException("Profile selector, Build/Flash/Debug commands or Debug icon are missing from the installed toolbar.");
         }
 
         var type = bundle.loadClass("io.github.niwantha33.zew.ui.ZephyrProfileToolbarContribution");
@@ -44,7 +52,7 @@ public final class ZephyrProfileToolbarSmoke {
                 throw new IllegalStateException("Selected profile is not identifiable in the toolbar.");
             if ((toolbar.getItem(0).getStyle() & SWT.DROP_DOWN) == 0)
                 throw new IllegalStateException("Quick selector does not expose a dropdown menu.");
-            System.out.println("PASS PROFILE INSTALLED UI: native profile dropdown and original actions registered");
+            System.out.println("PASS PROFILE INSTALLED UI: native profile dropdown and Build/Flash/Debug actions registered");
         } finally {
             testHost.dispose();
         }
