@@ -25,6 +25,8 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.TableItem;
+import org.eclipse.swt.widgets.TabFolder;
+import org.eclipse.swt.widgets.TabItem;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ProcessRunner;
@@ -52,6 +54,7 @@ public final class ZephyrContentionView extends ViewPart {
     private Text threshold;
     private Label status, priorities, incomplete, disclaimer;
     private Table table;
+    private Table objectTable;
 
     @Override public void createPartControl(Composite parent) {
         GridLayout layout = new GridLayout(1, false);
@@ -99,10 +102,14 @@ public final class ZephyrContentionView extends ViewPart {
         incomplete.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         showIncomplete(false);
 
-        table = new Table(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.V_SCROLL | SWT.H_SCROLL);
+        TabFolder tabs = new TabFolder(parent, SWT.NONE);
+        tabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        TabItem findingsTab = new TabItem(tabs, SWT.NONE);
+        findingsTab.setText("Blocking findings");
+        table = new Table(tabs, SWT.BORDER | SWT.FULL_SELECTION | SWT.V_SCROLL | SWT.H_SCROLL);
+        findingsTab.setControl(table);
         table.setHeaderVisible(true);
         table.setLinesVisible(true);
-        table.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         String[] columns = { "Kind", "Object", "Waiter", "Holder", "Duration (us)", "Explanation" };
         int[] widths = { 115, 210, 140, 140, 150, 510 };
         for (int i = 0; i < columns.length; i++) {
@@ -111,7 +118,25 @@ public final class ZephyrContentionView extends ViewPart {
             column.setWidth(widths[i]);
         }
         table.setVisible(false);
-        // Creating or showing the view never reads CTF, starts a Job, or polls a target.
+
+        TabItem objectsTab = new TabItem(tabs, SWT.NONE);
+        objectsTab.setText("Synchronization objects");
+        objectTable = new Table(tabs, SWT.BORDER | SWT.FULL_SELECTION | SWT.V_SCROLL | SWT.H_SCROLL);
+        objectsTab.setControl(objectTable);
+        objectTable.setHeaderVisible(true);
+        objectTable.setLinesVisible(true);
+        String[] objectColumns = { "Type", "Object", "Takes/Gets", "Gives/Puts",
+                "Failures", "Blocking", "Paired blocks", "Longest block (us)",
+                "Long blocks", "Unpaired blocks" };
+        int[] objectWidths = { 130, 245, 110, 110, 90, 95, 115, 155, 100, 120 };
+        for (int i = 0; i < objectColumns.length; i++) {
+            TableColumn column = new TableColumn(objectTable, SWT.LEFT);
+            column.setText(objectColumns[i]);
+            column.setWidth(objectWidths[i]);
+        }
+        objectTable.setVisible(false);
+        // No queue fill level, capacity, gate ownership or live debug state is inferred.
+        // Creating/showing the view never reads CTF, starts a Job or polls a target.
     }
 
     /** Project context is provided explicitly by the Zephyr menu command. */
@@ -153,6 +178,9 @@ public final class ZephyrContentionView extends ViewPart {
             if (loadJob != null) loadJob.cancel();
             displayed = null;
             if (table != null && !table.isDisposed()) { table.removeAll(); table.setVisible(false); }
+            if (objectTable != null && !objectTable.isDisposed()) {
+                objectTable.removeAll(); objectTable.setVisible(false);
+            }
             if (status != null && !status.isDisposed())
                 status.setText("Enter a valid nonnegative threshold in microseconds.");
             return;
@@ -165,6 +193,8 @@ public final class ZephyrContentionView extends ViewPart {
             status.setText("Zephyr Contention Report view is disabled in Zephyr Workbench preferences.");
             table.removeAll();
             table.setVisible(false);
+            objectTable.removeAll();
+            objectTable.setVisible(false);
             return;
         }
         Long thresholdUs = currentThreshold();
@@ -194,6 +224,8 @@ public final class ZephyrContentionView extends ViewPart {
         displayed = null;
         table.removeAll();
         table.setVisible(false);
+        objectTable.removeAll();
+        objectTable.setVisible(false);
         priorities.setText("");
         showIncomplete(false);
         status.setText("Reading saved CTF resource events with offline Python...");
@@ -232,6 +264,8 @@ public final class ZephyrContentionView extends ViewPart {
         displayed = report;
         table.removeAll();
         table.setVisible(false);
+        objectTable.removeAll();
+        objectTable.setVisible(false);
         priorities.setText("");
         showIncomplete(report != null && report.incomplete());
         if (report == null) {
@@ -250,13 +284,36 @@ public final class ZephyrContentionView extends ViewPart {
             }
         } finally { table.setRedraw(true); }
         table.setVisible(!model.rows().isEmpty());
-        if (model.rows().isEmpty()) status.setText(OfflineTraceViewModels.CONTENTION_EMPTY
-                + " Saved CTF: " + report.trace());
-        else status.setText("Observed patterns: " + model.rows().size()
+        objectTable.setRedraw(false);
+        try {
+            for (var observed : report.objects()) {
+                TableItem row = new TableItem(objectTable, SWT.NONE);
+                String longest = observed.maxBlockedNs() == null ? "unknown"
+                        : formatMicroseconds(observed.maxBlockedNs());
+                row.setText(new String[] { observed.kind(), observed.object(),
+                        Integer.toString(observed.takeGet()), Integer.toString(observed.givePut()),
+                        Integer.toString(observed.failures()),
+                        Integer.toString(observed.blockingEvents()),
+                        Integer.toString(observed.pairedBlocks()), longest,
+                        Integer.toString(observed.longBlocks()),
+                        Integer.toString(observed.unpairedBlocks()) });
+            }
+        } finally { objectTable.setRedraw(true); }
+        objectTable.setVisible(!report.objects().isEmpty());
+        if (model.rows().isEmpty() && report.objects().isEmpty())
+            status.setText(OfflineTraceViewModels.CONTENTION_EMPTY
+                    + " No identified synchronization objects. Saved CTF: " + report.trace());
+        else status.setText("Observed blocking patterns: " + model.rows().size()
+                + " | Synchronization objects: " + report.objects().size()
+                + " | Unattributed events: " + report.unattributedEvents()
                 + " | Threshold: " + report.thresholdUs() + " us"
                 + " | Saved CTF: " + report.trace() + " | Selected build: " + report.build());
         if (report.incomplete()) status.setText(status.getText() + " | Trace incomplete.");
         table.getParent().layout(true, true);
+    }
+
+    private static String formatMicroseconds(long ns) {
+        return (ns / 1000) + "." + String.format(java.util.Locale.ROOT, "%03d", ns % 1000);
     }
 
     private void showIncomplete(boolean visible) {
