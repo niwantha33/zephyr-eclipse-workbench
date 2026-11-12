@@ -47,6 +47,42 @@ with no conflicting take or intervening release. Semaphore holder
 identity is not inferred. If unproven, the Holder column stays blank and
 the explanation says **holder unknown**.
 
+## Synchronization objects (saved CTF, offline)
+
+The **Synchronization objects** tab uses the same selected trace, build and
+threshold as the **Blocking findings** tab. It adds per-object **observed**
+mutex, semaphore and Zephyr message-queue activity:
+
+- **Takes/Gets**: successful mutex locks, semaphore takes and message-queue
+  gets with explicit success evidence.
+- **Gives/Puts**: observed mutex unlocks and semaphore gives, plus message-queue
+  puts (including put-front) with explicit successful returns.
+- **Failures**: only explicitly non-zero returned status codes.
+- **Blocking / Paired blocks**: observed blocking events and those whose
+  BLOCKING-to-exit interval has matching object, operation and observed thread
+  identity. **Longest block** is unknown without a completed pair.
+- **Long blocks**: pairs with a duration strictly greater than the selected
+  threshold; **Unpaired blocks**: blocking events without a proven paired exit.
+  An unpaired block does **not** imply a task is still blocked.
+
+This is an offline *operation-history* summary, not a live snapshot. The CTF
+record includes an object ID but generally not a friendly object name; IDs are
+labelled as such. Object IDs can be reused, and an observed operation count is
+not a lifetime count. No message-queue occupancy/size, throughput, starvation,
+deadlock, FIFO ordering or queue residence time is inferred from the available
+events. Thread identities must be explicit or established by same-stream
+scheduler evidence for wait pairing; otherwise blocking is shown as unpaired.
+
+### Gate / critical-section coverage
+
+TI-RTOS GateMutex maps conceptually to a mutex, but GateHwi, GateSwi and
+interrupt-mask critical sections do **not** appear as native Zephyr CTF
+mutex/semaphore/queue events. Do not display fictional gate ownership. A
+future explicit instrumentation adapter may cover critical-section entry,
+exit and duration when the application provides real evidence. Likewise,
+`k_fifo`, `k_lifo`, generic `k_queue`, and work queues have different
+semantics and are not claimed as message-queue coverage.
+
 ## Evidence limitations
 
 Stock Zephyr CTF commonly includes resource IDs rather than human-readable
