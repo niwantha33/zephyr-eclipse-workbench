@@ -12,7 +12,8 @@ Dated reports are historical snapshots, not statements of current support.
 2. **First build:** [Beginner setup](BEGINNER_SETUP.md) — create a workspace and compile the first application; then follow the [project workflow](ONE_CLICK_WORKFLOW.md).
 3. **Hardware Studio:** [Visual Hardware Studio](VISUAL_HARDWARE_STUDIO.md) — explore built Devicetree nodes, controllers and logical pin routes.
 4. **Debug:** [Registers and thread diagnostics](DEBUG_REGISTERS_AND_THREADS.md) — use compatible OpenOCD/CDT/GDB and inspect an exact matching SVD.
-5. **Evidence CLI:** [CLI reference](CLI_REFERENCE.md) — collect and compare build snapshots and inspect offline bundles.
+5. **Official references:** [Zephyr APIs, Devicetree bindings and manufacturer documentation](OFFICIAL_REFERENCES.md) — read-only documentation navigation across all boards.
+6. **Evidence CLI:** [CLI reference](CLI_REFERENCE.md) — collect and compare build snapshots and inspect offline bundles.
 
 ## Configuration
 
