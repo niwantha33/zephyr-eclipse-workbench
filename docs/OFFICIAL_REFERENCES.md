@@ -21,9 +21,14 @@ latest Zephyr board guide. The latest board guide can differ from the local
 checkout. The TRM applies to the family; check your exact silicon variant,
 package, errata and document revision before using register descriptions.
 
-Unknown boards intentionally show only generic Zephyr references. This is not a
-claim that other manufacturers lack documentation. Add another vendor/board only
-after verifying official sources and checking exact target identifiers.
+Every board and SoC receives generic Zephyr references and a curated set of
+**manufacturer documentation portals** spanning TI, ST, Nordic, Espressif, NXP,
+Renesas, Microchip, Silicon Labs, Raspberry Pi, Analog Devices and Infineon.
+The operator selects the exact part/revision within the official manufacturer
+site. These portals are vendor-neutral navigation, not automatic target matching.
+This makes documentation navigation useful across all device selections without
+fabricating an exact TRM association. Unknown boards do **not** receive an
+unverified part-specific TRM. Add exact links only after validating the target.
 
 This is documentation navigation, **not** a source of evidence for enabled drivers,
 runtime register contents, GPIO pinouts or firmware identity.
