@@ -72,6 +72,36 @@ public final class ZephyrReferenceCatalog {
         result.add(new Link("Supported boards", "Zephyr", base + "boards/index.html",
                 qualification));
 
+        // Manufacturer documentation portals apply to every project, regardless
+        // of whether the selected board belongs to a recognised vendor. They
+        // are navigation indexes, NEVER exact-part TRM matches.
+        String portalNote = "Manufacturer reference portal; choose the exact part, silicon revision, and board";
+        result.add(new Link("TI device technical documents", "Manufacturer portal",
+                "https://www.ti.com/microcontrollers-mcus-processors/microcontrollers/overview.html", portalNote));
+        result.add(new Link("STMicroelectronics MCU documentation", "Manufacturer portal",
+                "https://www.st.com/en/microcontrollers-microprocessors/documentation.html", portalNote));
+        result.add(new Link("Nordic Semiconductor documentation", "Manufacturer portal",
+                "https://docs.nordicsemi.com/", portalNote));
+        result.add(new Link("Espressif hardware technical documents", "Manufacturer portal",
+                "https://www.espressif.com/en/support/documents/technical-documents", portalNote));
+        result.add(new Link("NXP MCUXpresso documentation", "Manufacturer portal",
+                "https://mcuxpresso.nxp.com/docs", portalNote));
+        result.add(new Link("Renesas official documentation", "Manufacturer portal",
+                "https://www.renesas.com/en/document-search", portalNote));
+        result.add(new Link("Microchip onlinedocs", "Manufacturer portal",
+                "https://onlinedocs.microchip.com/", portalNote));
+        result.add(new Link("Silicon Labs documentation", "Manufacturer portal",
+                "https://docs.silabs.com/", portalNote));
+        result.add(new Link("Raspberry Pi microcontroller documentation", "Manufacturer portal",
+                "https://www.raspberrypi.com/documentation/microcontrollers/", portalNote));
+        result.add(new Link("Analog Devices technical documents", "Manufacturer portal",
+                "https://www.analog.com/en/resources/technical-documentation.html", portalNote));
+        result.add(new Link("Infineon documentation", "Manufacturer portal",
+                "https://www.infineon.com/", portalNote));
+        result.add(new Link("Other manufacturer / unsupported catalogue", "Manufacturer portal",
+                "https://docs.zephyrproject.org/latest/boards/index.html",
+                "Browse the official Zephyr board index; vendor-specific TRM is not resolved"));
+
         // Exact board-family mappings only. Unknown targets do not inherit a
         // superficially similar chip's TRM, schematic or board documentation.
         String board = exactBoardTarget == null ? "" : exactBoardTarget.strip();
