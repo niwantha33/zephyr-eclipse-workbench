@@ -87,7 +87,7 @@ public final class ZephyrReferenceCatalog {
         result.add(new Link("NXP MCUXpresso documentation", "Manufacturer portal",
                 "https://mcuxpresso.nxp.com/docs", portalNote));
         result.add(new Link("Renesas official documentation", "Manufacturer portal",
-                "https://www.renesas.com/en/document-search", portalNote));
+                "https://www.renesas.com/en/support/document-search", portalNote));
         result.add(new Link("Microchip onlinedocs", "Manufacturer portal",
                 "https://onlinedocs.microchip.com/", portalNote));
         result.add(new Link("Silicon Labs documentation", "Manufacturer portal",
@@ -95,7 +95,7 @@ public final class ZephyrReferenceCatalog {
         result.add(new Link("Raspberry Pi microcontroller documentation", "Manufacturer portal",
                 "https://www.raspberrypi.com/documentation/microcontrollers/", portalNote));
         result.add(new Link("Analog Devices technical documents", "Manufacturer portal",
-                "https://www.analog.com/en/resources/technical-documentation.html", portalNote));
+                "https://www.analog.com/en/resources.html", portalNote));
         result.add(new Link("Infineon documentation", "Manufacturer portal",
                 "https://www.infineon.com/", portalNote));
         result.add(new Link("Other manufacturer / unsupported catalogue", "Manufacturer portal",
