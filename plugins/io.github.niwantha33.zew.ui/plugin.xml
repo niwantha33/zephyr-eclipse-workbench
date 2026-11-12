@@ -244,6 +244,7 @@
     <command id="io.github.niwantha33.zew.coredumpInvestigation" name="Investigate Saved Binary Core Dump" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugserver" name="Start Debug Server" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debug" name="Debug Application" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.attach" name="Attach Without Flashing" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.flashDebug" name="Flash and Debug Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.flash" name="Flash Application" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.run" name="Run in Emulator" categoryId="io.github.niwantha33.zew.commands"/>
@@ -300,6 +301,7 @@
     <handler commandId="io.github.niwantha33.zew.coredumpInvestigation" class="io.github.niwantha33.zew.ui.CoredumpInvestigationHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugserver" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.debug" class="io.github.niwantha33.zew.ui.ZephyrDebugHandler"/>
+    <handler commandId="io.github.niwantha33.zew.attach" class="io.github.niwantha33.zew.ui.ZephyrDebugHandler"/>
     <handler commandId="io.github.niwantha33.zew.flashDebug" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.flash" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
     <handler commandId="io.github.niwantha33.zew.run" class="io.github.niwantha33.zew.ui.ProjectActionHandler"/>
@@ -355,7 +357,8 @@
           <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
           <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
           <command commandId="io.github.niwantha33.zew.flashDebug" label="Flash and Debug Application..." style="push"/>
-          <command commandId="io.github.niwantha33.zew.debug" label="Debug Application..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.debug" label="Debug Application (Flash and Debug)..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.attach" label="Attach Without Flashing (Advanced)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.debugserver" label="Start Debug Server..." style="push"/>
           <command commandId="io.github.niwantha33.zew.debugTools" label="Manage Shared OpenOCD Debug Tools..." style="push"/>
         </menu>
@@ -416,9 +419,6 @@
             class="io.github.niwantha33.zew.ui.ZephyrProfileToolbarContribution"/>
         <command commandId="io.github.niwantha33.zew.flash" icon="icons/flash.png"
             label="Flash Zephyr firmware" tooltip="Build and flash the selected Zephyr project" style="push"/>
-        <command commandId="io.github.niwantha33.zew.debug" icon="icons/debug.png"
-            label="Debug Zephyr application"
-            tooltip="Build and debug the selected Zephyr project (does not flash)" style="push"/>
       </toolbar>
     </menuContribution>
   </extension>
