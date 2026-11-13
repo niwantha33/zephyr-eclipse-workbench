@@ -24,8 +24,8 @@ final class SavedCtfFilePicker {
     static Path choose(Shell shell) {
         FileDialog dialog = new FileDialog(shell, SWT.OPEN);
         dialog.setText("Open Zephyr CTF: select metadata or channel0_0");
-        dialog.setFilterNames(new String[] { "CTF metadata / channel0_0", "All files" });
-        dialog.setFilterExtensions(new String[] { "metadata;channel0_0", "*" });
+        dialog.setFilterNames(new String[] { "All files (shows extensionless CTF)", "CTF metadata / channel0_0" });
+        dialog.setFilterExtensions(new String[] { "*", "metadata;channel0_0" });
         String selection = dialog.open();
         if (selection == null) return null;
         Path file = Path.of(selection).toAbsolutePath().normalize();
