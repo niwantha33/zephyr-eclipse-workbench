@@ -23,6 +23,7 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.WorkbenchException;
+import org.eclipse.ui.handlers.IHandlerService;
 import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.ProcessRunner;
 
@@ -43,7 +44,7 @@ public final class TraceCompassIntegrationView extends ViewPart {
     private Path savedCapture;
     private Label installation, selection, status;
     private Text standaloneExecutable;
-    private Button nativePerspective, launchStandalone;
+    private Button nativePerspective, installInEclipse, launchStandalone;
     private volatile Job handoff;
     private boolean disposed;
 
@@ -60,9 +61,10 @@ public final class TraceCompassIntegrationView extends ViewPart {
         installation.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         var installedActions = new Composite(parent, SWT.NONE);
         installedActions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        installedActions.setLayout(new GridLayout(3, false));
+        installedActions.setLayout(new GridLayout(2, false));
         nativePerspective = button(installedActions, "Open installed Tracing perspective", this::openPerspective);
         button(installedActions, "Check installation", this::refreshInstallation);
+        installInEclipse = button(installedActions, "Install Trace Compass in Eclipse...", this::openInstallWizard);
         button(installedActions, "Official install / downloads...", () -> {
             if (!Program.launch(DOWNLOADS))
                 status.setText("Could not open the browser. Use Help > Install New Software and enter: " + UPDATE_SITE);
@@ -136,7 +138,37 @@ public final class TraceCompassIntegrationView extends ViewPart {
                 : "Trace Compass Tracing perspective: NOT INSTALLED in this Eclipse. "
                         + "Standalone viewer remains an option.");
         nativePerspective.setEnabled(present);
+        installInEclipse.setEnabled(!present);
         installation.getParent().layout(true, true);
+    }
+
+    /**
+     * Open Eclipse's supported p2 installer. The user explicitly chooses the
+     * Trace Compass feature, approves its licences and authorises changes.
+     * Nothing is installed, downloaded or added to p2 on view creation.
+     * No compile-time dependency on optional Trace Compass bundles.
+     */
+    private void openInstallWizard() {
+        if (installed()) {
+            refreshInstallation();
+            status.setText("Trace Compass Tracing perspective is already installed in this Eclipse.");
+            return;
+        }
+        status.setText("Install New Software: click Add..., set Name = Trace Compass stable "
+                + "and Location = " + UPDATE_SITE + ". Select the Trace Compass feature, "
+                + "review dependencies/licences and restart this Eclipse. "
+                + "Installation is not automatic.");
+        try {
+            IHandlerService service = getSite().getService(IHandlerService.class);
+            if (service == null)
+                throw new IllegalStateException("Eclipse p2 Install New Software command is unavailable");
+            service.executeCommand("org.eclipse.equinox.p2.ui.sdk.install", null);
+            refreshInstallation();
+        } catch (Exception error) {
+            status.setText("Could not open native Eclipse software installer: "
+                    + error.getMessage() + ". Use Help > Install New Software > Add... "
+                    + UPDATE_SITE + ". Never run an unknown external installer.");
+        }
     }
 
     private void openPerspective() {

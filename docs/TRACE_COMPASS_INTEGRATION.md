@@ -16,12 +16,18 @@ Open **Zephyr > Capture & Analyse > Trace Compass Integration...**, or click
   `org.eclipse.linuxtools.tmf.ui.perspective` has actually been installed
   into this Eclipse instance. The workbench switches to Eclipse's normal
   Tracing perspective; it does not silently create a project or import a CTF.
-- **Official install / downloads...** opens the official Trace Compass download
-  page on explicit request. For the in-Eclipse plug-ins use
-  **Help > Install New Software** and enter
-  `https://download.eclipse.org/tracecompass/stable/repository/`.
-  Select a compatible Trace Compass feature and restart Eclipse. The feature
-  is optional and may require Eclipse/Java version compatibility.
+- **Install Trace Compass in Eclipse...** invokes this IDE's native
+  Eclipse p2 **Install New Software** wizard on explicit button click.
+  In that wizard choose **Add...**, enter name `Trace Compass stable`,
+  repository `https://download.eclipse.org/tracecompass/stable/repository/`,
+  select the official **Trace Compass** feature, review all dependencies and
+  licences, finish installation and restart Eclipse. The Workbench does **not**
+  silently download/install a dependency or claim that opening a wizard
+  installed it; the user decides whether to install.
+- **Official install / downloads...** is a separate fallback for a standalone
+  viewer or if native p2 UI is unavailable. For this release, the official
+  Trace Compass 12.1.0 plug-in requires Java 21 or newer; verify compatibility
+  with the installed Eclipse before accepting an installation.
 - **Use latest project capture** locates the newest saved
   `<application>/.zew-traces/trace-*/ctf`, or **Choose saved trace-* folder...**
   accepts an older capture. This step does not touch a probe.
