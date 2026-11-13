@@ -210,13 +210,17 @@ for p in bundles:
             if flash.find("configurationType[@id='io.github.niwantha33.zew.ui.launchType']") is None or flash.find("contextualLaunch/enablement") is None:
                 raise SystemExit('Flash shortcut lacks managed configuration or project enablement')
             toolbar = plugin.findall("./extension[@point='org.eclipse.ui.menus']/menuContribution/toolbar/command")
-            # The standard Eclipse green bug hosts native Debug As and launch history.
-            # Never contribute another Zephyr-only Debug icon to its global toolbar.
+            # Restore one explicit Zephyr Flash-and-Debug icon. The native
+            # Eclipse debug-launch history is separate and remains intact.
             if any(item.attrib.get('commandId') == 'io.github.niwantha33.zew.debug' for item in toolbar):
-                raise SystemExit('Duplicate Debug toolbar button; use Eclipse native Debug')
-            for command in ('org.eclipse.ui.project.buildProject', 'io.github.niwantha33.zew.flash'):
+                raise SystemExit('Duplicate legacy Debug toolbar button present')
+            for command in ('org.eclipse.ui.project.buildProject', 'io.github.niwantha33.zew.flash', 'io.github.niwantha33.zew.flashDebug'):
                 if sum(item.attrib.get('commandId') == command for item in toolbar) != 1:
                     raise SystemExit('Visible Build/Flash command missing or duplicated: ' + command)
+            debug_toolbar = [item for item in toolbar
+                             if item.attrib.get('commandId') == 'io.github.niwantha33.zew.flashDebug']
+            if len(debug_toolbar) != 1 or debug_toolbar[0].attrib.get('icon') != 'icons/debug.png':
+                raise SystemExit('Missing packaged native Debug icon/toolbar command')
             handlers = plugin.findall("./extension[@point='org.eclipse.ui.handlers']/handler")
             for name in ('debug', 'attach'):
                 command = 'io.github.niwantha33.zew.' + name
