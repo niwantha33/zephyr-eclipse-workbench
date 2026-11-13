@@ -156,13 +156,16 @@ public final class UmlClassView extends ViewPart {
 
     private void copyExport() {
         if (!snapshot.available()) return;
-        try (Clipboard clipboard = new Clipboard(getSite().getShell().getDisplay())) {
+        Clipboard clipboard = new Clipboard(getSite().getShell().getDisplay());
+        try {
             clipboard.setContents(new Object[] {UmlClassModel.plantUml(snapshot)},
                     new org.eclipse.swt.dnd.Transfer[] {TextTransfer.getInstance()});
             status.setText("PlantUML text copied from the displayed CDT outline; "
                     + "save it as .puml to render elsewhere.");
         } catch (RuntimeException failure) {
             status.setText("Could not copy PlantUML: " + failure.getClass().getSimpleName());
+        } finally {
+            clipboard.dispose();
         }
     }
 
