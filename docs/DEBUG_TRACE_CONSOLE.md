@@ -102,7 +102,10 @@ Contention, Memory and Tracepoint views, **Open saved CTF trace** now opens
 a native **file** chooser: select either `metadata` or `channel0_0` in
 the `ctf` folder. The view receives the containing directory and verifies
 both required files. **Open latest capture** is still the simpler option
-for the selected application project.
+for the selected application project. The separate Trace Compass handoff
+selects the visible `capture.json` receipt in the parent `trace-*` folder,
+not a hidden directory; it validates the receipt and both CTF files before
+requesting handoff.
 
 Importantly, a visible/saved stream does **not** mean it was decoded. A
 `CTF decoder: not checked` receipt means the Python interpreter used by
