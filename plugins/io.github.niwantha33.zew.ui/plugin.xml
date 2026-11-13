@@ -189,6 +189,10 @@
           name="Zephyr Devicetree Graph Studio"
           class="io.github.niwantha33.zew.ui.DtsGraphView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.umlClasses"
+          name="Zephyr Automatic UML (C/C++)"
+          class="io.github.niwantha33.zew.ui.UmlClassView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.embeddedHubBoards"
           name="EmbeddedHub Board Discovery"
           class="io.github.niwantha33.zew.ui.EmbeddedHubBoardCatalogueView"
@@ -231,6 +235,7 @@
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.embeddedHubBoards" name="Open EmbeddedHub Board Discovery" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.umlClasses" name="Open Automatic UML C/C++ Class Diagram" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.traceConsole" name="Open Debug Trace Console" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.liveTraceStreaming" name="Start Live Trace (not yet available)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.threadTimeline" name="Open Zephyr Thread Timeline" categoryId="io.github.niwantha33.zew.commands"/>
@@ -278,6 +283,7 @@
     <handler commandId="io.github.niwantha33.zew.planProjectUpgrade" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.embeddedHubBoards" class="io.github.niwantha33.zew.ui.EmbeddedHubBoardCatalogueHandler"/>
     <handler commandId="io.github.niwantha33.zew.configurationStudio" class="io.github.niwantha33.zew.ui.ConfigurationStudioHandler"/>
+    <handler commandId="io.github.niwantha33.zew.umlClasses" class="io.github.niwantha33.zew.ui.UmlClassHandler"/>
     <handler commandId="org.eclipse.ui.project.buildProject" class="io.github.niwantha33.zew.ui.ZephyrBuildHandler">
       <activeWhen>
         <with variable="selection">
@@ -345,6 +351,7 @@
           <command commandId="io.github.niwantha33.zew.investigateBuildFailure" label="Investigate Build Failure…" style="push"/>
           <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio..." style="push"/>
           <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
+          <command commandId="io.github.niwantha33.zew.umlClasses" label="Automatic UML (C/C++ Class Diagram)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.build" label="Build Application" style="push"/>
           <command commandId="io.github.niwantha33.zew.rebuild" label="Pristine Rebuild" style="push"/>
           <command commandId="io.github.niwantha33.zew.artifacts" label="Build and Show Firmware..." style="push"/>
