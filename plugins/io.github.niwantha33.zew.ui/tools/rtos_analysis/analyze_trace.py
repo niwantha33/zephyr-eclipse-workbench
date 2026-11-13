@@ -36,13 +36,19 @@ def summarize(records, *, idle_thread_id=None, deadlines_ns=None):
     first = last = None
     for record in records:
         kind = record['kind']
-        if kind in ('discarded_events', 'discarded_packets'):
-            count = record.get('count')
-            if count is None:
-                result['discard_count_unknown'] = True
+        if kind in ('discarded_events', 'discarded_packets', 'ram_buffer_full'):
+            if kind == 'ram_buffer_full':
+                result['buffer_full_reported'] = True
+                result['warnings'].append(
+                    'RAM tracing buffer reported full; lost event count unknown. '
+                    'CPU/timing conclusions withheld.')
             else:
-                key = 'discarded_events_reported' if kind == 'discarded_events' else 'discarded_packets_reported'
-                result[key] += count
+                count = record.get('count')
+                if count is None:
+                    result['discard_count_unknown'] = True
+                else:
+                    key = 'discarded_events_reported' if kind == 'discarded_events' else 'discarded_packets_reported'
+                    result[key] += count
             timing_valid = False
             active = None
             continue
@@ -117,9 +123,15 @@ def decode(ctf):
     """Compatibility entrypoint: the shared normalizer owns CTF decoding."""
     yield from decode_ctf(ctf)
 
-def analyze(ctf, *, idle_thread_id=None, deadlines_ns=None):
+def analyze(ctf, *, idle_thread_id=None, deadlines_ns=None, capture_full=False):
     try:
-        return summarize(decode(ctf), idle_thread_id=idle_thread_id, deadlines_ns=deadlines_ns)
+        records = decode(ctf)
+        if capture_full is True:
+            # While capture is staged, capture.json has not been written yet.
+            # Its target-side full flag is passed explicitly, not inferred.
+            from itertools import chain
+            records = chain(records, ({'kind': 'ram_buffer_full', 'count': None},))
+        return summarize(records, idle_thread_id=idle_thread_id, deadlines_ns=deadlines_ns)
     except ImportError:
         return {'ctf_decode': 'not checked', 'reason': 'Babeltrace 2 Python module bt2 is unavailable. '
                 'Install it for this Python interpreter or validate the CTF in Trace Compass.',
