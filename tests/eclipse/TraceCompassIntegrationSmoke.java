@@ -21,8 +21,14 @@ public final class TraceCompassIntegrationSmoke {
             var perspectiveField = type.getDeclaredField("nativePerspective");
             perspectiveField.setAccessible(true);
             var button = (Button) perspectiveField.get(view);
-            boolean installed = PlatformUI.getWorkbench().getPerspectiveRegistry()
-                    .findPerspectiveWithId("org.eclipse.linuxtools.tmf.ui.perspective") != null;
+            // In Eclipse the perspective alone is insufficient: a usable
+            // CTF reader bundle must also be installed and resolvable.
+            var bridge = org.eclipse.core.runtime.Platform.getBundle(
+                    "io.github.niwantha33.zew.ui").loadClass(
+                    "io.github.niwantha33.zew.ui.TraceCompassNativeBridge");
+            var isInstalled = bridge.getDeclaredMethod("installed");
+            isInstalled.setAccessible(true);
+            boolean installed = Boolean.TRUE.equals(isInstalled.invoke(null));
             if (button.isEnabled() != installed)
                 throw new AssertionError("Tracing perspective must reflect installed plug-ins, "
                         + "not a bundled dependency or an assumed installation");
