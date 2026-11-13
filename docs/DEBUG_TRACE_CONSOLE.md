@@ -71,9 +71,10 @@ profile before capture. Build and deliberately flash the same ELF/image;
 the tool cannot independently prove the flashed firmware equals that ELF.
 The active debug server and the CTF capture command cannot both own the
 XDS110 probe. If the capture fails, inspect the separate *RTOS trace*
-Eclipse Console, not a blank CPU table. The offline decoder requires the
-selected managed Python to provide Babeltrace 2 `bt2`, and CPU percentages
-require complete scheduler evidence. RAM buffer overflow/fullness can
+Eclipse Console, not a blank CPU table. Zephyr 4.4 packed RAM CTF is
+read by the bundled Python-only decoder using saved matching TSDL metadata.
+Other CTF layouts require Babeltrace 2 `bt2`. CPU percentages require
+complete, loss-qualified scheduler evidence. RAM buffer overflow/fullness can
 invalidate proportions; consider shorter captures or a supported larger
 buffer after checking board RAM resources.
 
@@ -123,6 +124,33 @@ and flash that configuration. Overflow compromises completeness; no CPU
 percentage, timing certainty or event-loss count may be inferred from an
 incomplete stream. All these operations stay offline except an explicit
 new capture, which resets/runs/halts the target.
+
+## Bug 11 follow-up — native packed CTF decoder (Zephyr 4.4)
+
+The saved Zephyr 4.4 RAM CTF format is not a normal packetized, clock-declared
+Babeltrace trace. Its `ctf/channel0_0` contains packed records with a 32-bit
+nanosecond timestamp, 16-bit event ID and fields defined by the sibling
+`ctf/metadata`. The timestamp layout was cross-checked against Zephyr 4.4
+`subsys/tracing/ctf/ctf_top.h`.
+
+Workbench now recognizes that exact little-endian layout and decodes it
+**without the external `bt2` module**. The native decoder uses bounded
+metadata/file reads, rejects unknown event IDs and truncation without
+inventing later events, and preserves reported RAM-buffer-full evidence.
+Other CTF layouts continue through Babeltrace if available.
+
+A user-supplied 4,078-byte trace plus matching 29,499-byte metadata was
+reviewed privately and yielded **190 structurally decoded event records**;
+the trace itself is **not** committed to this public repository.
+The backend had reported the RAM buffer full. This proves that event bytes
+can exist even when the installed IDE reports `not checked`; it does not
+qualify a complete CPU percentage, trace-loss count or flashed image match.
+
+New capture output produced with a full-buffer flag is decoded for
+**observed event details only**. CPU and aggregate thread timing are
+withheld until a trace with sufficiently complete evidence is captured.
+An old `report.html` remains a snapshot of its original decoder state;
+reload the saved CTF in an updated native Workbench view.
 
 ## Capture helper import failure (Bug 7)
 
