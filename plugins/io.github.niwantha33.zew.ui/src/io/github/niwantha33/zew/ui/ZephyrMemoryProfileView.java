@@ -168,7 +168,7 @@ public final class ZephyrMemoryProfileView extends ViewPart {
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     temporary = Files.createTempDirectory("zew-memory-profile-");
                     for (String filename : List.of(
-                            "semantic_trace.py", "memory_profiler.py", "memory_profile_report.py")) {
+                            "semantic_trace.py", "zephyr_ctf_binary.py", "memory_profiler.py", "memory_profile_report.py")) {
                         var entry = Activator.getDefault().getBundle()
                                 .getEntry("tools/rtos_analysis/" + filename);
                         if (entry == null) throw new IOException("Bundled trace tool missing: " + filename);
