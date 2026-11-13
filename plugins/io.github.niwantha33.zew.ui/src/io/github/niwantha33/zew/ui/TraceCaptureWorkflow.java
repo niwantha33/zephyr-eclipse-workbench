@@ -78,7 +78,13 @@ final class TraceCaptureWorkflow {
     static Optional<Path> latest(IProject project) throws IOException {
         if (project == null || !project.isAccessible() || project.getLocation() == null)
             return Optional.empty();
-        Path root = project.getLocation().toFile().toPath().resolve(".zew-traces");
+        return latest(project.getLocation().toFile().toPath());
+    }
+
+    /** Pure file-only overload for deterministic, probe-free capture regression tests. */
+    static Optional<Path> latest(Path application) throws IOException {
+        if (application == null) return Optional.empty();
+        Path root = application.resolve(".zew-traces");
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
         Path latest = null;
         FileTime newest = FileTime.fromMillis(0);
