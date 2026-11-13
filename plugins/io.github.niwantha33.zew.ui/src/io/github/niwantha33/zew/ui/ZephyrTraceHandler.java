@@ -74,7 +74,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                         line -> {
                             if (diagnostics.length() < 2048)
                                 diagnostics.append(line, 0, Math.min(line.length(),
-                                        2048 - diagnostics.length())).append('\\n');
+                                        2048 - diagnostics.length())).append('\n');
                         }, ProjectContext.environment(settings)).requireSuccess();
             } catch (Exception error) {
                 String details = diagnostics.toString().strip();
