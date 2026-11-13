@@ -1248,8 +1248,16 @@ public final class EditorSmoke implements IApplication {
                     // Exercise the actual user command. Eclipse may restore an old
                     // perspective memento with legacy placeholders; the command
                     // must repair it by instantiating each view explicitly.
-                    var openHardware = io.github.niwantha33.zew.ui.ZephyrDebugWorkspaceHandler.class
-                            .getDeclaredMethod("open", org.eclipse.ui.IWorkbenchWindow.class);
+                    // The smoke application is a separate OSGi bundle: load
+                    // the handler from its owning plug-in, not from the smoke
+                    // bundle's classloader (which does not import zew.ui internals).
+                    var zewUiBundle = org.eclipse.core.runtime.Platform.getBundle(
+                            "io.github.niwantha33.zew.ui");
+                    check(zewUiBundle != null, "installed Workbench UI bundle is available");
+                    var handlerClass = zewUiBundle.loadClass(
+                            "io.github.niwantha33.zew.ui.ZephyrDebugWorkspaceHandler");
+                    var openHardware = handlerClass.getDeclaredMethod(
+                            "open", org.eclipse.ui.IWorkbenchWindow.class);
                     openHardware.setAccessible(true);
                     openHardware.invoke(null, page.getWorkbenchWindow());
                     for (String id : java.util.List.of(
