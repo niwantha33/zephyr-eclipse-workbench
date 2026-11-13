@@ -1,0 +1,31 @@
+name: Cloud Native Core
+on:
+  pull_request:
+    paths:
+      - 'cloud-native/**'
+      - '.github/workflows/cloud-native.yml'
+  push:
+    branches:
+      - 'feature/cloud-native-architecture-foundation'
+    paths:
+      - 'cloud-native/**'
+      - '.github/workflows/cloud-native.yml'
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated dependencies
+        working-directory: cloud-native
+        run: npm install --no-audit --no-fund --ignore-scripts
+      - name: Compile TypeScript and run Node tests
+        working-directory: cloud-native
+        run: npm test
+      - name: Check C++ agent interface
+        run: c++ -std=c++20 -fsyntax-only -x c++ cloud-native/native/board_agent.hpp
