@@ -20,7 +20,6 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
@@ -128,11 +127,8 @@ public final class ZephyrMemoryProfileView extends ViewPart {
     }
 
     private void chooseTrace() {
-        DirectoryDialog dialog = new DirectoryDialog(getSite().getShell(), SWT.OPEN);
-        dialog.setText("Select a saved Zephyr CTF directory");
-        dialog.setMessage("Choose .zew-traces/trace-*/ctf or the containing trace-* directory.");
-        String path = dialog.open();
-        if (path != null) load(Path.of(path));
+        Path path = SavedCtfFilePicker.choose(getSite().getShell());
+        if (path != null) load(path);
     }
 
     private void load(Path selected) {
@@ -180,8 +176,8 @@ public final class ZephyrMemoryProfileView extends ViewPart {
                             Files.copy(input, temporary.resolve(filename));
                         }
                     }
-                    var command = List.of(settings.getProperty("python"),
-                            temporary.resolve("memory_profile_report.py").toString(),
+                    var command = TracePythonLaunch.command(settings.getProperty("python"),
+                            temporary.resolve("memory_profile_report.py"),
                             "--ctf", ctf.toString());
                     String output = new ProcessRunner().run(command,
                             project.getLocation().toFile().toPath(),
