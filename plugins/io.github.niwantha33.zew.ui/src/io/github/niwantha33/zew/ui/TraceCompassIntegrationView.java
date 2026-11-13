@@ -302,8 +302,30 @@ public final class TraceCompassIntegrationView extends ViewPart {
     private void chooseExecutable() {
         var dialog = new FileDialog(getSite().getShell(), SWT.OPEN);
         dialog.setText("Choose existing Trace Compass standalone executable");
+        dialog.setFilterNames(new String[] { "Applications (*.exe)", "All files" });
+        dialog.setFilterExtensions(new String[] { "*.exe", "*" });
         String chosen = dialog.open();
         if (chosen != null) standaloneExecutable.setText(chosen);
+    }
+
+    /** Prevent a directory/typo being sent to the Python bridge as an executable. */
+    static String standaloneExecutableIssue(String configured) {
+        if (configured == null || configured.isBlank()) return null; // PATH / environment
+        final Path candidate;
+        try {
+            candidate = Path.of(configured.strip());
+        } catch (java.nio.file.InvalidPathException invalid) {
+            return "Invalid standalone executable path. Browse to tracecompass.exe.";
+        }
+        if (Files.isDirectory(candidate))
+            return "Selected path is a FOLDER, not an executable. "
+                    + "Use 'Open CTF in installed Trace Compass' above; "
+                    + "standalone mode requires an actual tracecompass.exe file.";
+        if (!Files.isRegularFile(candidate, java.nio.file.LinkOption.NOFOLLOW_LINKS))
+            return "Standalone executable does not exist: " + candidate
+                    + ". Use the installed Trace Compass button above, "
+                    + "or Browse to the actual tracecompass.exe.";
+        return null;
     }
 
     private void openStandalone() {
@@ -319,6 +341,11 @@ public final class TraceCompassIntegrationView extends ViewPart {
             return;
         }
         final String executable = standaloneExecutable.getText().strip();
+        String executableIssue = standaloneExecutableIssue(executable);
+        if (executableIssue != null) {
+            status.setText(executableIssue);
+            return; // no Python job, no misleading tool exit code 3
+        }
         final java.util.Properties settings;
         try {
             settings = ProjectContext.settings(selected);
