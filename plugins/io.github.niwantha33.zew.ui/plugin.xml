@@ -321,6 +321,11 @@
     <handler commandId="io.github.niwantha33.zew.cancel" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
   </extension>
   <extension point="org.eclipse.ui.menus">
+    <menuContribution locationURI="popup:org.eclipse.debug.ui.ExpressionView?after=additions">
+      <command commandId="io.github.niwantha33.zew.debugExpressionProbe"
+               label="Zephyr: Inspect Expression Memory Address..."
+               style="push"/>
+    </menuContribution>
     <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
       <menu id="io.github.niwantha33.zew.menu" label="Zephyr">
         <command commandId="io.github.niwantha33.zew.quickStart" label="Start Here — Create Zephyr Project..." style="push"/>
