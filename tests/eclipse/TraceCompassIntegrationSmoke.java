@@ -38,6 +38,16 @@ public final class TraceCompassIntegrationSmoke {
                     java.nio.file.Path.class, org.eclipse.swt.widgets.Shell.class);
             if (!java.lang.reflect.Modifier.isStatic(traceOpen.getModifiers()))
                 throw new AssertionError("Direct installed Trace Compass CTF opener missing");
+            // The CTF reader expects the directory, not its metadata file.
+            // A previous implementation sent metadata and never opened the trace.
+            var traceArgument = bridge.getDeclaredMethod("traceDirectoryArgument",
+                    java.nio.file.Path.class);
+            traceArgument.setAccessible(true);
+            var exampleCtf = java.nio.file.Path.of("trace-123", "ctf");
+            var resolved = (String) traceArgument.invoke(null, exampleCtf);
+            if (!resolved.equals(exampleCtf.toAbsolutePath().normalize().toString())
+                    || resolved.endsWith("metadata"))
+                throw new AssertionError("Native Trace Compass must receive the CTF directory");
             // Passive smoke never calls open: that would link into the workspace.
 
             if (button.isEnabled() != installed)
