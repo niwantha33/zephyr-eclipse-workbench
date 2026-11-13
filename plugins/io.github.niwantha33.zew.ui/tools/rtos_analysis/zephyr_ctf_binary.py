@@ -144,7 +144,10 @@ def decode_packed(path: Path):
                 value = struct.unpack_from(fmt, payload)[0]
             values[label] = value
         if last is not None and ts < last:
-            # 32-bit nanosecond rollover; preserve ordering only.
+            # A backwards clock jump is NOT automatically a 32-bit wrap.
+            # Accept only the signature of an actual near-boundary rollover.
+            if last < 0xF0000000 or ts > 0x0FFFFFFF:
+                raise ValueError('Nonmonotonic CTF timestamp without proven 32-bit wrap')
             wrap += 1 << 32
         last = ts
         total += 1
