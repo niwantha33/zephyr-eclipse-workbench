@@ -98,6 +98,8 @@ class ThreadTimelineTests(unittest.TestCase):
         self.assertEqual(actual.intervals, [])
         self.assertEqual(actual.scheduler_events, 0)
         self.assertIn("likely not enabled", actual.detail)
+        self.assertEqual(actual.total_events, 2)
+        self.assertEqual([e.event_name for e in actual.observed_events], ["isr_enter", "isr_exit"])
 
     def test_incomplete_semantic_input_and_unknown_counter_propagate(self):
         events = [SemanticEvent(10, EventKind.THREAD_SWITCHED_IN, "worker", "2",
@@ -125,7 +127,7 @@ class ThreadTimelineTests(unittest.TestCase):
         self.assertEqual([r for r in actual.intervals if r.state == "ISR"],
                          [timeline.Interval(2, 5, "", "", "ISR")])
 
-    def test_v2_header_keeps_full_raw_trace_range_even_with_unpaired_edges(self):
+    def test_v3_header_keeps_raw_trace_range_and_observed_events(self):
         result = timeline.timeline_from_events([
             raw("thread_name_set", 5, "a"),
             raw("thread_switched_in", 20, "a"),
@@ -136,9 +138,11 @@ class ThreadTimelineTests(unittest.TestCase):
         self.assertEqual([(x.start_ns, x.end_ns) for x in result.intervals],
                          [(20, 30)])
         header = timeline.serialize(result).splitlines()[0].split("\t")
-        self.assertEqual(header[1], "2")
-        self.assertEqual(header[-2:], ["5", "50"])
-        self.assertEqual(len(header), 9)
+        self.assertEqual(header[1], "3")
+        self.assertEqual(header[7:9], ["5", "50"])
+        self.assertEqual(header[9:], ["4", "4"])
+        self.assertEqual(len(header), 11)
+        self.assertEqual(len(result.observed_events), 4)
 
     def test_cross_stream_switches_never_pair(self):
         actual = timeline.timeline_from_events([
