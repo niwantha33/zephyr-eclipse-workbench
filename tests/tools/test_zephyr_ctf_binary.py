@@ -123,6 +123,14 @@ class PackedCtfTests(unittest.TestCase):
         self.assertEqual([e['timestamp_ns'] for e in events],
                          [0xFFFFFFF0, (1 << 32) + 0x10])
 
+    def test_backwards_timestamp_without_wrap_is_rejected(self):
+        (self.ctf / 'channel0_0').write_bytes(
+            raw_event(300, 0x1B) + raw_event(200, 0x1B))
+        semantic = SemanticTraceParser().parse(self.ctf)
+        self.assertTrue(semantic.incomplete)
+        self.assertEqual(len(semantic.events), 1)
+        self.assertIn('Nonmonotonic CTF timestamp', semantic.error)
+
     def test_unrecognized_or_truncated_stream_never_guesses_past_error(self):
         for payload, message in (
             (raw_event(100, 0x1B) + raw_event(200, 0xFFFF), 'Unknown Zephyr CTF'),
