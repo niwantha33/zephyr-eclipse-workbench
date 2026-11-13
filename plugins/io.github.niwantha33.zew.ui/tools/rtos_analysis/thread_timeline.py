@@ -23,6 +23,7 @@ THREAD_STATES = {
     EventKind.THREAD_SLEEPING: "Sleeping",
 }
 MAX_ROWS = 10000
+MAX_OBSERVED_EVENTS = 1024  # bounded UI preview; complete counts remain visible
 EMPTY_MESSAGE = "No scheduler events found. Scheduler tracing was likely not enabled in the Zephyr build."
 INCOMPLETE_BANNER = "This trace is incomplete. Events after the truncation point are missing."
 
@@ -41,6 +42,15 @@ class Interval:
         return f"{ns // 1000}.{ns % 1000:03d}"
 
 
+@dataclass(frozen=True)
+class ObservedEvent:
+    timestamp_ns: int | None
+    event_name: str
+    thread_name: str
+    thread_id: str
+    kind: str
+
+
 @dataclass
 class Timeline:
     intervals: list[Interval] = field(default_factory=list)
@@ -51,6 +61,8 @@ class Timeline:
     decoder_unavailable: bool = False
     trace_start_ns: int | None = None
     trace_end_ns: int | None = None
+    total_events: int = 0
+    observed_events: list[ObservedEvent] = field(default_factory=list)
 
 
 def build_intervals(trace: SemanticTrace) -> Timeline:
@@ -64,6 +76,16 @@ def build_intervals(trace: SemanticTrace) -> Timeline:
     """
     result = Timeline(incomplete=trace.incomplete, unknown_events=trace.unknown_count,
                       detail=trace.error, decoder_unavailable=trace.decoder_unavailable)
+    # Every decoded record is a useful observation, including non-scheduler
+    # events and unpaired transitions. Never hide them because CPU metrics
+    # or matched timeline intervals are unavailable.
+    result.total_events = len(trace.events)
+    result.observed_events = [
+        ObservedEvent(event.timestamp_ns, event.raw_event_name[:120],
+                      event.thread_name[:120], (event.thread_id or '')[:64],
+                      event.kind.value)
+        for event in trace.events[:MAX_OBSERVED_EVENTS]
+    ]
     timestamps = [event.timestamp_ns for event in trace.events if event.timestamp_ns is not None]
     if timestamps:
         # Preserve observed trace bounds independently of complete intervals:
@@ -186,15 +208,21 @@ def _b64(value: str) -> str:
 
 def serialize(result: Timeline) -> str:
     """Versioned UTF-8, tab-separated, base64-escaped names and diagnostics."""
-    lines = ["\t".join(("ZEW_THREAD_TIMELINE", "2", str(int(result.incomplete)),
+    lines = ["\t".join(("ZEW_THREAD_TIMELINE", "3", str(int(result.incomplete)),
                         str(result.unknown_events), str(result.scheduler_events),
                         _b64(result.detail), str(int(result.decoder_unavailable)),
                         "" if result.trace_start_ns is None else str(result.trace_start_ns),
-                        "" if result.trace_end_ns is None else str(result.trace_end_ns)))]
+                        "" if result.trace_end_ns is None else str(result.trace_end_ns),
+                        str(result.total_events), str(len(result.observed_events))))]
     for interval in result.intervals:
         lines.append("\t".join(("I", str(interval.start_ns), str(interval.end_ns),
                                 _b64(interval.thread_name), _b64(interval.priority),
                                 interval.state)))
+    for event in result.observed_events:
+        lines.append("\t".join(("E",
+                        "" if event.timestamp_ns is None else str(event.timestamp_ns),
+                        _b64(event.event_name), _b64(event.thread_name),
+                        _b64(event.thread_id), event.kind)))
     return "\n".join(lines) + "\n"
 
 
