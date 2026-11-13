@@ -81,6 +81,39 @@ This update is **workflow integration**, not continuous live CPU profiling
 and not a proof of probe/trace correctness on real hardware. The analyzer
 retains its prior evidence-only output rules.
 
+## Capture helper import failure (Bug 7)
+
+A previous installed Workbench failed **after opening OpenOCD** with
+`ModuleNotFoundError: No module named 'analyze_trace'` from the staged
+`capture_snapshot.py`. The Python module `analyze_trace.py` belongs to
+the Workbench plug-in, **not** the user's application or Zephyr `prj.conf`.
+Installing `analyze_trace` using pip or changing the firmware is not the
+correct remedy.
+
+The repository has long listed the module among the copy resources; the
+reported failure therefore does **not** establish whether the installed
+plug-in was outdated or the temporary staging/runtime was incomplete.
+The revised capture implementation:
+- Uses one explicit capture-resource manifest and verifies the **installed**
+  OSGi bundle supplies all files, including transitive Python modules.
+- Copies those files to an isolated temporary capture directory and runs the
+  bundled `capture_snapshot.py --help` import preflight using the **managed
+  Python interpreter** before opening an OpenOCD process.
+- Aborts cleanly if imports fail, without target reset or GDB connection.
+  Success confirms package/import readiness, **not** physical trace validity.
+- Keeps the original error in the Eclipse RTOS Trace Console and lets the
+  Eclipse Job report a single failure rather than displaying two modal dialogs.
+- Tests both the isolated Python staging and installed OSGi resources in CI.
+
+To validate on an updated installation: terminate any old Debug/OpenOCD
+session, inspect the **RTOS trace** Console for
+`Verified bundled CTF capture Python imports before connecting to OpenOCD.`
+This is a prerequisite for successful trace capture, **not** proof that the
+running firmware matches the ELF, or that the trace decodes successfully.
+If the failure repeats, report the installed Workbench bundle version,
+the full RTOS trace console output and the Python interpreter configured
+for that application; do not manually patch the temp directory.
+
 ## What works now
 
 | Output | Evidence check | Capture action |
