@@ -54,6 +54,10 @@ class SavedCtfLoadingTests(unittest.TestCase):
                 source = (UI / filename).read_text(encoding="utf-8")
                 self.assertIn("SavedCtfFilePicker.choose(", source)
                 self.assertNotIn("new DirectoryDialog(", source)
+        handoff = (UI / "TraceCompassIntegrationView.java").read_text(encoding="utf-8")
+        self.assertIn('dialog.setFilterExtensions(new String[] { "capture.json", "*" })', handoff)
+        self.assertIn("selectCapture(file.getParent())", handoff)
+        self.assertNotIn("new DirectoryDialog(", handoff)
 
     def test_all_offline_view_launchers_use_safe_ctf_python_bootstrap(self):
         for filename, helper in VIEWS.items():
