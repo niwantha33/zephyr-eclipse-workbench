@@ -8,6 +8,8 @@ into a fresh temp directory, just as the installed OSGi bundle does.
 from __future__ import annotations
 
 import ast
+import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -19,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "plugins/io.github.niwantha33.zew.ui/tools/rtos_analysis"
 HANDLER = ROOT / "plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ZephyrTraceHandler.java"
 BUILD = ROOT / "plugins/io.github.niwantha33.zew.ui/build.properties"
+LAUNCH = ROOT / "plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/TracePythonLaunch.java"
 
 
 def capture_resources():
@@ -44,6 +47,21 @@ def staged_imports(py_file):
     return {name for name in imports if (TOOLS / (name + ".py")).is_file()}
 
 
+def trusted_bootstrap():
+    """Extract the actual Java bootstrap, avoiding an independent test-only copy."""
+    source = LAUNCH.read_text(encoding="utf-8")
+    match = re.search(r"static final String BOOTSTRAP\s*=\s*(.*?)\n\s*private TracePythonLaunch", source, re.S)
+    if match is None:
+        raise AssertionError("Missing trace Python bootstrap")
+    pieces = re.findall(r'"([^"]*)"', match.group(1))
+    if not pieces:
+        raise AssertionError("Cannot extract the actual isolated Python bootstrap")
+    self_code = "".join(json.loads('"' + piece + '"') for piece in pieces)
+    if "sys.path.insert(0,os.path.dirname(source))" not in self_code:
+        raise AssertionError("Trace bootstrap must add only the staged script parent")
+    return self_code
+
+
 class CtfCapturePackagingTests(unittest.TestCase):
     def test_manifest_contains_all_eager_local_module_dependencies(self):
         resources, source = capture_resources()
@@ -66,30 +84,52 @@ class CtfCapturePackagingTests(unittest.TestCase):
             if name not in {path[:-3] for path in resources if path.endswith(".py")}:
                 self.fail("Required local Python module omitted from capture package: " + name)
         self.assertIn("stageCaptureTool(", source)
+        self.assertIn("TracePythonLaunch.command(python, stage.resolve", source)
+        self.assertIn("var command = TracePythonLaunch.command(", source)
+        self.assertEqual(source.count("TracePythonLaunch.command("), 2,
+                         "Preflight and actual GDB capture must use identical Python launch mode")
         self.assertLess(source.index("staging = stageCaptureTool("),
                         source.index("server = builder.start();"),
                         "Python staging validation must happen before OpenOCD opens")
+        launcher = LAUNCH.read_text(encoding="utf-8")
+        for flag in ('command.add("-I")', 'command.add("-c")'):
+            self.assertIn(flag, launcher, "Keep Windows embedded Python isolation")
 
     def test_copied_runtime_imports_without_repo_path(self):
         resources, _ = capture_resources()
-        with tempfile.TemporaryDirectory(prefix="zew-ctf-packaging-") as temp:
-            stage = Path(temp)
+        # In the managed Windows embedded python313._pth distribution, script
+        # sibling modules are NOT on sys.path. -I reproduces the isolation on
+        # ordinary CI CPython, independently of the CI host's platform.
+        with tempfile.TemporaryDirectory(prefix="zew-ctf-packaging-Ω ") as temp:
+            root = Path(temp)
+            stage = root / "trusted trace tool"
+            stage.mkdir()
+            outside = root / "different cwd"
+            outside.mkdir()
             for name in resources:
                 (stage / name).write_bytes((TOOLS / name).read_bytes())
-            cmd = [sys.executable, "-E", str(stage / "capture_snapshot.py"), "--help"]
-            result = subprocess.run(cmd, cwd=stage, text=True, capture_output=True,
+            env = dict(os.environ, PYTHONPATH=str(TOOLS), PYTHONSAFEPATH="1",
+                       PYTHONDONTWRITEBYTECODE="1")
+            script = str(stage / "capture_snapshot.py")
+            direct = subprocess.run([sys.executable, "-I", script, "--help"],
+                                    cwd=outside, env=env, text=True, capture_output=True,
                                     timeout=15, check=False)
+            self.assertNotEqual(direct.returncode, 0,
+                                "Regression fixture must reproduce the embedded Python failure")
+            self.assertIn("No module named 'analyze_trace'", direct.stderr)
+
+            bootstrap = trusted_bootstrap()
+            cmd = [sys.executable, "-I", "-X", "utf8", "-c", bootstrap, script, "--help"]
+            result = subprocess.run(cmd, cwd=outside, env=env, text=True,
+                                    capture_output=True, timeout=15, check=False)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("--build", result.stdout)
 
-            # Reproduce the user's exact failure; ensure the positive result
-            # above is not accidentally importing a repo copy via sys.path.
             (stage / "analyze_trace.py").unlink()
-            negative = subprocess.run(cmd, cwd=stage, text=True, capture_output=True,
-                                      timeout=15, check=False)
-            self.assertNotEqual(negative.returncode, 0)
-            self.assertIn("No module named 'analyze_trace'", negative.stderr)
-
+            missing = subprocess.run(cmd, cwd=outside, env=env, text=True,
+                                     capture_output=True, timeout=15, check=False)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("No module named 'analyze_trace'", missing.stderr)
 
 if __name__ == "__main__":
     unittest.main()
