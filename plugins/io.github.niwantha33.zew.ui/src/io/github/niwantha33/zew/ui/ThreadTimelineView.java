@@ -280,7 +280,7 @@ public final class ThreadTimelineView extends ViewPart {
                 try {
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     temporary = Files.createTempDirectory("zew-thread-timeline-");
-                    for (String name : List.of("semantic_trace.py", "thread_timeline.py")) {
+                    for (String name : List.of("semantic_trace.py", "zephyr_ctf_binary.py", "thread_timeline.py")) {
                         var entry = Activator.getDefault().getBundle()
                                 .getEntry("tools/rtos_analysis/" + name);
                         if (entry == null) throw new IOException("Bundled trace tool missing: " + name);
