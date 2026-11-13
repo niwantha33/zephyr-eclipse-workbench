@@ -35,6 +35,7 @@ sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlTreeProjection.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlFlowGraph.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/DtsGraphModel.java']
+sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/UmlClassModel.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlSourceLoader.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlPythonLaunch.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/YamlBindingIntelligence.java']
@@ -71,6 +72,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'YamlDocumentModelTests'], check=
 subprocess.run([tool('java'), '-cp', str(out), 'YamlTreeProjectionTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'YamlFlowGraphTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DtsGraphModelTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'UmlClassModelTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'YamlSourceLoaderTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'YamlBindingIntelligenceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'YamlHardwareModelTests'], check=True, cwd=root, timeout=90)
