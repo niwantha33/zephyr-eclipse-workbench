@@ -68,7 +68,7 @@ public final class SocRegistersSmoke {
             optionalRoot.setAccessible(true);
             if (optionalRoot.invoke(null, new Object[] {null}) != null
                     || optionalRoot.invoke(null, "") != null
-                    || optionalRoot.invoke(null, "\\u0000") != null)
+                    || optionalRoot.invoke(null, "\0") != null)
                 throw new AssertionError("Invalid optional SVD search root must be ignored");
             var boardField = type.getDeclaredField("selectedBoard");
             boardField.setAccessible(true);
