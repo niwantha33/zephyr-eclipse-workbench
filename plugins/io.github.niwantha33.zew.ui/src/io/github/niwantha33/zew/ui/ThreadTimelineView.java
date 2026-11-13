@@ -22,7 +22,6 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
@@ -190,11 +189,8 @@ public final class ThreadTimelineView extends ViewPart {
     }
 
     private void chooseTrace() {
-        DirectoryDialog dialog = new DirectoryDialog(getSite().getShell(), SWT.OPEN);
-        dialog.setText("Select an existing saved Zephyr CTF directory");
-        dialog.setMessage("Choose .zew-traces/trace-*/ctf or the containing trace-* directory.");
-        String chosen = dialog.open();
-        if (chosen != null) load(Path.of(chosen));
+        Path chosen = SavedCtfFilePicker.choose(getSite().getShell());
+        if (chosen != null) load(chosen);
     }
 
     private void captureNew() {
@@ -292,8 +288,8 @@ public final class ThreadTimelineView extends ViewPart {
                             Files.copy(input, temporary.resolve(name));
                         }
                     }
-                    var command = List.of(settings.getProperty("python"),
-                            temporary.resolve("thread_timeline.py").toString(),
+                    var command = TracePythonLaunch.command(settings.getProperty("python"),
+                            temporary.resolve("thread_timeline.py"),
                             "--ctf", ctf.toString());
                     String output = new ProcessRunner().run(command,
                             project.getLocation().toFile().toPath(),
