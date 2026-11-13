@@ -49,6 +49,25 @@ public final class TraceCompassIntegrationSmoke {
             if (!installButton.getText().contains("Install Trace Compass")
                     || installButton.isEnabled() == installed)
                 throw new AssertionError("Native p2 install must be offered only when Trace Compass is absent");
+            // Regression: the reported C:\\eclipse\\trace-compass path was a
+            // directory, not an executable. Never send it to the Python bridge
+            // and misreport the validated CTF as a viewer failure.
+            var validateStandalone = type.getDeclaredMethod(
+                    "standaloneExecutableIssue", String.class);
+            validateStandalone.setAccessible(true);
+            java.nio.file.Path folder = java.nio.file.Files.createTempDirectory("zew-tc-folder-");
+            try {
+                String issue = (String) validateStandalone.invoke(null, folder.toString());
+                if (issue == null || !issue.contains("FOLDER")
+                        || !issue.contains("Open CTF in installed Trace Compass"))
+                    throw new AssertionError("Standalone folder must be rejected with native installed-viewer guidance");
+                if (validateStandalone.invoke(null, "") != null)
+                    throw new AssertionError("Empty standalone path should preserve PATH/env detection");
+                if (validateStandalone.invoke(null, folder.resolve("missing.exe").toString()) == null)
+                    throw new AssertionError("Missing standalone .exe should be rejected before starting helper");
+            } finally {
+                java.nio.file.Files.deleteIfExists(folder);
+            }
             var nativeFallbackField = type.getDeclaredField("inspectWorkbench");
             nativeFallbackField.setAccessible(true);
             var fallback = (Button) nativeFallbackField.get(view);
