@@ -33,6 +33,19 @@ public final class ZephyrCpuLoadSmoke {
                 && field(view, "loadJob") == null && !banner.isVisible() && !table.isVisible()
                 && status.getText().contains("No trace loaded"),
                 "open without CTF performs no analysis and shows no error");
+        var guided = java.util.Arrays.stream(status.getParent().getChildren())
+                .filter(child -> child instanceof org.eclipse.swt.widgets.Composite)
+                .map(child -> (org.eclipse.swt.widgets.Composite) child)
+                .filter(group -> java.util.Arrays.stream(group.getChildren())
+                        .anyMatch(child -> child instanceof org.eclipse.swt.widgets.Button b
+                                && b.getText().equals("1. Capture new CTF...")))
+                .findFirst().orElseThrow(() -> new AssertionError("Missing guided CTF workflow"));
+        var actions = java.util.Arrays.stream(guided.getChildren())
+                .filter(child -> child instanceof org.eclipse.swt.widgets.Button)
+                .map(child -> ((org.eclipse.swt.widgets.Button) child).getText()).toList();
+        check(actions.contains("2. Open latest capture")
+                && field(view, "loadJob") == null,
+                "CPU Load offers capture/latest actions without starting target operations");
         var bundle = org.eclipse.core.runtime.Platform.getBundle("io.github.niwantha33.zew.ui");
         Class<?> result = bundle.loadClass("io.github.niwantha33.zew.ui.OfflineTraceAnalysisService$CpuLoadResult");
         Class<?> row = bundle.loadClass("io.github.niwantha33.zew.ui.OfflineTraceAnalysisService$CpuThread");
