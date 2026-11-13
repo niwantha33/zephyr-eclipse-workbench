@@ -81,6 +81,49 @@ This update is **workflow integration**, not continuous live CPU profiling
 and not a proof of probe/trace correctness on real hardware. The analyzer
 retains its prior evidence-only output rules.
 
+## Bug 11 — CTF files appear missing in Windows picker
+
+Zephyr CTF is a **directory**, not one file ending in `.ctf`. A saved
+snapshot has this layout:
+
+```text
+<application>/.zew-traces/trace-YYYYMMDD-HHMMSS-NNN/
+  capture.json
+  diagnostics.json
+  report.html
+  ctf/
+    metadata       (extensionless TSDL)
+    channel0_0     (binary CTF stream, extensionless)
+```
+
+The old Windows **Select Folder** dialog hid `metadata` and `channel0_0`
+and displayed an apparently empty directory. In the Timeline, CPU Load,
+Contention, Memory and Tracepoint views, **Open saved CTF trace** now opens
+a native **file** chooser: select either `metadata` or `channel0_0` in
+the `ctf` folder. The view receives the containing directory and verifies
+both required files. **Open latest capture** is still the simpler option
+for the selected application project. The separate Trace Compass handoff
+selects the visible `capture.json` receipt in the parent `trace-*` folder,
+not a hidden directory; it validates the receipt and both CTF files before
+requesting handoff.
+
+Importantly, a visible/saved stream does **not** mean it was decoded. A
+`CTF decoder: not checked` receipt means the Python interpreter used by
+Workbench did not validate it, commonly because the Babeltrace 2 `bt2`
+module is unavailable. The capture itself may still be saved. The offline
+viewers now reuse the safe isolated Python launch method from Bug 10 for
+their bundled sibling helpers; this fixes module lookup under Windows
+embedded `python313._pth`, but does **not** install Babeltrace or claim
+decoding occurred. An actual `bt2` import and decoder validation or
+Trace Compass inspection is still required.
+
+If `capture_full: true`, independently increase the supported RAM trace
+buffer (subject to available MCU memory) or shorten the capture and rebuild
+and flash that configuration. Overflow compromises completeness; no CPU
+percentage, timing certainty or event-loss count may be inferred from an
+incomplete stream. All these operations stay offline except an explicit
+new capture, which resets/runs/halts the target.
+
 ## Capture helper import failure (Bug 7)
 
 A previous installed Workbench failed **after opening OpenOCD** with

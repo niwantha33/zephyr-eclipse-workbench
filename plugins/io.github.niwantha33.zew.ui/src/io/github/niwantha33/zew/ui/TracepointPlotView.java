@@ -21,7 +21,6 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
@@ -133,11 +132,8 @@ public final class TracepointPlotView extends ViewPart {
     }
 
     private void chooseTrace() {
-        DirectoryDialog dialog = new DirectoryDialog(getSite().getShell(), SWT.OPEN);
-        dialog.setText("Select a saved CTF folder");
-        dialog.setMessage("Choose .zew-traces/trace-*/ctf or its containing trace-* directory.");
-        String chosen = dialog.open();
-        if (chosen != null) load(Path.of(chosen));
+        Path chosen = SavedCtfFilePicker.choose(getSite().getShell());
+        if (chosen != null) load(chosen);
     }
 
     private void load(Path chosen) {
@@ -185,8 +181,8 @@ public final class TracepointPlotView extends ViewPart {
                         }
                     }
                     Path root = project.getLocation().toFile().toPath();
-                    var command = List.of(settings.getProperty("python"),
-                            temporary.resolve("tracepoint_samples.py").toString(),
+                    var command = TracePythonLaunch.command(settings.getProperty("python"),
+                            temporary.resolve("tracepoint_samples.py"),
                             "--project", root.toString(), "--ctf", ctf.toString());
                     String output = new ProcessRunner().run(command, root,
                             Duration.ofSeconds(45), monitor::isCanceled,
