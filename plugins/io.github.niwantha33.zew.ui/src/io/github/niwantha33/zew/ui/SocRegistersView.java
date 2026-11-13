@@ -120,7 +120,7 @@ public final class SocRegistersView extends ViewPart {
             String path = dialog.open();
             if (path != null) load(path);
         });
-        button(bar, "Refresh Live Values", this::refresh);
+        button(bar, "Refresh Selected + Watches", this::refresh);
         var options = new Composite(parent, SWT.NONE);
         options.setLayout(new GridLayout(6, false));
         options.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -180,7 +180,19 @@ public final class SocRegistersView extends ViewPart {
             if (item.getData("registers") instanceof java.util.List<?>) populatePeripheral(item);
             else if (item.getData() instanceof Register r) populateFields(item, r);
         });
-        tree.addListener(SWT.Selection, e -> historyChart.redraw());
+        tree.addListener(SWT.Selection, e -> {
+            historyChart.redraw();
+            if (!(e.item instanceof TreeItem item) || !(item.getData() instanceof Register r)) return;
+            if (!r.readable()) {
+                status.setText("Read blocked for " + r.key() + ": " + r.readBlockReason()
+                        + ". The exact device SVD prohibits this read. Select a readable register; "
+                        + "no target memory was accessed.");
+            } else {
+                status.setText("Selected " + r.key() + " at 0x" + r.address().toString(16)
+                        + ". Halt the target, then click Refresh Selected + Watches to read it. "
+                        + "Selection alone never reads hardware.");
+            }
+        });
         tree.addListener(SWT.MouseHover, e -> {
             var item = tree.getItem(new org.eclipse.swt.graphics.Point(e.x, e.y));
             tree.setToolTipText(item == null ? null : (String) item.getData("description"));
@@ -810,7 +822,7 @@ public final class SocRegistersView extends ViewPart {
                     + (history.baseline() == null ? " No baseline pinned."
                             : " Baseline: " + history.baseline().timestamp() + ".")
                     + (liveWatch ? " Halted-only sampled Live Watch; NOT continuous hardware tracing."
-                            : " No automatic polling."));
+                            : " No automatic polling. Not read = no successful snapshot yet; Blocked = unsafe SVD access."));
         } finally { tree.setRedraw(true); }
     }
 
@@ -834,7 +846,7 @@ public final class SocRegistersView extends ViewPart {
                 access += " — CHANGED since pinned snapshot";
             item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(),
                     "0x" + r.address().toString(16),
-                    value == null ? "—" : hex(value, r.size()),
+                    value == null ? (r.readable() ? "Not read" : "Blocked") : hex(value, r.size()),
                     r.reset() == null ? "—" : hex(r.reset(), r.size()), access });
             if (!r.fields().isEmpty()) new TreeItem(item, SWT.NONE).setText("Expand for fields");
         }
@@ -852,7 +864,8 @@ public final class SocRegistersView extends ViewPart {
             var mask = BigInteger.ONE.shiftLeft(f.width()).subtract(BigInteger.ONE);
             field.setText(new String[] { f.name(), "[" + (f.offset() + f.width() - 1)
                     + ":" + f.offset() + "]",
-                    value == null ? "—" : hex(value.shiftRight(f.offset()).and(mask), f.width()),
+                    value == null ? (r.readable() ? "Not read" : "Blocked")
+                            : hex(value.shiftRight(f.offset()).and(mask), f.width()),
                     r.reset() == null ? "—" : hex(r.reset().shiftRight(f.offset()).and(mask), f.width()),
                     f.access() + (f.readAction().isEmpty() ? "" : " / readAction: " + f.readAction()) });
         }
@@ -950,8 +963,24 @@ public final class SocRegistersView extends ViewPart {
         var chosen = selected();
         var targets = device.registers().stream()
                 .filter(r -> watches.contains(r.key()) || r.equals(chosen)).toList();
-        if (targets.isEmpty()) { status.setText("Select a register or add a watch first."); return; }
-        if (targets.size() > 64) { status.setText("Refresh is limited to 64 watches. Remove some watches first."); return; }
+        if (targets.isEmpty()) {
+            status.setText("Select a readable register or add a safe watch first. "
+                    + "The register explorer does not scan the entire chip.");
+            return;
+        }
+        // Do not invoke even the GDB read path when the SVD marks an address unsafe.
+        var readableTargets = targets.stream().filter(Register::readable).toList();
+        if (readableTargets.isEmpty()) {
+            var blocked = targets.get(0);
+            status.setText("No hardware read attempted: " + blocked.key()
+                    + " is blocked by its exact SVD (" + blocked.readBlockReason()
+                    + "). Select a readable register or safe watch.");
+            return;
+        }
+        if (readableTargets.size() > 64) {
+            status.setText("Refresh is limited to 64 readable registers. Remove some watches first.");
+            return;
+        }
         DebugTarget target = debugTarget();
         if (target == null) {
             status.setText(debugResolution + " Select a suspended thread/frame in Debug; "
@@ -964,7 +993,7 @@ public final class SocRegistersView extends ViewPart {
         long request = ++generation;
         status.setText("Resolving suspended GDB frame for read-only register snapshot…");
         try {
-            session.getExecutor().execute(() -> resolveReadFrame(session, target.context(), targets, request));
+            session.getExecutor().execute(() -> resolveReadFrame(session, target.context(), readableTargets, request));
         } catch (RejectedExecutionException ended) {
             finish(request, "Debug session ended before register refresh.");
         }
