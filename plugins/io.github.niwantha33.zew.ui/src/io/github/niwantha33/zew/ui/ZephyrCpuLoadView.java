@@ -63,7 +63,7 @@ public final class ZephyrCpuLoadView extends ViewPart {
         guidance.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         guidance.setText("Build + flash firmware with CONFIG_TRACING, CONFIG_TRACING_CTF "
                 + "and CONFIG_TRACING_BACKEND_RAM enabled. Terminate Debug to release OpenOCD; "
-                + "capture explicitly resets/runs/halts the MCU. Saved CTF analysis needs Babeltrace 2 bt2.");
+                + "capture explicitly resets/runs/halts the MCU. Zephyr 4.4 RAM CTF decodes natively; other formats need bt2.");
         var controls = new Composite(parent, SWT.NONE);
         controls.setLayout(new GridLayout(6, false));
         controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
