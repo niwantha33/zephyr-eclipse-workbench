@@ -20,7 +20,6 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
@@ -154,11 +153,8 @@ public final class ZephyrContentionView extends ViewPart {
     }
 
     private void chooseTrace() {
-        DirectoryDialog dialog = new DirectoryDialog(getSite().getShell(), SWT.OPEN);
-        dialog.setText("Select a saved Zephyr CTF directory");
-        dialog.setMessage("Select .zew-traces/trace-*/ctf or its parent capture directory.");
-        String choice = dialog.open();
-        if (choice != null) load(Path.of(choice));
+        Path choice = SavedCtfFilePicker.choose(getSite().getShell());
+        if (choice != null) load(choice);
     }
 
     private Long currentThreshold() {
