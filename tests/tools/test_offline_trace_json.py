@@ -37,6 +37,26 @@ class OfflineTraceJsonTests(unittest.TestCase):
         self.assertEqual([row["running_ns"] for row in report["cpu"]["rows"]], [5000, 3000])
         self.assertIsNone(report["cpu"]["cpu_busy_percent"])
 
+    def test_atomic_sched_switch_exclusive_cpu_is_measurable(self):
+        # A complete single-stream switch event is an observed boundary,
+        # not an ambiguous second switched_in. No idle identification is made.
+        trace = self.trace(raw("sched_switch", 0, "worker"),
+                           raw("sched_switch", 4000, "idle"),
+                           raw("isr_enter", 6000, None),
+                           raw("isr_exit", 7000, None),
+                           raw("sched_switch", 10000, "worker"),
+                           raw("thread_switched_out", 12000, "worker"))
+        report = cpu_report(trace)
+        self.assertEqual(report["status"], "ok", report["reason"])
+        self.assertEqual(report["cpu"]["unknown_ns"], 0)
+        self.assertEqual(report["cpu"]["isr_ns"], 1000)
+        self.assertEqual({r["name"]: r["running_ns"]
+                          for r in report["cpu"]["rows"]},
+                         {"worker": 6000, "idle": 5000})
+        self.assertEqual(sum(r["running_ns"] for r in report["cpu"]["rows"])
+                         + report["cpu"]["isr_ns"], 12000)
+        self.assertIsNone(report["cpu"]["cpu_busy_percent"])
+
     def test_nested_isr_is_exclusive_across_window_boundaries(self):
         # 0..10us worker, with two nested ISRs occupying 2..5us.
         trace = self.trace(raw("thread_switched_in", 0),
@@ -113,6 +133,33 @@ class OfflineTraceJsonTests(unittest.TestCase):
         trace = self.trace(raw("thread_switched_in", 0), raw("thread_switched_out", 100))
         with self.assertRaises(ValueError):
             cpu_report(trace, 200, 300)
+
+    def test_semaphore_and_queue_activity_requires_observed_results(self):
+        events = [
+            raw("sem_take", 0, "worker", obj="semA"),  # attempt, not success
+            raw("semaphore_take_enter", 1, "worker", obj="semA"),
+            raw("semaphore_take_blocking", 2, "worker", obj="semA"),
+            {**raw("semaphore_take_exit", 100_002, "worker", obj="semA"),
+             "ret": 0},
+            raw("semaphore_give_exit", 100_003, "worker", obj="semA"),
+            raw("msgq_put_enter", 100_010, "worker", obj="queueA"),
+            {**raw("msgq_put_exit", 100_011, "worker", obj="queueA"),
+             "ret": -11},  # proven failure
+            raw("msgq_get_enter", 100_012, "worker", obj="queueA"),
+            {**raw("msgq_get_exit", 100_013, "worker", obj="queueA"),
+             "ret": 0},
+        ]
+        report = contention_report(self.trace(*events), threshold_us=50)
+        objects = {(o["kind"], o["object"]): o for o in report["objects"]}
+        sem = objects[("Semaphore", "object ID semA (name unavailable)")]
+        self.assertEqual((sem["take_get"], sem["give_put"], sem["failures"]),
+                         (1, 1, 0))
+        self.assertEqual((sem["blocking_events"], sem["paired_blocks"],
+                          sem["long_blocks"], sem["max_blocked_ns"]),
+                         (1, 1, 1, 100_000))
+        queue = objects[("Message queue", "object ID queueA (name unavailable)")]
+        self.assertEqual((queue["take_get"], queue["give_put"], queue["failures"]),
+                         (1, 0, 1))
 
     def test_long_wait_survives_without_priorities_or_holder(self):
         trace = self.trace(raw("mutex_lock_enter", 0, "high", obj="lock"),

@@ -66,7 +66,11 @@ def account(records, *, idle_thread_id=None):
         kind = item.kind
         tid = item.thread_id
         if kind == EventKind.THREAD_SWITCHED_IN:
-            if tid is None or irq_depth or active is not None:
+            # A single sched_switch event is an atomic outgoing+incoming
+            # scheduler boundary. It proves the previous running thread
+            # stopped at this timestamp, unlike an unpaired switched_in.
+            atomic_switch = item.raw_event_name.rsplit(":", 1)[-1] == "sched_switch"
+            if tid is None or irq_depth or (active is not None and not atomic_switch):
                 return unknown("ambiguous or overlapping thread switch-in")
             active = str(tid)
             switches += 1

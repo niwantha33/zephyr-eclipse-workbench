@@ -39,6 +39,22 @@ class ThreadTimelineTests(unittest.TestCase):
                          ["0.500", "1.200", "1.200"])
         self.assertFalse(actual.incomplete)
 
+    def test_atomic_sched_switch_closes_previous_observed_thread(self):
+        # One sched_switch names the incoming thread and proves the outgoing
+        # boundary. A different standalone IN still has no such guarantee.
+        observed = timeline.timeline_from_events([
+            raw("sched_switch", 100, "a", "worker_a"),
+            raw("sched_switch", 600, "b", "worker_b"),
+            raw("sched_switch", 1800, "a", "worker_a"),
+        ])
+        self.assertEqual(
+            [(r.start_ns, r.end_ns, r.thread_name, r.state)
+             for r in observed.intervals],
+            [(100, 600, "worker_a", "Running"),
+             (600, 1800, "worker_b", "Running")])
+        self.assertEqual(observed.scheduler_events, 3)
+        self.assertFalse(observed.incomplete)
+
     def test_unknown_gap_is_not_fabricated_running_interval(self):
         actual = timeline.timeline_from_events([
             raw("thread_switched_in", 0, "a"),

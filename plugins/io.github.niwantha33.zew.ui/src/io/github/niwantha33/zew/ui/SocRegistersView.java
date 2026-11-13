@@ -81,6 +81,8 @@ public final class SocRegistersView extends ViewPart {
     private String selectedProjectName;
     private String debugResolution = "No unique active Zephyr debug session.";
     private String selectedBoard;
+    // Exact qualified target derived from the selected build, including board-only targets.
+    private String selectedSvdTarget;
     private String discoveryExplanation = "No exact project / SVD selected.";
     private volatile long discoveryGeneration;
     private final Map<String, BigInteger> values = new HashMap<>();
@@ -282,6 +284,7 @@ public final class SocRegistersView extends ViewPart {
         stopLiveWatch();
         selectedProjectName = project.getName();
         selectedBoard = null;
+        selectedSvdTarget = null;
         discoveryExplanation = "Finding vendor register descriptions for project " + selectedProjectName + "…";
         device = null; svdPath = null; svdIdentity = null;
         values.clear(); errors.clear(); watches.clear(); history.clear();
@@ -306,13 +309,15 @@ public final class SocRegistersView extends ViewPart {
                     Activator.getDefault().getLog().log(new Status(IStatus.INFO, Activator.ID,
                             "SVD target selection: " + target.state() + " — " + target.explanation()));
                     var roots = new ArrayList<Path>();
-                    Path workspace = Path.of(settings.getProperty("workspace"));
+                    Path workspace = optionalRoot(settings.getProperty("workspace"));
                     // Probe focused exact-chip/vendor-pack directories first;
                     // avoid double-scanning all West modules before local packs.
                     roots.add(project.getLocation().toFile().toPath().resolve(".zew/svd"));
-                    Path root = Path.of(settings.getProperty("zew.setupRoot"));
-                    roots.add(root.resolve("vendor-svd"));
-                    roots.add(root.resolve("svd"));
+                    Path root = optionalRoot(settings.getProperty("zew.setupRoot"));
+                    if (root != null) {
+                        roots.add(root.resolve("vendor-svd"));
+                        roots.add(root.resolve("svd"));
+                    }
                     Path userHome = Path.of(System.getProperty("user.home"));
                     roots.add(userHome.resolve(".cmsis/packs"));
                     roots.add(userHome.resolve(".cmsis-packs"));
@@ -336,15 +341,16 @@ public final class SocRegistersView extends ViewPart {
                     roots.add(userHome.resolve(".cache/arm/packs"));
                     roots.add(userHome.resolve("AppData/Local/Espressif"));
                     roots.add(userHome.resolve("esp/esp-idf"));
-                    roots.add(workspace.resolve("modules/hal/espressif"));
-                    roots.add(workspace.resolve("modules/hal/stm32"));
-                    roots.add(workspace.resolve("modules/hal/nordic"));
-                    roots.add(workspace.resolve("modules/hal/ti"));
-
-                    roots.add(userHome.resolve("AppData/Local/Arm/Packs"));
-                    roots.add(workspace.resolve("modules/hal"));
-                    roots.add(workspace.resolve("zephyr"));
-                    roots.add(Path.of(settings.getProperty("tools.sdk")));
+                    if (workspace != null) {
+                        roots.add(workspace.resolve("modules/hal/espressif"));
+                        roots.add(workspace.resolve("modules/hal/stm32"));
+                        roots.add(workspace.resolve("modules/hal/nordic"));
+                        roots.add(workspace.resolve("modules/hal/ti"));
+                        roots.add(workspace.resolve("modules/hal"));
+                        roots.add(workspace.resolve("zephyr"));
+                    }
+                    Path sdk = optionalRoot(settings.getProperty("tools.sdk"));
+                    if (sdk != null) roots.add(sdk);
                     if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win"))
                         roots.add(Path.of("C:/ti"));
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
@@ -367,6 +373,7 @@ public final class SocRegistersView extends ViewPart {
                 if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
                     if (tree.isDisposed() || request != discoveryGeneration) return;
                     selectedBoard = board;
+                    selectedSvdTarget = target.usable() ? target.target() : null;
                     discoveryExplanation = target.explanation();
                     if (result.state() == SvdAutoDiscovery.State.MATCHED) {
                         load(result.path().toString(), result.mappedByPack());
@@ -383,6 +390,19 @@ public final class SocRegistersView extends ViewPart {
         };
         job.setSystem(true);
         job.schedule();
+    }
+
+    /** Optional SDK roots must not prevent discovery in the remaining installed packs. */
+    private static Path optionalRoot(String value) {
+        if (value == null || value.isBlank()) return null;
+        try { return Path.of(value); }
+        catch (java.nio.file.InvalidPathException invalid) { return null; }
+    }
+
+    /** Resolve the actual SoC from generated build evidence for board-only targets. */
+    static String verifiedSvdPart(String board, String target) {
+        String part = SvdAutoDiscovery.partFromBoard(target);
+        return part.isBlank() ? SvdAutoDiscovery.partFromBoard(board) : part;
     }
 
     private String officialSvdPage(String board) {
@@ -679,10 +699,12 @@ public final class SocRegistersView extends ViewPart {
                     if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
                         if (closed || tree.isDisposed() || request != discoveryGeneration) return;
                         if (!exactPackDeviceMapping && board != null && !board.isBlank()
-                                && !SvdPartCompatibility.matches(SvdAutoDiscovery.partFromBoard(board), loaded.name())) {
+                                && !SvdPartCompatibility.matches(verifiedSvdPart(board, selectedSvdTarget), loaded.name())) {
                             status.setText("Rejected SVD model: register definitions are for "
                                     + loaded.name() + ", not the selected "
-                                    + SvdAutoDiscovery.partFromBoard(board)
+                                    + (verifiedSvdPart(board, selectedSvdTarget).isBlank()
+                                            ? "an unverified board-only target"
+                                            : verifiedSvdPart(board, selectedSvdTarget))
                                     + ". Previous definitions were kept; debug session unchanged.");
                             return;
                         }

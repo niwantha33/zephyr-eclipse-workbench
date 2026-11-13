@@ -52,6 +52,24 @@ public final class SocRegistersSmoke {
             if (!register.getText(1).equals("0x40000004") || register.getItemCount() != 1
                     || !register.getItem(0).getText().equals("EN") || !register.getText(3).equals("—"))
                 throw new AssertionError("Lazy register address/field/reset rendering");
+            // Board-only Zephyr projects must use CONFIG_SOC from the
+            // generated build, not reject the correct vendor SVD as unknown.
+            var evidencePart = type.getDeclaredMethod("verifiedSvdPart",
+                    String.class, String.class);
+            evidencePart.setAccessible(true);
+            if (!"nrf52832".equals(evidencePart.invoke(null,
+                    "thingy52", "thingy52/nrf52832"))
+                    || !"mspm0g3507".equals(evidencePart.invoke(null,
+                            "lp_mspm0g3507/mspm0g3507", null))
+                    || !"".equals(evidencePart.invoke(null, "thingy52", null)))
+                throw new AssertionError("SVD model identity must use exact build evidence");
+            // Absent or malformed optional SDK roots cannot break discovery.
+            var optionalRoot = type.getDeclaredMethod("optionalRoot", String.class);
+            optionalRoot.setAccessible(true);
+            if (optionalRoot.invoke(null, new Object[] {null}) != null
+                    || optionalRoot.invoke(null, "") != null
+                    || optionalRoot.invoke(null, "\0") != null)
+                throw new AssertionError("Invalid optional SVD search root must be ignored");
             var boardField = type.getDeclaredField("selectedBoard");
             boardField.setAccessible(true);
             boardField.set(view, "lp_mspm0g3507/mspm0g3507");

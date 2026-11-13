@@ -156,7 +156,8 @@ RESOURCE_EVENT_PHASES = {
     "mutex_lock_exit": "result",
     "mutex_unlock": "released", "mutex_give": "released",
     "mutex_unlock_enter": "release_attempt", "mutex_unlock_exit": "release_result",
-    "semaphore_take": "acquired", "sem_take": "acquired",
+    # Generic aliases have no verified success result. Do not fabricate takes.
+    "semaphore_take": "attempt", "sem_take": "attempt",
     "semaphore_take_enter": "attempt", "semaphore_take_blocking": "blocking",
     "semaphore_take_exit": "result",
     "semaphore_give": "released", "sem_give": "released",

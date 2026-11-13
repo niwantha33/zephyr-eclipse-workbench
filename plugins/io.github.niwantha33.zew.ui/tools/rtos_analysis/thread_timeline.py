@@ -147,8 +147,12 @@ def build_intervals(trace: SemanticTrace) -> Timeline:
         if event.kind == EventKind.THREAD_SWITCHED_IN:
             prior = running.pop(stream, None)
             if prior is not None:
-                # There was no matching OUT: duration of preceding thread is unknowable.
-                append(prior.timestamp_ns, ts, prior.thread_name, prior.thread_priority or "", "Unknown")
+                # sched_switch is itself the observed boundary between the
+                # previous and next thread. In contrast, two standalone IN
+                # records without OUT cannot prove a running interval.
+                atomic_switch = event.raw_event_name.rsplit(":", 1)[-1] == "sched_switch"
+                append(prior.timestamp_ns, ts, prior.thread_name, prior.thread_priority or "",
+                       "Running" if atomic_switch and key(prior) is not None else "Unknown")
             gap = unknown_start.pop(stream, None)
             if prior is None:
                 append(gap, ts, "", "", "Unknown")
