@@ -71,7 +71,7 @@ final class TraceCompassNativeBridge {
         if (!target.exists()) {
             target = (IProject) invoke(registry.getMethod(
                     "createProject", String.class, URI.class, IProgressMonitor.class),
-                    null, ANALYSIS_PROJECT, null, null);
+                    null, ANALYSIS_PROJECT, null, new org.eclipse.core.runtime.NullProgressMonitor());
         }
         if (target == null || !target.exists() || !target.isOpen())
             throw new IllegalStateException("Trace Compass tracing project could not be created");
