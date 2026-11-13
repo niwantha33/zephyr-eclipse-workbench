@@ -3,6 +3,7 @@ package io.github.niwantha33.zew.ui;
 
 import java.nio.file.Path;
 import java.nio.file.Files;
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -48,6 +49,22 @@ public final class ZephyrCpuLoadView extends ViewPart {
         banner.setForeground(parent.getDisplay().getSystemColor(SWT.COLOR_DARK_RED));
         banner.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         showBanner(false);
+        var guided = new Composite(parent, SWT.NONE);
+        guided.setLayout(new GridLayout(3, false));
+        guided.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        Button capture = new Button(guided, SWT.PUSH);
+        capture.setText("1. Capture new CTF...");
+        capture.setToolTipText("Stop active Debug first: capture resets, runs then halts the target.");
+        capture.addListener(SWT.Selection, e -> captureNew());
+        Button latest = new Button(guided, SWT.PUSH);
+        latest.setText("2. Open latest capture");
+        latest.setToolTipText("Load newest saved .zew-traces/trace-*/ctf without reading hardware.");
+        latest.addListener(SWT.Selection, e -> openLatest());
+        var guidance = new Label(parent, SWT.WRAP);
+        guidance.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        guidance.setText("Build + flash firmware with CONFIG_TRACING, CONFIG_TRACING_CTF "
+                + "and CONFIG_TRACING_BACKEND_RAM enabled. Terminate Debug to release OpenOCD; "
+                + "capture explicitly resets/runs/halts the MCU. Saved CTF analysis needs Babeltrace 2 bt2.");
         var controls = new Composite(parent, SWT.NONE);
         controls.setLayout(new GridLayout(6, false));
         controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -114,12 +131,44 @@ public final class ZephyrCpuLoadView extends ViewPart {
         if (project != null && project.isAccessible()) contextProject = project;
     }
     private IProject selectedProject() {
-        var selection = getSite().getWorkbenchWindow().getSelectionService().getSelection();
-        if (selection instanceof IStructuredSelection items && items.size() == 1) {
-            IProject selected = SelectedProject.importedProject(items.getFirstElement());
-            if (selected != null && selected.isAccessible()) contextProject = selected;
+        if (contextProject != null && contextProject.isAccessible()) return contextProject;
+        contextProject = TraceCaptureWorkflow.resolve(getSite().getWorkbenchWindow());
+        return contextProject;
+    }
+    private void captureNew() {
+        IProject selected = selectedProject();
+        if (selected == null) {
+            status.setText("Select an imported Zephyr application or its active Debug frame first.");
+            return;
         }
-        return contextProject != null && contextProject.isAccessible() ? contextProject : null;
+        ZephyrTraceHandler.capture(selected, getSite().getShell());
+    }
+    private void openLatest() {
+        IProject selected = selectedProject();
+        if (selected == null) {
+            status.setText("Select an imported Zephyr project or active Debug frame to locate saved CTF.");
+            return;
+        }
+        try {
+            var latest = TraceCaptureWorkflow.latest(selected);
+            if (latest.isEmpty()) {
+                status.setText("No saved CTF in " + selected.getName()
+                        + "/.zew-traces. Build and flash tracing firmware, terminate Debug and Capture new CTF.");
+                return;
+            }
+            load(latest.get());
+        } catch (IOException error) {
+            status.setText("Cannot find latest saved CTF: " + error.getMessage());
+        }
+    }
+    /** Called only after the user intentionally captured an exact saved CTF. */
+    /** Do not overwrite another application's already selected trace. */
+    public boolean acceptsCapture(IProject selected) {
+        return selected != null && (contextProject == null || contextProject.equals(selected));
+    }
+
+    public void loadSavedCapture(Path ctf) {
+        if (ctf != null && table != null && !table.isDisposed()) load(ctf);
     }
     private void chooseTrace() {
         DirectoryDialog dialog = new DirectoryDialog(getSite().getShell(), SWT.OPEN);
@@ -135,7 +184,12 @@ public final class ZephyrCpuLoadView extends ViewPart {
         }
         IProject project = selectedProject();
         if (project == null) {
-            clear("Select an imported Zephyr project to identify its managed Python and selected build.");
+            clear("Select an imported Zephyr project or active Debug frame to identify the build.");
+            return;
+        }
+        Path ctf = Files.isDirectory(trace.resolve("ctf")) ? trace.resolve("ctf") : trace;
+        if (!TraceCaptureWorkflow.isSavedCtf(ctf)) {
+            clear("Select a saved CTF folder containing metadata and channel0_0, not an arbitrary directory.");
             return;
         }
         try {
@@ -145,7 +199,7 @@ public final class ZephyrCpuLoadView extends ViewPart {
                 service = new OfflineTraceAnalysisService(new OfflineTracePythonBridge(project, settings));
             }
             selectedBuild = build;
-            selectedTrace = trace.toAbsolutePath().normalize();
+            selectedTrace = ctf.toAbsolutePath().normalize();
             analyse(null, null);
         } catch (Exception error) {
             clear("Cannot select build: " + error.getMessage());

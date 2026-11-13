@@ -9,6 +9,7 @@ import org.eclipse.cdt.dsf.debug.service.ICachingService;
 import org.eclipse.cdt.dsf.debug.service.IExpressions;
 import org.eclipse.cdt.dsf.debug.service.IFormattedValues;
 import org.eclipse.cdt.dsf.debug.service.IRunControl;
+import org.eclipse.cdt.dsf.debug.service.IStack;
 import org.eclipse.cdt.dsf.service.DsfServicesTracker;
 import org.eclipse.cdt.dsf.service.DsfSession;
 import org.eclipse.cdt.dsf.ui.viewmodel.datamodel.IDMVMContext;
@@ -27,14 +28,16 @@ import org.eclipse.ui.part.ViewPart;
 import io.github.niwantha33.zew.core.DebugExpressionProbe;
 
 /**
- * One-shot, manually requested inspection of a C symbol in a selected halted
+ * One-shot, manually requested inspection of a C lvalue in a selected halted
  * CDT DSF-GDB frame. No guessed values, variable mutation or automatic reads.
- * Does not call GDB inferior functions or dereference arbitrary memory.
+ * Does not call GDB inferior functions, write memory or follow pointers.
  */
 public final class DebugExpressionProbeView extends ViewPart {
     public static final String ID = Activator.ID + ".debugExpressionProbe";
     private Text symbol, result;
     private Label status;
+    private Button copyAddress;
+    private String verifiedAddress = "";
     private Display display;
     private boolean closed;
     private volatile long generation;
@@ -42,27 +45,40 @@ public final class DebugExpressionProbeView extends ViewPart {
     @Override public void createPartControl(Composite parent) {
         display = parent.getDisplay();
         parent.setLayout(new GridLayout(1, false));
-        new Label(parent, SWT.WRAP).setText("Read-only single-symbol GDB probe. "
-                + "Select a suspended Zephyr thread stack frame in Debug first.");
+        new Label(parent, SWT.WRAP).setText("Read-only GDB variable and member-address probe. "
+                + "Select a suspended Zephyr stack frame in Debug first.");
         var toolbar = new Composite(parent, SWT.NONE);
-        toolbar.setLayout(new GridLayout(3, false));
+        toolbar.setLayout(new GridLayout(4, false));
         toolbar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        new Label(toolbar, SWT.NONE).setText("C symbol");
+        new Label(toolbar, SWT.NONE).setText("Variable / member");
         symbol = new Text(toolbar, SWT.SINGLE | SWT.BORDER);
-        symbol.setMessage("gpio_dev");
+        symbol.setMessage("lab_stats.heartbeat");
         symbol.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         Button inspect = new Button(toolbar, SWT.PUSH);
-        inspect.setText("Check value + address");
+        inspect.setText("Inspect address + size");
         inspect.addListener(SWT.Selection, e -> inspect());
+        copyAddress = new Button(toolbar, SWT.PUSH);
+        copyAddress.setText("Copy address");
+        copyAddress.setEnabled(false);
+        copyAddress.addListener(SWT.Selection, e -> {
+            if (verifiedAddress.isEmpty()) return;
+            var clipboard = new org.eclipse.swt.dnd.Clipboard(display);
+            try {
+                clipboard.setContents(new Object[] { verifiedAddress },
+                        new org.eclipse.swt.dnd.Transfer[] {
+                                org.eclipse.swt.dnd.TextTransfer.getInstance() });
+            } finally { clipboard.dispose(); }
+        });
         symbol.addListener(SWT.DefaultSelection, e -> inspect());
         status = new Label(parent, SWT.WRAP);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        status.setText("No target data read. Select a suspended stack frame.");
+        status.setText("No target data read. Select a suspended stack frame and inspect a variable/member.");
         result = new Text(parent, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL | SWT.BORDER);
         result.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        result.setText("A global variable should not be diagnosed as a dead local merely because "
-                + "CDT Expressions shows <optimized out>. Probe both its value and storage address, "
-                + "then check debug ELF symbols and source/compiler identity if unavailable.");
+        result.setText("Example: lab_stats.heartbeat → address of the heartbeat member (not the value 16). "
+                + "The probe checks value, storage address and sizeof independently. "
+                + "A register-only temporary, bitfield or out-of-scope variable may have no address. "
+                + "Copy the confirmed address into Eclipse's native Memory view to inspect bytes.");
     }
 
     private IDMContext selectedFrame() {
@@ -78,7 +94,18 @@ public final class DebugExpressionProbeView extends ViewPart {
         return null;
     }
 
+    /** Invoked by the native Expressions popup; invalid complex expressions remain editable. */
+    public void inspectSelection(String candidate) {
+        if (closed || symbol == null || symbol.isDisposed()) return;
+        symbol.setText(candidate == null ? "" : candidate);
+        inspect();
+    }
+
     private void inspect() {
+        generation++; // immediately invalidate any older in-flight GDB response
+        verifiedAddress = "";
+        if (copyAddress != null && !copyAddress.isDisposed()) copyAddress.setEnabled(false);
+        if (result != null && !result.isDisposed()) result.setText("No current result. Inspection is pending or unavailable.");
         final String name;
         try { name = DebugExpressionProbe.validateSymbol(symbol.getText()); }
         catch (IllegalArgumentException invalid) {
@@ -86,7 +113,7 @@ public final class DebugExpressionProbeView extends ViewPart {
             return;
         }
         var context = selectedFrame();
-        if (context == null) {
+        if (context == null || DMContexts.getAncestorOfType(context, IStack.IFrameDMContext.class) == null) {
             status.setText("No selected native GDB frame. Select a suspended stack frame in Debug.");
             return;
         }
@@ -107,43 +134,60 @@ public final class DebugExpressionProbeView extends ViewPart {
                     var execution = DMContexts.getAncestorOfType(context, IRunControl.IExecutionDMContext.class);
                     if (run == null || expressions == null || execution == null
                             || !run.isSuspended(execution)) {
-                        deliver(request, "Target is not halted in a selected stack frame.", null);
+                        deliver(request, "Target is not halted in a selected stack frame.", null, "");
                         return;
                     }
                     if (expressions instanceof ICachingService cache) cache.flushCache(context);
-                    evaluate(session, run, execution, expressions, context, name, request, false, "", "");
+                    evaluate(session, run, execution, expressions, context, name, request, 0, "", "", "", "");
                 } finally { tracker.dispose(); }
             });
         } catch (RejectedExecutionException ended) {
-            deliver(request, "Debug session ended during the request.", null);
+            deliver(request, "Debug session ended during the request.", null, "");
         }
     }
 
     private void evaluate(DsfSession session, IRunControl run,
                           IRunControl.IExecutionDMContext execution,
                           IExpressions expressions, IDMContext context, String name,
-                          long request, boolean addressPhase, String value, String valueError) {
+                          long request, int phase, String value, String valueError,
+                          String address, String addressError) {
         if (closed || request != generation) return;
         if (!run.isSuspended(execution)) {
-            deliver(request, "Target resumed; earlier data was discarded. Halt and retry.", null);
+            deliver(request, "Target resumed; earlier data was discarded. Halt and retry.", null, "");
             return;
         }
-        // Only a validated identifier or address-of identifier is evaluated.
-        var expression = expressions.createExpression(context, addressPhase ? "&" + name : name);
+        // The expression is limited to a validated named C lvalue. No calls,
+        // assignments, pointer dereferences or raw user GDB commands are sent.
+        String code = switch (phase) {
+            case 0 -> name;
+            case 1 -> "&(" + name + ")";
+            case 2 -> "sizeof(" + name + ")";
+            default -> throw new IllegalArgumentException("Unexpected inspection phase");
+        };
+        var expression = expressions.createExpression(context, code);
         var formatted = expressions.getFormattedValueContext(expression, IFormattedValues.HEX_FORMAT);
         expressions.getFormattedExpressionValue(formatted,
                 new DataRequestMonitor<IFormattedValues.FormattedValueDMData>(session.getExecutor(), null) {
             @Override protected void handleCompleted() {
+                if (closed || request != generation || !run.isSuspended(execution)) {
+                    deliver(request, "Target resumed or selection changed; discard the snapshot.", null, "");
+                    return;
+                }
                 String answer = isSuccess() && getData() != null
                         ? bounded(getData().getFormattedValue()) : "";
                 String error = isSuccess() ? "" : bounded(getStatus().getMessage());
-                if (!addressPhase) {
+                if (phase == 0) {
                     evaluate(session, run, execution, expressions, context, name, request,
-                            true, answer, error);
-                    return;
+                            1, answer, error, "", "");
+                } else if (phase == 1) {
+                    evaluate(session, run, execution, expressions, context, name, request,
+                            2, value, valueError, answer, error);
+                } else {
+                    String report = DebugExpressionProbe.describe(name, value, address,
+                            answer, valueError, addressError, error);
+                    deliver(request, "GDB inspection complete for selected halted frame.",
+                            report, DebugExpressionProbe.confirmedAddress(address));
                 }
-                String report = DebugExpressionProbe.describe(name, value, answer, valueError, error);
-                deliver(request, "Probe completed for selected suspended frame.", report);
             }
         });
     }
@@ -153,12 +197,20 @@ public final class DebugExpressionProbeView extends ViewPart {
         return text.length() > 512 ? text.substring(0, 512) + " [truncated]" : text;
     }
 
-    private void deliver(long request, String message, String report) {
+    private void deliver(long request, String message, String report, String address) {
         if (display == null || display.isDisposed()) return;
         display.asyncExec(() -> {
             if (closed || request != generation || status.isDisposed()) return;
             status.setText(message);
-            if (report != null) result.setText(report);
+            if (report != null) {
+                result.setText(report);
+                verifiedAddress = address;
+                copyAddress.setEnabled(!address.isEmpty());
+            } else {
+                result.setText("No current snapshot: " + message);
+                verifiedAddress = "";
+                copyAddress.setEnabled(false);
+            }
             status.getParent().layout(true, true);
         });
     }

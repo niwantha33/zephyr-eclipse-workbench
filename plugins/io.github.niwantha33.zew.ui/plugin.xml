@@ -147,6 +147,11 @@
           name="Zephyr SoC Memory Map"
           class="io.github.niwantha33.zew.ui.SocMemoryMapView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.traceCompassIntegration"
+          name="Trace Compass Integration"
+          category="org.eclipse.debug.ui"
+          class="io.github.niwantha33.zew.ui.TraceCompassIntegrationView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.traceConsole"
           name="Zephyr Debug Trace Console"
           category="org.eclipse.debug.ui"
@@ -236,6 +241,7 @@
     <command id="io.github.niwantha33.zew.embeddedHubBoards" name="Open EmbeddedHub Board Discovery" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.umlClasses" name="Open Automatic UML C/C++ Class Diagram" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.traceCompassIntegration" name="Open Trace Compass Integration" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.traceConsole" name="Open Debug Trace Console" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.liveTraceStreaming" name="Start Live Trace (not yet available)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.threadTimeline" name="Open Zephyr Thread Timeline" categoryId="io.github.niwantha33.zew.commands"/>
@@ -294,6 +300,7 @@
         </with>
       </activeWhen>
     </handler>
+    <handler commandId="io.github.niwantha33.zew.traceCompassIntegration" class="io.github.niwantha33.zew.ui.TraceCompassIntegrationHandler"/>
     <handler commandId="io.github.niwantha33.zew.traceConsole" class="io.github.niwantha33.zew.ui.ZephyrTraceConsoleHandler"/>
     <handler commandId="io.github.niwantha33.zew.liveTraceStreaming" class="io.github.niwantha33.zew.ui.LiveTraceStreamingHandler"/>
     <handler commandId="io.github.niwantha33.zew.threadTimeline" class="io.github.niwantha33.zew.ui.ThreadTimelineHandler"/>
@@ -327,6 +334,11 @@
     <handler commandId="io.github.niwantha33.zew.cancel" class="io.github.niwantha33.zew.ui.WorkbenchHandler"/>
   </extension>
   <extension point="org.eclipse.ui.menus">
+    <menuContribution locationURI="popup:org.eclipse.debug.ui.ExpressionView?after=additions">
+      <command commandId="io.github.niwantha33.zew.debugExpressionProbe"
+               label="Zephyr: Inspect Expression Memory Address..."
+               style="push"/>
+    </menuContribution>
     <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
       <menu id="io.github.niwantha33.zew.menu" label="Zephyr">
         <command commandId="io.github.niwantha33.zew.quickStart" label="Start Here — Create Zephyr Project..." style="push"/>
@@ -377,6 +389,7 @@
           <command commandId="io.github.niwantha33.zew.coredumpInvestigation" label="Investigate Saved Binary Core Dump (Offline)..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.capture" label="Capture &amp; Analyse">
+          <command commandId="io.github.niwantha33.zew.traceCompassIntegration" label="Trace Compass Integration..." style="push"/>
           <command commandId="io.github.niwantha33.zew.traceConsole" label="Debug Trace Console..." style="push"/>
           <command commandId="io.github.niwantha33.zew.liveTraceStreaming" label="Start Live Trace (not yet available)" style="push"/>
           <command commandId="io.github.niwantha33.zew.threadTimeline" label="Zephyr Thread Timeline..." style="push"/>

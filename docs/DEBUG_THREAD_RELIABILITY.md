@@ -31,6 +31,53 @@ and diagnostic processing still receive the original lines before this display
 filter. This limits UI/document work during repetitive register polling without
 discarding a failure message.
 
+
+## Invalid-address reads during Zephyr thread unwinding (Bug 3)
+
+Observed TI XDS110/MSPM0G3507 console:
+`SWD DPIDR 0x6ba02477`, repeated `Error: Failed to read memory at
+0xaaaaaaaa`, later other implausible addresses, and `Warn :
+keep_alive() was not invoked in the 1000 ms timelimit`.
+DPIDR indicates an ARM SWD debug-port response; it does **not** establish
+that the RTOS unwind or every target-memory read succeeded.
+
+Zephyr can initialise unused thread-stack bytes to `0xAA`. The exact
+`0xAAAAAAAA` failed read is consistent with an attempted unwind through
+uninitialised stack data, but it does **not** prove corrupt application
+pointers, an RTOS metadata ABI mismatch, a specific firmware defect, or
+that the debug probe is faulty. OpenOCD's Zephyr RTOS decoder reads
+thread pointers and saved stack frames to reconstruct register values.
+A matching static thread-offset preflight does not validate each live
+thread's saved stack context.
+
+The debug-server console now preserves every error/warning, while
+emitting one additional diagnostic per distinctive symptom:
+`0xAAAAAAAA` failed read and OpenOCD keep-alive delay. No target-memory
+reads, RTOS configuration, flash contents or GDB settings are changed
+by the log filter. The existing routine INFO polling condensation is
+unchanged. This is diagnosis, **not an underlying memory-read fix**.
+
+For physical diagnosis, use an exact verified build/ELF and target,
+halt on a known active frame, inspect its real PC/SP, then compare
+individual stopped-thread saved SP addresses to the actual chip RAM
+range and Zephyr stack bounds (not guessed values). Identify whether
+the first invalid read follows a particular thread-selection/
+stack-expansion operation or occurs before any frame request.
+Verify the physical target's OpenOCD revision and Zephyr thread-layout
+compatibility. Do not hide errors, force-patch OpenOCD thread-offset
+tables, or blindly increase GDB timeouts: `set remotetimeout` can
+allow slow communication but cannot make invalid addresses valid.
+
+Hardware acceptance remains open: reproduce on the TI XDS110 with
+the exact MSPM0G3507 image, compare a safely halted active-thread
+register read with RTOS saved-frame reads, and capture the first
+failing GDB/OpenOCD command. Test the serial console diagnostic in
+that same session and confirm it does not mask the raw failures.
+
+Upstream references:
+- https://github.com/zephyrproject-rtos/zephyr/issues/61466
+- https://openocd.org/doc-release/doxygen/zephyr_8c_source.html
+
 ## Regression coverage
 
 The installed Eclipse test uses actual GNU GDB and gdbserver with a small host

@@ -37,6 +37,63 @@ import io.github.niwantha33.zew.core.TargetOperations;
 /** Experimental RAM snapshot for an already flashed, matching CTF build. */
 public final class ZephyrTraceHandler extends AbstractHandler {
     private static final Pattern GDB = Pattern.compile("(?m)^\\s+gdb:\\s*(.*?)\\s*$");
+    // One authoritative list used to build the isolated temporary capture tool.
+    // These Python modules are transitive imports of capture_snapshot.py.
+    static final List<String> CAPTURE_FILES = List.of(
+            "capture_snapshot.py", "analyze_trace.py", "cpu_analysis.py",
+            "timing_analysis.py", "semantic_trace.py", "thread_event_log.py",
+            "investigation.py", "trace_compass_bridge.py", "Zephyr_RTOS_Timeline.xml");
+
+    /**
+     * Validate the exact bundled Python tool closure *before* starting OpenOCD.
+     * Running --help imports every eager Python dependency but never connects
+     * to GDB or touches the target. It is safe to abort on any missing module.
+     */
+    private static Path stageCaptureTool(String python, java.util.Properties settings,
+            IProgressMonitor monitor, java.util.function.Consumer<String> report) throws Exception {
+        Path stage = Files.createTempDirectory("zew-trace-tool-");
+        try {
+            for (String name : CAPTURE_FILES) {
+                var resource = Activator.getDefault().getBundle()
+                        .getEntry("tools/rtos_analysis/" + name);
+                if (resource == null) throw new IOException(
+                        "Installed Workbench is missing its bundled RTOS trace helper: " + name
+                                + ". Update or reinstall Zephyr Workbench before capture.");
+                Path target = stage.resolve(name);
+                try (var input = resource.openStream()) {
+                    Files.copy(input, target);
+                }
+                if (!Files.isRegularFile(target) || Files.size(target) == 0)
+                    throw new IOException("Bundled trace helper was empty or unavailable: " + name);
+            }
+            StringBuilder diagnostics = new StringBuilder();
+            try {
+                new ProcessRunner().run(
+                        List.of(python, stage.resolve("capture_snapshot.py").toString(), "--help"),
+                        stage, Duration.ofSeconds(12), monitor::isCanceled,
+                        line -> {
+                            if (diagnostics.length() < 2048)
+                                diagnostics.append(line, 0, Math.min(line.length(),
+                                        2048 - diagnostics.length())).append('\n');
+                        }, ProjectContext.environment(settings)).requireSuccess();
+            } catch (Exception error) {
+                String details = diagnostics.toString().strip();
+                if (!details.isBlank()) report.accept("CTF helper import diagnostic: " + details);
+                throw new IOException("CTF Python helpers failed their import check before "
+                        + "starting OpenOCD. Check the installed Workbench package and its "
+                        + "managed Python interpreter. " + error.getMessage(), error);
+            }
+            report.accept("Verified bundled CTF capture Python imports before connecting to OpenOCD. "
+                    + "Workbench bundle version: " + Activator.getDefault().getBundle().getVersion());
+            return stage;
+        } catch (Exception error) {
+            try (var files = Files.walk(stage)) {
+                for (var file : files.sorted(Comparator.reverseOrder()).toList())
+                    Files.deleteIfExists(file);
+            } catch (IOException ignored) { /* do not conceal the underlying failure */ }
+            throw error;
+        }
+    }
 
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
         capture(SelectedProject.from(event), HandlerUtil.getActiveShell(event));
@@ -104,6 +161,9 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                     if (gdb.length() >= 2 && ((gdb.startsWith("\"") && gdb.endsWith("\""))
                             || (gdb.startsWith("'") && gdb.endsWith("'")))) gdb = gdb.substring(1, gdb.length() - 1);
                     if (!Files.isRegularFile(Path.of(gdb))) throw new IOException("The build's GDB is missing: " + gdb + ". Repair the Zephyr SDK.");
+                    // Package imports must be verifiable before we take ownership
+                    // of an XDS110 or start an OpenOCD process.
+                    staging = stageCaptureTool(settings.getProperty("python"), settings, monitor, report);
                     var ports = DebugPorts.select(3335);
                     plan = ports.apply(plan, runner);
                     var builder = new ProcessBuilder(plan.command(settings.getProperty("python")));
@@ -130,13 +190,6 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                     }
                     if (!owned.isAlive() || !diagnostics.isListening(ports.gdb()))
                         throw new IOException(diagnostics.describe(plan.board(), ports.gdb(), owned.isAlive() ? null : owned.exitValue()));
-                    staging = Files.createTempDirectory("zew-trace-tool-");
-                    for (String name : List.of("capture_snapshot.py", "analyze_trace.py", "cpu_analysis.py",
-                            "timing_analysis.py", "semantic_trace.py", "thread_event_log.py", "investigation.py", "trace_compass_bridge.py", "Zephyr_RTOS_Timeline.xml")) {
-                        var resource = Activator.getDefault().getBundle().getEntry("tools/rtos_analysis/" + name);
-                        if (resource == null) throw new IOException("Trace component missing: " + name + ". Reinstall Workbench.");
-                        try (var input = resource.openStream()) { Files.copy(input, staging.resolve(name)); }
-                    }
                     Path out = project.getLocation().toFile().toPath().resolve(".zew-traces");
                     Path resultFile = staging.resolve("capture-location.txt");
                     var command = List.of(settings.getProperty("python"), staging.resolve("capture_snapshot.py").toString(),
@@ -171,6 +224,10 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                             + "Import Zephyr_RTOS_Timeline.xml once using Tracing > XML Analyses.");
                     if (!shell.isDisposed()) shell.getDisplay().asyncExec(() -> {
                         if (!shell.isDisposed()) {
+                            // Explicit capture succeeded and the saved CTF files are
+                            // validated. Hand off to already open offline views,
+                            // never attach a second probe or run on view startup.
+                            TraceCaptureWorkflow.captured(project, captureDir);
                             MessageDialog.openInformation(shell, "RTOS trace captured",
                                     "Snapshot saved in:\n" + captureDir + "\n\nIf standalone Trace Compass is installed, an open request was attempted. " + "Otherwise import the ctf folder manually. "
                                     + "The supplied XML analysis must be imported once. Open report.html for CPU/ISR "
@@ -185,10 +242,11 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                 } catch (InterruptedException error) {
                     Thread.currentThread().interrupt(); return Status.CANCEL_STATUS;
                 } catch (Exception error) {
-                    if (!shell.isDisposed()) shell.getDisplay().asyncExec(() -> {
-                        if (!shell.isDisposed()) MessageDialog.openError(shell, "RTOS trace", error.getMessage());
-                    });
-                    return new Status(IStatus.ERROR, Activator.ID, "Trace capture failed: " + error.getMessage(), error);
+                    // The Eclipse Job dialog already displays ERROR status.
+                    // Avoid a second modal error popup for the same failure.
+                    report.accept("Trace capture failed: " + error.getMessage());
+                    return new Status(IStatus.ERROR, Activator.ID, "Trace capture failed: "
+                            + error.getMessage(), error);
                 } finally {
                     if (server != null) {
                         ownedChildren.addAll(server.descendants().toList());

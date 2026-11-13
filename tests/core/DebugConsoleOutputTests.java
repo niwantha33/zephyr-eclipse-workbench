@@ -20,6 +20,30 @@ public final class DebugConsoleOutputTests {
             if (!output.accept(line, 2_000_000_000L).equals(List.of(line))) throw new AssertionError("Non-polling output changed: " + line);
         if (!output.accept(poll, 3_000_000_000L).isEmpty()) throw new AssertionError("One-time explanation repeated");
         if (output.flush().size() != 1 || !output.flush().isEmpty()) throw new AssertionError("Final count lost or repeated");
-        System.out.println("DebugConsoleOutputTests PASS: no periodic poll spam; useful diagnostics retained");
+        var faults = new DebugConsoleOutput();
+        String fill = "Error: Failed to read memory at 0xaaaaaaaa";
+        var firstFill = faults.accept(fill, 0);
+        if (firstFill.size() != 2 || !firstFill.get(0).equals(fill)
+                || !firstFill.get(1).contains("NOT a confirmed cause")
+                || !firstFill.get(1).contains("ELF/flashed image"))
+            throw new AssertionError("Preserve raw stack-fill read error and add bounded guidance: " + firstFill);
+        if (!faults.accept("Error: Failed to read memory at 0xAAAAAAAA", 1).equals(
+                List.of("Error: Failed to read memory at 0xAAAAAAAA")))
+            throw new AssertionError("A repeat stack-fill error must remain visible without repeated advice");
+        String otherBad = "Error: Failed to read memory at 0x6269b060";
+        if (!faults.accept(otherBad, 2).equals(List.of(otherBad)))
+            throw new AssertionError("Unrecognised read failure must remain unmodified");
+        String delayed = "Warn : keep_alive() was not invoked in the 1000 ms timelimit. "
+                + "GDB alive packet not sent! (1597 ms). Workaround: increase remotetimeout in GDB";
+        var keepAlive = faults.accept(delayed, 3);
+        if (keepAlive.size() != 2 || !keepAlive.get(0).equals(delayed)
+                || !keepAlive.get(1).contains("does not repair invalid addresses"))
+            throw new AssertionError("Keep-alive warning must be preserved with non-masking guidance: " + keepAlive);
+        if (!faults.accept(delayed, 4).equals(List.of(delayed)))
+            throw new AssertionError("Keep-alive guidance may only be emitted once");
+        if (!faults.flush().isEmpty())
+            throw new AssertionError("Fault guidance must not be counted as suppressed polling");
+        System.out.println("DebugConsoleOutputTests PASS: poll count bounded, invalid read errors retained, and clues labelled");
+
     }
 }

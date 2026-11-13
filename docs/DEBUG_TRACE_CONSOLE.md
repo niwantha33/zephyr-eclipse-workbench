@@ -1,9 +1,131 @@
 # Zephyr Debug Trace Console (first integration slice)
 
-Open **Zephyr > Capture & Analyse > Debug Trace Console...** after selecting an imported
-Zephyr project. This view reads the generated `zephyr/.config` for the selected
-board/profile. It does **not** read target RAM, attach to a probe, flash, reset, or
-claim that the image on the device matches the build just by opening the view.
+Open **Zephyr > Capture & Analyse > Debug Trace Console...** during an
+existing Zephyr Debug session or after selecting an imported Zephyr project.
+The view now first follows an active native Zephyr debug-context project,
+then an explicit single project selection, then a **unique** live Zephyr
+launch. If two different running projects remain ambiguous it refuses to
+guess and asks you to select a project/thread. The **Use selected project /
+debug session** button also resolves the active Debug context. Changing to
+another Zephyr debug context updates the project and effective build evidence.
+Project discovery never accesses the MCU or starts a new debug session.
+
+This view reads generated `zephyr/.config` for that project's selected
+board/profile; it does **not** prove that this build was flashed. If the
+project's active build/profile differs from the already-flashed debug ELF, the
+displayed backend configuration is build intent, **not** verified live
+firmware configuration. It does **not** read target RAM, attach to a probe,
+flash or reset merely by opening the view.
+
+**The console is not an automatic live streaming terminal.** To see text,
+start **Capture UART/USB text** with a confirmed serial port/baud, or
+explicitly connect to an already running local RTT TCP receiver. CTF is
+binary capture evidence, not readable console text. On TI MSPM0G3507
+(Cortex-M0+) the ITM/SWO channel is unavailable; this is a hardware
+limitation, not a Workbench project-selection failure.
+
+## Guided CTF → Timeline / CPU Load (Bug 6)
+
+Both **Zephyr Thread Timeline** and the separate **Zephyr CPU Load** view
+are **saved-CTF offline analysers**, not real-time monitors. Opening the view
+alone never reads the target or starts a decoder. The empty tables mean
+**No trace loaded**, not a broken CPU probe.
+
+The new controls in each view are intentionally sequential:
+
+1. **1. Capture new CTF...** — resolves the already selected imported
+   Zephyr project or unique active Zephyr debug project, then invokes the
+   *existing* confirmed RAM CTF capture flow. This is a **target-affecting**
+   operation: first build and flash the matching RAM tracing configuration,
+   terminate an active Debug session to release the probe, and review the
+   confirmation. Capture resets the MCU, runs it for the configured short
+   interval (default 1 second), and leaves it halted.
+2. **2. Open latest capture** — reads only the most recent complete saved
+   `.zew-traces/trace-*/ctf` in that project; no probe/flash/target access.
+   Missing `metadata` or `channel0_0` files are rejected. If there is
+   no saved CTF, the UI says so instead of leaving an unexplained empty table.
+3. **Open saved CTF trace... / Load trace...** — select an older
+   `.zew-traces/trace-*/ctf` folder for comparison. The two views continue
+   to analyse only on explicit selection; they do not poll memory in Debug.
+
+After a **successful explicitly requested capture**, any *already open*
+Timeline and CPU Load views for the selected application are notified and load
+the saved CTF. The capture still saves `capture.json`, `diagnostics.json`,
+`report.html` and CTF bytes even when a viewer cannot decode them.
+A missing/unsupported decoder, incomplete scheduler events or reported loss
+must remain visible as unavailable/partial rather than fabricated CPU load.
+
+For an MSPM0G3507 project, typical `prj.conf` configuration is:
+
+```ini
+CONFIG_TRACING=y
+CONFIG_TRACING_CTF=y
+CONFIG_TRACING_BACKEND_RAM=y
+CONFIG_TRACING_SYNC=y
+CONFIG_RAM_TRACING_BUFFER_SIZE=4096
+CONFIG_THREAD_NAME=y
+```
+
+Check the **effective** `build/zephyr/.config` in the selected build
+profile before capture. Build and deliberately flash the same ELF/image;
+the tool cannot independently prove the flashed firmware equals that ELF.
+The active debug server and the CTF capture command cannot both own the
+XDS110 probe. If the capture fails, inspect the separate *RTOS trace*
+Eclipse Console, not a blank CPU table. The offline decoder requires the
+selected managed Python to provide Babeltrace 2 `bt2`, and CPU percentages
+require complete scheduler evidence. RAM buffer overflow/fullness can
+invalidate proportions; consider shorter captures or a supported larger
+buffer after checking board RAM resources.
+
+This update is **workflow integration**, not continuous live CPU profiling
+and not a proof of probe/trace correctness on real hardware. The analyzer
+retains its prior evidence-only output rules.
+
+## Capture helper import failure (Bug 7)
+
+A previous installed Workbench failed **after opening OpenOCD** with
+`ModuleNotFoundError: No module named 'analyze_trace'` from the staged
+`capture_snapshot.py`. The Python module `analyze_trace.py` belongs to
+the Workbench plug-in, **not** the user's application or Zephyr `prj.conf`.
+Installing `analyze_trace` using pip or changing the firmware is not the
+correct remedy.
+
+The repository has long listed the module among the copy resources; the
+reported failure therefore does **not** establish whether the installed
+plug-in was outdated or the temporary staging/runtime was incomplete.
+The revised capture implementation:
+- Uses one explicit capture-resource manifest and verifies the **installed**
+  OSGi bundle supplies all files, including transitive Python modules.
+- Copies those files to an isolated temporary capture directory and runs the
+  bundled `capture_snapshot.py --help` import preflight using the **managed
+  Python interpreter** before opening an OpenOCD process.
+- Aborts cleanly if imports fail, without target reset or GDB connection.
+  Success confirms package/import readiness, **not** physical trace validity.
+- Keeps the original error in the Eclipse RTOS Trace Console and lets the
+  Eclipse Job report a single failure rather than displaying two modal dialogs.
+- Tests both the isolated Python staging and installed OSGi resources in CI.
+
+To validate on an updated installation: terminate any old Debug/OpenOCD
+session, inspect the **RTOS trace** Console for
+`Verified bundled CTF capture Python imports before connecting to OpenOCD.`
+This is a prerequisite for successful trace capture, **not** proof that the
+running firmware matches the ELF, or that the trace decodes successfully.
+If the failure repeats, report the installed Workbench bundle version,
+the full RTOS trace console output and the Python interpreter configured
+for that application; do not manually patch the temp directory.
+
+## Trace Compass integration (Bug 8)
+
+Use **Zephyr > Capture & Analyse > Trace Compass Integration...** or the
+**Trace Compass...** button at the top of **Zephyr Debug Trace Console**.
+This restores a visible pathway that was missing from the Zephyr menu.
+The optional integration detects an installed Eclipse **Tracing** perspective
+without adding a hard dependency on Trace Compass plug-ins. If the perspective
+is absent, the UI links to the official installer and supports a **standalone**
+Trace Compass executable instead. Both require **saved** CTF evidence;
+there is no automatic live trace transport or probe operation in this view.
+See [Trace Compass integration](TRACE_COMPASS_INTEGRATION.md) for the exact
+install, saved-capture and XML analysis steps.
 
 ## What works now
 

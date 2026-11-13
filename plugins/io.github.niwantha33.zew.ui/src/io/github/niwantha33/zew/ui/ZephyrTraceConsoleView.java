@@ -5,6 +5,11 @@ import java.nio.file.Path;
 import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 import org.eclipse.core.runtime.QualifiedName;
+import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.debug.core.DebugPlugin;
+import org.eclipse.debug.core.ILaunch;
+import org.eclipse.debug.ui.DebugUITools;
+import org.eclipse.debug.ui.contexts.IDebugContextListener;
 import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.IConsole;
 import org.eclipse.ui.console.MessageConsole;
@@ -56,6 +61,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
     private Button captureRam, captureUart, captureRtt;
     private Text rttPort;
     private volatile Job rttJob;
+    private IDebugContextListener debugContextListener;
     private static final QualifiedName RTT_PORT = new QualifiedName(Activator.ID, "rtt.localPort");
 
     @Override public void createPartControl(Composite parent) {
@@ -70,20 +76,30 @@ public final class ZephyrTraceConsoleView extends ViewPart {
 
         var controls = new Composite(parent, SWT.NONE);
         controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        controls.setLayout(new GridLayout(3, false));
-        button(controls, "Use selected project", () -> {
-            var selection = getSite().getWorkbenchWindow().getSelectionService().getSelection();
-            IProject selected = selection instanceof IStructuredSelection items && items.size() == 1
-                    ? SelectedProject.importedProject(items.getFirstElement()) : null;
-            if (selected != null) displayProject(selected);
-            else context.setText("Select an imported Zephyr project in Project Explorer first.");
+        controls.setLayout(new GridLayout(4, false));
+        button(controls, "Use selected project / debug session", () -> {
+            IProject chosen = selectedProject();
+            if (chosen == null) chosen = activeDebugProject();
+            if (chosen == null) chosen = uniqueLiveDebugProject();
+            if (chosen != null) displayProject(chosen);
+            else context.setText("No unique imported Zephyr project/debug session. "
+                    + "Select one in Project Explorer or Debug; no target access attempted.");
         });
         button(controls, "Refresh build evidence", this::refresh);
+        button(controls, "Trace Compass...", () -> {
+            try {
+                var view = getSite().getPage().showView(TraceCompassIntegrationView.ID);
+                if (view instanceof TraceCompassIntegrationView compass && project != null)
+                    compass.displayProject(project);
+            } catch (org.eclipse.ui.PartInitException error) {
+                context.setText("Could not open Trace Compass integration: " + error.getMessage());
+            }
+        });
         button(controls, "Clear displayed output", () -> output.setText(""));
 
         context = new Label(parent, SWT.WRAP);
         context.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        context.setText("Select an imported Zephyr project. No device operation is performed by inspection.");
+        context.setText("Finding an imported project or active Zephyr debug session. Inspection does not access target memory.");
 
         transports = new Table(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         transports.setHeaderVisible(true);
@@ -117,10 +133,11 @@ public final class ZephyrTraceConsoleView extends ViewPart {
         captureRtt = button(actions, "Connect RTT (opt-in)", this::toggleRtt);
 
         var note = new Label(parent, SWT.WRAP);
-        note.setText("RTT connects only to a user-configured EXISTING localhost TCP receiver; no OpenOCD commands or target-memory scans. "
-                + "ITM/SWO remains build-intent only. "
-                + "RAM CTF must be decoded as a trace, never printed as text. "
-                + "Captured evidence is also kept in the normal Eclipse Console and project output folders.");
+        note.setText("This is a transport dashboard, not an automatic live text stream. "
+                + "Capture UART/USB text from a selected serial port, or explicitly connect to an existing RTT TCP receiver. "
+                + "RTT does not issue OpenOCD commands or scan target memory. "
+                + "ITM/SWO remains build-intent only. RAM CTF capture can reset/halt the target; "
+                + "never launch it unintentionally during an active debug session.");
         note.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         output = new Text(parent, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY | SWT.V_SCROLL | SWT.H_SCROLL);
@@ -129,11 +146,69 @@ public final class ZephyrTraceConsoleView extends ViewPart {
                 + "Timestamps displayed by UART capture are host receive timestamps.\n");
         OPEN.add(this);
         showSnapshot();
+        // A trace view commonly opens with the Debug tree focused, not Project
+        // Explorer. Resolve a unique active Zephyr launch instead of staying blank.
+        IProject initial = activeDebugProject();
+        if (initial == null) initial = selectedProject();
+        if (initial == null) initial = uniqueLiveDebugProject();
+        if (initial != null) displayProject(initial);
+        else context.setText("No unambiguous active Zephyr project. Select a project or "
+                + "suspended Zephyr debug frame, then use the selection button.");
+        debugContextListener = event -> {
+            var display = parent.getDisplay();
+            if (display.isDisposed()) return;
+            display.asyncExec(() -> {
+                if (context == null || context.isDisposed()) return;
+                IProject resolved = activeDebugProject();
+                if (resolved != null && !resolved.equals(project)) displayProject(resolved);
+            });
+        };
+        DebugUITools.getDebugContextManager().getContextService(getSite().getWorkbenchWindow())
+                .addDebugContextListener(debugContextListener);
+    }
+
+    private IProject selectedProject() {
         var selection = getSite().getWorkbenchWindow().getSelectionService().getSelection();
+        if (!(selection instanceof IStructuredSelection items) || items.size() != 1) return null;
+        return SelectedProject.importedProject(items.getFirstElement());
+    }
+
+    /** Use the exact active debug context when it carries an imported Zephyr launch. */
+    private IProject activeDebugProject() {
+        var contextService = DebugUITools.getDebugContextManager()
+                .getContextService(getSite().getWorkbenchWindow());
+        var selection = contextService.getActiveContext();
         if (selection instanceof IStructuredSelection items && items.size() == 1) {
-            var selected = SelectedProject.importedProject(items.getFirstElement());
-            if (selected != null) displayProject(selected);
+            IProject selected = SelectedProject.importedProject(items.getFirstElement());
+            if (selected != null) return selected;
         }
+        return null;
+    }
+
+    /**
+     * Last resort: exactly one live project-labelled native Zephyr launch.
+     * Multiple different projects are ambiguous; never take the first match.
+     * This is metadata only and does not enumerate probe threads or memory.
+     */
+    private IProject uniqueLiveDebugProject() {
+        IProject found = null;
+        for (ILaunch launch : DebugPlugin.getDefault().getLaunchManager().getLaunches()) {
+            if (launch.isTerminated() || launch.getLaunchConfiguration() == null) continue;
+            try {
+                var config = launch.getLaunchConfiguration();
+                if (!ZephyrLaunchDelegate.TYPE.equals(config.getType().getIdentifier())) continue;
+                String name = config.getAttribute(ZephyrLaunchDelegate.PROJECT, "");
+                if (name.isBlank()) continue;
+                IProject selected = SelectedProject.importedProject(
+                        ResourcesPlugin.getWorkspace().getRoot().getProject(name));
+                if (selected == null) continue;
+                if (found != null && !found.equals(selected)) return null;
+                found = selected;
+            } catch (org.eclipse.core.runtime.CoreException ignored) {
+                // No project identity can be proven from this launch.
+            }
+        }
+        return found;
     }
 
     private Button button(Composite parent, String label, Runnable action) {
@@ -330,6 +405,9 @@ public final class ZephyrTraceConsoleView extends ViewPart {
 
     @Override public void dispose() {
         if (rttJob != null) rttJob.cancel();
+        if (debugContextListener != null)
+            DebugUITools.getDebugContextManager().getContextService(getSite().getWorkbenchWindow())
+                    .removeDebugContextListener(debugContextListener);
         generation.incrementAndGet();
         OPEN.remove(this);
         super.dispose();

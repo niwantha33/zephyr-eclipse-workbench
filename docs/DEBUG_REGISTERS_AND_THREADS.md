@@ -1,11 +1,62 @@
 # Registers and OpenOCD thread diagnostics
 
+## Debug the current file's project
+
+With an imported Zephyr application's source file open, choose **Debug As >
+Zephyr Application**. Editor text selections use that file's project and its
+selected board/profile. An explicit file/project selection in Project Explorer
+takes precedence. Multiple selected targets, closed/unmanaged projects and
+unmapped external files do not select a different application automatically.
+New Zephyr launch configurations also prefill the current context's project;
+opening an existing configuration retains its saved project.
+
+This selects the firmware application containing the file, rather than executing
+a C source file on its own. Debug As retains the existing build, confirmed flash,
+verification and native GDB workflow.
+
 ## CPU registers
 
 Suspend the target and select a stack frame in the Debug view. Open
 **Window > Show View > Other > Debug > Registers**. CDT displays the registers
 reported by the architecture's GDB, including PC, SP and general registers.
 This uses the current native Zephyr DSF-GDB session.
+
+## Expression memory locations (Bug 4)
+
+The native CDT **Expressions** view shows **Name / Type / Value** but does not
+automatically add a per-member address column. For an immediate check, add
+`&lab_stats`, `&lab_stats.heartbeat` or `sizeof(lab_stats.heartbeat)` as normal
+GDB watch expressions. An address is different from the current variable value.
+
+For a guided read-only inspection while the target is halted:
+
+1. In **Debug**, select the precise suspended stack frame and open **Expressions**.
+2. Right-click a single expression and select **Zephyr: Inspect Expression Memory Address…**
+   or open **Zephyr > Inspect GDB Symbol (Read-only)**.
+3. The **Zephyr GDB Expression Probe** accepts named C variables, dotted fields and
+   small literal array indices, e.g. `lab_stats.heartbeat` or
+   `lab_stats.samples[2].count`. It refuses arbitrary GDB expressions, calls,
+   assignments, casts, pointer dereferences and writes. If a native expression's
+   internal representation is not a supported simple path, enter the field
+   path manually.
+4. **Inspect address + size** queries the selected paused GDB session. Its report
+   separates value, GDB-confirmed storage address and `sizeof` in bytes.
+   **Copy address** is enabled only after a nonzero numeric address was confirmed.
+   Paste it into the standard **Memory** view's Add Memory Monitor field to
+   inspect the actual bytes. No automatic target-memory scan or write occurs.
+
+Not every expression occupies memory: a register-only temporary, inlined value,
+C bitfield, out-of-scope symbol or optimized variable may lack an address.
+The probe reports **UNAVAILABLE** rather than manufacturing an offset or copying
+a pointer value as an address. A pointer variable's **storage address** (`&p`)
+is distinct from the location *pointed to* by `p`. An array index is not
+runtime bounds-checked by the probe. Selecting the correct image/ELF, suspended
+frame and memory region remains the debugger's responsibility.
+
+This extension does **not** replace CDT's Expressions view or claim to add a
+fourth column to its internal tree. Confirm that the popup receives the selected
+native expression on a packaged Eclipse installation. Automated core tests do
+not prove physical MSPM0/XDS110 memory inspection.
 
 ## Named SoC peripherals
 
@@ -18,7 +69,14 @@ physical chip before reading.
 The native tree shows peripherals, registers, bitfields, addresses, access,
 reset values and values from the selected CDT DSF-GDB debug session. Search by
 peripheral, register, field or description. Select a register (or one of its
-fields), halt the target in Debug, then click **Refresh Live Values**.
+fields), halt the target in Debug, then click **Refresh Selected + Watches**. The view labels a readable register
+**Not read** until a successful explicit snapshot; **Blocked** means the exact
+SVD forbids the read (such as a write-only GPIO output bit or a read-to-clear
+status field). Selecting a register or expanding the tree does not read MCU
+memory. The command skips all blocked targets; with none readable, it explains
+the SVD reason without opening a memory read. To check the physical read path,
+select a non-side-effect, SVD-readable register and refresh while halted.
+Visible register definitions are not live hardware values.
 An explicit suspended frame or thread is used when selected. If none is selected,
 the explorer can resolve the unique active native Zephyr GDB launch for its
 selected project, enumerate the connected inferior's suspended threads, and

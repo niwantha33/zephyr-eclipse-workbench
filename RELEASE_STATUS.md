@@ -6,6 +6,22 @@
 **Current Eclipse-preview stabilisation checklist (2026-11-10):** [release stabilisation board](docs/RELEASE_STABILIZATION_2026-11-10.md). It distinguishes current exact-head CI from outstanding clean-host, hardware, licensing and release-asset acceptance; it does not close G0.
 **Gate G0:** OPEN. No evidence-engine installer, release, production or certification claim.
 
+## Debug workflow issue 1 — current-file selection (2026-11-13, draft PR)
+
+- Debug As resolves editor text/empty selections to the active file's imported
+  Zephyr project. Explicit context-menu targets take precedence; multiple,
+  inaccessible or unmanaged selections do not redirect to another application.
+- File editor inputs and IFile-only adapters resolve their owning project.
+  New launch configurations prefill and map the current project; existing saved
+  configurations retain their project. Verified Flash-and-Debug stays unchanged.
+- Added installed-Eclipse regression coverage for editor selection, explicit
+  project precedence, ambiguous/closed/unmanaged/external targets, configuration
+  defaults and saved-project preservation, without starting a hardware launch.
+- Local Linux/JDK 21: `scripts/test_core.py` passed (767 Python tests, 14 skips,
+  plus the Java core suites); all 160 UI and Eclipse smoke Java sources compiled
+  against the pinned Eclipse 4.41/CDT 12.6 APIs. Installed desktop execution,
+  exact-head remote CI and physical-board acceptance remain pending. G0 is OPEN.
+
 ## Baseline
 - Phase-0 starting main: e646073bd64da5601eb2258256db2cf7ca7cd265, no open PRs, AGENTS.md absent.
 - Development CI [41041729242](https://github.com/niwantha33/zephyr-eclipse-workbench/actions/runs/41041729242) passed Linux p2/UI and Windows firmware-matrix tests.
