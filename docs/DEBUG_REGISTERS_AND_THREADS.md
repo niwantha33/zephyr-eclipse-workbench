@@ -32,7 +32,14 @@ physical chip before reading.
 The native tree shows peripherals, registers, bitfields, addresses, access,
 reset values and values from the selected CDT DSF-GDB debug session. Search by
 peripheral, register, field or description. Select a register (or one of its
-fields), halt the target in Debug, then click **Refresh Live Values**.
+fields), halt the target in Debug, then click **Refresh Selected + Watches**. The view labels a readable register
+**Not read** until a successful explicit snapshot; **Blocked** means the exact
+SVD forbids the read (such as a write-only GPIO output bit or a read-to-clear
+status field). Selecting a register or expanding the tree does not read MCU
+memory. The command skips all blocked targets; with none readable, it explains
+the SVD reason without opening a memory read. To check the physical read path,
+select a non-side-effect, SVD-readable register and refresh while halted.
+Visible register definitions are not live hardware values.
 An explicit suspended frame or thread is used when selected. If none is selected,
 the explorer can resolve the unique active native Zephyr GDB launch for its
 selected project, enumerate the connected inferior's suspended threads, and
