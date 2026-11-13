@@ -136,6 +136,7 @@ for p in bundles:
                         'YamlPythonLaunch',
                         'YamlTreeProjection', 'YamlFlowGraph', 'YamlFlowCanvas',
                         'DtsGraphView', 'DtsGraphCanvas', 'DtsGraphModel', 'DtsGraphLoader',
+                        'UmlClassView', 'UmlClassCanvas', 'UmlClassModel', 'UmlCdtSource', 'UmlClassHandler',
                         'YamlBindingIntelligence', 'YamlHardwareModel',
                         'YamlTwisterModel', 'YamlDiagnosticModel', 'YamlDiagnosticMarkers',
                         'YamlScalarEdit', 'YamlPatchValidator'):
