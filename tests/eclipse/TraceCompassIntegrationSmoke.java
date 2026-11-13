@@ -26,6 +26,13 @@ public final class TraceCompassIntegrationSmoke {
             if (button.isEnabled() != installed)
                 throw new AssertionError("Tracing perspective must reflect installed plug-ins, "
                         + "not a bundled dependency or an assumed installation");
+            var installField = type.getDeclaredField("installInEclipse");
+            installField.setAccessible(true);
+            var installButton = (Button) installField.get(view);
+            if (!installButton.getText().contains("Install Trace Compass")
+                    || installButton.isEnabled() == installed)
+                throw new AssertionError("Native p2 install must be offered only when Trace Compass is absent");
+            // Do NOT click: smoke must not open a wizard or download software.
             var installation = type.getDeclaredField("installation");
             installation.setAccessible(true);
             var label = (Label) installation.get(view);
