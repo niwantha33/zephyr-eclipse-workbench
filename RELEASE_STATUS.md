@@ -727,3 +727,16 @@ EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.
   target memory tests are **pending**; this is not a verified hardware capability
   and does not advance G0.
 - Acceptance and safety details: [Target Memory Browser](docs/TARGET_MEMORY_BROWSER.md).
+
+## Automatic UML source-outline preview — development PR (2026-11-13)
+
+- Added a bounded, native SWT **Automatic UML (C/C++)** view backed by Eclipse
+  CDT's source outline for the currently selected C/C++ source/header.
+- Shows source-identified class/struct/union definitions, fields, methods,
+  double-click source navigation and deterministic PlantUML text export.
+- Limits source structures and labels incomplete observations; does not claim
+  whole-project calls, inheritance, embedded runtime interactions or live state.
+- Added headless model tests, installed SWT smoke, and a packaged-class gate.
+  Documentation: [Automatic UML milestone 1](docs/AUTOMATIC_UML.md).
+- **Validation pending at exact PR head.** This is not released, hardware-tested,
+  or evidence of the broader G0 gate closing. No automatic update is published.
