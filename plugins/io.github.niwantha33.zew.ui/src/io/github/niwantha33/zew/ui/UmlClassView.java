@@ -128,6 +128,11 @@ public final class UmlClassView extends ViewPart {
         reader.schedule();
     }
 
+    /** Supplies a source-outline projection for installed-UI and integration tests. */
+    public void displayObservation(UmlClassModel.Snapshot observation) {
+        show(observation);
+    }
+
     private void show(UmlClassModel.Snapshot model) {
         snapshot = model;
         canvas.show(model);
