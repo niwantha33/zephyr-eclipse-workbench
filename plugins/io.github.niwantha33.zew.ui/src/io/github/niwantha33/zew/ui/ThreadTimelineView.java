@@ -136,27 +136,6 @@ public final class ThreadTimelineView extends ViewPart {
             column.setWidth(widths[i]);
         }
 
-        TabItem observedTab = new TabItem(tabs, SWT.NONE);
-        observedTab.setText("Observed CTF Events");
-        Composite observedPage = new Composite(tabs, SWT.NONE);
-        observedPage.setLayout(new GridLayout(1, false));
-        observedTab.setControl(observedPage);
-        observedStatus = new Label(observedPage, SWT.WRAP);
-        observedStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        observedStatus.setText("No trace loaded. This tab shows raw observations even if CPU metrics are unavailable.");
-        observedTable = new Table(observedPage,
-                SWT.FULL_SELECTION | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
-        observedTable.setHeaderVisible(true);
-        observedTable.setLinesVisible(true);
-        observedTable.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        String[] observedTitles = { "Time (ns)", "Event", "Thread", "Thread ID", "Semantic kind" };
-        int[] observedWidths = { 150, 250, 200, 140, 200 };
-        for (int i = 0; i < observedTitles.length; i++) {
-            TableColumn column = new TableColumn(observedTable, SWT.LEFT);
-            column.setText(observedTitles[i]);
-            column.setWidth(observedWidths[i]);
-        }
-
         TabItem cpuTab = new TabItem(tabs, SWT.NONE);
         cpuTab.setText("Zephyr CPU Load");
         Composite cpuPage = new Composite(tabs, SWT.NONE);
@@ -208,6 +187,27 @@ public final class ThreadTimelineView extends ViewPart {
             column.setText(cpuTitles[i]);
             column.setWidth(cpuWidths[i]);
         }
+        TabItem observedTab = new TabItem(tabs, SWT.NONE);
+        observedTab.setText("Observed CTF Events");
+        Composite observedPage = new Composite(tabs, SWT.NONE);
+        observedPage.setLayout(new GridLayout(1, false));
+        observedTab.setControl(observedPage);
+        observedStatus = new Label(observedPage, SWT.WRAP);
+        observedStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        observedStatus.setText("No trace loaded. This tab shows raw observations even if CPU metrics are unavailable.");
+        observedTable = new Table(observedPage,
+                SWT.FULL_SELECTION | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
+        observedTable.setHeaderVisible(true);
+        observedTable.setLinesVisible(true);
+        observedTable.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        String[] observedTitles = { "Time (ns)", "Event", "Thread", "Thread ID", "Semantic kind" };
+        int[] observedWidths = { 150, 250, 200, 140, 200 };
+        for (int i = 0; i < observedTitles.length; i++) {
+            TableColumn column = new TableColumn(observedTable, SWT.LEFT);
+            column.setText(observedTitles[i]);
+            column.setWidth(observedWidths[i]);
+        }
+
         // No decoder, Job, file read or target access happens when either
         // tab is created or selected. Calculate only after explicit trace load.
     }
