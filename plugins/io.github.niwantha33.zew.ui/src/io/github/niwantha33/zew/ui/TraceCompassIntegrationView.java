@@ -163,7 +163,7 @@ public final class TraceCompassIntegrationView extends ViewPart {
         String chosen = dialog.open();
         if (chosen == null) return;
         Path location = Path.of(chosen).toAbsolutePath().normalize();
-        if ("ctf".equals(location.getFileName().toString()))
+        if (location.getFileName() != null && "ctf".equals(location.getFileName().toString()))
             location = location.getParent();
         selectCapture(location);
     }
