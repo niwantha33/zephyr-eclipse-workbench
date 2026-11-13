@@ -36,8 +36,8 @@ final class OfflineTracePythonBridge implements OfflineTraceAnalysisService.Brid
                     Files.copy(input, temporary.resolve(name));
                 }
             }
-            var args = new java.util.ArrayList<>(List.of(interpreter,
-                    temporary.resolve("offline_trace_json.py").toString(),
+            var args = new java.util.ArrayList<>(TracePythonLaunch.command(interpreter,
+                    temporary.resolve("offline_trace_json.py"),
                     "--mode", request.mode(), "--ctf", request.trace().toString()));
             if (request.startNs() != null) {
                 args.addAll(List.of("--start-ns", Long.toString(request.startNs()),
