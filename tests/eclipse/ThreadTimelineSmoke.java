@@ -161,6 +161,19 @@ public final class ThreadTimelineSmoke {
         check(!apply.isEnabled() && cpuTable.getItemCount() == 0
                 && cpuStatus.getText().contains("CPU percentages are withheld"),
                 "incomplete CTF suppresses CPU percentages in native Thread Timeline");
+        String eventReport = "ZEW_THREAD_TIMELINE\t3\t1\t0\t0\t\t0\t100\t200\t2\t2\n"
+                + "E\t100\t" + b64("thread_sched_ready") + "\t" + b64("lab_worker")
+                + "\t" + b64("1234") + "\tTHREAD_READY\n"
+                + "E\t200\t" + b64("isr_enter") + "\t\t\tISR_ENTER\n";
+        displayed.set(view, model.getMethod("parse", String.class).invoke(null, eventReport));
+        var refreshEvents = view.getClass().getDeclaredMethod("refreshObservedRows");
+        refreshEvents.setAccessible(true);
+        refreshEvents.invoke(view);
+        check(observedTable.getItemCount() == 2
+                && observedTable.getItem(0).getText(1).equals("thread_sched_ready")
+                && observedTable.getItem(0).getText(2).equals("lab_worker")
+                && observedStatus.getText().contains("PARTIAL CAPTURE"),
+                "incomplete CTF still displays observed event rows and loss warning");
         window.getActivePage().hideView(view);
         System.out.println("PASS THREAD TIMELINE INSTALLED UI: no-trace view disposed cleanly");
     }
