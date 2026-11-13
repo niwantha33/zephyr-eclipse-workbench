@@ -76,7 +76,7 @@ public final class ZephyrTraceConsoleView extends ViewPart {
 
         var controls = new Composite(parent, SWT.NONE);
         controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        controls.setLayout(new GridLayout(3, false));
+        controls.setLayout(new GridLayout(4, false));
         button(controls, "Use selected project / debug session", () -> {
             IProject chosen = selectedProject();
             if (chosen == null) chosen = activeDebugProject();
@@ -86,6 +86,15 @@ public final class ZephyrTraceConsoleView extends ViewPart {
                     + "Select one in Project Explorer or Debug; no target access attempted.");
         });
         button(controls, "Refresh build evidence", this::refresh);
+        button(controls, "Trace Compass...", () -> {
+            try {
+                var view = getSite().getPage().showView(TraceCompassIntegrationView.ID);
+                if (view instanceof TraceCompassIntegrationView compass && project != null)
+                    compass.displayProject(project);
+            } catch (org.eclipse.ui.PartInitException error) {
+                context.setText("Could not open Trace Compass integration: " + error.getMessage());
+            }
+        });
         button(controls, "Clear displayed output", () -> output.setText(""));
 
         context = new Label(parent, SWT.WRAP);
