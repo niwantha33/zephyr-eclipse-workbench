@@ -78,7 +78,19 @@ public final class TraceConsoleSmoke {
                         java.nio.file.Files.deleteIfExists(p);
                 }
             }
-            System.out.println("TraceConsoleSmoke PASS: passive view, five backends and exact saved CTF lookup");
+            // Test the *installed OSGi bundle*, not repository filesystem.
+            // A missing analyze_trace.py must fail CI before any XDS110 is opened.
+            var captureType = bundle.loadClass("io.github.niwantha33.zew.ui.ZephyrTraceHandler");
+            var resources = captureType.getDeclaredField("CAPTURE_FILES");
+            resources.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            var names = (java.util.List<String>) resources.get(null);
+            check(names.contains("analyze_trace.py"), "capture includes CTF analyzer module");
+            for (String name : names)
+                check(bundle.getEntry("tools/rtos_analysis/" + name) != null,
+                        "packaged capture dependency missing from installed Eclipse bundle: " + name);
+            System.out.println("TraceConsoleSmoke PASS: installed capture tool resources, "
+                    + "passive view, five backends and exact saved CTF lookup");
         } finally {
             page.hideView(view);
         }
