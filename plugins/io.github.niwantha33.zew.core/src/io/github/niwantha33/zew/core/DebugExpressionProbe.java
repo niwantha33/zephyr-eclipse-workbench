@@ -15,7 +15,7 @@ public final class DebugExpressionProbe {
     private static final Pattern LOCATION = Pattern.compile(
             "[A-Za-z_][A-Za-z_0-9]{0,127}(?:\\.[A-Za-z_][A-Za-z_0-9]{0,127}|\\[(?:0|[1-9][0-9]{0,3})\\]){0,12}");
     private static final Pattern ADDRESS = Pattern.compile(
-            "(?i)0x([0-9a-f]{1,16})(?:\\s+<[^\\r\\n>]{1,160}>)?");
+            "(?i)0x([0-9a-f]{1,16})(?:\\s+<[^\\r\n>]{1,160}>)?");
 
     public static String validateSymbol(String input) {
         String name = input == null ? "" : input.strip();
@@ -39,6 +39,18 @@ public final class DebugExpressionProbe {
         return value.signum() == 0 ? "" : "0x" + value.toString(16);
     }
 
+    /** Preserve size only when GDB returned a bounded, nonnegative integer. */
+    public static String confirmedSize(String candidate) {
+        String raw = candidate == null ? "" : candidate.strip();
+        if (!raw.matches("(?i)(0x[0-9a-f]{1,16}|[0-9]{1,20})")) return "";
+        try {
+            java.math.BigInteger n = raw.startsWith("0x") || raw.startsWith("0X")
+                    ? new java.math.BigInteger(raw.substring(2), 16)
+                    : new java.math.BigInteger(raw);
+            return n.signum() >= 0 && n.bitLength() <= 32 ? n.toString() : "";
+        } catch (NumberFormatException invalid) { return ""; }
+    }
+
     public static String describe(String symbol, String value, String address,
                                   String valueError, String addressError) {
         return describe(symbol, value, address, "", valueError, addressError, "");
@@ -49,35 +61,35 @@ public final class DebugExpressionProbe {
         String name = validateSymbol(symbol);
         String v = value == null ? "" : value.strip();
         String a = confirmedAddress(address);
-        String sz = size == null ? "" : size.strip();
+        String sz = confirmedSize(size);
         StringBuilder result = new StringBuilder("Expression: ").append(name)
-                .append("\\nGDB value: ").append(v.isBlank() ? "UNAVAILABLE" : v)
-                .append("\\nStorage address: ").append(a.isBlank() ? "UNAVAILABLE" : a)
-                .append("\\nSize (sizeof, bytes): ").append(sz.isBlank() ? "UNAVAILABLE" : sz);
+                .append("\nGDB value: ").append(v.isBlank() ? "UNAVAILABLE" : v)
+                .append("\nStorage address: ").append(a.isBlank() ? "UNAVAILABLE" : a)
+                .append("\nSize (sizeof, bytes): ").append(sz.isBlank() ? "UNAVAILABLE" : sz);
         if (valueError != null && !valueError.isBlank())
-            result.append("\\nValue evaluation: ").append(valueError.strip());
+            result.append("\nValue evaluation: ").append(valueError.strip());
         if (addressError != null && !addressError.isBlank())
-            result.append("\\nAddress evaluation: ").append(addressError.strip());
+            result.append("\nAddress evaluation: ").append(addressError.strip());
         if (sizeError != null && !sizeError.isBlank())
-            result.append("\\nSize evaluation: ").append(sizeError.strip());
+            result.append("\nSize evaluation: ").append(sizeError.strip());
         String failure = valueError == null ? "" : valueError.toLowerCase(Locale.ROOT);
         boolean optimized = v.contains("<optimized out>") || v.contains("<unavailable>")
                 || failure.contains("optimized out") || failure.contains("unavailable");
         if (optimized && !a.isEmpty()) {
-            result.append("\\nGDB can locate storage for this symbol but cannot provide its current value. ")
+            result.append("\nGDB can locate storage for this symbol but cannot provide its current value. ")
                     .append("Check ELF DWARF, exact compiler command, ELF/target identity and target read permissions.");
         } else if (optimized) {
-            result.append("\\nGDB could not supply the value; the address was not confirmed either. ")
+            result.append("\nGDB could not supply the value; the address was not confirmed either. ")
                     .append("Check whether the symbol is global, emitted in this ELF and available in this frame.");
         } else if (!v.isBlank() && (valueError == null || valueError.isBlank())
                 && (addressError == null || addressError.isBlank())) {
-            result.append("\\nGDB returned a value. It is a halted-session snapshot, not proof of physical GPIO state.");
+            result.append("\nGDB returned a value. It is a halted-session snapshot, not proof of physical GPIO state.");
         } else {
-            result.append("\\nInconclusive. This view cannot infer an absent variable's value from its C type.");
+            result.append("\nInconclusive. This view cannot infer an absent variable's value from its C type.");
         }
-        if (a.isBlank()) result.append("\\nNo confirmed storage address: this value may be a register, "
+        if (a.isBlank()) result.append("\nNo confirmed storage address: this value may be a register, "
                 + "a compiler temporary, a bitfield, out of scope or otherwise unavailable.");
-        return result.append("\\nProbe is read-only. No arbitrary pointer is dereferenced or written.")
+        return result.append("\nProbe is read-only. No arbitrary pointer is dereferenced or written.")
                 .toString();
     }
 }
