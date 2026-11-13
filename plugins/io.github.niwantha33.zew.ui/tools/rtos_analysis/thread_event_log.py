@@ -7,6 +7,8 @@ DIRECT = {
     "thread_switched_in": "switch-in observed; scheduled",
     "thread_switched_out": "switch-out observed; ready/wait/sleep UNKNOWN",
     "thread_ready": "ready event observed; interval UNKNOWN",
+    "thread_sched_ready": "scheduler ready event observed; interval UNKNOWN",
+    "thread_sched_pend": "scheduler pending event observed; interval UNKNOWN",
     "thread_pend": "pending event observed; interval UNKNOWN",
     "thread_sleep": "sleep request observed; interval UNKNOWN",
     "thread_wakeup": "wakeup observed; next state UNKNOWN",
@@ -30,14 +32,16 @@ def events_table(records, limit=LIMIT):
     loss = bad_clock = False
     for rec in records:
         kind = rec.get("kind")
-        if kind in ("discarded_events", "discarded_packets"):
+        if kind in ("discarded_events", "discarded_packets", "ram_buffer_full"):
             loss = True
             if len(rows) >= limit:
                 omitted += 1
             else:
                 rows.append({"timestamp_ns": None, "stream": "", "core": "", "thread_id": "",
                              "thread_name": "", "event": plain(kind),
-                             "observed": "reported loss: event sequence INCOMPLETE"})
+                             "observed": ("RAM buffer full; lost event count UNKNOWN"
+                                          if kind == "ram_buffer_full" else
+                                          "reported loss: event sequence INCOMPLETE")})
             continue
         if kind != "event":
             continue
@@ -71,7 +75,7 @@ def events_table(records, limit=LIMIT):
                "observed events only; unreported loss and target clock accuracy UNKNOWN")
     return {"rows": rows, "quality": quality, "events_observed": observed,
             "rows_omitted": omitted, "row_cap": limit,
-            "source": "normalized Babeltrace 2 offline CTF stream",
+            "source": "normalized saved CTF stream (native Zephyr 4.4 or Babeltrace 2)",
             "source_locations": "UNKNOWN: no validated PC/ELF mapping",
             "state_intervals": "UNKNOWN absent explicit matched state evidence",
             "clock": "CTF nanoseconds if available; calibration unverified"}

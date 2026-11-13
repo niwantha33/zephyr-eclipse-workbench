@@ -13,6 +13,7 @@ from pathlib import Path
 import math
 import struct
 from typing import Iterable, Mapping
+from zephyr_ctf_binary import decode_packed, supports, buffer_full_evidence
 
 
 class EventKind(str, Enum):
@@ -95,8 +96,10 @@ RAW_EVENT_KINDS: dict[str, EventKind] = {
     "thread_switched_in": EventKind.THREAD_SWITCHED_IN,
     "thread_switched_out": EventKind.THREAD_SWITCHED_OUT,
     "thread_ready": EventKind.THREAD_READY,
+    "thread_sched_ready": EventKind.THREAD_READY,
     "thread_pend": EventKind.THREAD_BLOCKED,
     "thread_pending": EventKind.THREAD_BLOCKED,
+    "thread_sched_pend": EventKind.THREAD_BLOCKED,
     "thread_sleep_enter": EventKind.THREAD_SLEEPING,
     "isr_enter": EventKind.ISR_ENTER,
     "isr_enter_user": EventKind.ISR_ENTER,
@@ -319,10 +322,17 @@ def _tracepoint_value(raw: Mapping, spec) -> int | float:
 
 
 def decode_ctf(path: Path):
-    """Yield Babeltrace records from a saved CTF trace; errors reach the parser.
+    """Use the native Zephyr 4.4 wire layout when recognized; else Babeltrace.
 
-    Import bt2 lazily so list-based normalization works without Babeltrace.
+    Zephyr's raw RAM stream is not a packetized CTF trace with a clock
+    declaration, so default_clock_snapshot is not reliable for that format.
     """
+    if supports(path):
+        yield from decode_packed(path)
+        if buffer_full_evidence(path):
+            # This is a verified RAM-backend flag, NOT a known dropped count.
+            yield {"kind": "ram_buffer_full", "count": None}
+        return
     import bt2
 
     streams = {}
@@ -414,11 +424,13 @@ class SemanticTraceParser:
                 else:
                     raw = dict(raw)
                     trace.raw_records.append(raw)
-                    if raw.get("kind") in ("discarded_events", "discarded_packets"):
-                        # These are loss notifications, not CTF events.
-                        # Keep their original raw-record evidence for existing
-                        # analyzers. Memory profiling separately checks loss.
+                    if raw.get("kind") in ("discarded_events", "discarded_packets",
+                                            "ram_buffer_full"):
+                        # Backend full is verified via the saved receipt's hashes;
+                        # it is loss *risk*, not an invented dropped-event count.
                         trace.loss_reported = True
+                        if raw.get("kind") == "ram_buffer_full":
+                            trace.incomplete = True
                         continue
                     name = _text(raw.get("name"))
                     simple_name = name.rsplit(":", 1)[-1]

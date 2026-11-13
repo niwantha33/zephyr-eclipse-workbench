@@ -172,7 +172,7 @@ public final class TracepointPlotView extends ViewPart {
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     temporary = Files.createTempDirectory("zew-user-tracepoints-");
                     for (String filename : List.of(
-                            "semantic_trace.py", "tracepoint_config.py", "tracepoint_samples.py")) {
+                            "semantic_trace.py", "zephyr_ctf_binary.py", "tracepoint_config.py", "tracepoint_samples.py")) {
                         var entry = Activator.getDefault().getBundle()
                                 .getEntry("tools/rtos_analysis/" + filename);
                         if (entry == null) throw new IOException("Bundled trace tool missing: " + filename);

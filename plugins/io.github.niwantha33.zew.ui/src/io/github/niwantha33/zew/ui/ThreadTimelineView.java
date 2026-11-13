@@ -111,7 +111,7 @@ public final class ThreadTimelineView extends ViewPart {
         guidance.setText("To begin: build and flash CONFIG_TRACING=y + CONFIG_TRACING_CTF=y "
                 + "+ CONFIG_TRACING_BACKEND_RAM=y. Terminate Debug before Capture; "
                 + "the capture resets/runs/halts the MCU. Then open the latest saved CTF. "
-                + "Requires Babeltrace 2 (Python bt2) to decode scheduler events.");
+                + "Zephyr 4.4 packed RAM CTF decodes natively; other CTF formats may need Babeltrace 2 bt2.");
 
         tabs = new TabFolder(parent, SWT.NONE);
         tabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -280,7 +280,7 @@ public final class ThreadTimelineView extends ViewPart {
                 try {
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     temporary = Files.createTempDirectory("zew-thread-timeline-");
-                    for (String name : List.of("semantic_trace.py", "thread_timeline.py")) {
+                    for (String name : List.of("semantic_trace.py", "zephyr_ctf_binary.py", "thread_timeline.py")) {
                         var entry = Activator.getDefault().getBundle()
                                 .getEntry("tools/rtos_analysis/" + name);
                         if (entry == null) throw new IOException("Bundled trace tool missing: " + name);
@@ -370,6 +370,11 @@ public final class ThreadTimelineView extends ViewPart {
     }
 
     private void prepareCpuLoad() {
+        if (displayed != null && displayed.incomplete()) {
+            clearCpuLoad("Incomplete CTF or full RAM buffer: observed thread intervals "
+                    + "may be inspected, but CPU percentages are withheld.");
+            return;
+        }
         if (displayed == null || displayed.schedulerEvents() == 0
                 || displayed.intervals().isEmpty()) {
             clearCpuLoad(displayed != null && displayed.schedulerEvents() == 0
@@ -459,7 +464,7 @@ public final class ThreadTimelineView extends ViewPart {
             table.setRedraw(true);
         }
         if (displayed.decoderUnavailable())
-            status.setText("CTF decoding unavailable: install Babeltrace 2 bt2 for the selected Python. "
+            status.setText("CTF format not handled by the native Zephyr decoder; configure Babeltrace 2 bt2. "
                     + displayed.detail());
         else if (displayed.schedulerEvents() == 0)
             status.setText(NO_SCHEDULER + " " + displayed.detail());

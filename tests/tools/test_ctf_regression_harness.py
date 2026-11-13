@@ -47,6 +47,7 @@ MODULE_FEATURES = {
     "memory_profile_report": "Memory allocation profiling",
     "memory_profiler": "Memory allocation profiling",
     "semantic_trace": "CTF semantic normalization",
+    "zephyr_ctf_binary": "CTF semantic normalization",
     "synchronization_analysis": "Synchronization object activity (mutex, semaphore, Zephyr message queue)",
     "serial_console": "Debug serial console",
     "thread_event_log": "Thread event log",

@@ -239,7 +239,8 @@ def capture(gdb: Path, elf: Path, metadata: Path, destination: Path, port: int,
                    'trace_sha256': hashlib.sha256(data).hexdigest(),
                    'build_config_sha256': hashlib.sha256(
                        (elf.parent / '.config').read_bytes()).hexdigest(),
-                   'ctf_analysis': analyze(ctf),
+                   'ctf_analysis': analyze(
+                       ctf, capture_full=evidence.get('backend_buffer_full') is True),
                    'firmware_matches_elf': 'not verified',
                    'gdb_output': gdb_output}
         (stage / 'capture.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
