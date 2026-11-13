@@ -24,6 +24,63 @@ binary capture evidence, not readable console text. On TI MSPM0G3507
 (Cortex-M0+) the ITM/SWO channel is unavailable; this is a hardware
 limitation, not a Workbench project-selection failure.
 
+## Guided CTF → Timeline / CPU Load (Bug 6)
+
+Both **Zephyr Thread Timeline** and the separate **Zephyr CPU Load** view
+are **saved-CTF offline analysers**, not real-time monitors. Opening the view
+alone never reads the target or starts a decoder. The empty tables mean
+**No trace loaded**, not a broken CPU probe.
+
+The new controls in each view are intentionally sequential:
+
+1. **1. Capture new CTF...** — resolves the already selected imported
+   Zephyr project or unique active Zephyr debug project, then invokes the
+   *existing* confirmed RAM CTF capture flow. This is a **target-affecting**
+   operation: first build and flash the matching RAM tracing configuration,
+   terminate an active Debug session to release the probe, and review the
+   confirmation. Capture resets the MCU, runs it for the configured short
+   interval (default 1 second), and leaves it halted.
+2. **2. Open latest capture** — reads only the most recent complete saved
+   `.zew-traces/trace-*/ctf` in that project; no probe/flash/target access.
+   Missing `metadata` or `channel0_0` files are rejected. If there is
+   no saved CTF, the UI says so instead of leaving an unexplained empty table.
+3. **Open saved CTF trace... / Load trace...** — select an older
+   `.zew-traces/trace-*/ctf` folder for comparison. The two views continue
+   to analyse only on explicit selection; they do not poll memory in Debug.
+
+After a **successful explicitly requested capture**, any *already open*
+Timeline and CPU Load views for the selected application are notified and load
+the saved CTF. The capture still saves `capture.json`, `diagnostics.json`,
+`report.html` and CTF bytes even when a viewer cannot decode them.
+A missing/unsupported decoder, incomplete scheduler events or reported loss
+must remain visible as unavailable/partial rather than fabricated CPU load.
+
+For an MSPM0G3507 project, typical `prj.conf` configuration is:
+
+```ini
+CONFIG_TRACING=y
+CONFIG_TRACING_CTF=y
+CONFIG_TRACING_BACKEND_RAM=y
+CONFIG_TRACING_SYNC=y
+CONFIG_RAM_TRACING_BUFFER_SIZE=4096
+CONFIG_THREAD_NAME=y
+```
+
+Check the **effective** `build/zephyr/.config` in the selected build
+profile before capture. Build and deliberately flash the same ELF/image;
+the tool cannot independently prove the flashed firmware equals that ELF.
+The active debug server and the CTF capture command cannot both own the
+XDS110 probe. If the capture fails, inspect the separate *RTOS trace*
+Eclipse Console, not a blank CPU table. The offline decoder requires the
+selected managed Python to provide Babeltrace 2 `bt2`, and CPU percentages
+require complete scheduler evidence. RAM buffer overflow/fullness can
+invalidate proportions; consider shorter captures or a supported larger
+buffer after checking board RAM resources.
+
+This update is **workflow integration**, not continuous live CPU profiling
+and not a proof of probe/trace correctness on real hardware. The analyzer
+retains its prior evidence-only output rules.
+
 ## What works now
 
 | Output | Evidence check | Capture action |
