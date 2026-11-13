@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Validate marketing assets and catalogue
         run: |
           python - <<'PY'
@@ -84,7 +84,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload static website
