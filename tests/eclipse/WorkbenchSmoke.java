@@ -28,7 +28,7 @@ public final class WorkbenchSmoke implements IApplication {
                             // on the worker thread so native smoke failures fail CI.
                             var uiFailure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
                             display.syncExec(() -> {
-                                try { ZephyrProfileToolbarSmoke.run(); TraceConsoleSmoke.run(); SocRegistersSmoke.run(); YamlStructureSmoke.run(); DtsGraphSmoke.run(); ThreadTimelineSmoke.run(); ZephyrCpuLoadSmoke.run(); TracepointPlotSmoke.run(); ZephyrContentionSmoke.run(); ZephyrMemoryProfileSmoke.run(); }
+                                try { ZephyrProfileToolbarSmoke.run(); TraceConsoleSmoke.run(); TraceCompassIntegrationSmoke.run(); SocRegistersSmoke.run(); YamlStructureSmoke.run(); DtsGraphSmoke.run(); ThreadTimelineSmoke.run(); ZephyrCpuLoadSmoke.run(); TracepointPlotSmoke.run(); ZephyrContentionSmoke.run(); ZephyrMemoryProfileSmoke.run(); }
                                 catch (Throwable ex) { uiFailure.set(ex); }
                             });
                             if (uiFailure.get() != null)
