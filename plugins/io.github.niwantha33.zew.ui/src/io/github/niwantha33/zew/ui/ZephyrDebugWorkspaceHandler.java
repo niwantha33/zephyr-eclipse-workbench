@@ -38,16 +38,22 @@ public final class ZephyrDebugWorkspaceHandler extends AbstractHandler {
         var descriptor = window.getWorkbench().getPerspectiveRegistry()
                 .findPerspectiveWithId(ZephyrHardwareDebugPerspective.ID);
         if (descriptor == null) return;
-        // Eclipse remembers any user rearrangement in this separate perspective.
+        // Eclipse persists old perspective mementos (including placeholders).
+        // Explicitly instantiate the passive observability views even when
+        // an existing workspace was created before the perspective fix.
         page.setPerspective(descriptor);
         try {
+            page.showView(ZephyrTraceConsoleView.ID, null, IWorkbenchPage.VIEW_VISIBLE);
+            page.showView(ThreadTimelineView.ID, null, IWorkbenchPage.VIEW_VISIBLE);
+            page.showView(ZephyrCpuLoadView.ID, null, IWorkbenchPage.VIEW_VISIBLE);
+            page.showView(TraceCompassIntegrationView.ID, null, IWorkbenchPage.VIEW_VISIBLE);
             page.showView("org.eclipse.debug.ui.DebugView",
                     null, IWorkbenchPage.VIEW_ACTIVATE);
         } catch (org.eclipse.ui.PartInitException error) {
             var plugin = Activator.getDefault();
             if (plugin != null) plugin.getLog().log(new org.eclipse.core.runtime.Status(
                     org.eclipse.core.runtime.IStatus.WARNING, Activator.ID,
-                    "Zephyr debug perspective is available, but Debug view could not open.", error));
+                    "Zephyr debug perspective could not open one or more native observability views.", error));
         }
     }
 }

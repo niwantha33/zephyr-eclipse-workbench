@@ -86,7 +86,7 @@ class TraceRegressionHarnessTests(unittest.TestCase):
                 contention = contention_report.analyze(replay(filename))
                 memory = memory_profile_report.analyze(replay(filename))
                 summary = analyze_trace.summarize(replay(filename), idle_thread_id="idle")
-                self.assertTrue(thread_timeline.serialize(timeline).startswith("ZEW_THREAD_TIMELINE\t2\t"))
+                self.assertTrue(thread_timeline.serialize(timeline).startswith("ZEW_THREAD_TIMELINE\t3\t"))
                 self.assertIn(cpu["status"], ("unavailable", "partial", "measured"))
                 self.assertTrue(plot.startswith("ZEW_TRACEPOINTS\t1\t"))
                 self.assertTrue(contention.startswith("ZEW_CONTENTION\t1\t"))

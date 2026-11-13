@@ -1,5 +1,28 @@
 # Zephyr Debug Trace Console (first integration slice)
 
+## Installed view visibility and observed-event inspection (release blocker)
+
+**Zephyr > Run & Debug > Open Zephyr Hardware Debug Workspace** now opens
+actual tabs, not placeholders: Debug Trace Console, Thread Timeline,
+Zephyr CPU Load, and Trace Compass Integration. Explicitly opening the
+workspace also repairs older persisted Eclipse perspectives; opening
+a view never silently connects a probe or starts a CTF capture.
+
+After capture, select **Zephyr Thread Timeline > Open latest capture**,
+then **Observed CTF Events**. This displays up to 1024 actual decoded
+events (with a total-event count) even when the RAM buffer was full, thread
+switches cannot be paired, or no reliable CPU percentage is available.
+Entries show event timestamp, name, thread name/ID and semantic type.
+This is an offline observation of saved data, **not** live CPU sampling.
+The **Zephyr CPU Load** tab reports unavailable rather than displaying
+fabricated 0% utilisation for full/incomplete captures.
+
+The separate **Trace Compass Integration** tab is only a launcher and
+install guide; it does not bundle the third-party Trace Compass plug-ins.
+If it says NOT INSTALLED, the actual Tracing perspective cannot open yet.
+Use the official Eclipse p2 update site and verify installation/restart.
+
+
 Open **Zephyr > Capture & Analyse > Debug Trace Console...** during an
 existing Zephyr Debug session or after selecting an imported Zephyr project.
 The view now first follows an active native Zephyr debug-context project,

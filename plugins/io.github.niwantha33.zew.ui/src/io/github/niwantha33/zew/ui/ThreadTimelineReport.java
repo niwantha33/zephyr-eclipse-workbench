@@ -23,12 +23,18 @@ public final class ThreadTimelineReport {
 
     public record Interval(long startNs, long endNs, String durationUs,
                            String threadName, String priority, String state) { }
+    public record ObservedEvent(Long timestampNs, String eventName,
+                                String threadName, String threadId, String kind) { }
 
-    public record Snapshot(List<Interval> intervals, boolean incomplete,
+    public record Snapshot(List<Interval> intervals, List<ObservedEvent> events,
+                           long totalEvents, boolean incomplete,
                            long unknownEvents, long schedulerEvents,
                            String detail, boolean decoderUnavailable,
                            Long traceStartNs, Long traceEndNs) {
-        public Snapshot { intervals = List.copyOf(intervals); }
+        public Snapshot {
+            intervals = List.copyOf(intervals);
+            events = List.copyOf(events);
+        }
     }
 
     private ThreadTimelineReport() { }
@@ -42,23 +48,43 @@ public final class ThreadTimelineReport {
         String[] header = lines[0].split("\\t", -1);
         if (!"ZEW_THREAD_TIMELINE".equals(header[0])
                 || !(header.length == 7 && "1".equals(header[1])
-                        || header.length == 9 && "2".equals(header[1])))
+                        || header.length == 9 && "2".equals(header[1])
+                        || header.length == 11 && "3".equals(header[1])))
             throw new IllegalArgumentException("Unsupported thread timeline protocol");
         boolean incomplete = flag(header[2]);
         long unknown = positive(header[3]);
         long scheduler = positive(header[4]);
         String detail = decoded(header[5]);
         boolean decoderMissing = flag(header[6]);
-        Long traceStart = header.length == 9 && !header[7].isEmpty() ? positive(header[7]) : null;
-        Long traceEnd = header.length == 9 && !header[8].isEmpty() ? positive(header[8]) : null;
+        Long traceStart = header.length >= 9 && !header[7].isEmpty() ? positive(header[7]) : null;
+        Long traceEnd = header.length >= 9 && !header[8].isEmpty() ? positive(header[8]) : null;
+        long totalEvents = header.length == 11 ? positive(header[9]) : 0;
+        long expectedEvents = header.length == 11 ? positive(header[10]) : 0;
+        if (expectedEvents > 1024 || expectedEvents > totalEvents)
+            throw new IllegalArgumentException("Invalid observed event count");
         if ((traceStart == null) != (traceEnd == null)
                 || traceStart != null && traceEnd < traceStart)
             throw new IllegalArgumentException("Invalid observed trace bounds");
         List<Interval> rows = new ArrayList<>();
+        List<ObservedEvent> events = new ArrayList<>();
         for (int i = 1; i < lines.length - 1; i++) {
+            String[] tokens = lines[i].split("\\t", -1);
+            if (tokens.length == 6 && "E".equals(tokens[0]) && header.length == 11) {
+                if (events.size() >= expectedEvents)
+                    throw new IllegalArgumentException("Unexpected extra observed event");
+                Long timestamp = tokens[1].isEmpty() ? null : positive(tokens[1]);
+                if (timestamp != null && traceStart != null
+                        && (timestamp < traceStart || timestamp > traceEnd))
+                    throw new IllegalArgumentException("Observed event outside trace bounds");
+                String kind = tokens[5];
+                if (!kind.matches("[A-Z_]{3,48}"))
+                    throw new IllegalArgumentException("Invalid semantic event kind");
+                events.add(new ObservedEvent(timestamp, decoded(tokens[2]),
+                        decoded(tokens[3]), decoded(tokens[4]), kind));
+                continue;
+            }
             if (rows.size() >= MAX_ROWS)
                 throw new IllegalArgumentException("Timeline exceeds supported row limit");
-            String[] tokens = lines[i].split("\\t", -1);
             if (tokens.length != 6 || !"I".equals(tokens[0]))
                 throw new IllegalArgumentException("Malformed timeline interval line " + i);
             long start = positive(tokens[1]);
@@ -72,8 +98,10 @@ public final class ThreadTimelineReport {
                                          nanos.remainder(BigInteger.valueOf(1000)).intValue());
             rows.add(new Interval(start, end, micros, decoded(tokens[3]), decoded(tokens[4]), tokens[5]));
         }
-        return new Snapshot(rows, incomplete, unknown, scheduler, detail, decoderMissing,
-                traceStart, traceEnd);
+        if (events.size() != expectedEvents)
+            throw new IllegalArgumentException("Missing observed event rows");
+        return new Snapshot(rows, events, totalEvents, incomplete, unknown, scheduler,
+                detail, decoderMissing, traceStart, traceEnd);
     }
 
     private static boolean flag(String text) {

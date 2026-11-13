@@ -74,6 +74,10 @@ public final class ThreadTimelineSmoke {
                 "filtering an unloaded view is safe and does not trigger analysis");
         TabFolder tabs = (TabFolder) field(view, "tabs");
         Table cpuTable = (Table) field(view, "cpuTable");
+        Table observedTable = (Table) field(view, "observedTable");
+        Label observedStatus = (Label) field(view, "observedStatus");
+        check(observedTable.getItemCount() == 0 && observedStatus.getText().contains("No trace loaded"),
+                "observed events tab opens passively without a decoder or target read");
         Label cpuDisclaimer = (Label) field(view, "cpuDisclaimer");
         Label cpuWarning = (Label) field(view, "cpuWarning");
         Label cpuStatus = (Label) field(view, "cpuStatus");
@@ -81,7 +85,8 @@ public final class ThreadTimelineSmoke {
         Text windowStart = (Text) field(view, "windowStart");
         Text windowEnd = (Text) field(view, "windowEnd");
         Button apply = (Button) field(view, "cpuApply");
-        check(tabs.getItemCount() == 2 && tabs.getItem(1).getText().equals("Zephyr CPU Load"),
+        check(tabs.getItemCount() == 3 && tabs.getItem(1).getText().equals("Zephyr CPU Load")
+                && tabs.getItem(2).getText().equals("Observed CTF Events"),
                 "a second CPU Load tab exists alongside Thread Timeline");
         check(cpuTable.getColumnCount() == 3 && List.of(
                 "Thread Name", "Running (us)", "Percentage").equals(
@@ -156,6 +161,19 @@ public final class ThreadTimelineSmoke {
         check(!apply.isEnabled() && cpuTable.getItemCount() == 0
                 && cpuStatus.getText().contains("CPU percentages are withheld"),
                 "incomplete CTF suppresses CPU percentages in native Thread Timeline");
+        String eventReport = "ZEW_THREAD_TIMELINE\t3\t1\t0\t0\t\t0\t100\t200\t2\t2\n"
+                + "E\t100\t" + b64("thread_sched_ready") + "\t" + b64("lab_worker")
+                + "\t" + b64("1234") + "\tTHREAD_READY\n"
+                + "E\t200\t" + b64("isr_enter") + "\t\t\tISR_ENTER\n";
+        displayed.set(view, model.getMethod("parse", String.class).invoke(null, eventReport));
+        var refreshEvents = view.getClass().getDeclaredMethod("refreshObservedRows");
+        refreshEvents.setAccessible(true);
+        refreshEvents.invoke(view);
+        check(observedTable.getItemCount() == 2
+                && observedTable.getItem(0).getText(1).equals("thread_sched_ready")
+                && observedTable.getItem(0).getText(2).equals("lab_worker")
+                && observedStatus.getText().contains("PARTIAL CAPTURE"),
+                "incomplete CTF still displays observed event rows and loss warning");
         window.getActivePage().hideView(view);
         System.out.println("PASS THREAD TIMELINE INSTALLED UI: no-trace view disposed cleanly");
     }

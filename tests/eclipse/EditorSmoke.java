@@ -1245,6 +1245,30 @@ public final class EditorSmoke implements IApplication {
                     check(hardwareDebugPerspective != null,
                             "Zephyr Hardware Debug perspective is installed");
                     page.setPerspective(hardwareDebugPerspective);
+                    // Exercise the actual user command. Eclipse may restore an old
+                    // perspective memento with legacy placeholders; the command
+                    // must repair it by instantiating each view explicitly.
+                    // The smoke application is a separate OSGi bundle: load
+                    // the handler from its owning plug-in, not from the smoke
+                    // bundle's classloader (which does not import zew.ui internals).
+                    var zewUiBundle = org.eclipse.core.runtime.Platform.getBundle(
+                            "io.github.niwantha33.zew.ui");
+                    check(zewUiBundle != null, "installed Workbench UI bundle is available");
+                    var handlerClass = zewUiBundle.loadClass(
+                            "io.github.niwantha33.zew.ui.ZephyrDebugWorkspaceHandler");
+                    var openHardware = handlerClass.getDeclaredMethod(
+                            "open", org.eclipse.ui.IWorkbenchWindow.class);
+                    openHardware.setAccessible(true);
+                    openHardware.invoke(null, page.getWorkbenchWindow());
+                    for (String id : java.util.List.of(
+                            "io.github.niwantha33.zew.ui.traceConsole",
+                            "io.github.niwantha33.zew.ui.threadTimeline",
+                            "io.github.niwantha33.zew.ui.cpuLoad",
+                            "io.github.niwantha33.zew.ui.traceCompassIntegration")) {
+                        var reference = page.findViewReference(id);
+                        check(reference != null && reference.getView(false) != null,
+                                "Open Zephyr Hardware Debug Workspace instantiates observability view: " + id);
+                    }
                     check(page.findViewReference("org.eclipse.debug.ui.MemoryView") != null,
                             "native target Memory view is part of the hardware debug layout");
                     check(page.showView("org.eclipse.debug.ui.MemoryView") != null,
