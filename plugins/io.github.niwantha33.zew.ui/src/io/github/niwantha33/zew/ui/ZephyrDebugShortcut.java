@@ -10,7 +10,6 @@ import org.eclipse.debug.core.ILaunchConfiguration;
 import org.eclipse.debug.core.ILaunchManager;
 import org.eclipse.debug.ui.ILaunchShortcut2;
 import org.eclipse.jface.viewers.ISelection;
-import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.PlatformUI;
 
@@ -20,8 +19,7 @@ public class ZephyrDebugShortcut implements ILaunchShortcut2 {
         return SelectedProject.importedProject(value);
     }
     private IProject project(ISelection selection) {
-        return selection instanceof IStructuredSelection items && items.size() == 1
-                ? project(items.getFirstElement()) : null;
+        return SelectedProject.forLaunch(selection);
     }
     private IProject project(IEditorPart editor) {
         return editor == null ? null : project(editor.getEditorInput());

@@ -1666,6 +1666,7 @@ public final class EditorSmoke implements IApplication {
             check(flashShortcut.getLaunchableResource(selection) == null,
                     "ordinary C project is not treated as an imported Zephyr Flash target");
             project.setPersistentProperty(setupProperty, fixture.toString());
+            DebugLaunchSelectionSmoke.run(ui, project);
             check(Platform.getAdapterManager().hasAdapter(project, "org.eclipse.debug.ui.actions.ILaunchable"),
                     "managed project participates in native launch selection");
             check(project.equals(flashShortcut.getLaunchableResource(selection)),

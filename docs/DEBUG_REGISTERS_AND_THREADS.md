@@ -1,5 +1,19 @@
 # Registers and OpenOCD thread diagnostics
 
+## Debug the current file's project
+
+With an imported Zephyr application's source file open, choose **Debug As >
+Zephyr Application**. Editor text selections use that file's project and its
+selected board/profile. An explicit file/project selection in Project Explorer
+takes precedence. Multiple selected targets, closed/unmanaged projects and
+unmapped external files do not select a different application automatically.
+New Zephyr launch configurations also prefill the current context's project;
+opening an existing configuration retains its saved project.
+
+This selects the firmware application containing the file, rather than executing
+a C source file on its own. Debug As retains the existing build, confirmed flash,
+verification and native GDB workflow.
+
 ## CPU registers
 
 Suspend the target and select a stack frame in the Debug view. Open

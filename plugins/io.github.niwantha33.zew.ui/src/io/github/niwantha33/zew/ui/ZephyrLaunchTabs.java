@@ -107,7 +107,9 @@ public final class ZephyrLaunchTabs extends AbstractLaunchConfigurationTabGroup 
             }
         }
         @Override public void setDefaults(ILaunchConfigurationWorkingCopy configuration) {
-            configuration.setAttribute(ZephyrLaunchDelegate.PROJECT, "");
+            IProject selected = SelectedProject.forLaunch();
+            configuration.setAttribute(ZephyrLaunchDelegate.PROJECT, selected == null ? "" : selected.getName());
+            configuration.setMappedResources(selected == null ? null : new org.eclipse.core.resources.IResource[] {selected});
             configuration.setAttribute(ZephyrLaunchDelegate.ACTION, debugMode ? "debug" : "run");
             if (debugMode) {
                 configuration.setAttribute(ZephyrNativeDebugDelegate.PORT, 3333);
