@@ -441,6 +441,12 @@
             class="io.github.niwantha33.zew.ui.ZephyrProfileToolbarContribution"/>
         <command commandId="io.github.niwantha33.zew.flash" icon="icons/flash.png"
             label="Flash Zephyr firmware" tooltip="Build and flash the selected Zephyr project" style="push"/>
+        <command commandId="io.github.niwantha33.zew.flashDebug"
+            icon="platform:/plugin/org.eclipse.debug.ui/icons/full/etool16/debug_exc.png"
+            label="Native Debug" tooltip="Flash and Debug the selected Zephyr application (CDT DSF-GDB)" style="push"/>
+        <command commandId="io.github.niwantha33.zew.debugWorkspace"
+            icon="platform:/plugin/org.eclipse.debug.ui/icons/full/etool16/debug_exc.png"
+            label="Debug Views" tooltip="Open the Zephyr Hardware Debug perspective and live debug views" style="push"/>
       </toolbar>
     </menuContribution>
   </extension>
