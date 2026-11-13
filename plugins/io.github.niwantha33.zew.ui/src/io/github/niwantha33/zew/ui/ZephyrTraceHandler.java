@@ -66,17 +66,25 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                 if (!Files.isRegularFile(target) || Files.size(target) == 0)
                     throw new IOException("Bundled trace helper was empty or unavailable: " + name);
             }
+            StringBuilder diagnostics = new StringBuilder();
             try {
                 new ProcessRunner().run(
                         List.of(python, stage.resolve("capture_snapshot.py").toString(), "--help"),
                         stage, Duration.ofSeconds(12), monitor::isCanceled,
-                        ignored -> {}, ProjectContext.environment(settings)).requireSuccess();
+                        line -> {
+                            if (diagnostics.length() < 2048)
+                                diagnostics.append(line, 0, Math.min(line.length(),
+                                        2048 - diagnostics.length())).append('\\n');
+                        }, ProjectContext.environment(settings)).requireSuccess();
             } catch (Exception error) {
+                String details = diagnostics.toString().strip();
+                if (!details.isBlank()) report.accept("CTF helper import diagnostic: " + details);
                 throw new IOException("CTF Python helpers failed their import check before "
                         + "starting OpenOCD. Check the installed Workbench package and its "
                         + "managed Python interpreter. " + error.getMessage(), error);
             }
-            report.accept("Verified bundled CTF capture Python imports before connecting to OpenOCD.");
+            report.accept("Verified bundled CTF capture Python imports before connecting to OpenOCD. "
+                    + "Workbench bundle version: " + Activator.getDefault().getBundle().getVersion());
             return stage;
         } catch (Exception error) {
             try (var files = Files.walk(stage)) {
