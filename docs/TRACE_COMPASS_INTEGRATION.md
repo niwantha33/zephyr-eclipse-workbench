@@ -55,6 +55,50 @@ registered. If using native Eclipse Trace Compass, import `ctf/` as
 
 
 
+## Missing viewer is not a failed capture (Bug 11 handoff)
+
+The standalone action uses the existing `trace_compass_bridge.py` contract:
+a verified saved CTF with **no standalone executable** yields
+`status=viewer-unavailable` and CLI exit code **2**. Workbench now
+distinguishes this documented optional dependency from a corrupt CTF
+artifact; it shows explicit actions instead of the generic "Tool exited
+with code 2" error. Hash/length/read-completeness verification is unchanged.
+A malformed bridge response, invalid capture or non-optional failure
+still blocks the handoff.
+
+The Trace Compass integration has three distinct paths:
+
+1. **Inspect saved CTF events in Workbench** (no additional software):
+   select the capture and click this button. Zephyr Thread Timeline opens
+   and displays the **Observed CTF Events** tab. The imported application
+   project and its managed Python interpreter are still required. No
+   probe is connected and no firmware is modified.
+2. **Open installed Tracing perspective** (Trace Compass plug-ins *in the
+   same Eclipse*): click this only when "INSTALLED" is displayed. With
+   your selected capture, choose **File > Open Trace**, then select
+   `trace-*/ctf/metadata` (extensionless file) or another file in the
+   same directory. The new perspective does not auto-import an
+   external file. Import `Zephyr_RTOS_Timeline.xml` separately if the
+   analysis is supported by this Trace Compass installation.
+3. **Open verified CTF in standalone Trace Compass** (separate app):
+   install the official Windows/Linux standalone RCP and choose its
+   real `tracecompass.exe` using **Browse executable...**, or place
+   it on `PATH`/set `ZEW_TRACE_COMPASS`. The bridge requests
+   `tracecompass --cli --open <ctf-directory>` **only after** the
+   saved receipt, binary stream and metadata pass validation. A launch
+   request is not proof that the viewer imported the trace.
+
+**Important distinction:** an Eclipse p2 Trace Compass plug-in install
+does **not** create a discoverable `tracecompass.exe`. If the native
+Tracing perspective is installed, use path 2. If it is not installed
+and you need a graphical viewer, use the explicit p2 installer button
+or official standalone download; neither installs automatically.
+
+A receipt with `capture_full=true` can still have validated CTF
+events. Use those observations, but do not claim complete CPU
+utilisation, a known lost-event count or WCET. There is no need to
+re-flash merely to correct a missing host-side viewer.
+
 ## Capture from Workbench
 
 1. Select the exact Zephyr project, qualified board/core, and build profile.

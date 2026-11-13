@@ -7,6 +7,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
@@ -44,7 +46,9 @@ public final class TraceCompassIntegrationView extends ViewPart {
     private Path savedCapture;
     private Label installation, selection, status;
     private Text standaloneExecutable;
-    private Button nativePerspective, installInEclipse, launchStandalone;
+    private Button nativePerspective, installInEclipse, launchStandalone, inspectWorkbench;
+    private static final Pattern BRIDGE_STATUS =
+            Pattern.compile("\"status\"\\s*:\\s*\"([a-z-]+)\"");
     private volatile Job handoff;
     private boolean disposed;
 
@@ -95,6 +99,8 @@ public final class TraceCompassIntegrationView extends ViewPart {
         standaloneExecutable.setMessage("Select tracecompass.exe / tracecompass or leave blank for PATH");
         button(executableRow, "Browse executable...", this::chooseExecutable);
 
+        inspectWorkbench = button(parent, "Inspect saved CTF events in Workbench", this::inspectSavedTrace);
+        inspectWorkbench.setEnabled(false);
         launchStandalone = button(parent, "Open verified CTF in standalone Trace Compass...", this::openStandalone);
         launchStandalone.setEnabled(false);
         status = new Label(parent, SWT.WRAP);
@@ -180,8 +186,11 @@ public final class TraceCompassIntegrationView extends ViewPart {
         try {
             PlatformUI.getWorkbench().showPerspective(
                     TRACING_PERSPECTIVE, getSite().getWorkbenchWindow());
-            status.setText("Opened Eclipse Tracing perspective. Import the saved CTF via "
-                    + "Trace Compass Tracing Project Explorer; no trace was auto-imported.");
+            status.setText(savedCapture == null
+                    ? "Opened Eclipse Tracing perspective. Select a saved capture, then import CTF."
+                    : "Opened Eclipse Tracing perspective. Use File > Open Trace, choose "
+                            + savedCapture.resolve("ctf").resolve("metadata")
+                            + ". A perspective switch does not automatically import the trace.");
         } catch (WorkbenchException error) {
             status.setText("Unable to open installed Tracing perspective: " + error.getMessage());
         }
@@ -229,6 +238,7 @@ public final class TraceCompassIntegrationView extends ViewPart {
             savedCapture = null;
             selection.setText("No verified capture selected.");
             launchStandalone.setEnabled(false);
+            inspectWorkbench.setEnabled(false);
             status.setText("Select a saved trace-* directory containing capture.json and "
                     + "ctf/metadata + ctf/channel0_0. Hashes are verified before handoff.");
             return;
@@ -236,7 +246,45 @@ public final class TraceCompassIntegrationView extends ViewPart {
         savedCapture = path;
         selection.setText("Selected capture (not yet verified): " + path);
         launchStandalone.setEnabled(true);
-        status.setText("Ready for explicit standalone handoff. No viewer has been launched.");
+        inspectWorkbench.setEnabled(true);
+        status.setText("Capture selected. Inspect events in Workbench without Trace Compass, "
+                + "or explicitly open the optional standalone viewer.");
+    }
+
+    /** Built-in read-only viewing remains usable even when Trace Compass is absent. */
+    private void inspectSavedTrace() {
+        IProject selected = project();
+        if (savedCapture == null || selected == null) {
+            status.setText("Select a saved capture and its imported Zephyr application project.");
+            return;
+        }
+        try {
+            var view = (ThreadTimelineView) getSite().getPage().showView(ThreadTimelineView.ID);
+            view.displayProject(selected);
+            view.loadSavedCapture(savedCapture.resolve("ctf"));
+            status.setText("Opening saved CTF in Workbench Thread Timeline > Observed CTF Events. "
+                    + "RAM-buffer-full traces can show events but not qualified CPU percentages.");
+        } catch (org.eclipse.ui.PartInitException error) {
+            status.setText("Could not open native CTF event viewer: " + error.getMessage());
+        }
+    }
+
+    /**
+     * Exit 2 is an expected optional-viewer absence, not corrupt CTF.
+     * Require one unambiguous bridge status and its matching exit code.
+     * Other codes or truncated output remain failures, never success.
+     */
+    static String classifyHandoff(String output, int exitCode, boolean truncated) throws IOException {
+        if (truncated || output == null || output.length() > 16_384)
+            throw new IOException("Trace Compass bridge returned incomplete or oversized output.");
+        Matcher status = BRIDGE_STATUS.matcher(output);
+        if (!status.find()) throw new IOException("Trace Compass bridge omitted its status.");
+        String value = status.group(1);
+        if (status.find()) throw new IOException("Trace Compass bridge reported multiple statuses.");
+        if (exitCode == 0 && "launch-requested".equals(value)) return value;
+        if (exitCode == 2 && "viewer-unavailable".equals(value)) return value;
+        throw new IOException("Trace Compass bridge returned unexpected status " + value
+                + " (exit " + exitCode + ").");
     }
 
     private void chooseExecutable() {
@@ -292,13 +340,33 @@ public final class TraceCompassIntegrationView extends ViewPart {
                         command.add("--launcher");
                         command.add(executable);
                     }
-                    String raw = new ProcessRunner().run(command, temporary, Duration.ofSeconds(20),
+                    var process = new ProcessRunner().run(command, temporary, Duration.ofSeconds(20),
                             monitor::isCanceled, ignored -> {},
-                            ProjectContext.environment(settings)).requireCompleteOutput();
-                    if (!raw.contains("\"status\": \"launch-requested\""))
-                        throw new IOException("Trace Compass launch was not confirmed by its bridge: " + raw);
-                    outcome = "Trace Compass launch requested for " + capture.resolve("ctf")
-                            + ". Verify that the viewer imported the CTF; XML analysis is a separate step.";
+                            ProjectContext.environment(settings));
+                    String bridgeState;
+                    try {
+                        bridgeState = classifyHandoff(
+                                process.output(), process.exitCode(), process.truncated());
+                    } catch (IOException invalid) {
+                        // Preserve the actual tool's diagnostic for malformed capture,
+                        // corrupt receipt, invalid launcher or a Python failure.
+                        process.requireCompleteOutput();
+                        throw invalid;
+                    }
+                    if ("viewer-unavailable".equals(bridgeState)) {
+                        outcome = "Saved CTF verified. No standalone tracecompass.exe found. "
+                                + "This is NOT a CTF decode failure. Select an existing "
+                                + "Trace Compass executable, or use Install Trace Compass "
+                                + "in Eclipse / Open installed Tracing perspective. "
+                                + "The native Workbench event viewer also works without it.";
+                    } else {
+                        outcome = "Standalone Trace Compass launch requested for "
+                                + capture.resolve("ctf")
+                                + ". Verify that the viewer imported the trace; "
+                                + "the launch alone does not prove successful decoding.";
+                    }
+                    if (process.output().contains("\"capture_full\": true"))
+                        outcome += " RAM tracing buffer is FULL: CPU/timing completeness is unavailable.";
                 } catch (java.io.InterruptedIOException cancelled) {
                     result = Status.CANCEL_STATUS;
                     outcome = "Trace Compass handoff cancelled.";

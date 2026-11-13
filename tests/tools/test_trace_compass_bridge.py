@@ -5,11 +5,13 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import io
+from contextlib import redirect_stdout
 from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 BRIDGE = Path(__file__).resolve().parents[2] / (
     "plugins/io.github.niwantha33.zew.ui/tools/rtos_analysis/trace_compass_bridge.py")
@@ -69,6 +71,22 @@ class TraceCompassHandoffTests(unittest.TestCase):
         self.assertIn(result["status"], ("viewer-unavailable", "ready"))
         self.assertIsNone(subject.find_launcher(environ={}, which=lambda name: None))
         proc.assert_not_called()
+
+    def test_cli_missing_optional_viewer_preserves_verified_capture_and_exit_contract(self):
+        self.receipt["capture_full"] = True
+        self.receipt["ctf_analysis"]["ctf_decode"] = "validated"
+        self.save_receipt()
+        output = io.StringIO()
+        with patch.object(subject, "find_launcher", return_value=None), patch.object(
+                sys, "argv", ["trace_compass_bridge.py", "--capture",
+                              str(self.capture), "--open"]), redirect_stdout(output):
+            exit_code = subject.main()
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 2)  # existing CLI contract retained
+        self.assertEqual(result["status"], "viewer-unavailable")
+        self.assertEqual(result["decode"], "validated")
+        self.assertIs(result["capture_full"], True)
+        self.assertEqual(result["ctf"], str((self.capture / "ctf").resolve()))
 
     def test_explicit_invalid_path_does_not_fall_back(self):
         with self.assertRaisesRegex(subject.HandoffError, "does not exist"):

@@ -32,6 +32,37 @@ public final class TraceCompassIntegrationSmoke {
             if (!installButton.getText().contains("Install Trace Compass")
                     || installButton.isEnabled() == installed)
                 throw new AssertionError("Native p2 install must be offered only when Trace Compass is absent");
+            var nativeFallbackField = type.getDeclaredField("inspectWorkbench");
+            nativeFallbackField.setAccessible(true);
+            var fallback = (Button) nativeFallbackField.get(view);
+            if (fallback.isEnabled() || !fallback.getText().contains("Workbench"))
+                throw new AssertionError("Native CTF viewer must be visible but not load until a trace is selected");
+            var classify = type.getDeclaredMethod("classifyHandoff",
+                    String.class, int.class, boolean.class);
+            classify.setAccessible(true);
+            String missingViewer = "{\"capture_full\": true, \"decode\": \"validated\", "
+                    + "\"status\": \"viewer-unavailable\"}";
+            if (!"viewer-unavailable".equals(classify.invoke(null, missingViewer, 2, false)))
+                throw new AssertionError("The expected missing optional executable must be a handled state");
+            if (!"launch-requested".equals(classify.invoke(
+                    null, "{\"status\": \"launch-requested\"}", 0, false)))
+                throw new AssertionError("Verified standalone launch request must remain supported");
+            for (var rejected : new Object[][] {
+                    {missingViewer, 0, false}, // cannot claim a valid launch
+                    {missingViewer, 2, true},  // partial receipt cannot be trusted
+                    {"{\"status\": \"launch-requested\"}", 2, false},
+                    {"{\"status\": \"viewer-unavailable\", \"status\": \"launch-requested\"}", 2, false},
+                    {"{\"status\": \"blocked\"}", 3, false},
+            }) {
+                boolean failedClosed = false;
+                try {
+                    classify.invoke(null, rejected);
+                } catch (java.lang.reflect.InvocationTargetException exception) {
+                    failedClosed = exception.getCause() instanceof java.io.IOException;
+                }
+                if (!failedClosed)
+                    throw new AssertionError("Invalid Trace Compass bridge state must fail closed");
+            }
             // Do NOT click: smoke must not open a wizard or download software.
             var installation = type.getDeclaredField("installation");
             installation.setAccessible(true);
