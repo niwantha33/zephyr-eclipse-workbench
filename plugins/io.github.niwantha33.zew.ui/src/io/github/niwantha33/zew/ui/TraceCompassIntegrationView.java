@@ -66,7 +66,7 @@ public final class TraceCompassIntegrationView extends ViewPart {
         var installedActions = new Composite(parent, SWT.NONE);
         installedActions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         installedActions.setLayout(new GridLayout(2, false));
-        nativePerspective = button(installedActions, "Open installed Tracing perspective", this::openPerspective);
+        nativePerspective = button(installedActions, "Open CTF in installed Trace Compass", this::openPerspective);
         button(installedActions, "Check installation", this::refreshInstallation);
         installInEclipse = button(installedActions, "Install Trace Compass in Eclipse...", this::openInstallWizard);
         button(installedActions, "Official install / downloads...", () -> {
@@ -133,16 +133,15 @@ public final class TraceCompassIntegrationView extends ViewPart {
     }
 
     private boolean installed() {
-        return PlatformUI.getWorkbench().getPerspectiveRegistry()
-                .findPerspectiveWithId(TRACING_PERSPECTIVE) != null;
+        return TraceCompassNativeBridge.installed();
     }
 
     private void refreshInstallation() {
         boolean present = installed();
         installation.setText(present
-                ? "Trace Compass Tracing perspective: INSTALLED in this Eclipse."
-                : "Trace Compass Tracing perspective: NOT INSTALLED in this Eclipse. "
-                        + "Standalone viewer remains an option.");
+                ? "Trace Compass CTF reader and Tracing perspective: INSTALLED in this Eclipse."
+                : "Trace Compass: " + TraceCompassNativeBridge.availability()
+                        + ". The native Workbench CTF event viewer remains available.");
         nativePerspective.setEnabled(present);
         installInEclipse.setEnabled(!present);
         installation.getParent().layout(true, true);
@@ -180,19 +179,31 @@ public final class TraceCompassIntegrationView extends ViewPart {
     private void openPerspective() {
         if (!installed()) {
             refreshInstallation();
-            status.setText("Tracing perspective is unavailable. Install the optional Eclipse plug-ins first.");
+            status.setText(TraceCompassNativeBridge.availability()
+                    + ". Restart Eclipse or install the missing Trace Compass CTF feature.");
             return;
         }
+        final Path ctf = savedCapture == null ? null : savedCapture.resolve("ctf");
         try {
             PlatformUI.getWorkbench().showPerspective(
                     TRACING_PERSPECTIVE, getSite().getWorkbenchWindow());
-            status.setText(savedCapture == null
-                    ? "Opened Eclipse Tracing perspective. Select a saved capture, then import CTF."
-                    : "Opened Eclipse Tracing perspective. Use File > Open Trace, choose "
-                            + savedCapture.resolve("ctf").resolve("metadata")
-                            + ". A perspective switch does not automatically import the trace.");
-        } catch (WorkbenchException error) {
-            status.setText("Unable to open installed Tracing perspective: " + error.getMessage());
+            if (ctf == null) {
+                status.setText("Tracing perspective opened. Select latest capture and click again to import.");
+                return;
+            }
+            // Trace Compass's own public openTraceFromPath API links and opens
+            // this exact CTF. No separate executable and no Zephyr project mutation.
+            // A validated Zephyr RAM stream may still be unsupported by TC;
+            // show the status rather than inventing an imported trace.
+            org.eclipse.core.runtime.IStatus result =
+                    TraceCompassNativeBridge.open(ctf, getSite().getShell());
+            status.setText(result.isOK() && result.getCode() != org.eclipse.core.runtime.IStatus.INFO
+                    ? "Trace Compass CTF open requested: " + ctf
+                    : "Trace Compass could not open this CTF: " + result.getMessage()
+                            + ". Use Inspect saved CTF events in Workbench.");
+        } catch (Exception error) {
+            status.setText("Trace Compass import failed: " + error.getMessage()
+                    + ". Use native Workbench Observed CTF Events for this Zephyr RAM stream.");
         }
     }
 
