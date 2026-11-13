@@ -149,8 +149,8 @@ public final class ThreadTimelineSmoke {
         // backend reported RAM buffer full. Timeline observations remain
         // visible, but never present a CPU percentage for incomplete data.
         String incomplete = v2.replace(
-                "ZEW_THREAD_TIMELINE\\t2\\t0\\t0",
-                "ZEW_THREAD_TIMELINE\\t2\\t1\\t0");
+                "ZEW_THREAD_TIMELINE\t2\t0\t0",
+                "ZEW_THREAD_TIMELINE\t2\t1\t0");
         displayed.set(view, model.getMethod("parse", String.class).invoke(null, incomplete));
         prepare.invoke(view);
         check(!apply.isEnabled() && cpuTable.getItemCount() == 0
