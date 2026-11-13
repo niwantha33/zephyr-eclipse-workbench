@@ -51,6 +51,16 @@ public final class ThreadTimelineSmoke {
         check(status.getText().contains("No trace loaded")
                 && !table.isDisposed() && table.getItemCount() == 0,
                 "empty-state message is visible without any trace or exception");
+        var traceControls = filter.getParent();
+        var buttons = java.util.Arrays.stream(traceControls.getChildren())
+                .filter(child -> child instanceof Button)
+                .map(child -> ((Button) child).getText()).toList();
+        check(buttons.contains("1. Capture new CTF...")
+                && buttons.contains("2. Open latest capture")
+                && buttons.contains("Open saved CTF trace..."),
+                "timeline offers guided capture, latest and manual CTF selection");
+        check(field(view, "loadJob") == null,
+                "capture guidance does not start a decoder or target operation");
         check(table.getColumnCount() == 6 && List.of(
                 "Start (ns)", "End (ns)", "Duration (us)",
                 "Thread Name", "Priority", "State").equals(
