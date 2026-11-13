@@ -1,8 +1,53 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Trace Compass + Zephyr CTF: verified snapshot workflow
 
-This is a **standalone Trace Compass handoff**, not an installed Eclipse extension,
-bundled Trace Compass distribution, automatic XML registration, live profiler, or WCET proof.
+Trace Compass remains an **optional third-party tool**, not a bundled Eclipse
+extension, automatic XML registration, live profiler or WCET proof.
+The Workbench now has a visible entry point for **both** an installed Tracing
+perspective and a receipt-validated standalone handoff. This does not install
+Trace Compass automatically or claim that a launched viewer decoded CTF.
+
+## Find the integration (Bug 8)
+
+Open **Zephyr > Capture & Analyse > Trace Compass Integration...**, or click
+**Trace Compass...** in the **Zephyr Debug Trace Console**.
+
+- **Open installed Tracing perspective** is available when the optional
+  `org.eclipse.linuxtools.tmf.ui.perspective` has actually been installed
+  into this Eclipse instance. The workbench switches to Eclipse's normal
+  Tracing perspective; it does not silently create a project or import a CTF.
+- **Official install / downloads...** opens the official Trace Compass download
+  page on explicit request. For the in-Eclipse plug-ins use
+  **Help > Install New Software** and enter
+  `https://download.eclipse.org/tracecompass/stable/repository/`.
+  Select a compatible Trace Compass feature and restart Eclipse. The feature
+  is optional and may require Eclipse/Java version compatibility.
+- **Use latest project capture** locates the newest saved
+  `<application>/.zew-traces/trace-*/ctf`, or **Choose saved trace-* folder...**
+  accepts an older capture. This step does not touch a probe.
+- **Open verified CTF in standalone Trace Compass...** explicitly invokes
+  the already-bundled `trace_compass_bridge.py` through the selected project's
+  managed Python. It verifies `capture.json`, SHA-256 checksums, byte length
+  and transport completeness before requesting a viewer launch. Specify
+  `tracecompass.exe` / `tracecompass` using **Browse executable...**, or leave
+  blank to use an existing `ZEW_TRACE_COMPASS` or executable on `PATH`.
+  An absent executable, invalid saved capture or missing Python is reported,
+  **not** treated as success.
+
+To use the in-Eclipse viewer, first install Trace Compass plug-ins into this
+particular Eclipse installation. A Trace Compass **standalone executable** on
+your disk does not install the Tracing perspective inside Eclipse. Conversely,
+the installed plug-in is not the same thing as a discoverable standalone
+`tracecompass.exe`; both paths are supported independently.
+
+The saved Zephyr timeline definition still needs manual import:
+**Window > Preferences > Tracing > XML Analyses** and select
+`Zephyr_RTOS_Timeline.xml` from the saved trace directory. Neither switching
+perspectives nor launching the standalone viewer proves the XML analysis was
+registered. If using native Eclipse Trace Compass, import `ctf/` as
+**Generic CTF** in a Tracing project.
+
+
 
 ## Capture from Workbench
 
