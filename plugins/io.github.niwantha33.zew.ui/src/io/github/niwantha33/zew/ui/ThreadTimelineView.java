@@ -370,6 +370,11 @@ public final class ThreadTimelineView extends ViewPart {
     }
 
     private void prepareCpuLoad() {
+        if (displayed != null && displayed.incomplete()) {
+            clearCpuLoad("Incomplete CTF or full RAM buffer: observed thread intervals "
+                    + "may be inspected, but CPU percentages are withheld.");
+            return;
+        }
         if (displayed == null || displayed.schedulerEvents() == 0
                 || displayed.intervals().isEmpty()) {
             clearCpuLoad(displayed != null && displayed.schedulerEvents() == 0
