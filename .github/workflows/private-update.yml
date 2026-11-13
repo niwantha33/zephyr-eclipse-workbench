@@ -4,16 +4,13 @@
 # Do not use on a private repository with exhausted Actions minutes.
 name: Build and publish Zephyr Workbench p2 update
 on:
+  # Every main-tip transition needs its own publisher attempt. A merge
+  # commit can have an empty diff even while cancelling a previous release
+  # whose exact-SHA guard rejected a superseded main commit. A paths filter
+  # would leave the newer tip unpublished with no replacement workflow.
+  # Preserve the exact-commit/Windows/package qualification gates below.
   push:
     branches: [main]
-    paths:
-      - 'plugins/**'
-      - 'features/**'
-      - 'releng/**'
-      - 'scripts/**'
-      - 'tests/**'
-      - 'pom.xml'
-      - '.github/workflows/private-update.yml'
   workflow_dispatch:
 permissions:
   contents: read
