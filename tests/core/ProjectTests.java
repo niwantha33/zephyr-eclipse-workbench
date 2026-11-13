@@ -81,6 +81,24 @@ public final class ProjectTests {
             // A global variable can be unavailable independently of local lifetime.
             // The probe never guesses a missing pointer or calls arbitrary C code.
             check(DebugExpressionProbe.validateSymbol(" gpio_dev ").equals("gpio_dev"));
+            check(DebugExpressionProbe.validateSymbol("lab_stats.heartbeat")
+                    .equals("lab_stats.heartbeat"));
+            check(DebugExpressionProbe.validateSymbol("lab_stats.samples[12].count")
+                    .equals("lab_stats.samples[12].count"));
+            rejects(() -> DebugExpressionProbe.validateSymbol("lab_stats.samples[1024]"));
+            rejects(() -> DebugExpressionProbe.validateSymbol("lab_stats.heartbeat++"));
+            rejects(() -> DebugExpressionProbe.validateSymbol("&lab_stats"));
+            rejects(() -> DebugExpressionProbe.validateSymbol("lab_stats[1-1]"));
+            check(DebugExpressionProbe.confirmedAddress("0x200025f8 <lab_stats>").equals("0x200025f8"));
+            check(DebugExpressionProbe.confirmedAddress("0x0").isEmpty());
+            check(DebugExpressionProbe.confirmedAddress("0xaaaaaaaa junk").isEmpty());
+            check(DebugExpressionProbe.confirmedSize("0x4").equals("4"));
+            check(DebugExpressionProbe.confirmedSize("32").equals("32"));
+            check(DebugExpressionProbe.confirmedSize("not available").isEmpty());
+            String member = DebugExpressionProbe.describe("lab_stats.heartbeat", "0x10",
+                    "0x200025fc <lab_stats+4>", "0x4", "", "", "");
+            check(member.contains("Storage address: 0x200025fc")
+                    && member.contains("Size (sizeof, bytes): 4"));
             rejects(() -> DebugExpressionProbe.validateSymbol("gpio_dev->ops"));
             rejects(() -> DebugExpressionProbe.validateSymbol("gpio_dev = 0"));
             rejects(() -> DebugExpressionProbe.validateSymbol("gpio_dev()"));
