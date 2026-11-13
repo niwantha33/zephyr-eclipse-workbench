@@ -84,7 +84,16 @@ final class TraceCompassNativeBridge {
             throw new IllegalStateException("Trace Compass traces folder is unavailable");
         return (IStatus) invoke(helper.getMethod(
                 "openTraceFromPath", folderElement, String.class, Shell.class, String.class),
-                null, traces, folder.resolve("metadata").toString(), shell, null);
+                null, traces, traceDirectoryArgument(folder), shell, null);
+    }
+
+    /**
+     * Trace Compass's CTF parser validates a directory containing both metadata
+     * and event streams; passing the metadata file alone always fails the CTF
+     * trace-type check. Keep this pure for installed-UI smoke validation.
+     */
+    static String traceDirectoryArgument(Path folder) {
+        return folder.toAbsolutePath().normalize().toString();
     }
 
     private static Object invoke(java.lang.reflect.Method method, Object target, Object... args)
