@@ -171,6 +171,10 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                             + "Import Zephyr_RTOS_Timeline.xml once using Tracing > XML Analyses.");
                     if (!shell.isDisposed()) shell.getDisplay().asyncExec(() -> {
                         if (!shell.isDisposed()) {
+                            // Explicit capture succeeded and the saved CTF files are
+                            // validated. Hand off to already open offline views,
+                            // never attach a second probe or run on view startup.
+                            TraceCaptureWorkflow.captured(project, captureDir);
                             MessageDialog.openInformation(shell, "RTOS trace captured",
                                     "Snapshot saved in:\n" + captureDir + "\n\nIf standalone Trace Compass is installed, an open request was attempted. " + "Otherwise import the ctf folder manually. "
                                     + "The supplied XML analysis must be imported once. Open report.html for CPU/ISR "
