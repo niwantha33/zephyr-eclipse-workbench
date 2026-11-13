@@ -372,6 +372,8 @@
         <menu id="io.github.niwantha33.zew.menu.runDebug" label="Run &amp; Debug">
           <command commandId="io.github.niwantha33.zew.debugWorkspace"
                    label="Open Zephyr Hardware Debug Workspace" style="push"/>
+          <command commandId="io.github.niwantha33.zew.socRegisters"
+                   label="Open Zephyr Peripherals (SVD)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.targetMemory" label="Open Target Memory Browser" style="push"/>
           <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
           <command commandId="io.github.niwantha33.zew.flash" label="Flash Application..." style="push"/>
