@@ -69,7 +69,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
             StringBuilder diagnostics = new StringBuilder();
             try {
                 new ProcessRunner().run(
-                        List.of(python, stage.resolve("capture_snapshot.py").toString(), "--help"),
+                        TracePythonLaunch.command(python, stage.resolve("capture_snapshot.py"), "--help"),
                         stage, Duration.ofSeconds(12), monitor::isCanceled,
                         line -> {
                             if (diagnostics.length() < 2048)
@@ -83,7 +83,8 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                         + "starting OpenOCD. Check the installed Workbench package and its "
                         + "managed Python interpreter. " + error.getMessage(), error);
             }
-            report.accept("Verified bundled CTF capture Python imports before connecting to OpenOCD. "
+            report.accept("Verified bundled CTF capture Python imports with isolated "
+                    + "staged-directory bootstrap before connecting to OpenOCD. "
                     + "Workbench bundle version: " + Activator.getDefault().getBundle().getVersion());
             return stage;
         } catch (Exception error) {
@@ -192,7 +193,8 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                         throw new IOException(diagnostics.describe(plan.board(), ports.gdb(), owned.isAlive() ? null : owned.exitValue()));
                     Path out = project.getLocation().toFile().toPath().resolve(".zew-traces");
                     Path resultFile = staging.resolve("capture-location.txt");
-                    var command = List.of(settings.getProperty("python"), staging.resolve("capture_snapshot.py").toString(),
+                    var command = TracePythonLaunch.command(
+                            settings.getProperty("python"), staging.resolve("capture_snapshot.py"),
                             "--gdb", gdb, "--build", build.toString(),
                             "--zephyr", Path.of(settings.getProperty("workspace"), "zephyr").toString(),
                             "--output", out.toString(), "--port", Integer.toString(ports.gdb()),
