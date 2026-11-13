@@ -145,6 +145,17 @@ public final class ThreadTimelineSmoke {
                 && cpuTable.getItemCount() == 1
                 && cpuTable.getItem(0).getText(2).equals("70.00%"),
                 "CPU default uses full observed trace range including unpaired edges");
+        // A complete native CTF stream can still be loss-affected when the
+        // backend reported RAM buffer full. Timeline observations remain
+        // visible, but never present a CPU percentage for incomplete data.
+        String incomplete = v2.replace(
+                "ZEW_THREAD_TIMELINE\\t2\\t0\\t0",
+                "ZEW_THREAD_TIMELINE\\t2\\t1\\t0");
+        displayed.set(view, model.getMethod("parse", String.class).invoke(null, incomplete));
+        prepare.invoke(view);
+        check(!apply.isEnabled() && cpuTable.getItemCount() == 0
+                && cpuStatus.getText().contains("CPU percentages are withheld"),
+                "incomplete CTF suppresses CPU percentages in native Thread Timeline");
         window.getActivePage().hideView(view);
         System.out.println("PASS THREAD TIMELINE INSTALLED UI: no-trace view disposed cleanly");
     }
