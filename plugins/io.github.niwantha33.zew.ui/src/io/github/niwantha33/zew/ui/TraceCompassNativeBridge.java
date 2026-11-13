@@ -65,7 +65,7 @@ final class TraceCompassNativeBridge {
 
         // Dedicated tracing workspace project; never change Zephyr project nature.
         IProject target = ResourcesPlugin.getWorkspace().getRoot().getProject(ANALYSIS_PROJECT);
-        if (target.exists() && !target.hasNature("org.eclipse.linuxtools.tmf.ui.tmfProjectNature"))
+        if (target.exists() && !target.hasNature("org.eclipse.linuxtools.tmf.project.nature"))
             throw new IllegalStateException("Workspace project Zephyr_Trace_Analysis exists "
                     + "but is not a Trace Compass tracing project");
         if (!target.exists()) {
