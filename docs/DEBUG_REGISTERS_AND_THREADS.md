@@ -260,11 +260,39 @@ launch opens these views and initially activates CPU Registers. Select a suspend
 stack frame to inspect its locals; globals can be added explicitly in Expressions.
 Values may be unavailable for optimised code, missing symbols or a running target.
 
-A separately installed view titled **Peripherals** is not the Workbench SVD view
-and may require a different launch integration. Use **Zephyr Hardware Register Explorer > Import Register Definitions…**
-and choose the exact physical chip's vendor file. Loading a model does not prove
-it matches the device. Peripheral reads remain explicit and honour the SVD access
-restrictions; the tool does not infer package/register definitions from a board name.
+### Bug 9: blank Eclipse "Peripherals" tab
+
+A view labelled just **Peripherals** may come from the **Eclipse Embedded CDT**
+CMSIS-Packs peripheral plug-in. It expects a device association / pack and
+supported debugger launch context; the Workbench's native Zephyr DSF-GDB
+launch does **not** feed device/register data into that unrelated view.
+A blank generic tab therefore does not mean Zephyr has no peripherals and
+does not prove SVD import or GDB register reads failed.
+
+For Zephyr targets use the **Workbench's own** view:
+
+1. **Zephyr > Run & Debug > Open Zephyr Peripherals (SVD)...**. This reuses
+   **Zephyr Hardware Register Explorer**, not a duplicate second MMIO backend.
+   Or use **Zephyr > Inspect & Diagnose > Show Debug Data / Hardware Register Explorer**.
+2. The view searches for an exact-part SVD associated with the selected
+   Zephyr application. If none is installed, choose **Find Device Definitions**
+   or **Import Register Definitions...** for the verified device SVD.
+3. Expand a peripheral/register. Values read **Not read** until an explicit
+   **Refresh Selected + Watches** during a suspended, correctly matched
+   debug session. Write-only/read-side-effect registers remain **Blocked**.
+   Do not treat a populated peripheral tree as evidence of target-memory reads.
+
+This entry point is read-only and reuses the current CDT/GDB debug session;
+it never attaches a second GDB instance, resets, flashes or enumerates target
+addresses just because the view opens. If the generic Peripherals tab causes
+confusion, close that *tab* without uninstalling its Eclipse plug-in.
+The original Eclipse Embedded CDT view may work separately when its own packs,
+device mapping and supported launch configuration are correctly set up.
+No automatic native-view bridging is claimed.
+
+Loading an SVD model does not prove it matches the device. Peripheral reads
+remain explicit and honour the SVD access restrictions; the tool does not infer
+package/register definitions from a board name.
 
 Routine OpenOCD `Getting thread … reg list` polling is hidden after one explanatory
 message. A pending count is printed when a real diagnostic arrives or output ends;
