@@ -140,7 +140,8 @@ public final class TraceCompassIntegrationView extends ViewPart {
         boolean present = installed();
         installation.setText(present
                 ? "Trace Compass CTF reader and Tracing perspective: INSTALLED in this Eclipse."
-                : "Trace Compass: " + TraceCompassNativeBridge.availability()
+                : "Trace Compass CTF support: NOT INSTALLED or not resolved. "
+                        + TraceCompassNativeBridge.availability()
                         + ". The native Workbench CTF event viewer remains available.");
         nativePerspective.setEnabled(present);
         installInEclipse.setEnabled(!present);
