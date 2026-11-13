@@ -33,8 +33,9 @@ public final class ZephyrProfileToolbarSmoke {
         if (!toolbarXml.contains("class=\"io.github.niwantha33.zew.ui.ZephyrProfileToolbarContribution\"")
                 || !toolbarXml.contains("commandId=\"org.eclipse.ui.project.buildProject\"")
                 || !toolbarXml.contains("commandId=\"io.github.niwantha33.zew.flash\"")
-                || toolbarXml.contains("commandId=\"io.github.niwantha33.zew.debug\"")) {
-            throw new IllegalStateException("Profile selector or Build/Flash controls missing, or duplicate native Debug button present.");
+                || !toolbarXml.contains("commandId=\"io.github.niwantha33.zew.flashDebug\"")
+                || !toolbarXml.contains("icon=\"icons/debug.png\"")) {
+            throw new IllegalStateException("Profile, Build, Flash or native Debug toolbar control missing.");
         }
 
         var type = bundle.loadClass("io.github.niwantha33.zew.ui.ZephyrProfileToolbarContribution");
