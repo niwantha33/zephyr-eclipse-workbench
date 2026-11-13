@@ -74,6 +74,10 @@ public final class ThreadTimelineSmoke {
                 "filtering an unloaded view is safe and does not trigger analysis");
         TabFolder tabs = (TabFolder) field(view, "tabs");
         Table cpuTable = (Table) field(view, "cpuTable");
+        Table observedTable = (Table) field(view, "observedTable");
+        Label observedStatus = (Label) field(view, "observedStatus");
+        check(observedTable.getItemCount() == 0 && observedStatus.getText().contains("No trace loaded"),
+                "observed events tab opens passively without a decoder or target read");
         Label cpuDisclaimer = (Label) field(view, "cpuDisclaimer");
         Label cpuWarning = (Label) field(view, "cpuWarning");
         Label cpuStatus = (Label) field(view, "cpuStatus");
@@ -81,7 +85,8 @@ public final class ThreadTimelineSmoke {
         Text windowStart = (Text) field(view, "windowStart");
         Text windowEnd = (Text) field(view, "windowEnd");
         Button apply = (Button) field(view, "cpuApply");
-        check(tabs.getItemCount() == 2 && tabs.getItem(1).getText().equals("Zephyr CPU Load"),
+        check(tabs.getItemCount() == 3 && tabs.getItem(1).getText().equals("Zephyr CPU Load")
+                && tabs.getItem(2).getText().equals("Observed CTF Events"),
                 "a second CPU Load tab exists alongside Thread Timeline");
         check(cpuTable.getColumnCount() == 3 && List.of(
                 "Thread Name", "Running (us)", "Percentage").equals(
