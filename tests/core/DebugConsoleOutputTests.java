@@ -34,7 +34,7 @@ public final class DebugConsoleOutputTests {
         if (!faults.accept(otherBad, 2).equals(List.of(otherBad)))
             throw new AssertionError("Unrecognised read failure must remain unmodified");
         String delayed = "Warn : keep_alive() was not invoked in the 1000 ms timelimit. "
-                + "GDB alive packet not sent! (1597 ms). Workaround: increase \\"set remotetimeout\\" in GDB";
+                + "GDB alive packet not sent! (1597 ms). Workaround: increase remotetimeout in GDB";
         var keepAlive = faults.accept(delayed, 3);
         if (keepAlive.size() != 2 || !keepAlive.get(0).equals(delayed)
                 || !keepAlive.get(1).contains("does not repair invalid addresses"))
