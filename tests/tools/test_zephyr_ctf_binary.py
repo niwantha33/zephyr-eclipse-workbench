@@ -166,9 +166,8 @@ class PackedCtfTests(unittest.TestCase):
         self.assertTrue(report['incomplete'])
         self.assertEqual(report['cpu']['status'], 'unavailable')
         self.assertEqual(report['timing']['status'], 'unavailable')
-        self.assertNotIn('discarded_events_reported', {'discarded_events_reported':
-                          report['discarded_events_reported']} if
-                          report['discarded_events_reported'] else {})
+        self.assertEqual(report['discarded_events_reported'], 0)
+        self.assertIn('lost event count unknown', ' '.join(report['warnings']))
 
         capture['trace_sha256'] = '0' * 64
         (self.root / 'capture.json').write_text(json.dumps(capture))
