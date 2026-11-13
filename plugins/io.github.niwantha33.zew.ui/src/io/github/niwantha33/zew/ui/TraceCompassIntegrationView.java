@@ -233,6 +233,7 @@ public final class TraceCompassIntegrationView extends ViewPart {
         }
         launchStandalone.setEnabled(false);
         status.setText("Validating saved CTF and requesting standalone Trace Compass launch...");
+        final var uiDisplay = getSite().getShell().getDisplay();
         Job job = new Job("Open verified saved Zephyr CTF in Trace Compass") {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 Path temporary = null;
@@ -280,8 +281,7 @@ public final class TraceCompassIntegrationView extends ViewPart {
                     }
                 }
                 String message = outcome;
-                var display = getSite().getShell().getDisplay();
-                if (!display.isDisposed()) display.asyncExec(() -> {
+                if (!uiDisplay.isDisposed()) uiDisplay.asyncExec(() -> {
                     if (disposed || status == null || status.isDisposed()) return;
                     status.setText(message);
                     if (launchStandalone != null && !launchStandalone.isDisposed())
