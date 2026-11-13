@@ -102,8 +102,10 @@ public final class DebugExpressionProbeView extends ViewPart {
     }
 
     private void inspect() {
+        generation++; // immediately invalidate any older in-flight GDB response
         verifiedAddress = "";
         if (copyAddress != null && !copyAddress.isDisposed()) copyAddress.setEnabled(false);
+        if (result != null && !result.isDisposed()) result.setText("No current result. Inspection is pending or unavailable.");
         final String name;
         try { name = DebugExpressionProbe.validateSymbol(symbol.getText()); }
         catch (IllegalArgumentException invalid) {
@@ -204,6 +206,10 @@ public final class DebugExpressionProbeView extends ViewPart {
                 result.setText(report);
                 verifiedAddress = address;
                 copyAddress.setEnabled(!address.isEmpty());
+            } else {
+                result.setText("No current snapshot: " + message);
+                verifiedAddress = "";
+                copyAddress.setEnabled(false);
             }
             status.getParent().layout(true, true);
         });
