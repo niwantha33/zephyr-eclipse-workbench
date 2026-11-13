@@ -114,6 +114,9 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 var part = page.findView(ConfigurationHomeView.ID);
                 if (part instanceof ConfigurationHomeView home)
                     home.refreshAfterBuild(builtProject);
+                var studioPart = page.findView(ConfigurationStudioView.ID);
+                if (studioPart instanceof ConfigurationStudioView studio)
+                    studio.refreshAfterBuild(builtProject);
             }
         });
     }
@@ -143,6 +146,10 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
             if (expectedBuild != null && !buildDirectory.toAbsolutePath().normalize().equals(Path.of(expectedBuild)))
                 throw new java.io.IOException("The build profile changed while investigation was queued. Select the current build and retry.");
+            // Read the old generated artifact BEFORE West's configure/pristine step.
+            // An unsuccessful build must not publish a new comparison baseline.
+            String previousGeneratedConfig = clean ? null
+                    : io.github.niwantha33.zew.core.GeneratedConfigHistory.capture(buildDirectory);
             var environment = ProjectContext.environment(settings);
             monitor.beginTask(clean ? "Clean Zephyr project" : "Prepare tools and build Zephyr project", IProgressMonitor.UNKNOWN);
             if (!clean) {
@@ -312,6 +319,16 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 }
                 if (!clean) {
                     Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
+                    if (!monitor.isCanceled()) {
+                        try {
+                            io.github.niwantha33.zew.core.GeneratedConfigHistory.commit(
+                                    buildDirectory, previousGeneratedConfig);
+                        } catch (java.io.IOException historyError) {
+                            // Optional comparison history never changes a verified build result.
+                            stream.println("Generated .config comparison history unavailable; "
+                                    + "use the viewer's manual file comparison.");
+                        }
+                    }
                     // Capture only AFTER the exact build and generated outputs
                     // have passed their existing integrity/target checks.
                     // A missing dependency file yields UNVERIFIED, never a
