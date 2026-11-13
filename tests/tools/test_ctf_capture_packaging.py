@@ -50,10 +50,10 @@ def staged_imports(py_file):
 def trusted_bootstrap():
     """Extract the actual Java bootstrap, avoiding an independent test-only copy."""
     source = LAUNCH.read_text(encoding="utf-8")
-    match = re.search(r"static final String BOOTSTRAP\\s*=\\s*(.*?);", source, re.S)
+    match = re.search(r"static final String BOOTSTRAP\s*=\s*(.*?)\n\s*private TracePythonLaunch", source, re.S)
     if match is None:
         raise AssertionError("Missing trace Python bootstrap")
-    pieces = re.findall(r'"([^"\\n]*)"', match.group(1))
+    pieces = re.findall(r'"([^"]*)"', match.group(1))
     if not pieces:
         raise AssertionError("Cannot extract the actual isolated Python bootstrap")
     self_code = "".join(json.loads('"' + piece + '"') for piece in pieces)
