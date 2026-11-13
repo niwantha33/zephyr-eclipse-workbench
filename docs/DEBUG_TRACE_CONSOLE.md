@@ -114,6 +114,19 @@ If the failure repeats, report the installed Workbench bundle version,
 the full RTOS trace console output and the Python interpreter configured
 for that application; do not manually patch the temp directory.
 
+## Trace Compass integration (Bug 8)
+
+Use **Zephyr > Capture & Analyse > Trace Compass Integration...** or the
+**Trace Compass...** button at the top of **Zephyr Debug Trace Console**.
+This restores a visible pathway that was missing from the Zephyr menu.
+The optional integration detects an installed Eclipse **Tracing** perspective
+without adding a hard dependency on Trace Compass plug-ins. If the perspective
+is absent, the UI links to the official installer and supports a **standalone**
+Trace Compass executable instead. Both require **saved** CTF evidence;
+there is no automatic live trace transport or probe operation in this view.
+See [Trace Compass integration](TRACE_COMPASS_INTEGRATION.md) for the exact
+install, saved-capture and XML analysis steps.
+
 ## What works now
 
 | Output | Evidence check | Capture action |
