@@ -43,7 +43,8 @@ public final class ThreadTimelineView extends ViewPart {
     public static final String NO_SCHEDULER =
             "No scheduler events found. Scheduler tracing was likely not enabled in the Zephyr build.";
     public static final String INCOMPLETE =
-            "This trace is incomplete. Events after the truncation point are missing.";
+            "CTF evidence incomplete or RAM buffer full. Decoded events may be inspected; "
+                    + "CPU percentages and complete timing are not established.";
     public static final String CPU_DISCLAIMER =
             "Derived from context-switch events. Not a hardware measurement.";
 
@@ -53,6 +54,8 @@ public final class ThreadTimelineView extends ViewPart {
     private Text filter;
     private Table table;
     private TabFolder tabs;
+    private Table observedTable;
+    private Label observedStatus;
     private Table cpuTable;
     private Text windowStart, windowEnd;
     private Button cpuApply;
@@ -131,6 +134,27 @@ public final class ThreadTimelineView extends ViewPart {
             TableColumn column = new TableColumn(table, SWT.LEFT);
             column.setText(titles[i]);
             column.setWidth(widths[i]);
+        }
+
+        TabItem observedTab = new TabItem(tabs, SWT.NONE);
+        observedTab.setText("Observed CTF Events");
+        Composite observedPage = new Composite(tabs, SWT.NONE);
+        observedPage.setLayout(new GridLayout(1, false));
+        observedTab.setControl(observedPage);
+        observedStatus = new Label(observedPage, SWT.WRAP);
+        observedStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        observedStatus.setText("No trace loaded. This tab shows raw observations even if CPU metrics are unavailable.");
+        observedTable = new Table(observedPage,
+                SWT.FULL_SELECTION | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
+        observedTable.setHeaderVisible(true);
+        observedTable.setLinesVisible(true);
+        observedTable.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        String[] observedTitles = { "Time (ns)", "Event", "Thread", "Thread ID", "Semantic kind" };
+        int[] observedWidths = { 150, 250, 200, 140, 200 };
+        for (int i = 0; i < observedTitles.length; i++) {
+            TableColumn column = new TableColumn(observedTable, SWT.LEFT);
+            column.setText(observedTitles[i]);
+            column.setWidth(observedWidths[i]);
         }
 
         TabItem cpuTab = new TabItem(tabs, SWT.NONE);
@@ -271,6 +295,8 @@ public final class ThreadTimelineView extends ViewPart {
         if (loadJob != null) loadJob.cancel();
         displayed = null;
         table.removeAll();
+        observedTable.removeAll();
+        observedStatus.setText("Decoding observed CTF events...");
         clearCpuLoad("Reading saved CTF with the shared offline semantic normalizer...");
         showIncomplete(false);
         status.setText("Reading saved CTF with the shared offline semantic normalizer...");
@@ -323,12 +349,15 @@ public final class ThreadTimelineView extends ViewPart {
             if (generation.get() != ticket || table == null || table.isDisposed()) return;
             displayed = snapshot;
             table.removeAll();
+            observedTable.removeAll();
             showIncomplete(snapshot != null && snapshot.incomplete());
             if (error != null) {
                 status.setText(error);
+                observedStatus.setText(error);
                 clearCpuLoad(error);
             } else {
                 refreshRows();
+                refreshObservedRows();
                 prepareCpuLoad();
             }
         });
@@ -441,6 +470,29 @@ public final class ThreadTimelineView extends ViewPart {
         }
         cpuStatus.setText("Window: " + load.startNs() + "–" + load.endNs()
                 + " ns. Thread shares use the full selected window; unknown time is not assigned to threads.");
+    }
+
+    private void refreshObservedRows() {
+        if (observedTable == null || observedTable.isDisposed() || displayed == null) return;
+        observedTable.setRedraw(false);
+        try {
+            observedTable.removeAll();
+            for (ThreadTimelineReport.ObservedEvent record : displayed.events()) {
+                TableItem item = new TableItem(observedTable, SWT.NONE);
+                item.setText(new String[] {
+                        record.timestampNs() == null ? "unknown" : Long.toString(record.timestampNs()),
+                        record.eventName(), record.threadName(), record.threadId(), record.kind()
+                });
+            }
+        } finally {
+            observedTable.setRedraw(true);
+        }
+        observedStatus.setText("Showing " + displayed.events().size()
+                + " of " + displayed.totalEvents() + " decoded events. "
+                + (displayed.incomplete()
+                    ? "PARTIAL CAPTURE: these are observations, not complete CPU timing. "
+                    : "Capture loss and target clock calibration are not independently proved. ")
+                + (displayed.detail().isBlank() ? "" : displayed.detail()));
     }
 
     private void refreshRows() {
