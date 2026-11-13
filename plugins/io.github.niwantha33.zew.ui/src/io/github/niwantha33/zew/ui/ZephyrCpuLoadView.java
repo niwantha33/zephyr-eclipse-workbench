@@ -16,7 +16,6 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
@@ -171,11 +170,8 @@ public final class ZephyrCpuLoadView extends ViewPart {
         if (ctf != null && table != null && !table.isDisposed()) load(ctf);
     }
     private void chooseTrace() {
-        DirectoryDialog dialog = new DirectoryDialog(getSite().getShell(), SWT.OPEN);
-        dialog.setText("Load existing saved Zephyr CTF");
-        dialog.setMessage("Choose trace-*/ctf or the trace-* folder containing ctf.");
-        String chosen = dialog.open();
-        if (chosen != null) load(Path.of(chosen));
+        Path chosen = SavedCtfFilePicker.choose(getSite().getShell());
+        if (chosen != null) load(chosen);
     }
     private void load(Path trace) {
         if (!Activator.getDefault().getPreferenceStore().getBoolean(WorkbenchPreferences.ENABLE_CPU_VIEW)) {
