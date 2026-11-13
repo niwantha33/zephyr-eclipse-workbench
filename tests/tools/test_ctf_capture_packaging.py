@@ -53,13 +53,18 @@ class CtfCapturePackagingTests(unittest.TestCase):
         self.assertIn("tools/", BUILD.read_text())
         required = {"capture_snapshot"}
         pending = ["capture_snapshot"]
+        inspected = set()
         while pending:
-            required.update(staged_imports(TOOLS / (pending.pop() + ".py")))
-            for name in sorted(required):
-                if name not in {path[:-3] for path in resources if path.endswith(".py")}:
-                    self.fail("Required local Python module omitted from capture package: " + name)
-            pending = [name for name in required if name not in getattr(self, "_inspected", set())]
-            self._inspected = getattr(self, "_inspected", set()) | set(pending)
+            name = pending.pop()
+            if name in inspected:
+                continue
+            inspected.add(name)
+            for dependency in staged_imports(TOOLS / (name + ".py")):
+                required.add(dependency)
+                pending.append(dependency)
+        for name in sorted(required):
+            if name not in {path[:-3] for path in resources if path.endswith(".py")}:
+                self.fail("Required local Python module omitted from capture package: " + name)
         self.assertIn("stageCaptureTool(", source)
         self.assertLess(source.index("staging = stageCaptureTool("),
                         source.index("server = builder.start();"),
