@@ -115,12 +115,12 @@ final class TraceCaptureWorkflow {
             if (window.getActivePage() == null) continue;
             var page = window.getActivePage();
             var timeline = page.findView(ThreadTimelineView.ID);
-            if (timeline instanceof ThreadTimelineView view) {
+            if (timeline instanceof ThreadTimelineView view && view.acceptsCapture(project)) {
                 view.displayProject(project);
                 view.loadSavedCapture(capture.resolve("ctf"));
             }
             var cpu = page.findView(ZephyrCpuLoadView.ID);
-            if (cpu instanceof ZephyrCpuLoadView view) {
+            if (cpu instanceof ZephyrCpuLoadView view && view.acceptsCapture(project)) {
                 view.displayProject(project);
                 view.loadSavedCapture(capture.resolve("ctf"));
             }
