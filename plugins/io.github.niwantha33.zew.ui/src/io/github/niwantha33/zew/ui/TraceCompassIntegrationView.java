@@ -184,27 +184,42 @@ public final class TraceCompassIntegrationView extends ViewPart {
                     + ". Restart Eclipse or install the missing Trace Compass CTF feature.");
             return;
         }
+        // The standard one-click workflow opens the latest *saved* project
+        // snapshot. It does not capture, halt, or reset the target.
+        if (savedCapture == null) latest();
         final Path ctf = savedCapture == null ? null : savedCapture.resolve("ctf");
+        if (ctf == null) {
+            status.setText("No saved project CTF selected. Select an imported Zephyr "
+                    + "project and use latest capture, or choose capture.json.");
+            return;
+        }
         try {
-            PlatformUI.getWorkbench().showPerspective(
-                    TRACING_PERSPECTIVE, getSite().getWorkbenchWindow());
-            if (ctf == null) {
-                status.setText("Tracing perspective opened. Select latest capture and click again to import.");
-                return;
-            }
-            // Trace Compass's own public openTraceFromPath API links and opens
-            // this exact CTF. No separate executable and no Zephyr project mutation.
-            // A validated Zephyr RAM stream may still be unsupported by TC;
-            // show the status rather than inventing an imported trace.
+            // Import before changing perspective: failures must remain visible
+            // in this view instead of disappearing behind the Tracing layout.
             org.eclipse.core.runtime.IStatus result =
                     TraceCompassNativeBridge.open(ctf, getSite().getShell());
-            status.setText(result.isOK() && result.getCode() != org.eclipse.core.runtime.IStatus.INFO
-                    ? "Trace Compass CTF open requested: " + ctf
-                    : "Trace Compass could not open this CTF: " + result.getMessage()
-                            + ". Use Inspect saved CTF events in Workbench.");
+            if (result == null || !result.isOK()) {
+                String message = "Trace Compass could not import this saved CTF: "
+                        + (result == null ? "no result from Trace Compass"
+                                : result.getMessage())
+                        + ". Zephyr packed RAM streams may not be supported "
+                        + "as ordinary CTF packet streams. Use Inspect saved CTF "
+                        + "events in Workbench; the original capture was preserved.";
+                status.setText(message);
+                org.eclipse.jface.dialogs.MessageDialog.openWarning(
+                        getSite().getShell(), "Trace Compass CTF import unavailable", message);
+                return;
+            }
+            status.setText("Trace Compass imported saved CTF directory: " + ctf);
+            PlatformUI.getWorkbench().showPerspective(
+                    TRACING_PERSPECTIVE, getSite().getWorkbenchWindow());
         } catch (Exception error) {
-            status.setText("Trace Compass import failed: " + error.getMessage()
-                    + ". Use native Workbench Observed CTF Events for this Zephyr RAM stream.");
+            String message = "Trace Compass import failed: "
+                    + (error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage())
+                    + ". Use Inspect saved CTF events in Workbench. No new capture is needed.";
+            status.setText(message);
+            org.eclipse.jface.dialogs.MessageDialog.openError(
+                    getSite().getShell(), "Trace Compass import failed", message);
         }
     }
 
