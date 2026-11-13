@@ -1741,8 +1741,10 @@ public final class EditorSmoke implements IApplication {
             check(toolbarCommands.contains("org.eclipse.ui.project.buildProject")
                     && toolbarCommands.contains("io.github.niwantha33.zew.flash"),
                     "installed toolbar contributes visible native Build and explicit Flash commands");
-            check(!toolbarCommands.contains("io.github.niwantha33.zew.debug"),
-                    "installed toolbar uses Eclipse's native Debug control without an extra icon");
+            check(toolbarCommands.contains("io.github.niwantha33.zew.flashDebug")
+                    && toolbarCommands.stream().filter(
+                            id -> id.equals("io.github.niwantha33.zew.flashDebug")).count() == 1,
+                    "installed Zephyr native Flash-and-Debug toolbar icon is visible exactly once");
             check(Arrays.stream(handlers).anyMatch(element -> element.getContributor().getName()
                             .equals("io.github.niwantha33.zew.ui")
                             && "io.github.niwantha33.zew.debug".equals(element.getAttribute("commandId"))
