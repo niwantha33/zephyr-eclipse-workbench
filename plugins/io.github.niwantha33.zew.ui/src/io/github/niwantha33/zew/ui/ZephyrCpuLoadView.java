@@ -162,6 +162,11 @@ public final class ZephyrCpuLoadView extends ViewPart {
         }
     }
     /** Called only after the user intentionally captured an exact saved CTF. */
+    /** Do not overwrite another application's already selected trace. */
+    public boolean acceptsCapture(IProject selected) {
+        return selected != null && (contextProject == null || contextProject.equals(selected));
+    }
+
     public void loadSavedCapture(Path ctf) {
         if (ctf != null && table != null && !table.isDisposed()) load(ctf);
     }
