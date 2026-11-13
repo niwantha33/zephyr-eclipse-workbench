@@ -1245,14 +1245,21 @@ public final class EditorSmoke implements IApplication {
                     check(hardwareDebugPerspective != null,
                             "Zephyr Hardware Debug perspective is installed");
                     page.setPerspective(hardwareDebugPerspective);
+                    // Exercise the actual user command. Eclipse may restore an old
+                    // perspective memento with legacy placeholders; the command
+                    // must repair it by instantiating each view explicitly.
+                    var openHardware = io.github.niwantha33.zew.ui.ZephyrDebugWorkspaceHandler.class
+                            .getDeclaredMethod("open", org.eclipse.ui.IWorkbenchWindow.class);
+                    openHardware.setAccessible(true);
+                    openHardware.invoke(null, page.getWorkbenchWindow());
                     for (String id : java.util.List.of(
                             "io.github.niwantha33.zew.ui.traceConsole",
                             "io.github.niwantha33.zew.ui.threadTimeline",
                             "io.github.niwantha33.zew.ui.cpuLoad",
                             "io.github.niwantha33.zew.ui.traceCompassIntegration")) {
-                        check(page.findViewReference(id) != null
-                                && page.showView(id) != null,
-                                "hardware debug perspective instantiates actual observability view: " + id);
+                        var reference = page.findViewReference(id);
+                        check(reference != null && reference.getView(false) != null,
+                                "Open Zephyr Hardware Debug Workspace instantiates observability view: " + id);
                     }
                     check(page.findViewReference("org.eclipse.debug.ui.MemoryView") != null,
                             "native target Memory view is part of the hardware debug layout");
