@@ -158,7 +158,7 @@ class PackedCtfTests(unittest.TestCase):
             'capture_full': True,
             'trace_bytes': len(self.bytes),
             'trace_sha256': hashlib.sha256(self.bytes).hexdigest(),
-            'metadata_sha256': hashlib.sha256(METADATA.encode()).hexdigest(),
+            'metadata_sha256': hashlib.sha256((self.ctf / 'metadata').read_bytes()).hexdigest(),
         }
         (self.root / 'capture.json').write_text(json.dumps(capture))
         self.assertTrue(buffer_full_evidence(self.ctf))
