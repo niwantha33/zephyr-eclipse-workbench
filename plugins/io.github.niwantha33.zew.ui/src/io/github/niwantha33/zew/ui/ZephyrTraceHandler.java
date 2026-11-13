@@ -41,7 +41,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
     // These Python modules are transitive imports of capture_snapshot.py.
     static final List<String> CAPTURE_FILES = List.of(
             "capture_snapshot.py", "analyze_trace.py", "cpu_analysis.py",
-            "timing_analysis.py", "semantic_trace.py", "thread_event_log.py",
+            "timing_analysis.py", "semantic_trace.py", "zephyr_ctf_binary.py", "thread_event_log.py",
             "investigation.py", "trace_compass_bridge.py", "Zephyr_RTOS_Timeline.xml");
 
     /**
