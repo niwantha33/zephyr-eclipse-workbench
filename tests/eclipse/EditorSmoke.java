@@ -1275,13 +1275,18 @@ public final class EditorSmoke implements IApplication {
                     var tabsField = cls.getDeclaredField("tabs");
                     tabsField.setAccessible(true);
                     var studioTabs = (org.eclipse.swt.widgets.TabFolder) tabsField.get(view);
-                    check(studioTabs.getItemCount() == 4
+                    check(studioTabs.getItemCount() == 5
                             && "Start Here".equals(studioTabs.getItem(0).getText())
                             && "Software · Kconfig".equals(studioTabs.getItem(1).getText())
                             && "Hardware · Devicetree".equals(studioTabs.getItem(2).getText())
                             && "Evidence && Diagnostics".equals(studioTabs.getItem(3).getText())
+                            && "Generated .config · Diff".equals(studioTabs.getItem(4).getText())
                             && studioTabs.getSelectionIndex() == 0,
-                            "native Configuration Studio opens task-first Start here by default");
+                            "native Configuration Studio opens task-first Start here with read-only generated .config Diff tab");
+                    var diffPanelField = cls.getDeclaredField("configDiffPanel");
+                    diffPanelField.setAccessible(true);
+                    check(diffPanelField.get(view) != null,
+                            "installed native generated .config Diff panel is created");
                     // Real view activation calls setFocus; never allow it to
                     // activate Software merely because prj.conf is selected.
                     view.getClass().getMethod("setFocus").invoke(view);
