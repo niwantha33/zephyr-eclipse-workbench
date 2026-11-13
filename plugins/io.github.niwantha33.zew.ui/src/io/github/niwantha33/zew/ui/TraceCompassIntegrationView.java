@@ -18,7 +18,6 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.program.Program;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
@@ -157,15 +156,19 @@ public final class TraceCompassIntegrationView extends ViewPart {
     }
 
     private void chooseCapture() {
-        var dialog = new DirectoryDialog(getSite().getShell(), SWT.OPEN);
-        dialog.setText("Select saved Zephyr RAM CTF capture");
-        dialog.setMessage("Choose .zew-traces/trace-*/ or its ctf/ subfolder; capture.json is required.");
+        var dialog = new FileDialog(getSite().getShell(), SWT.OPEN);
+        dialog.setText("Select capture.json from a saved Zephyr CTF snapshot");
+        dialog.setFilterNames(new String[] { "Zephyr capture.json", "All files" });
+        dialog.setFilterExtensions(new String[] { "capture.json", "*" });
         String chosen = dialog.open();
         if (chosen == null) return;
-        Path location = Path.of(chosen).toAbsolutePath().normalize();
-        if (location.getFileName() != null && "ctf".equals(location.getFileName().toString()))
-            location = location.getParent();
-        selectCapture(location);
+        Path file = Path.of(chosen).toAbsolutePath().normalize();
+        if (file.getFileName() == null || !"capture.json".equals(file.getFileName().toString())
+                || !Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            status.setText("Select capture.json inside a saved trace-* directory.");
+            return;
+        }
+        selectCapture(file.getParent());
     }
 
     private void latest() {
