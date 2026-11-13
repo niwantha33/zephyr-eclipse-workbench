@@ -30,10 +30,14 @@ public final class ZephyrHardwareDebugPerspective implements IPerspectiveFactory
 
         IFolderLayout output = layout.createFolder(
                 "zew.debug.output", IPageLayout.BOTTOM, 0.68f, editor);
+        // Real views, not placeholders: the earlier perspective hid all
+        // observability tabs until the user knew their exact Show View IDs.
+        // These views stay passive until an explicit capture/load action.
+        output.addView(ZephyrTraceConsoleView.ID);
         output.addView("org.eclipse.ui.console.ConsoleView");
-        output.addPlaceholder(ZephyrTraceConsoleView.ID);
-        output.addPlaceholder(Activator.ID + ".threadTimeline");
-        output.addPlaceholder(Activator.ID + ".cpuLoad");
+        output.addView(ThreadTimelineView.ID);
+        output.addView(ZephyrCpuLoadView.ID);
+        output.addView(TraceCompassIntegrationView.ID);
 
         layout.addShowViewShortcut(SocRegistersHandler.VIEW_ID);
         layout.addShowViewShortcut("org.eclipse.debug.ui.RegisterView");
@@ -42,6 +46,7 @@ public final class ZephyrHardwareDebugPerspective implements IPerspectiveFactory
         layout.addShowViewShortcut(ZephyrTraceConsoleView.ID);
         layout.addShowViewShortcut(Activator.ID + ".threadTimeline");
         layout.addShowViewShortcut(Activator.ID + ".cpuLoad");
+        layout.addShowViewShortcut(TraceCompassIntegrationView.ID);
         layout.addPerspectiveShortcut("org.eclipse.debug.ui.DebugPerspective");
     }
 }
