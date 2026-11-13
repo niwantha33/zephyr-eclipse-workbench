@@ -48,7 +48,7 @@ public final class TraceCompassIntegrationView extends ViewPart {
     private Text standaloneExecutable;
     private Button nativePerspective, installInEclipse, launchStandalone, inspectWorkbench;
     private static final Pattern BRIDGE_STATUS =
-            Pattern.compile("\\"status\\"\\s*:\\s*\\"([a-z-]+)\\"");
+            Pattern.compile("\"status\"\\s*:\\s*\"([a-z-]+)\"");
     private volatile Job handoff;
     private boolean disposed;
 
