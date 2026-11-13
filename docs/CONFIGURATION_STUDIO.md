@@ -1,5 +1,35 @@
 # Native Zephyr Configuration Studio — initial integration
 
+## Generated .config Tree & Diff (feature branch)
+
+The existing native Configuration Studio includes a **Generated .config · Diff**
+tab. It displays the selected build profile's effective `zephyr/.config`
+as a read-only, expandable tree. Groups come from comments in the generated
+file, **not** a reconstructed Kconfig dependency hierarchy. Each setting has
+previous, current and explicitly labelled status columns. Added settings are
+green, changed values purple, removed settings red, while unchanged settings
+remain in the default foreground colour. A Changes only toggle and symbol/value
+search help navigate large configurations; at most 2,500 matching rows are
+rendered at once, and the viewer reports when this limit applies.
+
+A successful managed West build captures the previous build's `zephyr/.config`
+**before** configure/pristine and writes a bounded, atomic, build-local
+`zephyr/.config.previous` comparison baseline **only after verified build
+outputs**. Clean operations, cancelled/failed builds and source edits do not
+publish a new baseline. The snapshot is tied to the selected board/profile's
+build output, never written into `prj.conf`, and is only configuration data:
+it does not prove which firmware is flashed or running. The baseline may be
+unavailable after the first build or if the previous generated file was absent.
+
+Use **Compare with older .config…** to select an explicit older file, and
+**Previous build** to return to automatic comparison. Rebuild/refresh updates
+the view for the selected build. In the absence of a baseline, no symbols are
+misleadingly labelled as newly added. `# CONFIG_X is not set` is correctly
+interpreted as value `n`, whereas an entirely absent option is
+added/removed. Unrecognised lines are not silently interpreted as settings.
+This view never modifies generated configuration or requested source values.
+
+
 ## Step 07A — Hardware from the real Devicetree
 
 The Hardware workspace now has a native **Detected hardware** inventory

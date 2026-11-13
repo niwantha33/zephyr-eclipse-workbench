@@ -156,6 +156,7 @@ public final class ConfigurationStudioView extends ViewPart {
     private Button enableButton, disableButton, editButton, removeButton;
     private Combo category;
     private TabFolder tabs;
+    private GeneratedConfigDiffPanel configDiffPanel;
     private Button visualGuideButton;
     private Label context, status, overview, detailTitle, detailMeta, detailNotice;
     private Label totalMetric, changesMetric, issuesMetric, targetMetric;
@@ -999,6 +1000,7 @@ public final class ConfigurationStudioView extends ViewPart {
         hardwareActions.setSize(hardwareActions.computeSize(SWT.DEFAULT, SWT.DEFAULT));
 
         Composite reports = tab(tabs, "Evidence && Diagnostics");
+        configDiffPanel = new GeneratedConfigDiffPanel(tab(tabs, "Generated .config · Diff"));
         reports.setLayout(new GridLayout(1, false));
         var evidenceActions = new Composite(reports, SWT.NONE);
         evidenceActions.setLayout(new GridLayout(3, false));
@@ -1233,6 +1235,12 @@ public final class ConfigurationStudioView extends ViewPart {
         button.setText(label);
         button.addListener(SWT.Selection, event -> run.run());
         return button;
+    }
+
+    /** Called on the SWT thread after a verified native builder completes. */
+    void refreshAfterBuild(IProject built) {
+        if (project != null && project.equals(built) && options != null && !options.isDisposed())
+            reload();
     }
 
     public void displayProject(IProject selected) { displayProject(selected, false, null); }
@@ -2124,6 +2132,7 @@ public final class ConfigurationStudioView extends ViewPart {
             describeSelected();
             help.setText("Open Zephyr > Configuration Studio with an application selected in Project Explorer.");
             tree.setText("");
+            if (configDiffPanel != null) configDiffPanel.reload(null);
             refreshSourceBrowser();
             refreshHardware();
             refreshBeginnerGuide();
@@ -2163,6 +2172,7 @@ public final class ConfigurationStudioView extends ViewPart {
                         || Files.getLastModifiedTime(overlay)
                                 .compareTo(Files.getLastModifiedTime(effectiveDts)) > 0);
             buildOutdated = staleKconfig || staleDts;
+            if (configDiffPanel != null) configDiffPanel.reload(build);
             context.setText(project.getName() + "   •   " + board + "   •   " + snapshot.profile());
             updateMetrics();
             refreshPeripheralInfo();
@@ -2201,6 +2211,7 @@ public final class ConfigurationStudioView extends ViewPart {
             describeSelected();
             help.setText("Configuration cannot be loaded: " + error.getMessage());
             tree.setText("");
+            if (configDiffPanel != null) configDiffPanel.reload(null);
             refreshHardware();
             refreshBeginnerGuide();
             analysis.setText("Open Project settings or inspect the source file for configuration errors.");
