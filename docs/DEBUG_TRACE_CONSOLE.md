@@ -1,9 +1,28 @@
 # Zephyr Debug Trace Console (first integration slice)
 
-Open **Zephyr > Capture & Analyse > Debug Trace Console...** after selecting an imported
-Zephyr project. This view reads the generated `zephyr/.config` for the selected
-board/profile. It does **not** read target RAM, attach to a probe, flash, reset, or
-claim that the image on the device matches the build just by opening the view.
+Open **Zephyr > Capture & Analyse > Debug Trace Console...** during an
+existing Zephyr Debug session or after selecting an imported Zephyr project.
+The view now first follows an active native Zephyr debug-context project,
+then an explicit single project selection, then a **unique** live Zephyr
+launch. If two different running projects remain ambiguous it refuses to
+guess and asks you to select a project/thread. The **Use selected project /
+debug session** button also resolves the active Debug context. Changing to
+another Zephyr debug context updates the project and effective build evidence.
+Project discovery never accesses the MCU or starts a new debug session.
+
+This view reads generated `zephyr/.config` for that project's selected
+board/profile; it does **not** prove that this build was flashed. If the
+project's active build/profile differs from the already-flashed debug ELF, the
+displayed backend configuration is build intent, **not** verified live
+firmware configuration. It does **not** read target RAM, attach to a probe,
+flash or reset merely by opening the view.
+
+**The console is not an automatic live streaming terminal.** To see text,
+start **Capture UART/USB text** with a confirmed serial port/baud, or
+explicitly connect to an already running local RTT TCP receiver. CTF is
+binary capture evidence, not readable console text. On TI MSPM0G3507
+(Cortex-M0+) the ITM/SWO channel is unavailable; this is a hardware
+limitation, not a Workbench project-selection failure.
 
 ## What works now
 
