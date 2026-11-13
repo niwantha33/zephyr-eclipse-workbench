@@ -319,16 +319,6 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 }
                 if (!clean) {
                     Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
-                    if (!monitor.isCanceled()) {
-                        try {
-                            io.github.niwantha33.zew.core.GeneratedConfigHistory.commit(
-                                    buildDirectory, previousGeneratedConfig);
-                        } catch (java.io.IOException historyError) {
-                            // Optional comparison history never changes a verified build result.
-                            stream.println("Generated .config comparison history unavailable; "
-                                    + "use the viewer's manual file comparison.");
-                        }
-                    }
                     // Capture only AFTER the exact build and generated outputs
                     // have passed their existing integrity/target checks.
                     // A missing dependency file yields UNVERIFIED, never a
@@ -353,6 +343,17 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                         MemoryProfilerBuildIntegration.afterSuccessfulBuild(getProject(),
                                 buildDirectory, settings.getProperty("python"),
                                 monitor::isCanceled, stream::println);
+                }
+                // Publish the previous generated snapshot only after all normal
+                // successful-build processing, never after a failed or cancelled run.
+                if (!clean && !monitor.isCanceled()) {
+                    try {
+                        io.github.niwantha33.zew.core.GeneratedConfigHistory.commit(
+                                buildDirectory, previousGeneratedConfig);
+                    } catch (java.io.IOException historyError) {
+                        stream.println("Generated .config comparison history unavailable; "
+                                + "use the viewer's manual file comparison.");
+                    }
                 }
                 stream.println(clean ? "Clean completed." : "BUILD SUCCESS — configured firmware outputs verified.");
             } catch (java.io.InterruptedIOException error) { throw error; }
