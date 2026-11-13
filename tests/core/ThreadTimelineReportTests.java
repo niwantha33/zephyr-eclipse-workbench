@@ -61,11 +61,11 @@ public final class ThreadTimelineReportTests {
         check(malformed, "v2 refuses intervals extending outside observed trace extent");
 
         var observed = ThreadTimelineReport.parse(
-                "ZEW_THREAD_TIMELINE\\t3\\t1\\t1\\t0\\t"
-                + text("RAM tracing buffer full") + "\\t0\\t5\\t50\\t2\\t2\\n"
-                + "E\\t5\\t" + text("thread_sched_ready") + "\\t"
-                + text("lab_worker") + "\\t" + text("1234") + "\\tTHREAD_READY\\n"
-                + "E\\t50\\t" + text("isr_enter") + "\\t\\t\\tISR_ENTER\\n");
+                "ZEW_THREAD_TIMELINE\t3\t1\t1\t0\t"
+                + text("RAM tracing buffer full") + "\t0\t5\t50\t2\t2\n"
+                + "E\t5\t" + text("thread_sched_ready") + "\t"
+                + text("lab_worker") + "\t" + text("1234") + "\tTHREAD_READY\n"
+                + "E\t50\t" + text("isr_enter") + "\t\t\tISR_ENTER\n");
         check(observed.intervals().isEmpty() && observed.events().size() == 2
                 && observed.totalEvents() == 2 && observed.incomplete(),
                 "v3 keeps observed events when timeline has no paired intervals");
@@ -75,14 +75,14 @@ public final class ThreadTimelineReportTests {
                 "v3 event names, timestamps and threads survive the wire");
         malformed = false;
         try { ThreadTimelineReport.parse(
-                "ZEW_THREAD_TIMELINE\\t3\\t0\\t0\\t0\\t\\t0\\t5\\t50\\t2\\t2\\n"
-                + "E\\t5\\t" + text("isr_enter") + "\\t\\t\\tISR_ENTER\\n"); }
+                "ZEW_THREAD_TIMELINE\t3\t0\t0\t0\t\t0\t5\t50\t2\t2\n"
+                + "E\t5\t" + text("isr_enter") + "\t\t\tISR_ENTER\n"); }
         catch (IllegalArgumentException expected) { malformed = true; }
         check(malformed, "missing v3 observed rows rejected");
         malformed = false;
         try { ThreadTimelineReport.parse(
-                "ZEW_THREAD_TIMELINE\\t3\\t0\\t0\\t0\\t\\t0\\t5\\t50\\t1\\t1\\n"
-                + "E\\t99\\t" + text("isr_enter") + "\\t\\t\\tISR_ENTER\\n"); }
+                "ZEW_THREAD_TIMELINE\t3\t0\t0\t0\t\t0\t5\t50\t1\t1\n"
+                + "E\t99\t" + text("isr_enter") + "\t\t\tISR_ENTER\n"); }
         catch (IllegalArgumentException expected) { malformed = true; }
         check(malformed, "v3 event timestamp outside observed bounds rejected");
 
