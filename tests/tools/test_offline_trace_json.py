@@ -37,6 +37,26 @@ class OfflineTraceJsonTests(unittest.TestCase):
         self.assertEqual([row["running_ns"] for row in report["cpu"]["rows"]], [5000, 3000])
         self.assertIsNone(report["cpu"]["cpu_busy_percent"])
 
+    def test_atomic_sched_switch_exclusive_cpu_is_measurable(self):
+        # A complete single-stream switch event is an observed boundary,
+        # not an ambiguous second switched_in. No idle identification is made.
+        trace = self.trace(raw("sched_switch", 0, "worker"),
+                           raw("sched_switch", 4000, "idle"),
+                           raw("isr_enter", 6000, None),
+                           raw("isr_exit", 7000, None),
+                           raw("sched_switch", 10000, "worker"),
+                           raw("thread_switched_out", 12000, "worker"))
+        report = cpu_report(trace)
+        self.assertEqual(report["status"], "ok", report["reason"])
+        self.assertEqual(report["cpu"]["unknown_ns"], 0)
+        self.assertEqual(report["cpu"]["isr_ns"], 1000)
+        self.assertEqual({r["name"]: r["running_ns"]
+                          for r in report["cpu"]["rows"]},
+                         {"worker": 6000, "idle": 5000})
+        self.assertEqual(sum(r["running_ns"] for r in report["cpu"]["rows"])
+                         + report["cpu"]["isr_ns"], 12000)
+        self.assertIsNone(report["cpu"]["cpu_busy_percent"])
+
     def test_nested_isr_is_exclusive_across_window_boundaries(self):
         # 0..10us worker, with two nested ISRs occupying 2..5us.
         trace = self.trace(raw("thread_switched_in", 0),
