@@ -111,7 +111,7 @@ public final class ThreadTimelineView extends ViewPart {
         guidance.setText("To begin: build and flash CONFIG_TRACING=y + CONFIG_TRACING_CTF=y "
                 + "+ CONFIG_TRACING_BACKEND_RAM=y. Terminate Debug before Capture; "
                 + "the capture resets/runs/halts the MCU. Then open the latest saved CTF. "
-                + "Requires Babeltrace 2 (Python bt2) to decode scheduler events.");
+                + "Zephyr 4.4 packed RAM CTF decodes natively; other CTF formats may need Babeltrace 2 bt2.");
 
         tabs = new TabFolder(parent, SWT.NONE);
         tabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -459,7 +459,7 @@ public final class ThreadTimelineView extends ViewPart {
             table.setRedraw(true);
         }
         if (displayed.decoderUnavailable())
-            status.setText("CTF decoding unavailable: install Babeltrace 2 bt2 for the selected Python. "
+            status.setText("CTF format not handled by the native Zephyr decoder; configure Babeltrace 2 bt2. "
                     + displayed.detail());
         else if (displayed.schedulerEvents() == 0)
             status.setText(NO_SCHEDULER + " " + displayed.detail());
