@@ -875,6 +875,112 @@ public final class SocRegistersView extends ViewPart {
                     10 + i * width / (points.size() - 1),
                     29 + (int) ((1 - points.get(i).level()) * height));
     }
+    private void toggleWatch(Register register) {
+        if (register == null) return;
+        if (!watches.remove(register.key())) {
+            if (!register.readable()) {
+                status.setText("Watch unavailable: " + register.readBlockReason());
+                return;
+            }
+            if (watches.size() >= 64) {
+                status.setText("Watch is limited to 64 readable registers.");
+                return;
+            }
+            watches.add(register.key());
+        }
+        render();
+    }
+
+    private SvdDevice.Field selectedField() {
+        if (tree == null || tree.getSelectionCount() == 0) return null;
+        Object field = tree.getSelection()[0].getData("svdField");
+        return field instanceof SvdDevice.Field svd ? svd : null;
+    }
+
+    private void installRegisterMenu() {
+        var menu = new Menu(tree);
+        tree.setMenu(menu);
+        var add = new MenuItem(menu, SWT.PUSH);
+        add.setText("Add / remove watch");
+        add.addListener(SWT.Selection, e -> toggleWatch(selected()));
+        var write = new MenuItem(menu, SWT.PUSH);
+        write.setText("Write register value…");
+        write.addListener(SWT.Selection, e -> editRegister(selected()));
+        var bit = new MenuItem(menu, SWT.PUSH);
+        bit.setText("Toggle selected 1-bit field…");
+        bit.addListener(SWT.Selection, e -> toggleFieldBit(selected(), selectedField()));
+        menu.addListener(SWT.Show, e -> {
+            Register reg = selected();
+            add.setEnabled(reg != null && (watches.contains(reg.key()) || reg.readable()));
+            write.setEnabled(reg != null && reg.writable());
+            SvdDevice.Field field = selectedField();
+            bit.setEnabled(reg != null && reg.writable() && values.containsKey(reg.key())
+                    && field != null && field.width() == 1);
+        });
+        tree.addListener(SWT.MenuDetect, e -> {
+            var point = tree.toControl(e.x, e.y);
+            var hit = tree.getItem(point);
+            if (hit != null) tree.setSelection(hit);
+        });
+    }
+
+    private void installWatchMenu() {
+        var menu = new Menu(watchTable);
+        watchTable.setMenu(menu);
+        var remove = new MenuItem(menu, SWT.PUSH);
+        remove.setText("Remove watch");
+        remove.addListener(SWT.Selection, e -> {
+            Register reg = watchedSelection();
+            if (reg != null) toggleWatch(reg);
+        });
+        var write = new MenuItem(menu, SWT.PUSH);
+        write.setText("Write register value…");
+        write.addListener(SWT.Selection, e -> editRegister(watchedSelection()));
+        menu.addListener(SWT.Show, e -> {
+            Register reg = watchedSelection();
+            remove.setEnabled(reg != null);
+            write.setEnabled(reg != null && reg.writable());
+        });
+        watchTable.addListener(SWT.MenuDetect, e -> {
+            var point = watchTable.toControl(e.x, e.y);
+            var hit = watchTable.getItem(point);
+            if (hit != null) watchTable.setSelection(hit);
+        });
+        watchTable.addListener(SWT.Selection, e -> {
+            Register reg = watchedSelection();
+            if (reg != null) showRegisterDetails(reg);
+        });
+    }
+
+    private Register watchedSelection() {
+        if (watchTable == null || watchTable.isDisposed() || watchTable.getSelectionCount() != 1)
+            return null;
+        Object data = watchTable.getSelection()[0].getData();
+        return data instanceof Register reg ? reg : null;
+    }
+
+    private void renderWatches() {
+        if (watchTable == null || watchTable.isDisposed()) return;
+        String key = watchedSelection() == null ? null : watchedSelection().key();
+        watchTable.setRedraw(false);
+        try {
+            watchTable.removeAll();
+            if (device == null) return;
+            for (Register reg : device.registers()) {
+                if (!watches.contains(reg.key())) continue;
+                var row = new TableItem(watchTable, SWT.NONE);
+                row.setData(reg);
+                var value = values.get(reg.key());
+                row.setText(new String[] { reg.key(),
+                        value == null ? "—" : hex(value, reg.size()),
+                        errors.getOrDefault(reg.key(), value == null ? "Not read" : "Halted snapshot") });
+                if (reg.key().equals(key)) watchTable.setSelection(row);
+            }
+        } finally {
+            watchTable.setRedraw(true);
+        }
+    }
+
     private Register selected() {
         if (tree.getSelectionCount() == 0) return null;
         var item = tree.getSelection()[0];
@@ -884,6 +990,7 @@ public final class SocRegistersView extends ViewPart {
         if (tree == null || tree.isDisposed()) return;
         if (device == null) {
             tree.removeAll();
+            renderWatches();
             return;
         }
         Register chosen = selected();
@@ -940,33 +1047,59 @@ public final class SocRegistersView extends ViewPart {
                     + (liveWatch ? " Halted-only sampled Live Watch; NOT continuous hardware tracing."
                             : " No automatic polling. Not read = no successful snapshot yet; Blocked = unsafe SVD access."));
         } finally { tree.setRedraw(true); }
+        renderWatches();
+    }
+
+    private static String bits(BigInteger value, int width) {
+        StringBuilder result = new StringBuilder();
+        for (int bit = width - 1; bit >= 0; bit--) {
+            result.append(value.testBit(bit) ? '1' : '0');
+            if (bit > 0 && bit % 4 == 0) result.append(' ');
+        }
+        return result.toString();
     }
 
     private void showRegisterDetails(Register r) {
         if (registerDetails == null || registerDetails.isDisposed()) return;
-        StringBuilder details = new StringBuilder("REGISTER DETAILS\n\n")
+        BigInteger value = values.get(r.key());
+        var details = new StringBuilder("REGISTER DETAILS\n\n")
                 .append(r.key()).append("\n")
-                .append("Address: 0x").append(r.address().toString(16)).append("\n")
-                .append("Width: ").append(r.size()).append(" bits\n")
-                .append("Access: ").append(r.access()).append("\n")
-                .append("Reset: ").append(r.reset() == null ? "Not specified"
-                        : hex(r.reset(), r.size())).append("\n")
-                .append("Value: ").append(values.containsKey(r.key())
-                        ? hex(values.get(r.key()), r.size()) : "Not read").append("\n")
-                .append("Read: ").append(r.readable()
-                        ? "Available when target is suspended" : "Blocked: " + r.readBlockReason())
-                .append("\n\n")
-                .append(r.description().isBlank() ? "No register description supplied by SVD."
-                        : r.description()).append("\n\nFIELDS\n");
-        if (r.fields().isEmpty()) details.append("No field definitions in this SVD.\n");
+                .append("Address    0x").append(r.address().toString(16)).append("\n")
+                .append("Width      ").append(r.size()).append(" bits\n")
+                .append("Access     ").append(r.access()).append("\n")
+                .append("Reset      ").append(r.reset() == null ? "Unknown" : hex(r.reset(), r.size())).append("\n")
+                .append("Snapshot   ").append(value == null ? "Not read" : hex(value, r.size())).append("\n")
+                .append("Read       ").append(r.readable() ? "Halted only" : r.readBlockReason()).append("\n")
+                .append("Write      ").append(r.writable()
+                        ? "Right-click → Write register value (explicit confirmation)"
+                        : "Blocked: " + r.writeBlockReason())
+                .append("\n\nBITWISE (MSB → LSB)\n");
+        if (value != null) {
+            details.append("value  ").append(bits(value, r.size())).append("\n");
+            details.append("index  ");
+            for (int bit = r.size() - 1; bit >= 0; bit--) {
+                details.append(bit % 10);
+                if (bit > 0 && bit % 4 == 0) details.append(' ');
+            }
+            details.append("\n");
+        } else details.append("No halted snapshot; bits are not assumed to be zero.\n");
+        details.append("\nFIELDS\n");
+        if (r.fields().isEmpty()) details.append("(No field definitions in SVD)\n");
         for (var field : r.fields()) {
+            BigInteger mask = BigInteger.ONE.shiftLeft(field.width()).subtract(BigInteger.ONE);
             details.append("\n").append(field.name()).append(" [")
                     .append(field.offset() + field.width() - 1).append(":")
-                    .append(field.offset()).append("]")
-                    .append("  ").append(field.access()).append("\n");
+                    .append(field.offset()).append("]  ");
+            if (value != null) {
+                BigInteger fieldValue = value.shiftRight(field.offset()).and(mask);
+                details.append(hex(fieldValue, field.width())).append("  ")
+                        .append(bits(fieldValue, field.width()));
+            } else details.append("Not read");
+            details.append("  ").append(field.access()).append("\n");
             if (!field.description().isBlank())
-                details.append(field.description()).append("\n");
+                details.append(field.description().strip()).append("\n");
         }
+        if (!r.description().isBlank()) details.append("\n").append(r.description().strip());
         registerDetails.setText(details.toString());
     }
 
@@ -1004,6 +1137,7 @@ public final class SocRegistersView extends ViewPart {
         for (var f : r.fields()) {
             TreeItem field = new TreeItem(item, SWT.NONE);
             field.setData(r);
+            field.setData("svdField", f);
             field.setData("description", f.description());
             var mask = BigInteger.ONE.shiftLeft(f.width()).subtract(BigInteger.ONE);
             field.setText(new String[] { f.name(), "[" + (f.offset() + f.width() - 1)
