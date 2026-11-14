@@ -115,6 +115,8 @@ public final class SocRegistersView extends ViewPart {
     private int currentReadOk;
     private int currentReadFailed;
     private String lastReadError;
+    private volatile String lastGdbExpression;
+    private volatile String lastGdbReply;
     private java.time.Instant lastReadAt;
     private final RegisterHistory history = new RegisterHistory();
     private boolean liveWatch; // always off at startup
@@ -989,6 +991,11 @@ public final class SocRegistersView extends ViewPart {
                     .append(RegisterPresentation.explanation(chosen,
                             errors.get(chosen.key()))).append("\n");
         }
+        if (lastGdbExpression != null)
+            report.append("\nLAST GDB MEMORY EXPRESSION\n")
+                    .append(lastGdbExpression).append("\n")
+                    .append("GDB result: ").append(lastGdbReply == null
+                            ? "not available" : lastGdbReply).append("\n");
         if (lastReadError != null)
             report.append("\nMOST RECENT GDB ERROR\n").append(lastReadError).append("\n");
         report.append("\nValues are GDB snapshots from a suspended target. "
@@ -1878,6 +1885,8 @@ public final class SocRegistersView extends ViewPart {
         // GDB decodes target endianness; the width guard prevents ABI-dependent reads.
         String expression = "sizeof(" + type + ") == " + (r.size() / 8)
                 + " ? (unsigned long long)(*(volatile " + type + " *)0x" + r.address().toString(16) + ") : -1LL";
+        lastGdbExpression = expression;
+        lastGdbReply = null;
         var expr = expressions.createExpression(context, expression);
         var formatted = expressions.getFormattedValueContext(expr, IFormattedValues.HEX_FORMAT);
         expressions.getFormattedExpressionValue(formatted,
@@ -1887,6 +1896,7 @@ public final class SocRegistersView extends ViewPart {
                 if (!isSuccess()) error = "Read failed: " + getStatus().getMessage();
                 else try {
                     String raw = getData().getFormattedValue().trim();
+                    lastGdbReply = raw;
                     if (!raw.matches("0[xX][0-9a-fA-F]+")) throw new IllegalArgumentException();
                     value = new BigInteger(raw.substring(2), 16);
                     if (value.signum() < 0 || value.bitLength() > r.size()) throw new IllegalArgumentException();
