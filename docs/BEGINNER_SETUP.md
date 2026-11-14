@@ -1,5 +1,7 @@
 # Beginner setup — development preview 0.1.10
 
+For new, empty Eclipse workspaces, **Zephyr Beginner** now opens with Project Explorer, a five-step guide, Console and Problems. Existing workspaces keep their saved perspectives. See [the beginner perspective guide](ZEPHYR_BEGINNER_PERSPECTIVE.md) for navigation and access to advanced views.
+
 The new **Zephyr > Set Up Zephyr** wizard bootstraps a managed environment on
 native Windows x64. No installed Python, Git, winget, terminal commands or global
 PATH edits are needed. A welcome prompt offers setup in new Eclipse workspaces;
