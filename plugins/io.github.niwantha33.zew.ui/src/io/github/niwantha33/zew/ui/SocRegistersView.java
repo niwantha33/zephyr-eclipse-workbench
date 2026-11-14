@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 import org.eclipse.cdt.dsf.concurrent.DataRequestMonitor;
+import org.eclipse.cdt.dsf.concurrent.RequestMonitor;
 import org.eclipse.cdt.dsf.datamodel.DMContexts;
 import org.eclipse.cdt.dsf.datamodel.IDMContext;
 import org.eclipse.cdt.dsf.debug.service.IExpressions;
@@ -40,6 +41,12 @@ import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
+import org.eclipse.swt.widgets.Spinner;
+import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableColumn;
+import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeColumn;
@@ -67,10 +74,17 @@ import io.github.niwantha33.zew.core.RegisterSparkline;
 import io.github.niwantha33.zew.core.DebugSessionSelection;
 import io.github.niwantha33.zew.core.SvdDevice.Register;
 
-/** Read-only peripheral inspection through the user's selected native DSF session. */
+/** Exact-SVD peripheral inspection through the native DSF-GDB/OpenOCD session. */
 public final class SocRegistersView extends ViewPart {
     private Tree tree;
     private Text registerDetails;
+    private Table watchTable;
+    private Spinner watchInterval;
+    private Button autoReadOnHalt;
+    private int watchIntervalMs = 1500;
+    private static final int MAX_SNAPSHOT_REGISTERS = 4096;
+    private enum ReadScope { SELECTION, WATCHES, ALL_SAFE }
+    private boolean autoSnapshotEnabled = true;
     private Label status;
     private Label summary;
     private Label contextInfo;
@@ -113,7 +127,7 @@ public final class SocRegistersView extends ViewPart {
         ui = parent.getDisplay();
         parent.setLayout(new GridLayout(1, false));
         var bar = new Composite(parent, SWT.NONE);
-        bar.setLayout(new GridLayout(4, false));
+        bar.setLayout(new GridLayout(5, false));
         bar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(bar, "Find Device Definitions", this::chooseProjectForDiscovery);
         button(bar, "Get Device Registers…", this::downloadVendorSvd);
@@ -124,25 +138,38 @@ public final class SocRegistersView extends ViewPart {
             if (path != null) load(path);
         });
         button(bar, "Refresh Selected + Watches", this::refresh);
+        button(bar, "Read All SVD-Safe Registers", this::refreshAll);
         var options = new Composite(parent, SWT.NONE);
-        options.setLayout(new GridLayout(6, false));
+        options.setLayout(new GridLayout(9, false));
         options.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(options, "Pin baseline", this::pinBaseline);
         button(options, "Export history CSV…", this::exportHistory);
         watchButton = new Button(options, SWT.PUSH);
         watchButton.setText("Start Live Watch (opt-in)");
         watchButton.addListener(SWT.Selection, e -> toggleLiveWatch());
-        button(options, "Watch / unwatch", () -> {
-            var selected = selected();
-            if (selected != null) {
-                if (!watches.remove(selected.key())) watches.add(selected.key());
-                render();
-            }
-        });
+        button(options, "Watch / unwatch", () -> toggleWatch(selected()));
+        var periodLabel = new Label(options, SWT.NONE);
+        periodLabel.setText("Watch (ms):");
+        watchInterval = new Spinner(options, SWT.BORDER);
+        watchInterval.setMinimum(250);
+        watchInterval.setMaximum(60000);
+        watchInterval.setIncrement(250);
+        watchInterval.setPageIncrement(1000);
+        watchInterval.setSelection(watchIntervalMs);
+        watchInterval.setToolTipText("Polling interval while the native GDB target is halted (250–60000 ms).");
+        watchInterval.addModifyListener(e -> watchIntervalMs = watchInterval.getSelection());
         search = new Text(options, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
         search.setMessage("Find peripheral, register or field");
         search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         search.addModifyListener(e -> render());
+        autoReadOnHalt = new Button(options, SWT.CHECK);
+        autoReadOnHalt.setText("Snapshot on halt");
+        autoReadOnHalt.setToolTipText("Automatically read the SVD-declared safe registers after a verified GDB suspension. Running targets are never read.");
+        autoReadOnHalt.setSelection(autoSnapshotEnabled);
+        autoReadOnHalt.addListener(SWT.Selection, e -> {
+            autoSnapshotEnabled = autoReadOnHalt.getSelection();
+            if (autoSnapshotEnabled) scheduleAutoSnapshot();
+        });
         pinViewSelection = new Button(options, SWT.CHECK);
         pinViewSelection.setText("Pin Selection");
         pinViewSelection.setToolTipText("Do not follow other views' project/build selections.");
@@ -162,7 +189,7 @@ public final class SocRegistersView extends ViewPart {
         contextInfo.setText("No selected debug frame. CPU registers, Variables and Expressions are separate native Debug views.");
         summary = new Label(parent, SWT.WRAP);
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        summary.setText("No SVD model loaded yet. Find Device Definitions searches installed SDKs and packs; register values require a halted manual read.");
+        summary.setText("No SVD model loaded yet. Read snapshots require the existing halted native GDB/OpenOCD session.");
         historyChart = new Canvas(parent, SWT.BORDER | SWT.DOUBLE_BUFFERED);
         var chartData = new GridData(SWT.FILL, SWT.TOP, true, false);
         chartData.heightHint = 105;
@@ -170,18 +197,37 @@ public final class SocRegistersView extends ViewPart {
         historyChart.setLayoutData(chartData);
         historyChart.setVisible(false);
         historyChart.addPaintListener(e -> paintHistory(e.gc));
-        // VS Code-style resizable explorer and read-only register inspector.
+        // Native split explorer, bitwise inspector and independent watch panel.
         // Use SWT system colours: the panel follows Eclipse light/dark themes.
         var split = new org.eclipse.swt.custom.SashForm(parent, SWT.HORIZONTAL);
         split.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         tree = new Tree(split, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         tree.setHeaderVisible(true); tree.setLinesVisible(true);
-        registerDetails = new Text(split, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY
-                | SWT.V_SCROLL | SWT.H_SCROLL | SWT.WRAP);
+        var inspector = new Composite(split, SWT.NONE);
+        inspector.setLayout(new GridLayout(1, false));
+        registerDetails = new Text(inspector, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY
+                | SWT.V_SCROLL | SWT.H_SCROLL);
+        registerDetails.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        registerDetails.setFont(org.eclipse.jface.resource.JFaceResources.getTextFont());
         registerDetails.setText("REGISTER DETAILS\n\nSelect a peripheral or register.\n"
-                + "Addresses and field descriptions come from the verified SVD.\n"
-                + "Live values require a suspended GDB target and manual Refresh.");
-        split.setWeights(new int[] { 70, 30 });
+                + "Addresses and bit fields come from the exact SVD.\n"
+                + "Values are snapshots from the halted native GDB target.");
+        var watchHeading = new Label(inspector, SWT.NONE);
+        watchHeading.setText("Watched registers — independent halted-session snapshots");
+        watchTable = new Table(inspector, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
+        watchTable.setHeaderVisible(true);
+        watchTable.setLinesVisible(true);
+        var watchData = new GridData(SWT.FILL, SWT.BOTTOM, true, false);
+        watchData.heightHint = 145;
+        watchTable.setLayoutData(watchData);
+        for (String label : new String[] { "Register", "Value", "Status" }) {
+            var column = new TableColumn(watchTable, SWT.LEFT);
+            column.setText(label);
+        }
+        watchTable.getColumn(0).setWidth(170);
+        watchTable.getColumn(1).setWidth(110);
+        watchTable.getColumn(2).setWidth(160);
+        split.setWeights(new int[] { 62, 38 });
         String[] headings = { "Peripheral / register / field", "Address / bits", "Value (hex)", "Reset (hex)", "Access / status" };
         int[] widths = { 310, 155, 140, 140, 260 };
         for (int i = 0; i < headings.length; i++) {
@@ -212,6 +258,8 @@ public final class SocRegistersView extends ViewPart {
                         + "Selection alone never reads hardware.");
             }
         });
+        installRegisterMenu();
+        installWatchMenu();
         tree.addListener(SWT.MouseHover, e -> {
             var item = tree.getItem(new org.eclipse.swt.graphics.Point(e.x, e.y));
             tree.setToolTipText(item == null ? null : (String) item.getData("description"));
