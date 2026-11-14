@@ -374,6 +374,7 @@
           <command commandId="io.github.niwantha33.zew.flashDebug" label="Flash and Debug Application..." style="push"/>
           <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
           <command commandId="io.github.niwantha33.zew.debugWorkspace" label="Open Hardware Debug Workspace" style="push"/>
+          <command commandId="io.github.niwantha33.zew.socRegisters" label="Open Zephyr Peripherals (SVD)..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.advanced" label="Advanced Tools">
           <menu id="io.github.niwantha33.zew.menu.diagnostics" label="Hardware &amp; Diagnostics">
@@ -390,7 +391,7 @@
             <command commandId="io.github.niwantha33.zew.traceConsole" label="Debug Trace Console..." style="push"/>
             <command commandId="io.github.niwantha33.zew.liveTraceStreaming" label="Start Live Trace (not yet available)" style="push"/>
             <command commandId="io.github.niwantha33.zew.threadTimeline" label="Thread Timeline..." style="push"/>
-            <command commandId="io.github.niwantha33.zew.cpuLoad" label="CPU Load..." style="push"/>
+            <command commandId="io.github.niwantha33.zew.cpuLoad" label="Zephyr CPU Load (Saved CTF)..." style="push"/>
             <command commandId="io.github.niwantha33.zew.contentionReport" label="Contention Report..." style="push"/>
             <command commandId="io.github.niwantha33.zew.memoryProfile" label="Memory Profile..." style="push"/>
             <command commandId="io.github.niwantha33.zew.tracepointPlot" label="Tracepoint Plot..." style="push"/>
