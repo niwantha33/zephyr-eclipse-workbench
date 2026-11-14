@@ -1484,6 +1484,12 @@ public final class SocRegistersView extends ViewPart {
         DsfSession session = target.session();
         listenTo(session);
         busy = true;
+        previousValues.clear();
+        previousValues.putAll(values);
+        currentReadTotal = targets.size();
+        currentReadOk = 0;
+        currentReadFailed = 0;
+        lastReadError = null;
         long request = ++generation;
         status.setText("Reading " + targets.size() + " SVD-safe registers using existing halted "
                 + "GDB/OpenOCD session (no second OpenOCD connection)…");
@@ -1781,8 +1787,15 @@ public final class SocRegistersView extends ViewPart {
         ui.asyncExec(() -> {
             if (tree.isDisposed() || request != generation) return;
             values.remove(r.key()); errors.remove(r.key());
-            if (value != null) values.put(r.key(), value);
-            if (error != null) errors.put(r.key(), error);
+            if (value != null) {
+                values.put(r.key(), value);
+                currentReadOk++;
+            }
+            if (error != null) {
+                errors.put(r.key(), error);
+                lastReadError = r.key() + ": " + error;
+                currentReadFailed++;
+            }
             // One render per 32 GDB commands rather than thousands of SWT rebuilds.
             if (index % 32 == 31 || index == total - 1) {
                 render();
@@ -1808,8 +1821,18 @@ public final class SocRegistersView extends ViewPart {
                         return;
                     }
                 }
-                status.setText(message + " Captured history: " + history.samples().size()
-                        + "; compare only within the same debug session and exact SVD.");
+                if (message.startsWith("Refresh complete.")) {
+                    lastReadAt = java.time.Instant.now();
+                    String report = "Read " + currentReadOk + " of " + currentReadTotal
+                            + " registers through halted debugger";
+                    if (currentReadFailed > 0) report += "  •  " + currentReadFailed + " failed";
+                    status.setText(report + ". Select a register to see its bits.");
+                    status.setToolTipText(lastReadError == null ? "All attempted reads succeeded."
+                            : "Last GDB read failure: " + lastReadError);
+                } else {
+                    status.setText(message);
+                }
+                updateConnectionPath();
             }
         });
     }
