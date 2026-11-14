@@ -102,7 +102,8 @@ public final class SvdDeviceTests {
                 + "<dimIndex>1-2</dimIndex><addressOffset>0x20</addressOffset><size>16</size>" + reg + "</cluster>")));
         check(array.registers().size() == 2 && array.registers().get(1).name().equals("BANK2.CTRL"), "cluster arrays");
         check(array.registers().get(1).address().toString(16).equals("40000124") && array.registers().get(1).size() == 16, "cluster inherited size");
-        var wide = parse(device(peripheral(reg.replace("<fields>", "<size>64</size><fields>"))));
+        var wide = parse(device(peripheral(reg.replace("<addressOffset>4</addressOffset>", "<addressOffset>8</addressOffset>")
+                .replace("<fields>", "<size>64</size><fields>"))));
         check(wide.registers().get(0).size() == 64
                 && !wide.registers().get(0).readable()
                 && wide.registers().get(0).readBlockReason().contains("64-bit"),
