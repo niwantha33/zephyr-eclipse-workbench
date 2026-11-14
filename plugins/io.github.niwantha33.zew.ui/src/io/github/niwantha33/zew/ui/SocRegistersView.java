@@ -833,8 +833,8 @@ public final class SocRegistersView extends ViewPart {
     }
     private void toggleLiveWatch() {
         if (liveWatch) { stopLiveWatch(); status.setText("Live Watch stopped."); return; }
-        if (device == null || watches.isEmpty() || watches.size() > 8 || debugTarget() == null) {
-            status.setText("Load an exact SVD; watch 1–8 safe registers; start a unique native GDB session and halt the target.");
+        if (device == null || watches.isEmpty() || watches.size() > 64 || debugTarget() == null) {
+            status.setText("Load an exact SVD; watch 1–64 safe registers; start a unique native GDB session and halt the target.");
             return;
         }
         liveWatch = true;
@@ -848,14 +848,15 @@ public final class SocRegistersView extends ViewPart {
     }
     private void scheduleWatch(int epoch) {
         if (closed || ui == null || ui.isDisposed()) return;
-        ui.timerExec(1500, () -> {
+        ui.timerExec(watchIntervalMs, () -> {
             if (closed || tree.isDisposed() || !liveWatch || epoch != watchEpoch) return;
-            if (watches.isEmpty() || watches.size() > 8) {
+            if (watches.isEmpty() || watches.size() > 64) {
                 stopLiveWatch();
-                status.setText("Live Watch stopped: watch count outside 1–8.");
+                status.setText("Live Watch stopped: watch count outside 1–64.");
                 return;
             }
-            if (!busy && debugTarget() != null && System.currentTimeMillis() >= quietUntil) refresh();
+            if (!busy && debugTarget() != null && System.currentTimeMillis() >= quietUntil)
+                refreshWatches();
             scheduleWatch(epoch);
         });
     }
@@ -1232,46 +1233,51 @@ public final class SocRegistersView extends ViewPart {
         return null;
     }
 
-    private void refresh() {
+    private void refresh() { refresh(ReadScope.SELECTION); }
+    private void refreshAll() { refresh(ReadScope.ALL_SAFE); }
+    private void refreshWatches() { refresh(ReadScope.WATCHES); }
+
+    /** Reuse the active GDB/DSF session, which already owns the OpenOCD connection. */
+    private void refresh(ReadScope scope) {
         if (device == null) {
-            status.setText("Load the exact chip's vendor SVD first. Native CPU registers do not require an SVD; use the Registers view.");
+            status.setText("Load the verified chip SVD before reading peripheral registers.");
             return;
         }
-        if (busy) { status.setText("A register refresh is already in progress."); return; }
+        if (busy) {
+            if (scope != ReadScope.ALL_SAFE) status.setText("A register snapshot is already running.");
+            return;
+        }
         var chosen = selected();
         var targets = device.registers().stream()
-                .filter(r -> watches.contains(r.key()) || r.equals(chosen)).toList();
+                .filter(r -> r.readable() && switch (scope) {
+                    case ALL_SAFE -> true;
+                    case WATCHES -> watches.contains(r.key());
+                    case SELECTION -> watches.contains(r.key()) || r.equals(chosen);
+                }).toList();
         if (targets.isEmpty()) {
-            status.setText("Select a readable register or add a safe watch first. "
-                    + "The register explorer does not scan the entire chip.");
+            if (scope != ReadScope.ALL_SAFE)
+                status.setText("Select an SVD-readable register or add one to Watch.");
+            else status.setText("This SVD contains no registers declared safe to read.");
             return;
         }
-        // Do not invoke even the GDB read path when the SVD marks an address unsafe.
-        var readableTargets = targets.stream().filter(Register::readable).toList();
-        if (readableTargets.isEmpty()) {
-            var blocked = targets.get(0);
-            status.setText("No hardware read attempted: " + blocked.key()
-                    + " is blocked by its exact SVD (" + blocked.readBlockReason()
-                    + "). Select a readable register or safe watch.");
-            return;
-        }
-        if (readableTargets.size() > 64) {
-            status.setText("Refresh is limited to 64 readable registers. Remove some watches first.");
+        if (targets.size() > MAX_SNAPSHOT_REGISTERS) {
+            status.setText("Snapshot refused: " + targets.size() + " SVD-readable registers exceed "
+                    + MAX_SNAPSHOT_REGISTERS + ". Narrow the selection; no target access occurred.");
             return;
         }
         DebugTarget target = debugTarget();
         if (target == null) {
-            status.setText(debugResolution + " Select a suspended thread/frame in Debug; "
-                    + "no peripheral registers were read.");
+            status.setText(debugResolution + " Halt the matching native GDB target.");
             return;
         }
         DsfSession session = target.session();
         listenTo(session);
         busy = true;
         long request = ++generation;
-        status.setText("Resolving suspended GDB frame for read-only register snapshot…");
+        status.setText("Reading " + targets.size() + " SVD-safe registers using existing halted "
+                + "GDB/OpenOCD session (no second OpenOCD connection)…");
         try {
-            session.getExecutor().execute(() -> resolveReadFrame(session, target.context(), readableTargets, request));
+            session.getExecutor().execute(() -> resolveReadFrame(session, target.context(), targets, request));
         } catch (RejectedExecutionException ended) {
             finish(request, "Debug session ended before register refresh.");
         }
@@ -1408,11 +1414,11 @@ public final class SocRegistersView extends ViewPart {
             int index, long request) {
         // UI generation is checked on delivery; DSF also checks liveness before every command.
         if (closed || request != generation) return;
-        if (index == targets.size()) { finish(request, "Refresh complete. Values are snapshots; Refresh after stepping."); return; }
+        if (index == targets.size()) { finish(request, "Refresh complete. Snapshot from halted GDB."); return; }
         var r = targets.get(index);
         if (!run.isSuspended(execution)) { finish(request, "Target resumed; refresh stopped."); return; }
         if (!r.readable()) {
-            deliver(request, r, null, "Read blocked: " + r.readBlockReason());
+            deliver(request, r, null, "Read blocked: " + r.readBlockReason(), index, targets.size());
             readNext(session, expressions, run, execution, context, targets, index + 1, request); return;
         }
         String type = r.size() == 8 ? "unsigned char" : r.size() == 16 ? "unsigned short" : "unsigned int";
@@ -1432,19 +1438,24 @@ public final class SocRegistersView extends ViewPart {
                     value = new BigInteger(raw.substring(2), 16);
                     if (value.signum() < 0 || value.bitLength() > r.size()) throw new IllegalArgumentException();
                 } catch (Exception ex) { value = null; error = "Unsupported target ABI or nonnumeric GDB response"; }
-                deliver(request, r, value, error);
+                deliver(request, r, value, error, index, targets.size());
                 readNext(session, expressions, run, execution, context, targets, index + 1, request);
             }
         });
     }
-    private void deliver(long request, Register r, BigInteger value, String error) {
+    private void deliver(long request, Register r, BigInteger value, String error, int index, int total) {
         if (closed || ui.isDisposed()) return;
         ui.asyncExec(() -> {
             if (tree.isDisposed() || request != generation) return;
             values.remove(r.key()); errors.remove(r.key());
             if (value != null) values.put(r.key(), value);
             if (error != null) errors.put(r.key(), error);
-            render();
+            // One render per 32 GDB commands rather than thousands of SWT rebuilds.
+            if (index % 32 == 31 || index == total - 1) {
+                render();
+                var selected = selected();
+                if (selected != null && selected.key().equals(r.key())) showRegisterDetails(r);
+            }
         });
     }
     private void finish(long request, String message) {
