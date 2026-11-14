@@ -32,8 +32,8 @@ public final class SocRegistersSmoke {
             var detailsField = type.getDeclaredField("registerDetails");
             detailsField.setAccessible(true);
             var details = (Text) detailsField.get(view);
-            if (details == null || !details.getText().contains("REGISTER DETAILS"))
-                throw new AssertionError("Split register detail inspector is missing");
+            if (details == null || !details.getText().contains("Select a register"))
+                throw new AssertionError("Simplified register detail inspector is missing");
             // SVD parsing runs in a background Job. Process SWT events
             // until its UI hand-off completes, then expand the lazy tree.
             long loadDeadline = System.nanoTime() + java.time.Duration.ofSeconds(15).toNanos();
@@ -54,18 +54,32 @@ public final class SocRegistersSmoke {
             var registerEvent = new org.eclipse.swt.widgets.Event();
             registerEvent.item = register;
             tree.notifyListeners(org.eclipse.swt.SWT.Expand, registerEvent);
-            if (!register.getText(1).equals("0x40000004") || register.getItemCount() != 1
-                    || !register.getItem(0).getText().equals("EN") || !register.getText(3).equals("—"))
-                throw new AssertionError("Lazy register address/field/reset rendering");
+            if (!register.getText(0).equals("CTRL") || !register.getText(1).equals("—")
+                    || !register.getText(2).equals("Not sampled")
+                    || register.getItemCount() != 1
+                    || !register.getItem(0).getText().startsWith("EN [0:0]"))
+                throw new AssertionError("Compact register/value/status and lazy field rendering");
             tree.setSelection(register);
             var selectionEvent = new org.eclipse.swt.widgets.Event();
             selectionEvent.item = register;
             tree.notifyListeners(org.eclipse.swt.SWT.Selection, selectionEvent);
-            if (!details.getText().contains("GPIO.CTRL")
-                    || !details.getText().contains("Address    0x40000004")
-                    || !details.getText().contains("EN [0:0]")
-                    || !details.getText().contains("BITWISE"))
-                throw new AssertionError("Register inspector must display address, fields and descriptions");
+            var fieldTableRef = type.getDeclaredField("fieldTable");
+            fieldTableRef.setAccessible(true);
+            var fieldTable = (org.eclipse.swt.widgets.Table) fieldTableRef.get(view);
+            if (!details.getText().contains("GPIO  /  CTRL")
+                    || !details.getText().contains("0x40000004")
+                    || !details.getText().contains("Reset value")
+                    || fieldTable.getItemCount() != 1
+                    || !fieldTable.getItem(0).getText(0).equals("EN [0:0]"))
+                throw new AssertionError("Plain-language register inspector and structured fields");
+            if (tree.getColumnCount() != 3 || fieldTable.getColumnCount() != 3)
+                throw new AssertionError("Compact register and field tables must use three columns");
+            var contextInfoField = type.getDeclaredField("contextInfo");
+            contextInfoField.setAccessible(true);
+            var pathStatus = (Label) contextInfoField.get(view);
+            if (!pathStatus.getText().contains("Project")
+                    || !pathStatus.getText().contains("GDB"))
+                throw new AssertionError("Register read evidence chain is missing");
             var location = type.getDeclaredMethod(
                     "vendorPackLocation", String.class, java.nio.file.Path.class);
             location.setAccessible(true);
@@ -131,8 +145,9 @@ public final class SocRegistersSmoke {
             watchTableField.setAccessible(true);
             var watchTable = (org.eclipse.swt.widgets.Table) watchTableField.get(view);
             if (!watches.contains("GPIO.CTRL") || watchTable.getItemCount() != 1
+                    || !watchTable.getVisible()
                     || !watchTable.getItem(0).getText(0).equals("GPIO.CTRL"))
-                throw new AssertionError("Context-menu watch must populate independent Watch table");
+                throw new AssertionError("Context-menu watch must open independent Watch table");
             var periodField = type.getDeclaredField("watchInterval"); periodField.setAccessible(true);
             var period = (org.eclipse.swt.widgets.Spinner) periodField.get(view);
             if (period.getMinimum() > 250 || period.getMaximum() < 60000
@@ -152,8 +167,9 @@ public final class SocRegistersSmoke {
             if (!((Label) statusField.get(view)).getText().contains("no unique matching native GDB"))
                 throw new AssertionError("No-target register write must fail before any command");
             toggleWatch.invoke(view, reg);
-            if (!watches.isEmpty() || watchTable.getItemCount() != 0)
-                throw new AssertionError("Unwatch must remove independent Watch row");
+            if (!watches.isEmpty() || watchTable.getItemCount() != 0
+                    || watchTable.getVisible())
+                throw new AssertionError("Unwatch must collapse empty Watch section");
             var searchField = type.getDeclaredField("search"); searchField.setAccessible(true);
             var search = (Text) searchField.get(view);
             search.setText("not-present");

@@ -11,6 +11,29 @@ Previously the Zephyr Hardware Register Explorer view could attach to a native D
 5. When validated, the view shows peripheral/register names, addresses, reset values, bit fields and SVD read safety. Actual live values remain blank until a manual Refresh on a halted debug frame.
 6. If no vendor SVD is installed, the view reports the missing exact chip and searched paths instead of inventing registers. Find Device Definitions lets the user select a project; Load SVD lets them select a trusted exact-chip file.
 
+## Remembering verified register files (November 2026)
+
+The previous explorer cleared its saved SVD path each time it selected a Zephyr
+project. Consequently, a user could successfully import an official device
+description but had to locate the file again on the next debug session.
+
+The current Workbench remembers a successfully verified path and its SHA-256
+**per exact SoC** in the local Eclipse instance preferences. On a later launch,
+the discovery job re-parses the SVD, confirms that its model matches the built
+chip and verifies the original content hash before opening it. Missing, edited,
+symbolically linked, different-chip and unparseable files are rejected; normal
+official-pack discovery is used instead. The older managed `~/.zew/svd-cache`
+directory is also scanned. No vendor pack is copied into the project tree.
+
+A previous Eclipse view memento is accepted only after exact-part inspection,
+then migrated into hashed per-SoC preferences. An explicitly PDSC-mapped family
+SVD whose model is *not* itself exact-compatible is **not** trusted merely from
+its extracted cache path; repeat official package mapping verification.
+
+A green SVD match verifies a register *description*, not the attached physical
+MCU. Hardware reads still require a uniquely identified, suspended CDT-GDB
+session.
+
 ## TI MSPM0G3507
 
 The selected board target is lp_mspm0g3507/mspm0g3507. TI's shared MSPM0G350x SVD is allowed only if a vendor package declares MSPM0G3507 and explicitly points to that SVD.

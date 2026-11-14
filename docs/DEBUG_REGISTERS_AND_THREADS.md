@@ -69,7 +69,42 @@ sources; **Import Register Definitions…** loads a local SVD. A mismatched
 device, ambiguous revision or missing file never authorises an unrelated
 register map.
 
-### Snapshot while debugging
+#### A simpler everyday register explorer (November 2026)
+
+The **register tree now has three columns**: name, observed value and plain
+status. Address and reset information lives in the right-side details. The
+separate bit-field table shows field names, observed 0/1 or hex values, and the
+manufacturer's description. An empty watch pane collapses automatically.
+Less-used actions (manual Import SVD, pin baseline and export history) are
+under **More…**. The primary controls are **Choose project**, **Get SVD**,
+**Refresh selected** and **Read available**.
+
+A clickable diagnostic route shows:
+
+`Zephyr project → exact SoC → matched SVD → existing GDB → successful MMIO reads`
+
+Click it, or use **More… → Why no value? / Connection diagnostics…** to open
+and copy the full report: exact chip, model path and hash, native GDB session,
+number of successful/failed reads, last snapshot and last GDB error. This
+explicitly distinguishes a loaded register description from a successfully
+read physical register. It does not claim a separate OpenOCD connection.
+
+In the reported MSPM0G3507 screenshot, **GPIOB.DOUT23_20** is declared
+`write-only`: the SVD intentionally blocks reads of that register.
+Seeing **Write only** is not a read failure and does not mean its value is
+zero. The details explain the restriction and, if available in the loaded SVD,
+identify a readable input register in the same GPIO peripheral for checking
+input levels. By contrast, a numeric **0x00000000** shown after Refresh is
+a real successful GDB read. **Read failed** means the debugger returned an
+error; the diagnostic report retains that error and never manufactures zero.
+
+The toolbar reports actual attempted/read/failed counts, not just a generic
+"refresh complete" message. Changes since the preceding snapshot are shown
+in the tree and watch pane; a separately pinned baseline remains available
+for longer comparisons. The command path continues to be DSF-GDB's existing
+remote connection to the debug server, not an independent raw OpenOCD socket.
+
+## Snapshot while debugging
 
 - The existing native **CDT DSF-GDB** session sends memory reads through the
   debugger's existing GDB remote connection to OpenOCD. The explorer does **not**
