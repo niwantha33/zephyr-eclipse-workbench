@@ -12,9 +12,11 @@ import org.w3c.dom.Element;
 /** Bounded, offline CMSIS-SVD reader. Unsupported constructs fail explicitly. */
 public record SvdDevice(String name, List<Register> registers) {
     public record Field(String name, int offset, int width, String description,
-            String access, String readAction) {}
+            String access, String readAction, String modifiedWriteValues,
+            String writeConstraint) {}
     public record Register(String peripheral, String name, BigInteger address, int size,
             BigInteger reset, BigInteger resetMask, String access, String readAction,
+            String modifiedWriteValues, String writeConstraint,
             String description, List<Field> fields) {
         public boolean readable() { return readBlockReason().isEmpty(); }
         /** Conservatively block a full-width read if any included field is unsafe to read. */
@@ -30,6 +32,27 @@ public record SvdDevice(String name, List<Register> registers) {
             }
             return "";
         }
+        /**
+         * Fail closed for raw writes and bit-level read/modify/write. SVD descriptions
+         * are not proof that a peripheral is powered or safe to modify at runtime.
+         */
+        public String writeBlockReason() {
+            if (size > 32) return "64-bit writes are not supported";
+            if (!"read-write".equals(access)) return "register access: " + access;
+            if (!readable()) return "cannot safely read current register: " + readBlockReason();
+            if (!modifiedWriteValues.isBlank()) return "register modifiedWriteValues: " + modifiedWriteValues;
+            if (!writeConstraint.isBlank()) return "register writeConstraint: " + writeConstraint;
+            for (var field : fields) {
+                if (!"read-write".equals(field.access()))
+                    return "field " + field.name() + " access: " + field.access();
+                if (!field.modifiedWriteValues().isBlank())
+                    return "field " + field.name() + " modifiedWriteValues: " + field.modifiedWriteValues();
+                if (!field.writeConstraint().isBlank())
+                    return "field " + field.name() + " writeConstraint: " + field.writeConstraint();
+            }
+            return "";
+        }
+        public boolean writable() { return writeBlockReason().isEmpty(); }
         public String key() { return peripheral + "." + name; }
     }
     public static SvdDevice read(InputStream input) throws Exception {
@@ -134,7 +157,9 @@ public record SvdDevice(String name, List<Register> registers) {
                             throw new IllegalArgumentException("Invalid field: " + name);
                         fields.add(new Field(indexedName(fieldTemplate, fieldIndices.get(j), fieldCount),
                                 (int) bit, width, text(f, "description", ""),
-                                text(f, "access", access), text(f, "readAction", "")));
+                                text(f, "access", access), text(f, "readAction", ""),
+                                text(f, "modifiedWriteValues", ""),
+                                text(f, "writeConstraint", "")));
                     }
                 }
                 if (fields.size() > 4096) throw new IllegalArgumentException("SVD field limit exceeded");
@@ -154,6 +179,8 @@ public record SvdDevice(String name, List<Register> registers) {
                 if ((reset != null && (reset.signum() < 0 || reset.bitLength() > size)) || mask.signum() < 0 || mask.bitLength() > size)
                     throw new IllegalArgumentException("Invalid reset value/mask: " + name);
                 out.add(new Register(peripheral, name, address, size, reset, mask, access, action,
+                        inherit(r, parent, device, "modifiedWriteValues", ""),
+                        inherit(r, parent, device, "writeConstraint", ""),
                         text(r, "description", ""), List.copyOf(fields)));
             }
         }
