@@ -36,6 +36,7 @@ import io.github.niwantha33.zew.core.ZephyrProjectFiles;
 public final class ZephyrBeginnerView extends ViewPart {
     public static final String ID = Activator.ID + ".beginnerGuide";
     private ScrolledComposite scroll;
+    private Composite content;
     private Label selected, board, profile, buildOutput;
     private ISelectionListener selectionListener;
     private IResourceChangeListener resourceListener;
@@ -46,6 +47,7 @@ public final class ZephyrBeginnerView extends ViewPart {
         scroll.setExpandHorizontal(true);
         scroll.setExpandVertical(true);
         Composite body = new Composite(scroll, SWT.NONE);
+        content = body;
         GridLayout grid = new GridLayout(1, false);
         grid.marginWidth = 14;
         grid.marginHeight = 14;
@@ -96,6 +98,7 @@ public final class ZephyrBeginnerView extends ViewPart {
         getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(selectionListener);
         resourceListener = event -> {
             if (event.getType() != IResourceChangeEvent.POST_CHANGE) return;
+            if (scroll.isDisposed()) return;
             var display = scroll.getDisplay();
             if (!display.isDisposed()) display.asyncExec(() -> {
                 if (!scroll.isDisposed()) refresh();
@@ -141,6 +144,7 @@ public final class ZephyrBeginnerView extends ViewPart {
             board.setText("Board: not selected");
             profile.setText("Profile: not selected");
             buildOutput.setText("Build output: not checked");
+            updateScrollSize();
             return;
         }
         selected.setText(project.getName());
@@ -172,6 +176,13 @@ public final class ZephyrBeginnerView extends ViewPart {
         } catch (Exception missing) {
             buildOutput.setText("Build output: setup incomplete");
         }
+        updateScrollSize();
+    }
+
+    private void updateScrollSize() {
+        if (content == null || content.isDisposed() || scroll.isDisposed()) return;
+        content.layout(true, true);
+        scroll.setMinSize(content.computeSize(280, SWT.DEFAULT));
     }
 
     private IProject requireProject() {
@@ -216,7 +227,10 @@ public final class ZephyrBeginnerView extends ViewPart {
                 return;
             }
         }
-        ZephyrBuildHandler.schedule(project, false, false);
+        try { ZephyrBuildHandler.schedule(project, false, false); }
+        catch (RuntimeException error) {
+            MessageDialog.openError(getSite().getShell(), "Zephyr build", error.getMessage());
+        }
     }
 
     private void command(String id) {
