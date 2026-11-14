@@ -159,7 +159,7 @@ public record SvdDevice(String name, List<Register> registers) {
                                 (int) bit, width, text(f, "description", ""),
                                 text(f, "access", access), text(f, "readAction", ""),
                                 text(f, "modifiedWriteValues", ""),
-                                text(f, "writeConstraint", "")));
+                                child(f, "writeConstraint") == null ? "" : "SVD field write constraint"));
                     }
                 }
                 if (fields.size() > 4096) throw new IllegalArgumentException("SVD field limit exceeded");
@@ -180,7 +180,8 @@ public record SvdDevice(String name, List<Register> registers) {
                     throw new IllegalArgumentException("Invalid reset value/mask: " + name);
                 out.add(new Register(peripheral, name, address, size, reset, mask, access, action,
                         inherit(r, parent, device, "modifiedWriteValues", ""),
-                        inherit(r, parent, device, "writeConstraint", ""),
+                        hasConstraint(r) || hasConstraint(parent) || hasConstraint(device)
+                                ? "SVD register write constraint" : "",
                         text(r, "description", ""), List.copyOf(fields)));
             }
         }
@@ -203,6 +204,10 @@ public record SvdDevice(String name, List<Register> registers) {
         String replaced = template.replace("%s", index);
         return count > 1 && !template.contains("%s") ? replaced + index : replaced;
     }
+    private static boolean hasConstraint(Element element) {
+        return element != null && child(element, "writeConstraint") != null;
+    }
+
     private static boolean readAccess(String access) {
         // Unknown/vendor-specific access modes cannot authorise an MMIO read.
         return List.of("read-only", "read-write", "read-writeOnce").contains(access);
