@@ -12,13 +12,18 @@ import org.w3c.dom.Element;
 /** Bounded, offline CMSIS-SVD reader. Unsupported constructs fail explicitly. */
 public record SvdDevice(String name, List<Register> registers) {
     public record Field(String name, int offset, int width, String description,
-            String access, String readAction) {}
+            String access, String readAction, String modifiedWriteValues,
+            String writeConstraint) {}
     public record Register(String peripheral, String name, BigInteger address, int size,
             BigInteger reset, BigInteger resetMask, String access, String readAction,
+            String modifiedWriteValues, String writeConstraint,
             String description, List<Field> fields) {
         public boolean readable() { return readBlockReason().isEmpty(); }
         /** Conservatively block a full-width read if any included field is unsafe to read. */
         public String readBlockReason() {
+            // A 64-bit MMIO access on a 32-bit MCU may require two bus transfers.
+            // Display its definition without ever treating it as an atomic safe read.
+            if (size > 32) return "64-bit MMIO reads require a target-specific safe reader";
             if (!readAccess(access)) return "register access: " + access;
             if (!readAction.isEmpty()) return "register readAction: " + readAction;
             for (var field : fields) {
@@ -27,6 +32,27 @@ public record SvdDevice(String name, List<Register> registers) {
             }
             return "";
         }
+        /**
+         * Fail closed for raw writes and bit-level read/modify/write. SVD descriptions
+         * are not proof that a peripheral is powered or safe to modify at runtime.
+         */
+        public String writeBlockReason() {
+            if (size > 32) return "64-bit writes are not supported";
+            if (!"read-write".equals(access)) return "register access: " + access;
+            if (!readable()) return "cannot safely read current register: " + readBlockReason();
+            if (!modifiedWriteValues.isBlank()) return "register modifiedWriteValues: " + modifiedWriteValues;
+            if (!writeConstraint.isBlank()) return "register writeConstraint: " + writeConstraint;
+            for (var field : fields) {
+                if (!"read-write".equals(field.access()))
+                    return "field " + field.name() + " access: " + field.access();
+                if (!field.modifiedWriteValues().isBlank())
+                    return "field " + field.name() + " modifiedWriteValues: " + field.modifiedWriteValues();
+                if (!field.writeConstraint().isBlank())
+                    return "field " + field.name() + " writeConstraint: " + field.writeConstraint();
+            }
+            return "";
+        }
+        public boolean writable() { return writeBlockReason().isEmpty(); }
         public String key() { return peripheral + "." + name; }
     }
     public static SvdDevice read(InputStream input) throws Exception {
@@ -49,10 +75,21 @@ public record SvdDevice(String name, List<Register> registers) {
         for (var raw : children(peripherals)) {
             if (!raw.getTagName().equals("peripheral")) continue;
             var p = resolve(raw, peripherals, new ArrayList<>());
-            if (child(p, "dim") != null) throw new IllegalArgumentException("Peripheral arrays are not yet supported");
+            int count = arrayCount(p, 4096);
+            var indices = indices(text(p, "dimIndex", ""), count);
+            BigInteger increment = arrayIncrement(p, count);
+            BigInteger base = number(text(p, "baseAddress", ""));
+            String template = text(p, "name", "");
+            if (template.isBlank()) throw new IllegalArgumentException("SVD peripheral has no name");
             var registers = child(p, "registers");
-            if (registers != null) walk(registers, text(p, "name", ""), "", number(text(p, "baseAddress", "")),
-                    p, device, result, 0, budget);
+            for (int i = 0; i < count; i++) {
+                String name = indexedName(template, indices.get(i), count);
+                BigInteger address = base.add(increment.multiply(BigInteger.valueOf(i)));
+                if (address.signum() < 0 || address.bitLength() > 64)
+                    throw new IllegalArgumentException("Invalid peripheral address: " + name);
+                if (registers != null)
+                    walk(registers, name, "", address, p, device, result, 0, budget);
+            }
         }
         if (result.isEmpty()) throw new IllegalArgumentException("SVD contains no registers");
         var keys = new java.util.HashSet<String>();
@@ -86,32 +123,49 @@ public record SvdDevice(String name, List<Register> registers) {
                     continue;
                 }
                 int size = number(inherit(r, parent, device, "size", "32")).intValueExact();
-                if (!List.of(8, 16, 32).contains(size)) throw new IllegalArgumentException("Unsupported register width: " + size);
+                if (!List.of(8, 16, 32, 64).contains(size)) throw new IllegalArgumentException("Unsupported register width: " + size);
                 if (!address.mod(BigInteger.valueOf(size / 8)).equals(BigInteger.ZERO))
                     throw new IllegalArgumentException("Unaligned register: " + name);
                 String access = inherit(r, parent, device, "access", "read-write");
                 String action = inherit(r, parent, device, "readAction", "");
                 var fields = new ArrayList<Field>();
                 var fs = child(r, "fields");
-                if (fs != null) for (var f : children(fs)) {
-                    if (!f.getTagName().equals("field")) continue;
-                    f = resolve(f, fs, new ArrayList<>());
-                    if (child(f, "dim") != null)
-                        throw new IllegalArgumentException("Array fields are not yet supported: " + name);
+                if (fs != null) for (var rawField : children(fs)) {
+                    if (!rawField.getTagName().equals("field")) continue;
+                    var f = resolve(rawField, fs, new ArrayList<>());
+                    int fieldCount = arrayCount(f, 64);
+                    var fieldIndices = indices(text(f, "dimIndex", ""), fieldCount);
+                    int stride = arrayIncrement(f, fieldCount).intValueExact();
                     int offset, width;
                     if (child(f, "bitRange") != null) {
                         String[] range = text(f, "bitRange", "").replace("[", "").replace("]", "").split(":");
-                        offset = number(range[1]).intValueExact(); width = number(range[0]).intValueExact() - offset + 1;
+                        if (range.length != 2) throw new IllegalArgumentException("Invalid bitRange: " + name);
+                        offset = number(range[1]).intValueExact();
+                        width = number(range[0]).intValueExact() - offset + 1;
                     } else if (child(f, "lsb") != null) {
                         offset = number(text(f, "lsb", "")).intValueExact();
                         width = number(text(f, "msb", "")).intValueExact() - offset + 1;
                     } else {
-                        offset = number(text(f, "bitOffset", "")).intValueExact(); width = number(text(f, "bitWidth", "")).intValueExact();
+                        offset = number(text(f, "bitOffset", "")).intValueExact();
+                        width = number(text(f, "bitWidth", "")).intValueExact();
                     }
-                    if (offset < 0 || width < 1 || offset + width > size) throw new IllegalArgumentException("Invalid field: " + name);
-                    fields.add(new Field(text(f, "name", ""), offset, width, text(f, "description", ""),
-                            text(f, "access", access), text(f, "readAction", "")));
+                    String fieldTemplate = text(f, "name", "");
+                    if (fieldTemplate.isBlank()) throw new IllegalArgumentException("Unnamed field: " + name);
+                    for (int j = 0; j < fieldCount; j++) {
+                        long bit = (long) offset + (long) stride * j;
+                        if (bit < 0 || width < 1 || bit + width > size)
+                            throw new IllegalArgumentException("Invalid field: " + name);
+                        fields.add(new Field(indexedName(fieldTemplate, fieldIndices.get(j), fieldCount),
+                                (int) bit, width, text(f, "description", ""),
+                                text(f, "access", access), text(f, "readAction", ""),
+                                text(f, "modifiedWriteValues", ""),
+                                child(f, "writeConstraint") == null ? "" : "SVD field write constraint"));
+                    }
                 }
+                if (fields.size() > 4096) throw new IllegalArgumentException("SVD field limit exceeded");
+                var fieldNames = new java.util.HashSet<String>();
+                for (var field : fields) if (!fieldNames.add(field.name()))
+                    throw new IllegalArgumentException("Duplicate field in " + name + ": " + field.name());
                 String resetText = inherit(r, parent, device, "resetValue", "");
                 BigInteger reset = resetText.isEmpty() ? null : number(resetText);
                 // An inherited device/cluster resetMask can be wider than a register
@@ -125,10 +179,35 @@ public record SvdDevice(String name, List<Register> registers) {
                 if ((reset != null && (reset.signum() < 0 || reset.bitLength() > size)) || mask.signum() < 0 || mask.bitLength() > size)
                     throw new IllegalArgumentException("Invalid reset value/mask: " + name);
                 out.add(new Register(peripheral, name, address, size, reset, mask, access, action,
+                        inherit(r, parent, device, "modifiedWriteValues", ""),
+                        hasConstraint(r) || hasConstraint(parent) || hasConstraint(device)
+                                ? "SVD register write constraint" : "",
                         text(r, "description", ""), List.copyOf(fields)));
             }
         }
     }
+    private static int arrayCount(Element e, int maximum) {
+        int count = number(text(e, "dim", "1")).intValueExact();
+        if (count < 1 || count > maximum) throw new IllegalArgumentException("Invalid SVD array size");
+        return count;
+    }
+    private static BigInteger arrayIncrement(Element e, int count) {
+        String increment = text(e, "dimIncrement", "");
+        if (count > 1 && increment.isBlank())
+            throw new IllegalArgumentException("Missing SVD array increment");
+        BigInteger result = increment.isBlank() ? BigInteger.ZERO : number(increment);
+        if (result.signum() < 0 || result.bitLength() > 64 || (count > 1 && result.signum() == 0))
+            throw new IllegalArgumentException("Invalid SVD array increment");
+        return result;
+    }
+    private static String indexedName(String template, String index, int count) {
+        String replaced = template.replace("%s", index);
+        return count > 1 && !template.contains("%s") ? replaced + index : replaced;
+    }
+    private static boolean hasConstraint(Element element) {
+        return element != null && child(element, "writeConstraint") != null;
+    }
+
     private static boolean readAccess(String access) {
         // Unknown/vendor-specific access modes cannot authorise an MMIO read.
         return List.of("read-only", "read-write", "read-writeOnce").contains(access);

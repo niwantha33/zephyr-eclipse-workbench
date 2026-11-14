@@ -58,73 +58,87 @@ fourth column to its internal tree. Confirm that the popup receives the selected
 native expression on a packaged Eclipse installation. Automated core tests do
 not prove physical MSPM0/XDS110 memory inspection.
 
-## Named SoC peripherals
+## Named SoC peripherals — native OpenOCD/GDB register explorer (preview)
 
-Open **Window > Show View > Other > Debug > Zephyr Hardware Register Explorer**. Click **Load SVD**
-and choose the exact chip's vendor CMSIS-SVD file. The file is loaded locally;
-Workbench does not download or guess a device definition. The selected SVD path
-is restored when the view is reopened. Check its device name against your
-physical chip before reading.
+Open **Zephyr > Run & Debug > Open Zephyr Peripherals (SVD)...** or
+**Window > Show View > Other > Debug > Zephyr Hardware Register Explorer**.
+The explorer identifies the selected Zephyr project's exact SoC from its board
+and generated build, then verifies an installed matching SVD or CMSIS-Pack
+PDSC device mapping. **Get Device Registers…** offers specific vetted vendor
+sources; **Import Register Definitions…** loads a local SVD. A mismatched
+device, ambiguous revision or missing file never authorises an unrelated
+register map.
 
-The native tree shows peripherals, registers, bitfields, addresses, access,
-reset values and values from the selected CDT DSF-GDB debug session. Search by
-peripheral, register, field or description. Select a register (or one of its
-fields), halt the target in Debug, then click **Refresh Selected + Watches**. The view labels a readable register
-**Not read** until a successful explicit snapshot; **Blocked** means the exact
-SVD forbids the read (such as a write-only GPIO output bit or a read-to-clear
-status field). Selecting a register or expanding the tree does not read MCU
-memory. The command skips all blocked targets; with none readable, it explains
-the SVD reason without opening a memory read. To check the physical read path,
-select a non-side-effect, SVD-readable register and refresh while halted.
-Visible register definitions are not live hardware values.
-An explicit suspended frame or thread is used when selected. If none is selected,
-the explorer can resolve the unique active native Zephyr GDB launch for its
-selected project, enumerate the connected inferior's suspended threads, and
-borrow a top frame for memory-mapped register reads. Peripheral MMIO addresses
-are global, not thread-local. It does not switch the active debug selection.
-If multiple sessions/targets are ambiguous, it refuses to guess and asks for
-an explicit frame. A running target is never stopped automatically.
+### Snapshot while debugging
 
-**Watch / unwatch** includes a register in later
-refreshes, including when filtered out of the tree. Values differing from the
-SVD reset value within its reset mask are marked. An unspecified reset value
-is shown as unavailable, not assumed to be zero.
+- The existing native **CDT DSF-GDB** session sends memory reads through the
+  debugger's existing GDB remote connection to OpenOCD. The explorer does **not**
+  open a second Tcl/GDB port, restart OpenOCD or independently halt the CPU.
+- **Snapshot on halt** is enabled by default in this development preview. Once
+  an exact SVD and unambiguous debug session are available, the explorer
+  requests the SVD-declared readable registers after an actual GDB suspension,
+  including a target already halted before SVD load. It samples at most 4,096
+  registers per snapshot; larger maps require narrowing the selection.
+- The snapshot skips SVD-defined write-only, read-to-clear and other
+  read-side-effect registers, as well as 64-bit registers requiring a
+  target-specific safe reader. **SVD-declared readable is not proof of electrical
+  safety**: undocumented side effects, peripheral power domains, probe faults
+  and clock gating can still make a read fail. Disable **Snapshot on halt**
+  when investigating sensitive hardware.
+- **Read All SVD-Safe Registers** explicitly refreshes the same bounded set.
+  **Refresh Selected + Watches** refreshes only the selected readable register
+  and the separately watched registers. Reads run serially and stop on resume,
+  debug-session replacement, selected-model replacement or view disposal.
+  An attempted read may already have reached the target before cancellation.
+- On resume, values become **Not read** until the next halted snapshot.
+  A failed MMIO access is reported, never substituted with zero. The UI
+  refreshes in groups to avoid rebuilding thousands of SWT rows per read.
 
-Reads use the existing debug session: no second GDB connection, server launch,
-firmware write, halt or resume is issued by this view. The fallback frame
-lookup executes asynchronously through CDT DSF services and only succeeds for
-a suspended execution context. The view still requires an explicit selected
-register or watch; opening/expanding the tree never reads hardware.
-GDB handles target byte
-order; the expression checks the target C type width before dereferencing an
-8-, 16- or 32-bit address. Refresh drops the DSF expression cache. Reads are
-serial and capped at 64 registers per refresh. Values are explicit snapshots,
-not live polling, and should be refreshed after stepping or resuming. Context
-changes discard values and pending responses; a new SVD or closed view cancels
-subsequent requests. An already-issued read cannot be undone.
+### Watch and bitwise inspection
 
-Write-only and SVD-declared read-side-effect registers (including field-level
-read actions) are blocked. This is a read-only first implementation; there is
-no register editor. Vendor SVDs may omit side effects, so consult the reference
-manual before selecting a FIFO/status register. No peripheral address scan is
-performed.
+Right-click a register to **Add / remove watch**. The independent Watch table
+shows the register name, last observed value and failure/availability status.
+Select 1–64 readable registers and choose **Start Live Watch**. Adjust the
+**Watch (ms)** spinner from 250 ms to 60,000 ms; the interval is a best-effort
+host polling interval, **not a guaranteed real-time sampling rate**. Watch
+polling happens only while the existing GDB target is suspended, and never
+automatically halts firmware or reads a running MCU. Stop it before resuming
+time-critical hardware operation.
 
-The offline parser supports inherited register properties, same-scope
-`derivedFrom` peripherals/registers/fields, nested clusters, and numeric or
-comma-separated register/cluster array indices. XML external entities and
-DOCTYPE declarations are disabled. Files are limited to 32 MiB; array sizes,
-nesting, register counts and expansion work are bounded. Cross-scope derived
-references, peripheral/field arrays, non-byte address units, unaligned
-registers and unsupported widths fail with an explicit diagnostic. A failed
-load retains the previous device. The tree shows at most 2,000 matches at once;
-narrow the search to find other registers in large devices.
+The inspector displays address, SVD access and reset properties, hex snapshot,
+grouped binary bits with bit indexes, and decoded bit fields with widths,
+positions and values. Values are from one captured snapshot and are not an
+atomic simultaneous snapshot of the device. Use search to locate peripheral,
+register, field or description; the matching tree expands lazily.
 
-Automatic board-to-SVD resolution, remote SVD catalogs, register writes,
-polling and history plots are not included. CPU Registers remains the standard
-CDT view. Parser and existing core tests run in `scripts/test_core.py`; these
-checks do not establish probe or physical peripheral correctness. Validate on
-hardware with a safe, documented read-only register and compare the same
-address in GDB.
+### Guarded physical writes
+
+Right-click an eligible register and choose **Write register value…**. Enter an
+unsigned hex (0x...) or decimal value, then separately confirm the **physical
+MCU register write**. A one-bit field may also be toggled explicitly from a
+known halted snapshot. Edits use CDT's `IExpressions.writeExpression` through the
+*same* DSF GDB/OpenOCD connection; there is no direct unauthenticated OpenOCD
+command channel and no flash operation. After a successful write the tool
+requests a halted readback; this is not an atomic hardware proof.
+
+Writes fail closed when the exact current register is not read/write,
+the target is running or ambiguous, the SVD declares a read-side-effect or
+write constraint, a read-only field or modified-write semantics (including
+write-one-to-clear), or the register exceeds 32 bits. Missing/unknown
+electrical side effects may remain: consult the vendor reference manual,
+and only write peripheral registers on hardware you control. Neither full
+register writes nor bit edits are performed automatically.
+
+### Validation
+
+The Java parser and value-policy regression tests run under
+`scripts/test_core.py`; installed Eclipse SWT tests exercise the real
+view, watches and no-debugger write interlock. These are **not** successful
+physical MSPM0/XDS110 readback or write proofs. Before release, test debug
+start, suspend, resume, safe bulk reads, multiple frame selections, polling,
+writable GPIO data registers, readback and error cases on the real selected
+board; check the exact built and flashed ELF. Do not treat a green CI build
+as physical hardware qualification.
 
 ## Optional OpenOCD Tcl transcript
 

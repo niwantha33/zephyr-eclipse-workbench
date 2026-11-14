@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 import org.eclipse.cdt.dsf.concurrent.DataRequestMonitor;
+import org.eclipse.cdt.dsf.concurrent.RequestMonitor;
 import org.eclipse.cdt.dsf.datamodel.DMContexts;
 import org.eclipse.cdt.dsf.datamodel.IDMContext;
 import org.eclipse.cdt.dsf.debug.service.IExpressions;
@@ -40,6 +41,12 @@ import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
+import org.eclipse.swt.widgets.Spinner;
+import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableColumn;
+import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeColumn;
@@ -63,14 +70,22 @@ import io.github.niwantha33.zew.core.SvdPartCompatibility;
 import io.github.niwantha33.zew.core.VendorSvdProvisioner;
 import io.github.niwantha33.zew.core.GitHubSvdProvisioner;
 import io.github.niwantha33.zew.core.RegisterHistory;
+import io.github.niwantha33.zew.core.RegisterWriteValue;
 import io.github.niwantha33.zew.core.RegisterSparkline;
 import io.github.niwantha33.zew.core.DebugSessionSelection;
 import io.github.niwantha33.zew.core.SvdDevice.Register;
 
-/** Read-only peripheral inspection through the user's selected native DSF session. */
+/** Exact-SVD peripheral inspection through the native DSF-GDB/OpenOCD session. */
 public final class SocRegistersView extends ViewPart {
     private Tree tree;
     private Text registerDetails;
+    private Table watchTable;
+    private Spinner watchInterval;
+    private Button autoReadOnHalt;
+    private int watchIntervalMs = 1500;
+    private static final int MAX_SNAPSHOT_REGISTERS = 4096;
+    private enum ReadScope { SELECTION, WATCHES, ALL_SAFE }
+    private boolean autoSnapshotEnabled = true;
     private Label status;
     private Label summary;
     private Label contextInfo;
@@ -113,7 +128,7 @@ public final class SocRegistersView extends ViewPart {
         ui = parent.getDisplay();
         parent.setLayout(new GridLayout(1, false));
         var bar = new Composite(parent, SWT.NONE);
-        bar.setLayout(new GridLayout(4, false));
+        bar.setLayout(new GridLayout(5, false));
         bar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(bar, "Find Device Definitions", this::chooseProjectForDiscovery);
         button(bar, "Get Device Registers…", this::downloadVendorSvd);
@@ -124,25 +139,38 @@ public final class SocRegistersView extends ViewPart {
             if (path != null) load(path);
         });
         button(bar, "Refresh Selected + Watches", this::refresh);
+        button(bar, "Read All SVD-Safe Registers", this::refreshAll);
         var options = new Composite(parent, SWT.NONE);
-        options.setLayout(new GridLayout(6, false));
+        options.setLayout(new GridLayout(9, false));
         options.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(options, "Pin baseline", this::pinBaseline);
         button(options, "Export history CSV…", this::exportHistory);
         watchButton = new Button(options, SWT.PUSH);
         watchButton.setText("Start Live Watch (opt-in)");
         watchButton.addListener(SWT.Selection, e -> toggleLiveWatch());
-        button(options, "Watch / unwatch", () -> {
-            var selected = selected();
-            if (selected != null) {
-                if (!watches.remove(selected.key())) watches.add(selected.key());
-                render();
-            }
-        });
+        button(options, "Watch / unwatch", () -> toggleWatch(selected()));
+        var periodLabel = new Label(options, SWT.NONE);
+        periodLabel.setText("Watch (ms):");
+        watchInterval = new Spinner(options, SWT.BORDER);
+        watchInterval.setMinimum(250);
+        watchInterval.setMaximum(60000);
+        watchInterval.setIncrement(250);
+        watchInterval.setPageIncrement(1000);
+        watchInterval.setSelection(watchIntervalMs);
+        watchInterval.setToolTipText("Polling interval while the native GDB target is halted (250–60000 ms).");
+        watchInterval.addModifyListener(e -> watchIntervalMs = watchInterval.getSelection());
         search = new Text(options, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
         search.setMessage("Find peripheral, register or field");
         search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         search.addModifyListener(e -> render());
+        autoReadOnHalt = new Button(options, SWT.CHECK);
+        autoReadOnHalt.setText("Snapshot on halt");
+        autoReadOnHalt.setToolTipText("Automatically read the SVD-declared safe registers after a verified GDB suspension. Running targets are never read.");
+        autoReadOnHalt.setSelection(autoSnapshotEnabled);
+        autoReadOnHalt.addListener(SWT.Selection, e -> {
+            autoSnapshotEnabled = autoReadOnHalt.getSelection();
+            if (autoSnapshotEnabled) scheduleAutoSnapshot();
+        });
         pinViewSelection = new Button(options, SWT.CHECK);
         pinViewSelection.setText("Pin Selection");
         pinViewSelection.setToolTipText("Do not follow other views' project/build selections.");
@@ -162,7 +190,7 @@ public final class SocRegistersView extends ViewPart {
         contextInfo.setText("No selected debug frame. CPU registers, Variables and Expressions are separate native Debug views.");
         summary = new Label(parent, SWT.WRAP);
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        summary.setText("No SVD model loaded yet. Find Device Definitions searches installed SDKs and packs; register values require a halted manual read.");
+        summary.setText("No SVD model loaded yet. Read snapshots require the existing halted native GDB/OpenOCD session.");
         historyChart = new Canvas(parent, SWT.BORDER | SWT.DOUBLE_BUFFERED);
         var chartData = new GridData(SWT.FILL, SWT.TOP, true, false);
         chartData.heightHint = 105;
@@ -170,18 +198,37 @@ public final class SocRegistersView extends ViewPart {
         historyChart.setLayoutData(chartData);
         historyChart.setVisible(false);
         historyChart.addPaintListener(e -> paintHistory(e.gc));
-        // VS Code-style resizable explorer and read-only register inspector.
+        // Native split explorer, bitwise inspector and independent watch panel.
         // Use SWT system colours: the panel follows Eclipse light/dark themes.
         var split = new org.eclipse.swt.custom.SashForm(parent, SWT.HORIZONTAL);
         split.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         tree = new Tree(split, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         tree.setHeaderVisible(true); tree.setLinesVisible(true);
-        registerDetails = new Text(split, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY
-                | SWT.V_SCROLL | SWT.H_SCROLL | SWT.WRAP);
+        var inspector = new Composite(split, SWT.NONE);
+        inspector.setLayout(new GridLayout(1, false));
+        registerDetails = new Text(inspector, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY
+                | SWT.V_SCROLL | SWT.H_SCROLL);
+        registerDetails.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        registerDetails.setFont(org.eclipse.jface.resource.JFaceResources.getTextFont());
         registerDetails.setText("REGISTER DETAILS\n\nSelect a peripheral or register.\n"
-                + "Addresses and field descriptions come from the verified SVD.\n"
-                + "Live values require a suspended GDB target and manual Refresh.");
-        split.setWeights(new int[] { 70, 30 });
+                + "Addresses and bit fields come from the exact SVD.\n"
+                + "Values are snapshots from the halted native GDB target.");
+        var watchHeading = new Label(inspector, SWT.NONE);
+        watchHeading.setText("Watched registers — independent halted-session snapshots");
+        watchTable = new Table(inspector, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
+        watchTable.setHeaderVisible(true);
+        watchTable.setLinesVisible(true);
+        var watchData = new GridData(SWT.FILL, SWT.BOTTOM, true, false);
+        watchData.heightHint = 145;
+        watchTable.setLayoutData(watchData);
+        for (String label : new String[] { "Register", "Value", "Status" }) {
+            var column = new TableColumn(watchTable, SWT.LEFT);
+            column.setText(label);
+        }
+        watchTable.getColumn(0).setWidth(170);
+        watchTable.getColumn(1).setWidth(110);
+        watchTable.getColumn(2).setWidth(160);
+        split.setWeights(new int[] { 62, 38 });
         String[] headings = { "Peripheral / register / field", "Address / bits", "Value (hex)", "Reset (hex)", "Access / status" };
         int[] widths = { 310, 155, 140, 140, 260 };
         for (int i = 0; i < headings.length; i++) {
@@ -212,6 +259,8 @@ public final class SocRegistersView extends ViewPart {
                         + "Selection alone never reads hardware.");
             }
         });
+        installRegisterMenu();
+        installWatchMenu();
         tree.addListener(SWT.MouseHover, e -> {
             var item = tree.getItem(new org.eclipse.swt.graphics.Point(e.x, e.y));
             tree.setToolTipText(item == null ? null : (String) item.getData("description"));
@@ -634,25 +683,42 @@ public final class SocRegistersView extends ViewPart {
                 && picker.getFirstResult() instanceof IProject selected) useLaunchProject(selected);
     }
 
-    /** No implicit peripheral read: selection/resume/step only invalidates snapshots. */
+    /** UI frame selection does not invalidate a snapshot from the SAME debug session. */
     private void contextChanged() {
-        quietUntil = System.currentTimeMillis() + 1500;
-        generation++; busy = false; values.clear(); errors.clear(); render();
         var target = debugTarget();
         var selectedSession = target == null ? null : target.session();
-        listenTo(selectedSession);
+        boolean changed = selectedSession != listenedSession;
+        if (changed) {
+            generation++; busy = false; values.clear(); errors.clear(); render();
+            quietUntil = System.currentTimeMillis() + 350;
+            listenTo(selectedSession);
+        }
         contextInfo.setText(selectedSession == null
                 ? debugResolution
-                : "Native debug session " + selectedSession.getId()
+                : "Native GDB/OpenOCD session " + selectedSession.getId()
                     + (target.context() == null
-                        ? "; no frame selected — Refresh resolves a suspended GDB thread without halting the CPU."
-                        : "; selected context: " + target.context().getClass().getSimpleName()
-                            + ". Refresh uses its suspended frame/thread."));
+                        ? "; Refresh resolves its unique halted thread."
+                        : "; selected " + target.context().getClass().getSimpleName()));
         contextInfo.getParent().layout(true, true);
-        status.setText(device == null ? discoveryExplanation
-                : "Exact SVD model " + device.name()
-                    + " loaded for " + (selectedProjectName == null ? "manual selection" : selectedProjectName)
-                    + "; select a safe register and Refresh while halted.");
+        if (changed) {
+            status.setText(device == null ? discoveryExplanation
+                    : "SVD " + device.name() + ": native debugger attached. "
+                        + "SVD-safe registers are sampled after suspension.");
+            if (selectedSession != null) scheduleAutoSnapshot();
+        }
+    }
+
+    /** Snapshot only after a real stop; no second probe connection or target halt. */
+    private void scheduleAutoSnapshot() {
+        if (!autoSnapshotEnabled || device == null || closed || ui == null || ui.isDisposed()) return;
+        final long expectedGeneration = generation;
+        final DsfSession expectedSession = listenedSession;
+        if (expectedSession == null) return;
+        ui.timerExec(400, () -> {
+            if (closed || tree.isDisposed() || !autoSnapshotEnabled || busy
+                    || generation != expectedGeneration || listenedSession != expectedSession) return;
+            refresh(ReadScope.ALL_SAFE);
+        });
     }
 
     private final RunListener runListener = new RunListener();
@@ -661,25 +727,27 @@ public final class SocRegistersView extends ViewPart {
     public final class RunListener {
         @DsfServiceEventHandler public void eventDispatched(IRunControl.IResumedDMEvent event) {
             quietUntil = Long.MAX_VALUE;
-            invalidateSnapshot(event.getDMContext(), "Target resumed. Previous register values were cleared; halt and Refresh for a new snapshot.");
+            invalidateSnapshot(event.getDMContext(), "Target resumed. Halt to capture a new SVD snapshot.", false);
         }
         @DsfServiceEventHandler public void eventDispatched(IRunControl.ISuspendedDMEvent event) {
-            quietUntil = System.currentTimeMillis() + 1500;
-            invalidateSnapshot(event.getDMContext(), "Target suspended. Select its stack frame, then Refresh selected registers and watches.");
+            quietUntil = System.currentTimeMillis() + 350;
+            invalidateSnapshot(event.getDMContext(), "Target suspended. Taking SVD-safe register snapshot…", true);
         }
         @DsfServiceEventHandler public void eventDispatched(IRunControl.IExitedDMEvent event) {
             quietUntil = Long.MAX_VALUE;
-            invalidateSnapshot(event.getDMContext(), "Debug execution exited. No live peripheral values are available.");
+            invalidateSnapshot(event.getDMContext(), "Debug execution exited. No live peripheral values are available.", false);
         }
     }
 
-    private void invalidateSnapshot(IDMContext context, String message) {
+    private void invalidateSnapshot(IDMContext context, String message, boolean suspended) {
         var session = listenedSession;
-        if (closed || session == null || !session.getId().equals(context.getSessionId()) || ui.isDisposed()) return;
+        if (closed || session == null || !session.getId().equals(context.getSessionId())
+                || ui.isDisposed()) return;
         ui.asyncExec(() -> {
             if (tree.isDisposed() || listenedSession != session) return;
             generation++; busy = false; values.clear(); errors.clear(); render();
             status.setText(message);
+            if (suspended) scheduleAutoSnapshot();
         });
     }
 
@@ -756,6 +824,10 @@ public final class SocRegistersView extends ViewPart {
                                 + ". Live readings require an explicit refresh while halted.";
                         status.setText(loaded.name() + " — " + loaded.registers().size()
                                 + " definitions loaded. Debug execution was not changed.");
+                        // The session might have been suspended before the SVD was loaded.
+                        // Bind its existing launch now, even if no new Debug selection event occurs.
+                        contextChanged();
+                        scheduleAutoSnapshot();
                     });
                     return Status.OK_STATUS;
                 } catch (Exception ex) {
@@ -785,8 +857,8 @@ public final class SocRegistersView extends ViewPart {
     }
     private void toggleLiveWatch() {
         if (liveWatch) { stopLiveWatch(); status.setText("Live Watch stopped."); return; }
-        if (device == null || watches.isEmpty() || watches.size() > 8 || debugTarget() == null) {
-            status.setText("Load an exact SVD; watch 1–8 safe registers; start a unique native GDB session and halt the target.");
+        if (device == null || watches.isEmpty() || watches.size() > 64 || debugTarget() == null) {
+            status.setText("Load an exact SVD; watch 1–64 safe registers; start a unique native GDB session and halt the target.");
             return;
         }
         liveWatch = true;
@@ -800,14 +872,15 @@ public final class SocRegistersView extends ViewPart {
     }
     private void scheduleWatch(int epoch) {
         if (closed || ui == null || ui.isDisposed()) return;
-        ui.timerExec(1500, () -> {
+        ui.timerExec(watchIntervalMs, () -> {
             if (closed || tree.isDisposed() || !liveWatch || epoch != watchEpoch) return;
-            if (watches.isEmpty() || watches.size() > 8) {
+            if (watches.isEmpty() || watches.size() > 64) {
                 stopLiveWatch();
-                status.setText("Live Watch stopped: watch count outside 1–8.");
+                status.setText("Live Watch stopped: watch count outside 1–64.");
                 return;
             }
-            if (!busy && debugTarget() != null && System.currentTimeMillis() >= quietUntil) refresh();
+            if (!busy && debugTarget() != null && System.currentTimeMillis() >= quietUntil)
+                refreshWatches();
             scheduleWatch(epoch);
         });
     }
@@ -827,6 +900,112 @@ public final class SocRegistersView extends ViewPart {
                     10 + i * width / (points.size() - 1),
                     29 + (int) ((1 - points.get(i).level()) * height));
     }
+    private void toggleWatch(Register register) {
+        if (register == null) return;
+        if (!watches.remove(register.key())) {
+            if (!register.readable()) {
+                status.setText("Watch unavailable: " + register.readBlockReason());
+                return;
+            }
+            if (watches.size() >= 64) {
+                status.setText("Watch is limited to 64 readable registers.");
+                return;
+            }
+            watches.add(register.key());
+        }
+        render();
+    }
+
+    private SvdDevice.Field selectedField() {
+        if (tree == null || tree.getSelectionCount() == 0) return null;
+        Object field = tree.getSelection()[0].getData("svdField");
+        return field instanceof SvdDevice.Field svd ? svd : null;
+    }
+
+    private void installRegisterMenu() {
+        var menu = new Menu(tree);
+        tree.setMenu(menu);
+        var add = new MenuItem(menu, SWT.PUSH);
+        add.setText("Add / remove watch");
+        add.addListener(SWT.Selection, e -> toggleWatch(selected()));
+        var write = new MenuItem(menu, SWT.PUSH);
+        write.setText("Write register value…");
+        write.addListener(SWT.Selection, e -> editRegister(selected()));
+        var bit = new MenuItem(menu, SWT.PUSH);
+        bit.setText("Toggle selected 1-bit field…");
+        bit.addListener(SWT.Selection, e -> toggleFieldBit(selected(), selectedField()));
+        menu.addListener(SWT.Show, e -> {
+            Register reg = selected();
+            add.setEnabled(reg != null && (watches.contains(reg.key()) || reg.readable()));
+            write.setEnabled(reg != null && reg.writable());
+            SvdDevice.Field field = selectedField();
+            bit.setEnabled(reg != null && reg.writable() && values.containsKey(reg.key())
+                    && field != null && field.width() == 1);
+        });
+        tree.addListener(SWT.MenuDetect, e -> {
+            var point = tree.toControl(e.x, e.y);
+            var hit = tree.getItem(point);
+            if (hit != null) tree.setSelection(hit);
+        });
+    }
+
+    private void installWatchMenu() {
+        var menu = new Menu(watchTable);
+        watchTable.setMenu(menu);
+        var remove = new MenuItem(menu, SWT.PUSH);
+        remove.setText("Remove watch");
+        remove.addListener(SWT.Selection, e -> {
+            Register reg = watchedSelection();
+            if (reg != null) toggleWatch(reg);
+        });
+        var write = new MenuItem(menu, SWT.PUSH);
+        write.setText("Write register value…");
+        write.addListener(SWT.Selection, e -> editRegister(watchedSelection()));
+        menu.addListener(SWT.Show, e -> {
+            Register reg = watchedSelection();
+            remove.setEnabled(reg != null);
+            write.setEnabled(reg != null && reg.writable());
+        });
+        watchTable.addListener(SWT.MenuDetect, e -> {
+            var point = watchTable.toControl(e.x, e.y);
+            var hit = watchTable.getItem(point);
+            if (hit != null) watchTable.setSelection(hit);
+        });
+        watchTable.addListener(SWT.Selection, e -> {
+            Register reg = watchedSelection();
+            if (reg != null) showRegisterDetails(reg);
+        });
+    }
+
+    private Register watchedSelection() {
+        if (watchTable == null || watchTable.isDisposed() || watchTable.getSelectionCount() != 1)
+            return null;
+        Object data = watchTable.getSelection()[0].getData();
+        return data instanceof Register reg ? reg : null;
+    }
+
+    private void renderWatches() {
+        if (watchTable == null || watchTable.isDisposed()) return;
+        String key = watchedSelection() == null ? null : watchedSelection().key();
+        watchTable.setRedraw(false);
+        try {
+            watchTable.removeAll();
+            if (device == null) return;
+            for (Register reg : device.registers()) {
+                if (!watches.contains(reg.key())) continue;
+                var row = new TableItem(watchTable, SWT.NONE);
+                row.setData(reg);
+                var value = values.get(reg.key());
+                row.setText(new String[] { reg.key(),
+                        value == null ? "—" : hex(value, reg.size()),
+                        errors.getOrDefault(reg.key(), value == null ? "Not read" : "Halted snapshot") });
+                if (reg.key().equals(key)) watchTable.setSelection(row);
+            }
+        } finally {
+            watchTable.setRedraw(true);
+        }
+    }
+
     private Register selected() {
         if (tree.getSelectionCount() == 0) return null;
         var item = tree.getSelection()[0];
@@ -836,6 +1015,7 @@ public final class SocRegistersView extends ViewPart {
         if (tree == null || tree.isDisposed()) return;
         if (device == null) {
             tree.removeAll();
+            renderWatches();
             return;
         }
         Register chosen = selected();
@@ -892,33 +1072,59 @@ public final class SocRegistersView extends ViewPart {
                     + (liveWatch ? " Halted-only sampled Live Watch; NOT continuous hardware tracing."
                             : " No automatic polling. Not read = no successful snapshot yet; Blocked = unsafe SVD access."));
         } finally { tree.setRedraw(true); }
+        renderWatches();
+    }
+
+    private static String bits(BigInteger value, int width) {
+        StringBuilder result = new StringBuilder();
+        for (int bit = width - 1; bit >= 0; bit--) {
+            result.append(value.testBit(bit) ? '1' : '0');
+            if (bit > 0 && bit % 4 == 0) result.append(' ');
+        }
+        return result.toString();
     }
 
     private void showRegisterDetails(Register r) {
         if (registerDetails == null || registerDetails.isDisposed()) return;
-        StringBuilder details = new StringBuilder("REGISTER DETAILS\n\n")
+        BigInteger value = values.get(r.key());
+        var details = new StringBuilder("REGISTER DETAILS\n\n")
                 .append(r.key()).append("\n")
-                .append("Address: 0x").append(r.address().toString(16)).append("\n")
-                .append("Width: ").append(r.size()).append(" bits\n")
-                .append("Access: ").append(r.access()).append("\n")
-                .append("Reset: ").append(r.reset() == null ? "Not specified"
-                        : hex(r.reset(), r.size())).append("\n")
-                .append("Value: ").append(values.containsKey(r.key())
-                        ? hex(values.get(r.key()), r.size()) : "Not read").append("\n")
-                .append("Read: ").append(r.readable()
-                        ? "Available when target is suspended" : "Blocked: " + r.readBlockReason())
-                .append("\n\n")
-                .append(r.description().isBlank() ? "No register description supplied by SVD."
-                        : r.description()).append("\n\nFIELDS\n");
-        if (r.fields().isEmpty()) details.append("No field definitions in this SVD.\n");
+                .append("Address    0x").append(r.address().toString(16)).append("\n")
+                .append("Width      ").append(r.size()).append(" bits\n")
+                .append("Access     ").append(r.access()).append("\n")
+                .append("Reset      ").append(r.reset() == null ? "Unknown" : hex(r.reset(), r.size())).append("\n")
+                .append("Snapshot   ").append(value == null ? "Not read" : hex(value, r.size())).append("\n")
+                .append("Read       ").append(r.readable() ? "Halted only" : r.readBlockReason()).append("\n")
+                .append("Write      ").append(r.writable()
+                        ? "Right-click → Write register value (explicit confirmation)"
+                        : "Blocked: " + r.writeBlockReason())
+                .append("\n\nBITWISE (MSB → LSB)\n");
+        if (value != null) {
+            details.append("value  ").append(bits(value, r.size())).append("\n");
+            details.append("index  ");
+            for (int bit = r.size() - 1; bit >= 0; bit--) {
+                details.append(bit % 10);
+                if (bit > 0 && bit % 4 == 0) details.append(' ');
+            }
+            details.append("\n");
+        } else details.append("No halted snapshot; bits are not assumed to be zero.\n");
+        details.append("\nFIELDS\n");
+        if (r.fields().isEmpty()) details.append("(No field definitions in SVD)\n");
         for (var field : r.fields()) {
+            BigInteger mask = BigInteger.ONE.shiftLeft(field.width()).subtract(BigInteger.ONE);
             details.append("\n").append(field.name()).append(" [")
                     .append(field.offset() + field.width() - 1).append(":")
-                    .append(field.offset()).append("]")
-                    .append("  ").append(field.access()).append("\n");
+                    .append(field.offset()).append("]  ");
+            if (value != null) {
+                BigInteger fieldValue = value.shiftRight(field.offset()).and(mask);
+                details.append(hex(fieldValue, field.width())).append("  ")
+                        .append(bits(fieldValue, field.width()));
+            } else details.append("Not read");
+            details.append("  ").append(field.access()).append("\n");
             if (!field.description().isBlank())
-                details.append(field.description()).append("\n");
+                details.append(field.description().strip()).append("\n");
         }
+        if (!r.description().isBlank()) details.append("\n").append(r.description().strip());
         registerDetails.setText(details.toString());
     }
 
@@ -928,6 +1134,9 @@ public final class SocRegistersView extends ViewPart {
         java.util.List<Register> registers = (java.util.List<Register>) peripheral.getData("registers");
         if (registers == null) return;
         peripheral.removeAll();
+        Set<String> changedKeys = history.changes().stream()
+                .map(RegisterHistory.Delta::registerKey)
+                .collect(java.util.stream.Collectors.toSet());
         for (Register r : registers) {
             TreeItem item = new TreeItem(peripheral, SWT.NONE);
             item.setData(r);
@@ -938,7 +1147,7 @@ public final class SocRegistersView extends ViewPart {
             else if (value != null && r.reset() != null
                     && value.xor(r.reset()).and(r.resetMask()).signum() != 0)
                 access += " — differs from reset";
-            if (history.changes().stream().anyMatch(change -> change.registerKey().equals(r.key())))
+            if (changedKeys.contains(r.key()))
                 access += " — CHANGED since pinned snapshot";
             item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(),
                     "0x" + r.address().toString(16),
@@ -956,6 +1165,7 @@ public final class SocRegistersView extends ViewPart {
         for (var f : r.fields()) {
             TreeItem field = new TreeItem(item, SWT.NONE);
             field.setData(r);
+            field.setData("svdField", f);
             field.setData("description", f.description());
             var mask = BigInteger.ONE.shiftLeft(f.width()).subtract(BigInteger.ONE);
             field.setText(new String[] { f.name(), "[" + (f.offset() + f.width() - 1)
@@ -1050,54 +1260,137 @@ public final class SocRegistersView extends ViewPart {
         return null;
     }
 
-    private void refresh() {
+    private void refresh() { refresh(ReadScope.SELECTION); }
+    private void refreshAll() { refresh(ReadScope.ALL_SAFE); }
+    private void refreshWatches() { refresh(ReadScope.WATCHES); }
+
+    /** Reuse the active GDB/DSF session, which already owns the OpenOCD connection. */
+    private void refresh(ReadScope scope) {
         if (device == null) {
-            status.setText("Load the exact chip's vendor SVD first. Native CPU registers do not require an SVD; use the Registers view.");
+            status.setText("Load the verified chip SVD before reading peripheral registers.");
             return;
         }
-        if (busy) { status.setText("A register refresh is already in progress."); return; }
+        if (busy) {
+            if (scope != ReadScope.ALL_SAFE) status.setText("A register snapshot is already running.");
+            return;
+        }
         var chosen = selected();
         var targets = device.registers().stream()
-                .filter(r -> watches.contains(r.key()) || r.equals(chosen)).toList();
+                .filter(r -> r.readable() && switch (scope) {
+                    case ALL_SAFE -> true;
+                    case WATCHES -> watches.contains(r.key());
+                    case SELECTION -> watches.contains(r.key()) || r.equals(chosen);
+                }).sorted(java.util.Comparator.comparingInt(
+                        r -> watches.contains(r.key()) ? 0 : 1)).toList();
         if (targets.isEmpty()) {
-            status.setText("Select a readable register or add a safe watch first. "
-                    + "The register explorer does not scan the entire chip.");
+            if (scope != ReadScope.ALL_SAFE)
+                status.setText("Select an SVD-readable register or add one to Watch.");
+            else status.setText("This SVD contains no registers declared safe to read.");
             return;
         }
-        // Do not invoke even the GDB read path when the SVD marks an address unsafe.
-        var readableTargets = targets.stream().filter(Register::readable).toList();
-        if (readableTargets.isEmpty()) {
-            var blocked = targets.get(0);
-            status.setText("No hardware read attempted: " + blocked.key()
-                    + " is blocked by its exact SVD (" + blocked.readBlockReason()
-                    + "). Select a readable register or safe watch.");
-            return;
-        }
-        if (readableTargets.size() > 64) {
-            status.setText("Refresh is limited to 64 readable registers. Remove some watches first.");
+        if (targets.size() > MAX_SNAPSHOT_REGISTERS) {
+            status.setText("Snapshot refused: " + targets.size() + " SVD-readable registers exceed "
+                    + MAX_SNAPSHOT_REGISTERS + ". Narrow the selection; no target access occurred.");
             return;
         }
         DebugTarget target = debugTarget();
         if (target == null) {
-            status.setText(debugResolution + " Select a suspended thread/frame in Debug; "
-                    + "no peripheral registers were read.");
+            status.setText(debugResolution + " Halt the matching native GDB target.");
             return;
         }
         DsfSession session = target.session();
         listenTo(session);
         busy = true;
         long request = ++generation;
-        status.setText("Resolving suspended GDB frame for read-only register snapshot…");
+        status.setText("Reading " + targets.size() + " SVD-safe registers using existing halted "
+                + "GDB/OpenOCD session (no second OpenOCD connection)…");
         try {
-            session.getExecutor().execute(() -> resolveReadFrame(session, target.context(), readableTargets, request));
+            session.getExecutor().execute(() -> resolveReadFrame(session, target.context(), targets, request));
         } catch (RejectedExecutionException ended) {
             finish(request, "Debug session ended before register refresh.");
+        }
+    }
+
+    private void editRegister(Register register) {
+        if (register == null || device == null) return;
+        if (!register.writable()) {
+            status.setText("Register write blocked by SVD: " + register.writeBlockReason());
+            return;
+        }
+        var current = values.get(register.key());
+        var dialog = new org.eclipse.jface.dialogs.InputDialog(getSite().getShell(),
+                "Write " + register.key(),
+                "Set an unsigned " + register.size() + "-bit value (0x... or decimal).\n"
+                        + "This writes to the physical MCU through the active halted GDB/OpenOCD session.",
+                current == null ? "" : hex(current, register.size()), entered -> {
+                    try { RegisterWriteValue.parse(register, entered); return null; }
+                    catch (IllegalArgumentException invalid) { return invalid.getMessage(); }
+                });
+        if (dialog.open() != org.eclipse.jface.window.Window.OK) return;
+        try {
+            submitRegisterWrite(register, RegisterWriteValue.parse(register, dialog.getValue()));
+        } catch (IllegalArgumentException rejected) {
+            status.setText(rejected.getMessage());
+        }
+    }
+
+    private void toggleFieldBit(Register register, SvdDevice.Field field) {
+        if (register == null || field == null || field.width() != 1) return;
+        try {
+            BigInteger toggled = RegisterWriteValue.toggle(
+                    register, values.get(register.key()), field.offset());
+            submitRegisterWrite(register, toggled);
+        } catch (IllegalArgumentException rejected) {
+            status.setText(rejected.getMessage());
+        }
+    }
+
+    private record WriteIntent(Register register, BigInteger value) {}
+
+    private void submitRegisterWrite(Register register, BigInteger value) {
+        if (device == null || register == null || !device.registers().contains(register)
+                || !register.writable()) {
+            status.setText("Write blocked: the exact current SVD does not authorise this register.");
+            return;
+        }
+        if (busy) { status.setText("Wait for the current register operation to finish."); return; }
+        var target = debugTarget();
+        if (target == null) {
+            status.setText("Write blocked: no unique matching native GDB target. Halt it first.");
+            return;
+        }
+        String intended = "0x" + RegisterWriteValue.parse(
+                register, "0x" + value.toString(16)).toString(16);
+        if (!org.eclipse.jface.dialogs.MessageDialog.openConfirm(getSite().getShell(),
+                "Confirm physical MCU register write",
+                "This will change real hardware. The target must be halted.\n\n"
+                        + register.key() + " @ 0x" + register.address().toString(16)
+                        + "\nNew value: " + intended
+                        + "\n\nSome peripheral writes can affect clocks, interrupts, power or pins. "
+                        + "Proceed only if the register is appropriate for this board and state."))
+            return;
+        var session = target.session();
+        listenTo(session);
+        busy = true;
+        long request = ++generation;
+        status.setText("Writing " + register.key() + " through the existing halted GDB/OpenOCD session…");
+        var intent = new WriteIntent(register, value);
+        try {
+            session.getExecutor().execute(() -> resolveOperationFrame(
+                    session, target.context(), java.util.List.of(register), request, intent));
+        } catch (RejectedExecutionException ended) {
+            finish(request, "Debug session ended; register was not written.");
         }
     }
 
     /** DSF services and frame enumeration must run only on the session's executor. */
     private void resolveReadFrame(DsfSession session, IDMContext selected,
             java.util.List<Register> targets, long request) {
+        resolveOperationFrame(session, selected, targets, request, null);
+    }
+
+    private void resolveOperationFrame(DsfSession session, IDMContext selected,
+            java.util.List<Register> targets, long request, WriteIntent write) {
         var tracker = new DsfServicesTracker(Activator.getDefault().getBundle()
                 .getBundleContext(), session.getId());
         try {
@@ -1115,7 +1408,7 @@ public final class SocRegistersView extends ViewPart {
                     if (thread == null || !run.isSuspended(thread)) {
                         finish(request, "Selected debug frame is running; halt the target before Refresh.");
                     } else {
-                        readInFrame(session, expressions, run, thread, frame, targets, request);
+                        operateInFrame(session, expressions, run, thread, frame, targets, request, write);
                     }
                     return;
                 }
@@ -1127,7 +1420,7 @@ public final class SocRegistersView extends ViewPart {
                         finish(request, "Selected debug thread is running; halt it before Refresh.");
                     } else {
                         readFromThreads(session, stack, run, expressions,
-                                java.util.List.of(execution), 0, targets, request);
+                                java.util.List.of(execution), 0, targets, request, write);
                     }
                     return;
                 }
@@ -1171,7 +1464,7 @@ public final class SocRegistersView extends ViewPart {
                                 return;
                             }
                             readFromThreads(session, stack, run, expressions,
-                                    suspended, 0, targets, request);
+                                    suspended, 0, targets, request, write);
                         }
                     });
                 }
@@ -1184,7 +1477,7 @@ public final class SocRegistersView extends ViewPart {
     /** A stopped multi-thread inferior may have several threads; find a usable top frame. */
     private void readFromThreads(DsfSession session, IStack stack, IRunControl run,
             IExpressions expressions, java.util.List<IRunControl.IExecutionDMContext> threads,
-            int index, java.util.List<Register> targets, long request) {
+            int index, java.util.List<Register> targets, long request, WriteIntent write) {
         if (closed || request != generation) return;
         if (index >= threads.size()) {
             finish(request, "No suspended GDB thread supplies a stack frame. "
@@ -1193,7 +1486,7 @@ public final class SocRegistersView extends ViewPart {
         }
         var execution = threads.get(index);
         if (!run.isSuspended(execution)) {
-            readFromThreads(session, stack, run, expressions, threads, index + 1, targets, request);
+            readFromThreads(session, stack, run, expressions, threads, index + 1, targets, request, write);
             return;
         }
         stack.getFrames(execution, 0, 0,
@@ -1201,13 +1494,58 @@ public final class SocRegistersView extends ViewPart {
             @Override protected void handleCompleted() {
                 if (closed || request != generation) return;
                 if (isSuccess() && getData() != null && getData().length > 0) {
-                    readInFrame(session, expressions, run, execution, getData()[0], targets, request);
+                    operateInFrame(session, expressions, run, execution, getData()[0], targets, request, write);
                 } else {
                     readFromThreads(session, stack, run, expressions,
-                            threads, index + 1, targets, request);
+                            threads, index + 1, targets, request, write);
                 }
             }
         });
+    }
+
+    private void operateInFrame(DsfSession session, IExpressions expressions, IRunControl run,
+            IRunControl.IExecutionDMContext execution, IStack.IFrameDMContext frame,
+            java.util.List<Register> targets, long request, WriteIntent write) {
+        if (write == null) readInFrame(session, expressions, run, execution, frame, targets, request);
+        else writeInFrame(session, expressions, run, execution, frame, write, request);
+    }
+
+    private void writeInFrame(DsfSession session, IExpressions expressions, IRunControl run,
+            IRunControl.IExecutionDMContext execution, IStack.IFrameDMContext frame,
+            WriteIntent write, long request) {
+        if (closed || request != generation) return;
+        Register reg = write.register();
+        if (!run.isSuspended(execution) || !reg.writable() || device == null
+                || !device.registers().contains(reg)) {
+            finish(request, "Hardware write cancelled: stopped session/SVD identity not valid.");
+            return;
+        }
+        String type = reg.size() == 8 ? "unsigned char"
+                : reg.size() == 16 ? "unsigned short" : "unsigned int";
+        String addressExpression = "*(volatile " + type + " *)0x"
+                + reg.address().toString(16);
+        var location = expressions.createExpression(frame, addressExpression);
+        // DSF routes this write through the *existing* GDB remote target; it
+        // never creates a second OpenOCD control socket or executes shell commands.
+        expressions.writeExpression(location, "0x" + write.value().toString(16),
+                IFormattedValues.HEX_FORMAT,
+                new RequestMonitor(session.getExecutor(), null) {
+                    @Override protected void handleCompleted() {
+                        if (closed || request != generation) return;
+                        if (!isSuccess()) {
+                            finish(request, "GDB register write failed: " + getStatus().getMessage());
+                            return;
+                        }
+                        if (!run.isSuspended(execution)) {
+                            finish(request, "GDB write returned but target resumed; no readback performed.");
+                            return;
+                        }
+                        if (expressions instanceof ICachingService cache) cache.flushCache(frame);
+                        // A readback is an observation, not an atomic hardware proof.
+                        readNext(session, expressions, run, execution, frame,
+                                java.util.List.of(reg), 0, request);
+                    }
+                });
     }
 
     private void readInFrame(DsfSession session, IExpressions expressions, IRunControl run,
@@ -1226,11 +1564,11 @@ public final class SocRegistersView extends ViewPart {
             int index, long request) {
         // UI generation is checked on delivery; DSF also checks liveness before every command.
         if (closed || request != generation) return;
-        if (index == targets.size()) { finish(request, "Refresh complete. Values are snapshots; Refresh after stepping."); return; }
+        if (index == targets.size()) { finish(request, "Refresh complete. Snapshot from halted GDB."); return; }
         var r = targets.get(index);
         if (!run.isSuspended(execution)) { finish(request, "Target resumed; refresh stopped."); return; }
         if (!r.readable()) {
-            deliver(request, r, null, "Read blocked: " + r.readBlockReason());
+            deliver(request, r, null, "Read blocked: " + r.readBlockReason(), index, targets.size());
             readNext(session, expressions, run, execution, context, targets, index + 1, request); return;
         }
         String type = r.size() == 8 ? "unsigned char" : r.size() == 16 ? "unsigned short" : "unsigned int";
@@ -1250,19 +1588,24 @@ public final class SocRegistersView extends ViewPart {
                     value = new BigInteger(raw.substring(2), 16);
                     if (value.signum() < 0 || value.bitLength() > r.size()) throw new IllegalArgumentException();
                 } catch (Exception ex) { value = null; error = "Unsupported target ABI or nonnumeric GDB response"; }
-                deliver(request, r, value, error);
+                deliver(request, r, value, error, index, targets.size());
                 readNext(session, expressions, run, execution, context, targets, index + 1, request);
             }
         });
     }
-    private void deliver(long request, Register r, BigInteger value, String error) {
+    private void deliver(long request, Register r, BigInteger value, String error, int index, int total) {
         if (closed || ui.isDisposed()) return;
         ui.asyncExec(() -> {
             if (tree.isDisposed() || request != generation) return;
             values.remove(r.key()); errors.remove(r.key());
             if (value != null) values.put(r.key(), value);
             if (error != null) errors.put(r.key(), error);
-            render();
+            // One render per 32 GDB commands rather than thousands of SWT rebuilds.
+            if (index % 32 == 31 || index == total - 1) {
+                render();
+                var selected = selected();
+                if (selected != null && selected.key().equals(r.key())) showRegisterDetails(r);
+            }
         });
     }
     private void finish(long request, String message) {

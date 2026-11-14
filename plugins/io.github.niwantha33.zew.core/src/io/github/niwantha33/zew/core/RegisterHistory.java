@@ -16,7 +16,7 @@ public final class RegisterHistory {
         public Sample {
             if (session == null || session.isBlank() || svdIdentity == null
                     || svdIdentity.isBlank() || timestamp == null || values == null
-                    || values.size() > 256)
+                    || values.size() > 4096)
                 throw new IllegalArgumentException("Snapshot identity/value limit invalid.");
             values = Map.copyOf(values);
             if (values.entrySet().stream().anyMatch(e -> e.getKey() == null

@@ -16,7 +16,7 @@ public final class SocRegistersSmoke {
         var statusField = type.getDeclaredField("status"); statusField.setAccessible(true);
         var refresh = type.getDeclaredMethod("refresh"); refresh.setAccessible(true);
         refresh.invoke(view);
-        if (!((Label) statusField.get(view)).getText().contains("SVD first"))
+        if (!((Label) statusField.get(view)).getText().contains("verified chip SVD"))
             throw new AssertionError("Missing peripheral model must explain how to populate the view");
         var load = type.getDeclaredMethod("load", String.class); load.setAccessible(true);
         var fixture = Files.createTempFile("zew-soc-registers-", ".svd");
@@ -62,8 +62,9 @@ public final class SocRegistersSmoke {
             selectionEvent.item = register;
             tree.notifyListeners(org.eclipse.swt.SWT.Selection, selectionEvent);
             if (!details.getText().contains("GPIO.CTRL")
-                    || !details.getText().contains("Address: 0x40000004")
-                    || !details.getText().contains("EN [0:0]"))
+                    || !details.getText().contains("Address    0x40000004")
+                    || !details.getText().contains("EN [0:0]")
+                    || !details.getText().contains("BITWISE"))
                 throw new AssertionError("Register inspector must display address, fields and descriptions");
             var location = type.getDeclaredMethod(
                     "vendorPackLocation", String.class, java.nio.file.Path.class);
@@ -116,8 +117,43 @@ public final class SocRegistersSmoke {
             boardField.set(view, null);
             tree.setSelection(register);
             refresh.invoke(view);
-            if (!((Label) statusField.get(view)).getText().contains("suspended"))
+            if (!((Label) statusField.get(view)).getText().contains("Halt"))
                 throw new AssertionError("No-session read was not rejected");
+            var watchesField = type.getDeclaredField("watches"); watchesField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            var watches = (java.util.Set<String>) watchesField.get(view);
+            var toggleWatch = type.getDeclaredMethod("toggleWatch",
+                    io.github.niwantha33.zew.core.SvdDevice.Register.class);
+            toggleWatch.setAccessible(true);
+            var reg = register.getData();
+            toggleWatch.invoke(view, reg);
+            var watchTableField = type.getDeclaredField("watchTable");
+            watchTableField.setAccessible(true);
+            var watchTable = (org.eclipse.swt.widgets.Table) watchTableField.get(view);
+            if (!watches.contains("GPIO.CTRL") || watchTable.getItemCount() != 1
+                    || !watchTable.getItem(0).getText(0).equals("GPIO.CTRL"))
+                throw new AssertionError("Context-menu watch must populate independent Watch table");
+            var periodField = type.getDeclaredField("watchInterval"); periodField.setAccessible(true);
+            var period = (org.eclipse.swt.widgets.Spinner) periodField.get(view);
+            if (period.getMinimum() > 250 || period.getMaximum() < 60000
+                    || period.getSelection() != 1500)
+                throw new AssertionError("Watch polling interval must be adjustable");
+            var autoField = type.getDeclaredField("autoReadOnHalt"); autoField.setAccessible(true);
+            var onHalt = (org.eclipse.swt.widgets.Button) autoField.get(view);
+            if (!onHalt.getSelection())
+                throw new AssertionError("Safe snapshot on GDB halt must be enabled by default");
+            if (tree.getMenu() == null || watchTable.getMenu() == null)
+                throw new AssertionError("Register and Watch right-click actions are missing");
+            var write = type.getDeclaredMethod("submitRegisterWrite",
+                    io.github.niwantha33.zew.core.SvdDevice.Register.class,
+                    java.math.BigInteger.class);
+            write.setAccessible(true);
+            write.invoke(view, reg, java.math.BigInteger.ONE);
+            if (!((Label) statusField.get(view)).getText().contains("no unique matching native GDB"))
+                throw new AssertionError("No-target register write must fail before any command");
+            toggleWatch.invoke(view, reg);
+            if (!watches.isEmpty() || watchTable.getItemCount() != 0)
+                throw new AssertionError("Unwatch must remove independent Watch row");
             var searchField = type.getDeclaredField("search"); searchField.setAccessible(true);
             var search = (Text) searchField.get(view);
             search.setText("not-present");
@@ -132,7 +168,9 @@ public final class SocRegistersSmoke {
             values.put("stale", java.math.BigInteger.ONE);
             var contextChanged = type.getDeclaredMethod("contextChanged"); contextChanged.setAccessible(true);
             contextChanged.invoke(view);
-            if (!values.isEmpty()) throw new AssertionError("Debug-context change must clear stale peripheral snapshots");
+            if (!values.containsKey("stale"))
+                throw new AssertionError("Unchanged debug selection must not discard valid snapshots");
+            values.clear();
             checkResumeInvalidation(view, tree, (Label) statusField.get(view), values);
             org.eclipse.core.runtime.Platform.getBundle("io.github.niwantha33.zew.ui")
                     .loadClass("io.github.niwantha33.zew.ui.SocRegistersHandler")

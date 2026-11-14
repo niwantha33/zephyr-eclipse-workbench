@@ -102,7 +102,14 @@ public final class SvdDeviceTests {
                 + "<dimIndex>1-2</dimIndex><addressOffset>0x20</addressOffset><size>16</size>" + reg + "</cluster>")));
         check(array.registers().size() == 2 && array.registers().get(1).name().equals("BANK2.CTRL"), "cluster arrays");
         check(array.registers().get(1).address().toString(16).equals("40000124") && array.registers().get(1).size() == 16, "cluster inherited size");
-        rejects(device(peripheral(reg.replace("<fields>", "<size>64</size><fields>"))), "reject unsupported width");
+        var wide = parse(device(peripheral(reg.replace("<addressOffset>4</addressOffset>", "<addressOffset>8</addressOffset>")
+                .replace("<fields>", "<size>64</size><fields>"))));
+        check(wide.registers().get(0).size() == 64
+                && !wide.registers().get(0).readable()
+                && wide.registers().get(0).readBlockReason().contains("64-bit"),
+                "64-bit definitions are visible but cannot trigger unqualified MMIO reads");
+        rejects(device(peripheral(reg.replace("<fields>", "<size>128</size><fields>"))),
+                "reject register width above 64 bits");
         rejects(device(peripheral(reg.replace("<bitWidth>1", "<bitWidth>33"))), "reject invalid field");
         rejects(device(peripheral(reg.replace("<addressOffset>4", "<addressOffset>3"))), "reject unaligned address");
         rejects(device(peripheral("<register derivedFrom='NOPE'><name>X</name></register>")), "reject unresolved inheritance");
@@ -117,7 +124,32 @@ public final class SvdDeviceTests {
         rejects(device(peripheral(reg + reg)), "duplicate register keys");
         rejects(device(peripheral(reg.replace("<fields>", "<dim>4097</dim><dimIncrement>4</dimIncrement><fields>"))), "array bound");
         rejects(device(peripheral(reg.replace("<fields>", "<dim>2</dim><dimIndex>0-5</dimIndex><dimIncrement>4</dimIncrement><fields>"))), "invalid array indices");
-        rejects(device(peripheral(reg.replace("<name>EN</name>", "<name>EN</name><dim>2</dim>"))), "unsupported field arrays");
+        String fieldArray = "<register><name>FLAGS</name><addressOffset>0</addressOffset><fields>"
+                + "<field><name>IRQ[%s]</name><dim>4</dim><dimIncrement>2</dimIncrement>"
+                + "<dimIndex>0-3</dimIndex><bitOffset>1</bitOffset><bitWidth>1</bitWidth>"
+                + "</field></fields></register>";
+        var fArray = parse(device(peripheral(fieldArray))).registers().get(0);
+        check(fArray.fields().size() == 4 && fArray.fields().get(0).name().equals("IRQ[0]")
+                && fArray.fields().get(3).name().equals("IRQ[3]")
+                && fArray.fields().get(3).offset() == 7, "field arrays keep accurate bit offsets");
+        rejects(device(peripheral(fieldArray.replace("<dimIncrement>2</dimIncrement>", ""))),
+                "array fields require an explicit address/bit increment");
+        rejects(device(peripheral(fieldArray.replace("<dimIncrement>2</dimIncrement>",
+                "<dimIncrement>12</dimIncrement>"))), "field arrays must fit register width");
+        String peripheralArray = "<peripheral><name>GPIO[%s]</name><dim>2</dim><dimIncrement>0x1000</dimIncrement>"
+                + "<dimIndex>A,B</dimIndex><baseAddress>0x40000000</baseAddress><registers>"
+                + "<register><name>IN</name><addressOffset>0x10</addressOffset></register>"
+                + "</registers></peripheral>";
+        var pArray = parse(device(peripheralArray));
+        check(pArray.registers().size() == 2
+                && pArray.registers().get(0).key().equals("GPIO[A].IN")
+                && pArray.registers().get(1).key().equals("GPIO[B].IN")
+                && pArray.registers().get(1).address().equals(new BigInteger("40001010", 16)),
+                "peripheral arrays show each instance with correct address");
+        rejects(device(peripheralArray.replace("<dimIncrement>0x1000</dimIncrement>", "")),
+                "peripheral arrays require an explicit increment");
+        rejects(device(peripheralArray.replace("<dim>2</dim>", "<dim>4097</dim>")),
+                "unbounded peripheral arrays are rejected");
         System.out.println("SvdDeviceTests: PASS");
     }
 }
