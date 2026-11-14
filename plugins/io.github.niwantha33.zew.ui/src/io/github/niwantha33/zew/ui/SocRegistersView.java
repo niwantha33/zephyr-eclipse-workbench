@@ -67,6 +67,8 @@ import io.github.niwantha33.zew.core.SvdAutoDiscovery;
 import io.github.niwantha33.zew.core.SvdTargetEvidence;
 import io.github.niwantha33.zew.core.BuildArtifacts;
 import io.github.niwantha33.zew.core.SvdPartCompatibility;
+import io.github.niwantha33.zew.core.SvdPreferredSource;
+import org.eclipse.core.runtime.preferences.InstanceScope;
 import io.github.niwantha33.zew.core.VendorSvdProvisioner;
 import io.github.niwantha33.zew.core.GitHubSvdProvisioner;
 import io.github.niwantha33.zew.core.RegisterHistory;
@@ -94,6 +96,7 @@ public final class SocRegistersView extends ViewPart {
     private Text search;
     private SvdDevice device;
     private String svdPath;
+    private String legacySavedPath;
     private String selectedProjectName;
     private String debugResolution = "No unique active Zephyr debug session.";
     private String selectedBoard;
@@ -122,7 +125,7 @@ public final class SocRegistersView extends ViewPart {
 
     @Override public void init(IViewSite site, IMemento memento) throws PartInitException {
         super.init(site, memento);
-        if (memento != null) svdPath = memento.getString("svdPath");
+        if (memento != null) legacySavedPath = memento.getString("svdPath");
     }
     @Override public void createPartControl(Composite parent) {
         ui = parent.getDisplay();
@@ -421,10 +424,24 @@ public final class SocRegistersView extends ViewPart {
                     if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win"))
                         roots.add(Path.of("C:/ti"));
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
-                    result = target.usable()
-                            ? SvdAutoDiscovery.resolve(target.target(), roots, userHome.resolve(".zew/svd-cache"))
-                            : new SvdAutoDiscovery.Result(SvdAutoDiscovery.State.INVALID_TARGET,
-                                    "", null, 0, false, target.explanation(), List.of());
+                    if (!target.usable()) {
+                        result = new SvdAutoDiscovery.Result(SvdAutoDiscovery.State.INVALID_TARGET,
+                                "", null, 0, false, target.explanation(), List.of());
+                    } else {
+                        // Honour a previously validated per-device manual import first.
+                        // Recheck SHA-256 and SVD model every time; stale paths are never trusted.
+                        var remembered = preferredSvd(target.target(), legacySavedPath);
+                        if (remembered != null) {
+                            result = new SvdAutoDiscovery.Result(SvdAutoDiscovery.State.MATCHED,
+                                    SvdAutoDiscovery.partFromBoard(target.target()), remembered.path(),
+                                    remembered.registers(), false,
+                                    "Reusing the verified register definitions you imported earlier.",
+                                    List.of(remembered.path().toString()));
+                        } else {
+                            result = SvdAutoDiscovery.resolve(target.target(), roots,
+                                    userHome.resolve(".zew/svd-cache"));
+                        }
+                    }
                     Activator.getDefault().getLog().log(new Status(IStatus.INFO, Activator.ID,
                             "SVD search: " + result.state() + " — " + result.explanation()
                             + "; scanned roots: " + result.inspected().size()));
@@ -457,6 +474,49 @@ public final class SocRegistersView extends ViewPart {
         };
         job.setSystem(true);
         job.schedule();
+    }
+
+    /** Eclipse-local preferences: do not commit licensed vendor SVDs into projects. */
+    private static String preferredKey(String qualifiedTarget) {
+        String part = SvdAutoDiscovery.partFromBoard(qualifiedTarget);
+        return part.isBlank() ? null : "svd.preferred." + part;
+    }
+
+    private static SvdPreferredSource.Verified preferredSvd(String target, String legacy) {
+        String key = preferredKey(target);
+        if (key == null) return null;
+        var preferences = InstanceScope.INSTANCE.getNode(Activator.ID);
+        String path = preferences.get(key + ".path", "");
+        String sha = preferences.get(key + ".sha256", "");
+        if (!path.isBlank()) {
+            try {
+                var resolved = SvdPreferredSource.reopen(target, Path.of(path), sha);
+                if (resolved != null) return resolved;
+            } catch (java.nio.file.InvalidPathException invalid) {
+                // Fall through to ordinary exact-part vendor discovery.
+            }
+            // A cached file has changed or disappeared; never reuse a stale hash.
+            return null;
+        }
+        if (legacy != null && !legacy.isBlank()) {
+            try { return SvdPreferredSource.inspect(target, Path.of(legacy)); }
+            catch (Exception invalid) { /* Saved Eclipse memento was stale. */ }
+        }
+        return null;
+    }
+
+    private static void rememberSvd(String target, Path file, String sha256, String model) {
+        String key = preferredKey(target);
+        if (key == null || !SvdPartCompatibility.matches(
+                SvdAutoDiscovery.partFromBoard(target), model)) return;
+        var preferences = InstanceScope.INSTANCE.getNode(Activator.ID);
+        preferences.put(key + ".path", file.toAbsolutePath().normalize().toString());
+        preferences.put(key + ".sha256", sha256);
+        try { preferences.flush(); }
+        catch (org.osgi.service.prefs.BackingStoreException failure) {
+            Activator.getDefault().getLog().log(new Status(IStatus.WARNING,
+                    Activator.ID, "Cannot persist verified SVD source", failure));
+        }
     }
 
     /** Optional SDK roots must not prevent discovery in the remaining installed packs. */
@@ -815,6 +875,10 @@ public final class SocRegistersView extends ViewPart {
                             return;
                         }
                         generation++; busy = false; device = loaded; svdPath = path;
+                        // Direct/manual SVDs and exact-model pack SVDs can be
+                        // safely revalidated and reopened on the next launch.
+                        String verifiedTarget = selectedSvdTarget == null ? board : selectedSvdTarget;
+                        rememberSvd(verifiedTarget, file, identity, loaded.name());
                         svdIdentity = identity;
                         values.clear(); errors.clear(); watches.clear(); history.clear();
                         render();
