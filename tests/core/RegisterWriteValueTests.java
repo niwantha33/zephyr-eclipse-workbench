@@ -42,6 +42,11 @@ public final class RegisterWriteValueTests {
                 "write-one-to-clear requires a specialised writer");
         check(!reg("<writeConstraint><range><minimum>0</minimum><maximum>1</maximum>"
                 + "</range></writeConstraint>").writable(), "constrained writes blocked");
+        check(!reg("<writeConstraint writeAsRead='true'/>").writable(),
+                "attribute-only SVD write constraints must block edits");
+        check(!reg("<fields><field><name>BIT</name><bitOffset>0</bitOffset>"
+                + "<bitWidth>1</bitWidth><writeConstraint useEnumeratedValues='true'/>"
+                + "</field></fields>").writable(), "field write constraint attributes block edits");
         check(!reg("<fields><field><name>STATUS</name><bitOffset>0</bitOffset>"
                 + "<bitWidth>1</bitWidth><access>read-only</access></field></fields>").writable(),
                 "mixed-access field register blocked");
