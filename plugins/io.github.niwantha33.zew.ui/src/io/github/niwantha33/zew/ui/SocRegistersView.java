@@ -1412,7 +1412,7 @@ public final class SocRegistersView extends ViewPart {
                 String label = field.name() + " [" + (field.offset() + field.width() - 1)
                         + ":" + field.offset() + "]";
                 String formatted = fieldValue == null ? "—" :
-                        field.width() == 1 ? (fieldValue.signum() == 0 ? "0 / OFF" : "1 / ON")
+                        field.width() == 1 ? (fieldValue.signum() == 0 ? "0 / CLEAR" : "1 / SET")
                                 : hex(fieldValue, field.width());
                 String meaning = field.description().isBlank()
                         ? field.access() : field.description().replace('\n', ' ').trim();
