@@ -825,6 +825,8 @@ public final class SocRegistersView extends ViewPart {
                         status.setText(loaded.name() + " — " + loaded.registers().size()
                                 + " definitions loaded. Debug execution was not changed.");
                         // The session might have been suspended before the SVD was loaded.
+                        // Bind its existing launch now, even if no new Debug selection event occurs.
+                        contextChanged();
                         scheduleAutoSnapshot();
                     });
                     return Status.OK_STATUS;
@@ -1132,6 +1134,9 @@ public final class SocRegistersView extends ViewPart {
         java.util.List<Register> registers = (java.util.List<Register>) peripheral.getData("registers");
         if (registers == null) return;
         peripheral.removeAll();
+        Set<String> changedKeys = history.changes().stream()
+                .map(RegisterHistory.Delta::registerKey)
+                .collect(java.util.stream.Collectors.toSet());
         for (Register r : registers) {
             TreeItem item = new TreeItem(peripheral, SWT.NONE);
             item.setData(r);
@@ -1142,7 +1147,7 @@ public final class SocRegistersView extends ViewPart {
             else if (value != null && r.reset() != null
                     && value.xor(r.reset()).and(r.resetMask()).signum() != 0)
                 access += " — differs from reset";
-            if (history.changes().stream().anyMatch(change -> change.registerKey().equals(r.key())))
+            if (changedKeys.contains(r.key()))
                 access += " — CHANGED since pinned snapshot";
             item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(),
                     "0x" + r.address().toString(16),
@@ -1275,7 +1280,8 @@ public final class SocRegistersView extends ViewPart {
                     case ALL_SAFE -> true;
                     case WATCHES -> watches.contains(r.key());
                     case SELECTION -> watches.contains(r.key()) || r.equals(chosen);
-                }).toList();
+                }).sorted(java.util.Comparator.comparingInt(
+                        r -> watches.contains(r.key()) ? 0 : 1)).toList();
         if (targets.isEmpty()) {
             if (scope != ReadScope.ALL_SAFE)
                 status.setText("Select an SVD-readable register or add one to Watch.");
