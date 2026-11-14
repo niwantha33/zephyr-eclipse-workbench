@@ -70,6 +70,7 @@ import io.github.niwantha33.zew.core.SvdPartCompatibility;
 import io.github.niwantha33.zew.core.VendorSvdProvisioner;
 import io.github.niwantha33.zew.core.GitHubSvdProvisioner;
 import io.github.niwantha33.zew.core.RegisterHistory;
+import io.github.niwantha33.zew.core.RegisterWriteValue;
 import io.github.niwantha33.zew.core.RegisterSparkline;
 import io.github.niwantha33.zew.core.DebugSessionSelection;
 import io.github.niwantha33.zew.core.SvdDevice.Register;
@@ -1304,9 +1305,86 @@ public final class SocRegistersView extends ViewPart {
         }
     }
 
+    private void editRegister(Register register) {
+        if (register == null || device == null) return;
+        if (!register.writable()) {
+            status.setText("Register write blocked by SVD: " + register.writeBlockReason());
+            return;
+        }
+        var current = values.get(register.key());
+        var dialog = new org.eclipse.jface.dialogs.InputDialog(getSite().getShell(),
+                "Write " + register.key(),
+                "Set an unsigned " + register.size() + "-bit value (0x... or decimal).\n"
+                        + "This writes to the physical MCU through the active halted GDB/OpenOCD session.",
+                current == null ? "" : hex(current, register.size()), entered -> {
+                    try { RegisterWriteValue.parse(register, entered); return null; }
+                    catch (IllegalArgumentException invalid) { return invalid.getMessage(); }
+                });
+        if (dialog.open() != org.eclipse.jface.window.Window.OK) return;
+        try {
+            submitRegisterWrite(register, RegisterWriteValue.parse(register, dialog.getValue()));
+        } catch (IllegalArgumentException rejected) {
+            status.setText(rejected.getMessage());
+        }
+    }
+
+    private void toggleFieldBit(Register register, SvdDevice.Field field) {
+        if (register == null || field == null || field.width() != 1) return;
+        try {
+            BigInteger toggled = RegisterWriteValue.toggle(
+                    register, values.get(register.key()), field.offset());
+            submitRegisterWrite(register, toggled);
+        } catch (IllegalArgumentException rejected) {
+            status.setText(rejected.getMessage());
+        }
+    }
+
+    private record WriteIntent(Register register, BigInteger value) {}
+
+    private void submitRegisterWrite(Register register, BigInteger value) {
+        if (device == null || register == null || !device.registers().contains(register)
+                || !register.writable()) {
+            status.setText("Write blocked: the exact current SVD does not authorise this register.");
+            return;
+        }
+        if (busy) { status.setText("Wait for the current register operation to finish."); return; }
+        var target = debugTarget();
+        if (target == null) {
+            status.setText("Write blocked: no unique matching native GDB target. Halt it first.");
+            return;
+        }
+        String intended = "0x" + RegisterWriteValue.parse(
+                register, "0x" + value.toString(16)).toString(16);
+        if (!org.eclipse.jface.dialogs.MessageDialog.openConfirm(getSite().getShell(),
+                "Confirm physical MCU register write",
+                "This will change real hardware. The target must be halted.\n\n"
+                        + register.key() + " @ 0x" + register.address().toString(16)
+                        + "\nNew value: " + intended
+                        + "\n\nSome peripheral writes can affect clocks, interrupts, power or pins. "
+                        + "Proceed only if the register is appropriate for this board and state."))
+            return;
+        var session = target.session();
+        listenTo(session);
+        busy = true;
+        long request = ++generation;
+        status.setText("Writing " + register.key() + " through the existing halted GDB/OpenOCD session…");
+        var intent = new WriteIntent(register, value);
+        try {
+            session.getExecutor().execute(() -> resolveOperationFrame(
+                    session, target.context(), java.util.List.of(register), request, intent));
+        } catch (RejectedExecutionException ended) {
+            finish(request, "Debug session ended; register was not written.");
+        }
+    }
+
     /** DSF services and frame enumeration must run only on the session's executor. */
     private void resolveReadFrame(DsfSession session, IDMContext selected,
             java.util.List<Register> targets, long request) {
+        resolveOperationFrame(session, selected, targets, request, null);
+    }
+
+    private void resolveOperationFrame(DsfSession session, IDMContext selected,
+            java.util.List<Register> targets, long request, WriteIntent write) {
         var tracker = new DsfServicesTracker(Activator.getDefault().getBundle()
                 .getBundleContext(), session.getId());
         try {
@@ -1324,7 +1402,7 @@ public final class SocRegistersView extends ViewPart {
                     if (thread == null || !run.isSuspended(thread)) {
                         finish(request, "Selected debug frame is running; halt the target before Refresh.");
                     } else {
-                        readInFrame(session, expressions, run, thread, frame, targets, request);
+                        operateInFrame(session, expressions, run, thread, frame, targets, request, write);
                     }
                     return;
                 }
@@ -1336,7 +1414,7 @@ public final class SocRegistersView extends ViewPart {
                         finish(request, "Selected debug thread is running; halt it before Refresh.");
                     } else {
                         readFromThreads(session, stack, run, expressions,
-                                java.util.List.of(execution), 0, targets, request);
+                                java.util.List.of(execution), 0, targets, request, write);
                     }
                     return;
                 }
@@ -1380,7 +1458,7 @@ public final class SocRegistersView extends ViewPart {
                                 return;
                             }
                             readFromThreads(session, stack, run, expressions,
-                                    suspended, 0, targets, request);
+                                    suspended, 0, targets, request, write);
                         }
                     });
                 }
@@ -1393,7 +1471,7 @@ public final class SocRegistersView extends ViewPart {
     /** A stopped multi-thread inferior may have several threads; find a usable top frame. */
     private void readFromThreads(DsfSession session, IStack stack, IRunControl run,
             IExpressions expressions, java.util.List<IRunControl.IExecutionDMContext> threads,
-            int index, java.util.List<Register> targets, long request) {
+            int index, java.util.List<Register> targets, long request, WriteIntent write) {
         if (closed || request != generation) return;
         if (index >= threads.size()) {
             finish(request, "No suspended GDB thread supplies a stack frame. "
@@ -1402,7 +1480,7 @@ public final class SocRegistersView extends ViewPart {
         }
         var execution = threads.get(index);
         if (!run.isSuspended(execution)) {
-            readFromThreads(session, stack, run, expressions, threads, index + 1, targets, request);
+            readFromThreads(session, stack, run, expressions, threads, index + 1, targets, request, write);
             return;
         }
         stack.getFrames(execution, 0, 0,
@@ -1410,13 +1488,58 @@ public final class SocRegistersView extends ViewPart {
             @Override protected void handleCompleted() {
                 if (closed || request != generation) return;
                 if (isSuccess() && getData() != null && getData().length > 0) {
-                    readInFrame(session, expressions, run, execution, getData()[0], targets, request);
+                    operateInFrame(session, expressions, run, execution, getData()[0], targets, request, write);
                 } else {
                     readFromThreads(session, stack, run, expressions,
-                            threads, index + 1, targets, request);
+                            threads, index + 1, targets, request, write);
                 }
             }
         });
+    }
+
+    private void operateInFrame(DsfSession session, IExpressions expressions, IRunControl run,
+            IRunControl.IExecutionDMContext execution, IStack.IFrameDMContext frame,
+            java.util.List<Register> targets, long request, WriteIntent write) {
+        if (write == null) readInFrame(session, expressions, run, execution, frame, targets, request);
+        else writeInFrame(session, expressions, run, execution, frame, write, request);
+    }
+
+    private void writeInFrame(DsfSession session, IExpressions expressions, IRunControl run,
+            IRunControl.IExecutionDMContext execution, IStack.IFrameDMContext frame,
+            WriteIntent write, long request) {
+        if (closed || request != generation) return;
+        Register reg = write.register();
+        if (!run.isSuspended(execution) || !reg.writable() || device == null
+                || !device.registers().contains(reg)) {
+            finish(request, "Hardware write cancelled: stopped session/SVD identity not valid.");
+            return;
+        }
+        String type = reg.size() == 8 ? "unsigned char"
+                : reg.size() == 16 ? "unsigned short" : "unsigned int";
+        String addressExpression = "*(volatile " + type + " *)0x"
+                + reg.address().toString(16);
+        var location = expressions.createExpression(frame, addressExpression);
+        // DSF routes this write through the *existing* GDB remote target; it
+        // never creates a second OpenOCD control socket or executes shell commands.
+        expressions.writeExpression(location, "0x" + write.value().toString(16),
+                IFormattedValues.HEX_FORMAT,
+                new RequestMonitor(session.getExecutor(), null) {
+                    @Override protected void handleCompleted() {
+                        if (closed || request != generation) return;
+                        if (!isSuccess()) {
+                            finish(request, "GDB register write failed: " + getStatus().getMessage());
+                            return;
+                        }
+                        if (!run.isSuspended(execution)) {
+                            finish(request, "GDB write returned but target resumed; no readback performed.");
+                            return;
+                        }
+                        if (expressions instanceof ICachingService cache) cache.flushCache(frame);
+                        // A readback is an observation, not an atomic hardware proof.
+                        readNext(session, expressions, run, execution, frame,
+                                java.util.List.of(reg), 0, request);
+                    }
+                });
     }
 
     private void readInFrame(DsfSession session, IExpressions expressions, IRunControl run,
