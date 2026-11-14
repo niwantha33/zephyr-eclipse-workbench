@@ -29,6 +29,11 @@ public final class SocRegistersSmoke {
             load.invoke(view, fixture.toString());
             var treeField = type.getDeclaredField("tree"); treeField.setAccessible(true);
             var tree = (Tree) treeField.get(view);
+            var detailsField = type.getDeclaredField("registerDetails");
+            detailsField.setAccessible(true);
+            var details = (Text) detailsField.get(view);
+            if (details == null || !details.getText().contains("REGISTER DETAILS"))
+                throw new AssertionError("Split register detail inspector is missing");
             // SVD parsing runs in a background Job. Process SWT events
             // until its UI hand-off completes, then expand the lazy tree.
             long loadDeadline = System.nanoTime() + java.time.Duration.ofSeconds(15).toNanos();
@@ -52,6 +57,24 @@ public final class SocRegistersSmoke {
             if (!register.getText(1).equals("0x40000004") || register.getItemCount() != 1
                     || !register.getItem(0).getText().equals("EN") || !register.getText(3).equals("—"))
                 throw new AssertionError("Lazy register address/field/reset rendering");
+            tree.setSelection(register);
+            var selectionEvent = new org.eclipse.swt.widgets.Event();
+            selectionEvent.item = register;
+            tree.notifyListeners(org.eclipse.swt.SWT.Selection, selectionEvent);
+            if (!details.getText().contains("GPIO.CTRL")
+                    || !details.getText().contains("Address: 0x40000004")
+                    || !details.getText().contains("EN [0:0]"))
+                throw new AssertionError("Register inspector must display address, fields and descriptions");
+            var location = type.getDeclaredMethod(
+                    "vendorPackLocation", String.class, java.nio.file.Path.class);
+            location.setAccessible(true);
+            var projectRoot = java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "zew-svd-smoke");
+            var fallback = (java.nio.file.Path) location.invoke(null, null, projectRoot);
+            if (!fallback.equals(projectRoot.resolve(".zew/vendor-svd")))
+                throw new AssertionError("Missing setupRoot must use local project vendor pack directory");
+            var managed = (java.nio.file.Path) location.invoke(null, projectRoot.toString(), projectRoot);
+            if (!managed.equals(projectRoot.resolve("vendor-svd")))
+                throw new AssertionError("Configured managed setupRoot must remain supported");
             // Board-only Zephyr projects must use CONFIG_SOC from the
             // generated build, not reject the correct vendor SVD as unknown.
             var evidencePart = type.getDeclaredMethod("verifiedSvdPart",
@@ -100,7 +123,9 @@ public final class SocRegistersSmoke {
             search.setText("not-present");
             if (tree.getItemCount() != 0) throw new AssertionError("Search failed to filter");
             search.setText("EN");
-            if (tree.getItemCount() != 1) throw new AssertionError("Field search did not restore register");
+            if (tree.getItemCount() != 1 || !tree.getItem(0).getExpanded()
+                    || tree.getItem(0).getItemCount() != 1)
+                throw new AssertionError("Field search must automatically expand matched register");
             var valuesField = type.getDeclaredField("values"); valuesField.setAccessible(true);
             @SuppressWarnings("unchecked")
             var values = (java.util.Map<String, java.math.BigInteger>) valuesField.get(view);

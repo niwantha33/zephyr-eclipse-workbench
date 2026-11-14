@@ -70,6 +70,7 @@ import io.github.niwantha33.zew.core.SvdDevice.Register;
 /** Read-only peripheral inspection through the user's selected native DSF session. */
 public final class SocRegistersView extends ViewPart {
     private Tree tree;
+    private Text registerDetails;
     private Label status;
     private Label summary;
     private Label contextInfo;
@@ -169,9 +170,18 @@ public final class SocRegistersView extends ViewPart {
         historyChart.setLayoutData(chartData);
         historyChart.setVisible(false);
         historyChart.addPaintListener(e -> paintHistory(e.gc));
-        tree = new Tree(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
+        // VS Code-style resizable explorer and read-only register inspector.
+        // Use SWT system colours: the panel follows Eclipse light/dark themes.
+        var split = new org.eclipse.swt.custom.SashForm(parent, SWT.HORIZONTAL);
+        split.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        tree = new Tree(split, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         tree.setHeaderVisible(true); tree.setLinesVisible(true);
-        tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        registerDetails = new Text(split, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY
+                | SWT.V_SCROLL | SWT.H_SCROLL | SWT.WRAP);
+        registerDetails.setText("REGISTER DETAILS\n\nSelect a peripheral or register.\n"
+                + "Addresses and field descriptions come from the verified SVD.\n"
+                + "Live values require a suspended GDB target and manual Refresh.");
+        split.setWeights(new int[] { 70, 30 });
         String[] headings = { "Peripheral / register / field", "Address / bits", "Value (hex)", "Reset (hex)", "Access / status" };
         int[] widths = { 310, 155, 140, 140, 260 };
         for (int i = 0; i < headings.length; i++) {
@@ -184,7 +194,14 @@ public final class SocRegistersView extends ViewPart {
         });
         tree.addListener(SWT.Selection, e -> {
             historyChart.redraw();
-            if (!(e.item instanceof TreeItem item) || !(item.getData() instanceof Register r)) return;
+            if (!(e.item instanceof TreeItem item)) return;
+            if (!(item.getData() instanceof Register r)) {
+                if (registerDetails != null && !registerDetails.isDisposed())
+                    registerDetails.setText("PERIPHERAL\n\n" + item.getText(0)
+                            + "\n\nExpand to inspect its registers. No hardware has been read.");
+                return;
+            }
+            showRegisterDetails(r);
             if (!r.readable()) {
                 status.setText("Read blocked for " + r.key() + ": " + r.readBlockReason()
                         + ". The exact device SVD prohibits this read. Select a readable register; "
@@ -313,6 +330,7 @@ public final class SocRegistersView extends ViewPart {
                     // Probe focused exact-chip/vendor-pack directories first;
                     // avoid double-scanning all West modules before local packs.
                     roots.add(project.getLocation().toFile().toPath().resolve(".zew/svd"));
+                    roots.add(project.getLocation().toFile().toPath().resolve(".zew/vendor-svd"));
                     Path root = optionalRoot(settings.getProperty("zew.setupRoot"));
                     if (root != null) {
                         roots.add(root.resolve("vendor-svd"));
@@ -397,6 +415,14 @@ public final class SocRegistersView extends ViewPart {
         if (value == null || value.isBlank()) return null;
         try { return Path.of(value); }
         catch (java.nio.file.InvalidPathException invalid) { return null; }
+    }
+
+    /** Stable project-local fallback: never require a separately installed setupRoot. */
+    static Path vendorPackLocation(String configuredSetupRoot, Path projectRoot) {
+        Path setup = optionalRoot(configuredSetupRoot);
+        if (setup != null) return setup.resolve("vendor-svd");
+        if (projectRoot != null) return projectRoot.resolve(".zew/vendor-svd");
+        throw new IllegalArgumentException("No project storage directory is available");
     }
 
     /** Resolve the actual SoC from generated build evidence for board-only targets. */
@@ -486,10 +512,22 @@ public final class SocRegistersView extends ViewPart {
         final Path vendorDir;
         try {
             var settings = ProjectContext.settings(target);
-            board = settings.getProperty("board", "");
-            vendorDir = Path.of(settings.getProperty("zew.setupRoot")).resolve("vendor-svd");
+            String selected = settings.getProperty("board", "");
+            Path build = ProjectContext.buildDirectory(target, settings);
+            Map<String, String> config = Files.isRegularFile(build.resolve("zephyr/.config"))
+                    ? BuildArtifacts.configuration(build) : Map.of();
+            var identity = SvdTargetEvidence.select(selected, config);
+            if (!identity.usable()) {
+                status.setText("Cannot download SVD without verified SoC: "
+                        + identity.explanation() + " Select the exact board or build the project first.");
+                return;
+            }
+            board = identity.target();
+            Path projectRoot = target.getLocation() == null ? null
+                    : target.getLocation().toFile().toPath();
+            vendorDir = vendorPackLocation(settings.getProperty("zew.setupRoot"), projectRoot);
         } catch (Exception error) {
-            status.setText("Cannot determine exact board or vendor-pack directory: " + error.getMessage());
+            status.setText("Cannot determine exact SoC or vendor-pack directory: " + error.getMessage());
             return;
         }
         if (GitHubSvdProvisioner.supports(board)) {
@@ -795,7 +833,11 @@ public final class SocRegistersView extends ViewPart {
         return item.getData() instanceof Register register ? register : null;
     }
     private void render() {
-        if (device == null || tree == null || tree.isDisposed()) return;
+        if (tree == null || tree.isDisposed()) return;
+        if (device == null) {
+            tree.removeAll();
+            return;
+        }
         Register chosen = selected();
         var expandedPeripherals = new HashSet<String>();
         var expandedRegisters = new HashSet<String>();
@@ -823,7 +865,10 @@ public final class SocRegistersView extends ViewPart {
                 // Lightweight placeholder: no register or field widgets until expanded.
                 new TreeItem(peripheral, SWT.NONE).setText("Expand to show "
                         + entry.getValue().size() + " registers");
-                if (expandedPeripherals.contains(entry.getKey())) {
+                // Search results should be immediately visible, not hidden
+                // behind a collapsed peripheral requiring a second click.
+                if (expandedPeripherals.contains(entry.getKey())
+                        || (!query.isBlank() && matches.size() <= 12)) {
                     populatePeripheral(peripheral);
                     peripheral.setExpanded(true);
                     for (TreeItem child : peripheral.getItems()) {
@@ -836,6 +881,7 @@ public final class SocRegistersView extends ViewPart {
                     }
                 }
             }
+            if (chosen != null) showRegisterDetails(chosen);
             int count = matches.values().stream().mapToInt(java.util.List::size).sum();
             summary.setText("All " + matches.size() + " peripherals; " + count
                     + " matching registers available. Expand a peripheral to see its registers. "
@@ -846,6 +892,34 @@ public final class SocRegistersView extends ViewPart {
                     + (liveWatch ? " Halted-only sampled Live Watch; NOT continuous hardware tracing."
                             : " No automatic polling. Not read = no successful snapshot yet; Blocked = unsafe SVD access."));
         } finally { tree.setRedraw(true); }
+    }
+
+    private void showRegisterDetails(Register r) {
+        if (registerDetails == null || registerDetails.isDisposed()) return;
+        StringBuilder details = new StringBuilder("REGISTER DETAILS\n\n")
+                .append(r.key()).append("\n")
+                .append("Address: 0x").append(r.address().toString(16)).append("\n")
+                .append("Width: ").append(r.size()).append(" bits\n")
+                .append("Access: ").append(r.access()).append("\n")
+                .append("Reset: ").append(r.reset() == null ? "Not specified"
+                        : hex(r.reset(), r.size())).append("\n")
+                .append("Value: ").append(values.containsKey(r.key())
+                        ? hex(values.get(r.key()), r.size()) : "Not read").append("\n")
+                .append("Read: ").append(r.readable()
+                        ? "Available when target is suspended" : "Blocked: " + r.readBlockReason())
+                .append("\n\n")
+                .append(r.description().isBlank() ? "No register description supplied by SVD."
+                        : r.description()).append("\n\nFIELDS\n");
+        if (r.fields().isEmpty()) details.append("No field definitions in this SVD.\n");
+        for (var field : r.fields()) {
+            details.append("\n").append(field.name()).append(" [")
+                    .append(field.offset() + field.width() - 1).append(":")
+                    .append(field.offset()).append("]")
+                    .append("  ").append(field.access()).append("\n");
+            if (!field.description().isBlank())
+                details.append(field.description()).append("\n");
+        }
+        registerDetails.setText(details.toString());
     }
 
     private void populatePeripheral(TreeItem peripheral) {
