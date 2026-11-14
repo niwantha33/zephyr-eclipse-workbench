@@ -68,6 +68,7 @@ import io.github.niwantha33.zew.core.SvdTargetEvidence;
 import io.github.niwantha33.zew.core.BuildArtifacts;
 import io.github.niwantha33.zew.core.SvdPartCompatibility;
 import io.github.niwantha33.zew.core.SvdPreferredSource;
+import io.github.niwantha33.zew.core.RegisterPresentation;
 import org.eclipse.core.runtime.preferences.InstanceScope;
 import io.github.niwantha33.zew.core.VendorSvdProvisioner;
 import io.github.niwantha33.zew.core.GitHubSvdProvisioner;
@@ -82,6 +83,8 @@ public final class SocRegistersView extends ViewPart {
     private Tree tree;
     private Text registerDetails;
     private Table watchTable;
+    private Table fieldTable;
+    private Label watchHeading;
     private Spinner watchInterval;
     private Button autoReadOnHalt;
     private int watchIntervalMs = 1500;
@@ -130,70 +133,83 @@ public final class SocRegistersView extends ViewPart {
     @Override public void createPartControl(Composite parent) {
         ui = parent.getDisplay();
         parent.setLayout(new GridLayout(1, false));
+        // Primary actions fit narrow Debug perspectives. Rare actions live in
+        // the native More menu rather than occupying the whole top of the view.
         var bar = new Composite(parent, SWT.NONE);
         bar.setLayout(new GridLayout(5, false));
         bar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        button(bar, "Find Device Definitions", this::chooseProjectForDiscovery);
-        button(bar, "Get Device Registers…", this::downloadVendorSvd);
-        button(bar, "Import Register Definitions…", () -> {
+        button(bar, "Choose project", this::chooseProjectForDiscovery);
+        button(bar, "Get SVD", this::downloadVendorSvd);
+        button(bar, "Refresh selected", this::refresh);
+        button(bar, "Read available", this::refreshAll);
+        var more = new Button(bar, SWT.PUSH);
+        more.setText("More…");
+        var advanced = new Menu(more);
+        menuAction(advanced, "Import SVD file…", () -> {
             var dialog = new FileDialog(parent.getShell(), SWT.OPEN);
             dialog.setFilterExtensions(new String[] { "*.svd;*.xml", "*.*" });
             String path = dialog.open();
             if (path != null) load(path);
         });
-        button(bar, "Refresh Selected + Watches", this::refresh);
-        button(bar, "Read All SVD-Safe Registers", this::refreshAll);
+        menuAction(advanced, "Pin snapshot as baseline", this::pinBaseline);
+        menuAction(advanced, "Export register history as CSV…", this::exportHistory);
+        more.addListener(SWT.Selection, e -> {
+            advanced.setLocation(more.toDisplay(0, more.getSize().y));
+            advanced.setVisible(true);
+        });
+
         var options = new Composite(parent, SWT.NONE);
-        options.setLayout(new GridLayout(9, false));
+        options.setLayout(new GridLayout(7, false));
         options.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        button(options, "Pin baseline", this::pinBaseline);
-        button(options, "Export history CSV…", this::exportHistory);
+        search = new Text(options, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
+        search.setMessage("Search registers or pins…");
+        search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        search.addModifyListener(e -> render());
+        button(options, "Watch selected", () -> toggleWatch(selected()));
         watchButton = new Button(options, SWT.PUSH);
-        watchButton.setText("Start Live Watch (opt-in)");
+        watchButton.setText("Start watch");
         watchButton.addListener(SWT.Selection, e -> toggleLiveWatch());
-        button(options, "Watch / unwatch", () -> toggleWatch(selected()));
         var periodLabel = new Label(options, SWT.NONE);
-        periodLabel.setText("Watch (ms):");
+        periodLabel.setText("Every (ms)");
         watchInterval = new Spinner(options, SWT.BORDER);
         watchInterval.setMinimum(250);
         watchInterval.setMaximum(60000);
         watchInterval.setIncrement(250);
         watchInterval.setPageIncrement(1000);
         watchInterval.setSelection(watchIntervalMs);
-        watchInterval.setToolTipText("Polling interval while the native GDB target is halted (250–60000 ms).");
+        watchInterval.setToolTipText("Poll watched registers only while the target is halted.");
         watchInterval.addModifyListener(e -> watchIntervalMs = watchInterval.getSelection());
-        search = new Text(options, SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
-        search.setMessage("Find peripheral, register or field");
-        search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        search.addModifyListener(e -> render());
         autoReadOnHalt = new Button(options, SWT.CHECK);
-        autoReadOnHalt.setText("Snapshot on halt");
-        autoReadOnHalt.setToolTipText("Automatically read the SVD-declared safe registers after a verified GDB suspension. Running targets are never read.");
+        autoReadOnHalt.setText("Read on halt");
+        autoReadOnHalt.setToolTipText("Read SVD-safe registers after the debugger pauses. Disable for sensitive peripherals.");
         autoReadOnHalt.setSelection(autoSnapshotEnabled);
         autoReadOnHalt.addListener(SWT.Selection, e -> {
             autoSnapshotEnabled = autoReadOnHalt.getSelection();
             if (autoSnapshotEnabled) scheduleAutoSnapshot();
         });
         pinViewSelection = new Button(options, SWT.CHECK);
-        pinViewSelection.setText("Pin Selection");
-        pinViewSelection.setToolTipText("Do not follow other views' project/build selections.");
+        pinViewSelection.setText("Pin project");
+        pinViewSelection.setToolTipText("Keep the current project when another view changes its selection.");
         pinViewSelection.addListener(SWT.Selection, e -> {
             if (!pinViewSelection.getSelection())
                 ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
                         .replay(this::followContext);
         });
         linkedSelection = new Label(parent, SWT.WRAP);
-        linkedSelection.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        linkedSelection.setText("No linked Devicetree selection. No hardware is read on selection.");
+        var linkedData = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        linkedData.exclude = true;
+        linkedSelection.setLayoutData(linkedData);
+        linkedSelection.setVisible(false);
+        linkedSelection.setText("No linked Devicetree selection.");
         status = new Label(parent, SWT.WRAP);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         status.setText("Automatically detecting exact vendor SVD from the selected Zephyr build. No generic MCU model is substituted.");
         contextInfo = new Label(parent, SWT.WRAP);
         contextInfo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        contextInfo.setText("No selected debug frame. CPU registers, Variables and Expressions are separate native Debug views.");
+        contextInfo.setText("Project —  ›  Chip —  ›  Register map —  ›  Debugger —  ›  Values —");
         summary = new Label(parent, SWT.WRAP);
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        summary.setText("No SVD model loaded yet. Read snapshots require the existing halted native GDB/OpenOCD session.");
+        summary.setText("Choose an MCU project. Register definitions are loaded automatically when available.");
         historyChart = new Canvas(parent, SWT.BORDER | SWT.DOUBLE_BUFFERED);
         var chartData = new GridData(SWT.FILL, SWT.TOP, true, false);
         chartData.heightHint = 105;
@@ -206,24 +222,43 @@ public final class SocRegistersView extends ViewPart {
         var split = new org.eclipse.swt.custom.SashForm(parent, SWT.HORIZONTAL);
         split.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         tree = new Tree(split, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
-        tree.setHeaderVisible(true); tree.setLinesVisible(true);
+        tree.setHeaderVisible(true); tree.setLinesVisible(false);
         var inspector = new Composite(split, SWT.NONE);
         inspector.setLayout(new GridLayout(1, false));
         registerDetails = new Text(inspector, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY
-                | SWT.V_SCROLL | SWT.H_SCROLL);
-        registerDetails.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+                | SWT.V_SCROLL | SWT.H_SCROLL | SWT.WRAP);
+        var detailLayout = new GridData(SWT.FILL, SWT.TOP, true, false);
+        detailLayout.heightHint = 165;
+        registerDetails.setLayoutData(detailLayout);
         registerDetails.setFont(org.eclipse.jface.resource.JFaceResources.getTextFont());
-        registerDetails.setText("REGISTER DETAILS\n\nSelect a peripheral or register.\n"
-                + "Addresses and bit fields come from the exact SVD.\n"
-                + "Values are snapshots from the halted native GDB target.");
-        var watchHeading = new Label(inspector, SWT.NONE);
-        watchHeading.setText("Watched registers — independent halted-session snapshots");
+        registerDetails.setText("Select a register to see its value, bits and purpose.\n"
+                + "No value is assumed until the debugger successfully reads it.");
+        var fieldHeading = new Label(inspector, SWT.NONE);
+        fieldHeading.setText("Individual bits and fields");
+        fieldTable = new Table(inspector, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
+        fieldTable.setHeaderVisible(true);
+        fieldTable.setLinesVisible(false);
+        fieldTable.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        String[] fieldHeads = { "Bit / field", "Value", "What it does" };
+        int[] fieldWidths = { 125, 85, 205 };
+        for (int i = 0; i < fieldHeads.length; i++) {
+            var column = new TableColumn(fieldTable, SWT.LEFT);
+            column.setText(fieldHeads[i]); column.setWidth(fieldWidths[i]);
+        }
+        watchHeading = new Label(inspector, SWT.NONE);
+        watchHeading.setText("My watches (halted only)");
+        var watchLabelData = new GridData(SWT.FILL, SWT.BOTTOM, true, false);
+        watchLabelData.exclude = true;
+        watchHeading.setLayoutData(watchLabelData);
+        watchHeading.setVisible(false);
         watchTable = new Table(inspector, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         watchTable.setHeaderVisible(true);
         watchTable.setLinesVisible(true);
         var watchData = new GridData(SWT.FILL, SWT.BOTTOM, true, false);
-        watchData.heightHint = 145;
+        watchData.heightHint = 120;
+        watchData.exclude = true;
         watchTable.setLayoutData(watchData);
+        watchTable.setVisible(false);
         for (String label : new String[] { "Register", "Value", "Status" }) {
             var column = new TableColumn(watchTable, SWT.LEFT);
             column.setText(label);
@@ -231,9 +266,9 @@ public final class SocRegistersView extends ViewPart {
         watchTable.getColumn(0).setWidth(170);
         watchTable.getColumn(1).setWidth(110);
         watchTable.getColumn(2).setWidth(160);
-        split.setWeights(new int[] { 62, 38 });
-        String[] headings = { "Peripheral / register / field", "Address / bits", "Value (hex)", "Reset (hex)", "Access / status" };
-        int[] widths = { 310, 155, 140, 140, 260 };
+        split.setWeights(new int[] { 54, 46 });
+        String[] headings = { "Peripheral / register", "Value", "Status" };
+        int[] widths = { 225, 105, 135 };
         for (int i = 0; i < headings.length; i++) {
             var column = new TreeColumn(tree, SWT.LEFT); column.setText(headings[i]); column.setWidth(widths[i]);
         }
@@ -264,6 +299,7 @@ public final class SocRegistersView extends ViewPart {
         });
         installRegisterMenu();
         installWatchMenu();
+        installFieldMenu();
         tree.addListener(SWT.MouseHover, e -> {
             var item = tree.getItem(new org.eclipse.swt.graphics.Point(e.x, e.y));
             tree.setToolTipText(item == null ? null : (String) item.getData("description"));
@@ -828,6 +864,12 @@ public final class SocRegistersView extends ViewPart {
             }); }
             catch (RejectedExecutionException ended) { listenedSession = null; }
         }
+    }
+
+    private static void menuAction(Menu menu, String label, Runnable action) {
+        var item = new MenuItem(menu, SWT.PUSH);
+        item.setText(label);
+        item.addListener(SWT.Selection, e -> action.run());
     }
 
     private void button(Composite parent, String label, Runnable action) {
