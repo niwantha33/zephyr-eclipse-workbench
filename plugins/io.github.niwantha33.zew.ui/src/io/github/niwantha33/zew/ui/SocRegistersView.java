@@ -313,6 +313,7 @@ public final class SocRegistersView extends ViewPart {
                     // Probe focused exact-chip/vendor-pack directories first;
                     // avoid double-scanning all West modules before local packs.
                     roots.add(project.getLocation().toFile().toPath().resolve(".zew/svd"));
+                    roots.add(project.getLocation().toFile().toPath().resolve(".zew/vendor-svd"));
                     Path root = optionalRoot(settings.getProperty("zew.setupRoot"));
                     if (root != null) {
                         roots.add(root.resolve("vendor-svd"));
@@ -486,10 +487,28 @@ public final class SocRegistersView extends ViewPart {
         final Path vendorDir;
         try {
             var settings = ProjectContext.settings(target);
-            board = settings.getProperty("board", "");
-            vendorDir = Path.of(settings.getProperty("zew.setupRoot")).resolve("vendor-svd");
+            String selected = settings.getProperty("board", "");
+            Path build = ProjectContext.buildDirectory(target, settings);
+            Map<String, String> config = Files.isRegularFile(build.resolve("zephyr/.config"))
+                    ? BuildArtifacts.configuration(build) : Map.of();
+            var identity = SvdTargetEvidence.select(selected, config);
+            if (!identity.usable()) {
+                status.setText("Cannot download SVD without verified SoC: "
+                        + identity.explanation() + " Select the exact board or build the project first.");
+                return;
+            }
+            board = identity.target();
+            Path setupRoot = optionalRoot(settings.getProperty("zew.setupRoot"));
+            Path projectRoot = target.getLocation() == null ? null
+                    : target.getLocation().toFile().toPath();
+            if (setupRoot != null) vendorDir = setupRoot.resolve("vendor-svd");
+            else if (projectRoot != null) vendorDir = projectRoot.resolve(".zew/vendor-svd");
+            else {
+                status.setText("Cannot locate a writable vendor SVD directory for this project.");
+                return;
+            }
         } catch (Exception error) {
-            status.setText("Cannot determine exact board or vendor-pack directory: " + error.getMessage());
+            status.setText("Cannot determine exact SoC or vendor-pack directory: " + error.getMessage());
             return;
         }
         if (GitHubSvdProvisioner.supports(board)) {
@@ -795,7 +814,11 @@ public final class SocRegistersView extends ViewPart {
         return item.getData() instanceof Register register ? register : null;
     }
     private void render() {
-        if (device == null || tree == null || tree.isDisposed()) return;
+        if (tree == null || tree.isDisposed()) return;
+        if (device == null) {
+            tree.removeAll();
+            return;
+        }
         Register chosen = selected();
         var expandedPeripherals = new HashSet<String>();
         var expandedRegisters = new HashSet<String>();
