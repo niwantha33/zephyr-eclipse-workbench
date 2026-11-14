@@ -96,11 +96,10 @@ public final class ZephyrBeginnerView extends ViewPart {
 
         selectionListener = (part, selection) -> refresh();
         getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(selectionListener);
+        var display = parent.getDisplay();
         resourceListener = event -> {
-            if (event.getType() != IResourceChangeEvent.POST_CHANGE) return;
-            if (scroll.isDisposed()) return;
-            var display = scroll.getDisplay();
-            if (!display.isDisposed()) display.asyncExec(() -> {
+            if (event.getType() != IResourceChangeEvent.POST_CHANGE || display.isDisposed()) return;
+            display.asyncExec(() -> {
                 if (!scroll.isDisposed()) refresh();
             });
         };
