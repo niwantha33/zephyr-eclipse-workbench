@@ -20,9 +20,12 @@ public final class RegisterPresentation {
     public static String explanation(SvdDevice.Register reg, String error) {
         if (!reg.readable()) {
             if ("write-only".equals(reg.access()))
-                return "This register controls an output. The chip's register description says "
-                        + "it cannot be read; a blank value does not mean zero. "
-                        + "Look for a readable input or status register in the same peripheral.";
+                return (reg.name().toUpperCase(java.util.Locale.ROOT).contains("DOUT")
+                        ? "This register controls output pins. "
+                        : "This register accepts write commands. ")
+                        + "The chip's register description says it cannot be read; "
+                        + "a blank value does not mean zero. "
+                        + "For pin state, look for a readable input/status register in the same peripheral.";
             if (!reg.readAction().isBlank() || reg.readBlockReason().contains("readAction"))
                 return "Reading this register can change hardware state (such as clearing a flag). "
                         + "Workbench will not read it automatically.";
