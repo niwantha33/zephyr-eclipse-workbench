@@ -84,6 +84,7 @@ public final class SocRegistersView extends ViewPart {
     private Text registerDetails;
     private Table watchTable;
     private Table fieldTable;
+    private Register inspectedRegister;
     private Label watchHeading;
     private Spinner watchInterval;
     private Button autoReadOnHalt;
@@ -1083,6 +1084,34 @@ public final class SocRegistersView extends ViewPart {
         });
     }
 
+    private void installFieldMenu() {
+        var menu = new Menu(fieldTable);
+        fieldTable.setMenu(menu);
+        var toggle = new MenuItem(menu, SWT.PUSH);
+        toggle.setText("Toggle this 1-bit field…");
+        toggle.addListener(SWT.Selection, e -> {
+            if (fieldTable.getSelectionCount() == 1
+                    && fieldTable.getSelection()[0].getData() instanceof SvdDevice.Field field)
+                toggleFieldBit(inspectedRegister, field);
+        });
+        menu.addListener(SWT.Show, e -> {
+            boolean allowed = fieldTable.getSelectionCount() == 1
+                    && fieldTable.getSelection()[0].getData() instanceof SvdDevice.Field field
+                    && field.width() == 1 && inspectedRegister != null
+                    && inspectedRegister.writable()
+                    && values.containsKey(inspectedRegister.key());
+            toggle.setEnabled(allowed);
+        });
+        fieldTable.addListener(SWT.MenuDetect, e -> {
+            var item = fieldTable.getItem(fieldTable.toControl(e.x, e.y));
+            if (item != null) fieldTable.setSelection(item);
+        });
+        fieldTable.addListener(SWT.MouseHover, e -> {
+            var item = fieldTable.getItem(new org.eclipse.swt.graphics.Point(e.x, e.y));
+            fieldTable.setToolTipText(item == null ? null : (String) item.getData("description"));
+        });
+    }
+
     private Register watchedSelection() {
         if (watchTable == null || watchTable.isDisposed() || watchTable.getSelectionCount() != 1)
             return null;
@@ -1092,6 +1121,16 @@ public final class SocRegistersView extends ViewPart {
 
     private void renderWatches() {
         if (watchTable == null || watchTable.isDisposed()) return;
+        boolean hasWatch = device != null && !watches.isEmpty();
+        if (watchTable.getVisible() != hasWatch) {
+            var tableData = (GridData) watchTable.getLayoutData();
+            tableData.exclude = !hasWatch;
+            watchTable.setVisible(hasWatch);
+            var titleData = (GridData) watchHeading.getLayoutData();
+            titleData.exclude = !hasWatch;
+            watchHeading.setVisible(hasWatch);
+            watchTable.getParent().layout(true, true);
+        }
         String key = watchedSelection() == null ? null : watchedSelection().key();
         watchTable.setRedraw(false);
         try {
@@ -1104,12 +1143,10 @@ public final class SocRegistersView extends ViewPart {
                 var value = values.get(reg.key());
                 row.setText(new String[] { reg.key(),
                         value == null ? "—" : hex(value, reg.size()),
-                        errors.getOrDefault(reg.key(), value == null ? "Not read" : "Halted snapshot") });
+                        RegisterPresentation.state(reg, value, errors.get(reg.key())) });
                 if (reg.key().equals(key)) watchTable.setSelection(row);
             }
-        } finally {
-            watchTable.setRedraw(true);
-        }
+        } finally { watchTable.setRedraw(true); }
     }
 
     private Register selected() {
@@ -1121,6 +1158,8 @@ public final class SocRegistersView extends ViewPart {
         if (tree == null || tree.isDisposed()) return;
         if (device == null) {
             tree.removeAll();
+            inspectedRegister = null;
+            if (fieldTable != null && !fieldTable.isDisposed()) fieldTable.removeAll();
             renderWatches();
             return;
         }
@@ -1169,14 +1208,10 @@ public final class SocRegistersView extends ViewPart {
             }
             if (chosen != null) showRegisterDetails(chosen);
             int count = matches.values().stream().mapToInt(java.util.List::size).sum();
-            summary.setText("All " + matches.size() + " peripherals; " + count
-                    + " matching registers available. Expand a peripheral to see its registers. "
-                    + watches.size() + " watches; " + history.samples().size()
-                    + " captured register snapshots (max " + RegisterHistory.LIMIT + ")."
-                    + (history.baseline() == null ? " No baseline pinned."
-                            : " Baseline: " + history.baseline().timestamp() + ".")
-                    + (liveWatch ? " Halted-only sampled Live Watch; NOT continuous hardware tracing."
-                            : " No automatic polling. Not read = no successful snapshot yet; Blocked = unsafe SVD access."));
+            summary.setText(matches.size() + " peripherals  •  " + count + " matching registers  •  "
+                    + values.size() + " values read  •  " + watches.size() + " watches"
+                    + (liveWatch ? "  •  Polling while paused" : "")
+                    + (history.baseline() != null ? "  •  Baseline pinned" : ""));
         } finally { tree.setRedraw(true); }
         renderWatches();
     }
@@ -1192,46 +1227,59 @@ public final class SocRegistersView extends ViewPart {
 
     private void showRegisterDetails(Register r) {
         if (registerDetails == null || registerDetails.isDisposed()) return;
+        inspectedRegister = r;
         BigInteger value = values.get(r.key());
-        var details = new StringBuilder("REGISTER DETAILS\n\n")
-                .append(r.key()).append("\n")
-                .append("Address    0x").append(r.address().toString(16)).append("\n")
-                .append("Width      ").append(r.size()).append(" bits\n")
-                .append("Access     ").append(r.access()).append("\n")
-                .append("Reset      ").append(r.reset() == null ? "Unknown" : hex(r.reset(), r.size())).append("\n")
-                .append("Snapshot   ").append(value == null ? "Not read" : hex(value, r.size())).append("\n")
-                .append("Read       ").append(r.readable() ? "Halted only" : r.readBlockReason()).append("\n")
-                .append("Write      ").append(r.writable()
-                        ? "Right-click → Write register value (explicit confirmation)"
-                        : "Blocked: " + r.writeBlockReason())
-                .append("\n\nBITWISE (MSB → LSB)\n");
+        String state = RegisterPresentation.state(r, value, errors.get(r.key()));
+        String explanation = RegisterPresentation.explanation(r, errors.get(r.key()));
+        var details = new StringBuilder(r.peripheral()).append("  /  ").append(r.name()).append("\n\n")
+                .append("Live value     ")
+                .append(value == null ? "—  (" + state + ")" : hex(value, r.size()))
+                .append("\n")
+                .append("Address        0x").append(r.address().toString(16)).append("\n")
+                .append("Width          ").append(r.size()).append(" bits\n")
+                .append("Reset value    ").append(r.reset() == null
+                        ? "Not provided by vendor" : hex(r.reset(), r.size())).append("\n");
         if (value != null) {
-            details.append("value  ").append(bits(value, r.size())).append("\n");
-            details.append("index  ");
-            for (int bit = r.size() - 1; bit >= 0; bit--) {
-                details.append(bit % 10);
-                if (bit > 0 && bit % 4 == 0) details.append(' ');
-            }
-            details.append("\n");
-        } else details.append("No halted snapshot; bits are not assumed to be zero.\n");
-        details.append("\nFIELDS\n");
-        if (r.fields().isEmpty()) details.append("(No field definitions in SVD)\n");
-        for (var field : r.fields()) {
-            BigInteger mask = BigInteger.ONE.shiftLeft(field.width()).subtract(BigInteger.ONE);
-            details.append("\n").append(field.name()).append(" [")
-                    .append(field.offset() + field.width() - 1).append(":")
-                    .append(field.offset()).append("]  ");
-            if (value != null) {
-                BigInteger fieldValue = value.shiftRight(field.offset()).and(mask);
-                details.append(hex(fieldValue, field.width())).append("  ")
-                        .append(bits(fieldValue, field.width()));
-            } else details.append("Not read");
-            details.append("  ").append(field.access()).append("\n");
-            if (!field.description().isBlank())
-                details.append(field.description().strip()).append("\n");
+            details.append("Binary         ").append(bits(value, r.size())).append("\n");
         }
-        if (!r.description().isBlank()) details.append("\n").append(r.description().strip());
+        if (r.writable()) details.append("Edit           Right-click register to write\n");
+        if (!r.readable() || value == null)
+            details.append("\n").append(explanation).append("\n");
+        if (!r.readable() && device != null) {
+            var alternative = device.registers().stream()
+                    .filter(candidate -> candidate.peripheral().equals(r.peripheral())
+                            && candidate.readable()
+                            && !candidate.key().equals(r.key())
+                            && (candidate.name().toUpperCase(Locale.ROOT).contains("DIN")
+                                || candidate.name().toUpperCase(Locale.ROOT).contains("INPUT")))
+                    .findFirst();
+            alternative.ifPresent(candidate -> details.append("\nPossible input register: ")
+                    .append(candidate.name()).append(" (check its description)."));
+        }
         registerDetails.setText(details.toString());
+
+        if (fieldTable == null || fieldTable.isDisposed()) return;
+        fieldTable.setRedraw(false);
+        try {
+            fieldTable.removeAll();
+            for (var field : r.fields()) {
+                var row = new TableItem(fieldTable, SWT.NONE);
+                row.setData(field);
+                row.setData("description", field.description());
+                var mask = BigInteger.ONE.shiftLeft(field.width()).subtract(BigInteger.ONE);
+                var fieldValue = value == null ? null
+                        : value.shiftRight(field.offset()).and(mask);
+                String label = field.name() + " [" + (field.offset() + field.width() - 1)
+                        + ":" + field.offset() + "]";
+                String formatted = fieldValue == null ? "—" :
+                        field.width() == 1 ? (fieldValue.signum() == 0 ? "0 / OFF" : "1 / ON")
+                                : hex(fieldValue, field.width());
+                String meaning = field.description().isBlank()
+                        ? field.access() : field.description().replace('\n', ' ').trim();
+                if (meaning.length() > 90) meaning = meaning.substring(0, 87) + "…";
+                row.setText(new String[] { label, formatted, meaning });
+            }
+        } finally { fieldTable.setRedraw(true); }
     }
 
     private void populatePeripheral(TreeItem peripheral) {
@@ -1255,10 +1303,10 @@ public final class SocRegistersView extends ViewPart {
                 access += " — differs from reset";
             if (changedKeys.contains(r.key()))
                 access += " — CHANGED since pinned snapshot";
+            String state = RegisterPresentation.state(r, value, errors.get(r.key()));
+            if (changedKeys.contains(r.key())) state += "  • changed";
             item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(),
-                    "0x" + r.address().toString(16),
-                    value == null ? (r.readable() ? "Not read" : "Blocked") : hex(value, r.size()),
-                    r.reset() == null ? "—" : hex(r.reset(), r.size()), access });
+                    value == null ? "—" : hex(value, r.size()), state });
             if (!r.fields().isEmpty()) new TreeItem(item, SWT.NONE).setText("Expand for fields");
         }
         peripheral.setData("populated", Boolean.TRUE);
@@ -1274,12 +1322,10 @@ public final class SocRegistersView extends ViewPart {
             field.setData("svdField", f);
             field.setData("description", f.description());
             var mask = BigInteger.ONE.shiftLeft(f.width()).subtract(BigInteger.ONE);
-            field.setText(new String[] { f.name(), "[" + (f.offset() + f.width() - 1)
+            field.setText(new String[] { f.name() + " [" + (f.offset() + f.width() - 1)
                     + ":" + f.offset() + "]",
-                    value == null ? (r.readable() ? "Not read" : "Blocked")
-                            : hex(value.shiftRight(f.offset()).and(mask), f.width()),
-                    r.reset() == null ? "—" : hex(r.reset().shiftRight(f.offset()).and(mask), f.width()),
-                    f.access() + (f.readAction().isEmpty() ? "" : " / readAction: " + f.readAction()) });
+                    value == null ? "—" : hex(value.shiftRight(f.offset()).and(mask), f.width()),
+                    RegisterPresentation.state(r, value, errors.get(r.key())) });
         }
         item.setData("populated", Boolean.TRUE);
     }
