@@ -95,6 +95,7 @@ public final class SocRegistersView extends ViewPart {
     private Label status;
     private Label summary;
     private Label contextInfo;
+    private Canvas readPathCanvas;
     private org.eclipse.swt.widgets.Display ui;
     private volatile DsfSession listenedSession;
     private Text search;
@@ -214,8 +215,19 @@ public final class SocRegistersView extends ViewPart {
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         status.setText("Automatically detecting exact vendor SVD from the selected Zephyr build. No generic MCU model is substituted.");
         contextInfo = new Label(parent, SWT.WRAP);
-        contextInfo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        var contextLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        contextLayout.exclude = true;
+        contextInfo.setLayoutData(contextLayout);
+        contextInfo.setVisible(false);
         contextInfo.setText("Project —  ›  Chip —  ›  Register map —  ›  Debugger —  ›  Values —");
+        readPathCanvas = new Canvas(parent, SWT.BORDER | SWT.DOUBLE_BUFFERED);
+        var routeLayout = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        routeLayout.heightHint = 56;
+        readPathCanvas.setLayoutData(routeLayout);
+        readPathCanvas.setToolTipText("Zephyr project → exact MCU → register map → "
+                + "GDB/debug server → successful reads. Click for technical diagnostics.");
+        readPathCanvas.addPaintListener(e -> paintReadPath(e.gc));
+        readPathCanvas.addListener(SWT.MouseDown, e -> showConnectionDiagnostics());
         summary = new Label(parent, SWT.WRAP);
         summary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         summary.setText("Choose an MCU project. Register definitions are loaded automatically when available.");
@@ -298,7 +310,7 @@ public final class SocRegistersView extends ViewPart {
             showRegisterDetails(r);
             if (!r.readable()) {
                 status.setText(RegisterPresentation.state(r, null, null) + " — "
-                        + r.key() + ". " + RegisterPresentation.explanation(r, null));
+                        + r.name() + ". The value cannot be read. See the right panel.");
             } else {
                 status.setText("Selected " + r.name() + ". Refresh selected to read it while paused.");
             }
@@ -820,11 +832,60 @@ public final class SocRegistersView extends ViewPart {
                 + "   ›   Read  " + values.size();
         if (!pipeline.equals(contextInfo.getText())) {
             contextInfo.setText(pipeline);
-            contextInfo.getParent().layout(true, true);
+            if (readPathCanvas != null && !readPathCanvas.isDisposed())
+                readPathCanvas.redraw();
         }
         contextInfo.setToolTipText("Data route: Zephyr project/build → exact device SVD "
                 + "→ existing CDT DSF-GDB session → debug server (OpenOCD if configured) "
                 + "→ halted memory-mapped register. No second OpenOCD connection.");
+    }
+
+    private static String shorten(String value, int limit) {
+        if (value.length() <= limit) return value;
+        return value.substring(0, Math.max(1, limit - 1)) + "…";
+    }
+
+    private void paintReadPath(org.eclipse.swt.graphics.GC gc) {
+        if (readPathCanvas == null || readPathCanvas.isDisposed()) return;
+        var box = readPathCanvas.getClientArea();
+        int gap = 13, margin = 7, count = 5;
+        int width = Math.max(35, (box.width - margin * 2 - gap * (count - 1)) / count);
+        int x = margin, y = 5, height = Math.min(44, Math.max(28, box.height - 10));
+        String part = selectedSvdTarget == null ? verifiedSvdPart(selectedBoard, null)
+                : SvdAutoDiscovery.partFromBoard(selectedSvdTarget);
+        String[] titles = { "PROJECT", "CHIP", "SVD MAP", "GDB", "VALUES" };
+        String[] states = {
+                selectedProjectName == null ? "Select" : selectedProjectName,
+                part.isBlank() ? "Unknown" : part.toUpperCase(Locale.ROOT),
+                device == null ? "Missing" : "Loaded",
+                listenedSession == null ? "No session" : "Attached",
+                values.isEmpty() ? "No reads yet" : values.size() + " read"
+        };
+        boolean[] okay = { selectedProjectName != null, !part.isBlank(),
+                device != null, listenedSession != null, !values.isEmpty() };
+        var foreground = gc.getForeground();
+        var background = gc.getBackground();
+        int labelMax = Math.max(4, (width - 10) / 7);
+        for (int i = 0; i < count; i++) {
+            gc.setBackground(readPathCanvas.getDisplay().getSystemColor(SWT.COLOR_WIDGET_BACKGROUND));
+            gc.fillRoundRectangle(x, y, width, height, 7, 7);
+            gc.setForeground(readPathCanvas.getDisplay().getSystemColor(
+                    okay[i] ? SWT.COLOR_DARK_GREEN : SWT.COLOR_WIDGET_DARK_SHADOW));
+            gc.drawRoundRectangle(x, y, width, height, 7, 7);
+            gc.drawText(shorten(titles[i], labelMax), x + 6, y + 4, true);
+            gc.setForeground(readPathCanvas.getDisplay().getSystemColor(SWT.COLOR_WIDGET_FOREGROUND));
+            gc.drawText(shorten(states[i], labelMax), x + 6, y + 23, true);
+            if (i < count - 1) {
+                gc.drawLine(x + width + 2, y + height / 2, x + width + gap - 3, y + height / 2);
+                gc.drawLine(x + width + gap - 5, y + height / 2 - 3,
+                        x + width + gap - 2, y + height / 2);
+                gc.drawLine(x + width + gap - 5, y + height / 2 + 3,
+                        x + width + gap - 2, y + height / 2);
+            }
+            x += width + gap;
+        }
+        gc.setForeground(foreground);
+        gc.setBackground(background);
     }
 
     /** Snapshot only after a real stop; no second probe connection or target halt. */
