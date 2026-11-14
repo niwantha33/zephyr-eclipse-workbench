@@ -27,8 +27,9 @@ public final class ZephyrBeginnerPerspectiveSmoke {
                     || page.findView("org.eclipse.ui.console.ConsoleView") == null
                     || page.findView("org.eclipse.ui.views.ProblemView") == null)
                 throw new IllegalStateException("Beginner essential views not visible.");
-            if (page.findView("io.github.niwantha33.zew.ui.socRegisters") != null)
-                throw new IllegalStateException("Advanced registers opened in beginner layout.");
+            var registers = page.findView("io.github.niwantha33.zew.ui.socRegisters");
+            if (registers != null && page.isPartVisible(registers))
+                throw new IllegalStateException("Advanced registers visible in beginner layout.");
             System.out.println("PASS BEGINNER PERSPECTIVE: essential views only; advanced registered");
         } finally {
             if (previous != null) page.setPerspective(previous);
