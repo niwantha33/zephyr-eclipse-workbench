@@ -158,6 +158,8 @@ public final class SocRegistersView extends ViewPart {
             String path = dialog.open();
             if (path != null) load(path);
         });
+        menuAction(advanced, "Why no value? / Connection diagnostics…",
+                this::showConnectionDiagnostics);
         menuAction(advanced, "Pin snapshot as baseline", this::pinBaseline);
         menuAction(advanced, "Export register history as CSV…", this::exportHistory);
         more.addListener(SWT.Selection, e -> {
@@ -892,6 +894,57 @@ public final class SocRegistersView extends ViewPart {
         var item = new MenuItem(menu, SWT.PUSH);
         item.setText(label);
         item.addListener(SWT.Selection, e -> action.run());
+    }
+
+    private void showConnectionDiagnostics() {
+        String part = selectedSvdTarget == null ? verifiedSvdPart(selectedBoard, null)
+                : SvdAutoDiscovery.partFromBoard(selectedSvdTarget);
+        var chosen = selected() == null ? watchedSelection() : selected();
+        var report = new StringBuilder("REGISTER READ PATH (LOCAL DIAGNOSTICS)\n\n")
+                .append("1. Zephyr project: ").append(selectedProjectName == null
+                        ? "NOT SELECTED" : selectedProjectName).append("\n")
+                .append("2. Exact chip: ").append(part.isBlank() ? "NOT VERIFIED" : part).append("\n")
+                .append("3. Vendor register map: ").append(device == null
+                        ? "NOT LOADED" : device.name()).append("\n")
+                .append("   File: ").append(svdPath == null ? "none" : svdPath).append("\n")
+                .append("   SHA-256: ").append(svdIdentity == null
+                        ? "unavailable" : svdIdentity).append("\n")
+                .append("4. Native CDT GDB: ").append(listenedSession == null
+                        ? "NOT ATTACHED" : "session " + listenedSession.getId()).append("\n")
+                .append("5. Debug server: existing GDB remote transport (OpenOCD when configured)\n")
+                .append("6. MMIO registers successfully observed: ").append(values.size()).append("\n")
+                .append("   Last batch: ").append(currentReadOk).append(" / ")
+                .append(currentReadTotal).append(" read, ")
+                .append(currentReadFailed).append(" failures\n")
+                .append("   Last snapshot: ").append(lastReadAt == null
+                        ? "none" : lastReadAt).append("\n");
+        if (chosen != null) {
+            var value = values.get(chosen.key());
+            report.append("\nSELECTED REGISTER\n")
+                    .append(chosen.key()).append(" @ 0x")
+                    .append(chosen.address().toString(16)).append("\n")
+                    .append("Read status: ").append(RegisterPresentation.state(
+                            chosen, value, errors.get(chosen.key()))).append("\n")
+                    .append(RegisterPresentation.explanation(chosen,
+                            errors.get(chosen.key()))).append("\n");
+        }
+        if (lastReadError != null)
+            report.append("\nMOST RECENT GDB ERROR\n").append(lastReadError).append("\n");
+        report.append("\nValues are GDB snapshots from a suspended target. "
+                + "The register map alone is not proof that the MCU was read. "
+                + "No additional OpenOCD connection is created.");
+        var dialog = new org.eclipse.jface.dialogs.MessageDialog(getSite().getShell(),
+                "Register Explorer — Read Path", null, report.toString(),
+                org.eclipse.jface.dialogs.MessageDialog.INFORMATION,
+                new String[] { "Copy diagnostics", "Close" }, 1);
+        if (dialog.open() == 0) {
+            var clipboard = new org.eclipse.swt.dnd.Clipboard(ui);
+            try {
+                clipboard.setContents(new Object[] { report.toString() },
+                        new org.eclipse.swt.dnd.Transfer[] {
+                                org.eclipse.swt.dnd.TextTransfer.getInstance() });
+            } finally { clipboard.dispose(); }
+        }
     }
 
     private void button(Composite parent, String label, Runnable action) {
