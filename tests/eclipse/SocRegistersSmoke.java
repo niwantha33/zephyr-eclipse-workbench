@@ -58,9 +58,9 @@ public final class SocRegistersSmoke {
                     || !register.getItem(0).getText().equals("EN") || !register.getText(3).equals("—"))
                 throw new AssertionError("Lazy register address/field/reset rendering");
             tree.setSelection(register);
-            tree.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event() {{
-                item = register;
-            }});
+            var selectionEvent = new org.eclipse.swt.widgets.Event();
+            selectionEvent.item = register;
+            tree.notifyListeners(org.eclipse.swt.SWT.Selection, selectionEvent);
             if (!details.getText().contains("GPIO.CTRL")
                     || !details.getText().contains("Address: 0x40000004")
                     || !details.getText().contains("EN [0:0]"))
