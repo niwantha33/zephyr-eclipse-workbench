@@ -682,25 +682,42 @@ public final class SocRegistersView extends ViewPart {
                 && picker.getFirstResult() instanceof IProject selected) useLaunchProject(selected);
     }
 
-    /** No implicit peripheral read: selection/resume/step only invalidates snapshots. */
+    /** UI frame selection does not invalidate a snapshot from the SAME debug session. */
     private void contextChanged() {
-        quietUntil = System.currentTimeMillis() + 1500;
-        generation++; busy = false; values.clear(); errors.clear(); render();
         var target = debugTarget();
         var selectedSession = target == null ? null : target.session();
-        listenTo(selectedSession);
+        boolean changed = selectedSession != listenedSession;
+        if (changed) {
+            generation++; busy = false; values.clear(); errors.clear(); render();
+            quietUntil = System.currentTimeMillis() + 350;
+            listenTo(selectedSession);
+        }
         contextInfo.setText(selectedSession == null
                 ? debugResolution
-                : "Native debug session " + selectedSession.getId()
+                : "Native GDB/OpenOCD session " + selectedSession.getId()
                     + (target.context() == null
-                        ? "; no frame selected — Refresh resolves a suspended GDB thread without halting the CPU."
-                        : "; selected context: " + target.context().getClass().getSimpleName()
-                            + ". Refresh uses its suspended frame/thread."));
+                        ? "; Refresh resolves its unique halted thread."
+                        : "; selected " + target.context().getClass().getSimpleName()));
         contextInfo.getParent().layout(true, true);
-        status.setText(device == null ? discoveryExplanation
-                : "Exact SVD model " + device.name()
-                    + " loaded for " + (selectedProjectName == null ? "manual selection" : selectedProjectName)
-                    + "; select a safe register and Refresh while halted.");
+        if (changed) {
+            status.setText(device == null ? discoveryExplanation
+                    : "SVD " + device.name() + ": native debugger attached. "
+                        + "SVD-safe registers are sampled after suspension.");
+            if (selectedSession != null) scheduleAutoSnapshot();
+        }
+    }
+
+    /** Snapshot only after a real stop; no second probe connection or target halt. */
+    private void scheduleAutoSnapshot() {
+        if (!autoSnapshotEnabled || device == null || closed || ui == null || ui.isDisposed()) return;
+        final long expectedGeneration = generation;
+        final DsfSession expectedSession = listenedSession;
+        if (expectedSession == null) return;
+        ui.timerExec(400, () -> {
+            if (closed || tree.isDisposed() || !autoSnapshotEnabled || busy
+                    || generation != expectedGeneration || listenedSession != expectedSession) return;
+            refresh(ReadScope.ALL_SAFE);
+        });
     }
 
     private final RunListener runListener = new RunListener();
@@ -709,25 +726,27 @@ public final class SocRegistersView extends ViewPart {
     public final class RunListener {
         @DsfServiceEventHandler public void eventDispatched(IRunControl.IResumedDMEvent event) {
             quietUntil = Long.MAX_VALUE;
-            invalidateSnapshot(event.getDMContext(), "Target resumed. Previous register values were cleared; halt and Refresh for a new snapshot.");
+            invalidateSnapshot(event.getDMContext(), "Target resumed. Halt to capture a new SVD snapshot.", false);
         }
         @DsfServiceEventHandler public void eventDispatched(IRunControl.ISuspendedDMEvent event) {
-            quietUntil = System.currentTimeMillis() + 1500;
-            invalidateSnapshot(event.getDMContext(), "Target suspended. Select its stack frame, then Refresh selected registers and watches.");
+            quietUntil = System.currentTimeMillis() + 350;
+            invalidateSnapshot(event.getDMContext(), "Target suspended. Taking SVD-safe register snapshot…", true);
         }
         @DsfServiceEventHandler public void eventDispatched(IRunControl.IExitedDMEvent event) {
             quietUntil = Long.MAX_VALUE;
-            invalidateSnapshot(event.getDMContext(), "Debug execution exited. No live peripheral values are available.");
+            invalidateSnapshot(event.getDMContext(), "Debug execution exited. No live peripheral values are available.", false);
         }
     }
 
-    private void invalidateSnapshot(IDMContext context, String message) {
+    private void invalidateSnapshot(IDMContext context, String message, boolean suspended) {
         var session = listenedSession;
-        if (closed || session == null || !session.getId().equals(context.getSessionId()) || ui.isDisposed()) return;
+        if (closed || session == null || !session.getId().equals(context.getSessionId())
+                || ui.isDisposed()) return;
         ui.asyncExec(() -> {
             if (tree.isDisposed() || listenedSession != session) return;
             generation++; busy = false; values.clear(); errors.clear(); render();
             status.setText(message);
+            if (suspended) scheduleAutoSnapshot();
         });
     }
 
@@ -804,6 +823,8 @@ public final class SocRegistersView extends ViewPart {
                                 + ". Live readings require an explicit refresh while halted.";
                         status.setText(loaded.name() + " — " + loaded.registers().size()
                                 + " definitions loaded. Debug execution was not changed.");
+                        // The session might have been suspended before the SVD was loaded.
+                        scheduleAutoSnapshot();
                     });
                     return Status.OK_STATUS;
                 } catch (Exception ex) {
