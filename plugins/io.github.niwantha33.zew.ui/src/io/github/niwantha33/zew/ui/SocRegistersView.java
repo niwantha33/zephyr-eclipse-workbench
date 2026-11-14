@@ -417,6 +417,14 @@ public final class SocRegistersView extends ViewPart {
         catch (java.nio.file.InvalidPathException invalid) { return null; }
     }
 
+    /** Stable project-local fallback: never require a separately installed setupRoot. */
+    static Path vendorPackLocation(String configuredSetupRoot, Path projectRoot) {
+        Path setup = optionalRoot(configuredSetupRoot);
+        if (setup != null) return setup.resolve("vendor-svd");
+        if (projectRoot != null) return projectRoot.resolve(".zew/vendor-svd");
+        throw new IllegalArgumentException("No project storage directory is available");
+    }
+
     /** Resolve the actual SoC from generated build evidence for board-only targets. */
     static String verifiedSvdPart(String board, String target) {
         String part = SvdAutoDiscovery.partFromBoard(target);
@@ -515,15 +523,9 @@ public final class SocRegistersView extends ViewPart {
                 return;
             }
             board = identity.target();
-            Path setupRoot = optionalRoot(settings.getProperty("zew.setupRoot"));
             Path projectRoot = target.getLocation() == null ? null
                     : target.getLocation().toFile().toPath();
-            if (setupRoot != null) vendorDir = setupRoot.resolve("vendor-svd");
-            else if (projectRoot != null) vendorDir = projectRoot.resolve(".zew/vendor-svd");
-            else {
-                status.setText("Cannot locate a writable vendor SVD directory for this project.");
-                return;
-            }
+            vendorDir = vendorPackLocation(settings.getProperty("zew.setupRoot"), projectRoot);
         } catch (Exception error) {
             status.setText("Cannot determine exact SoC or vendor-pack directory: " + error.getMessage());
             return;
