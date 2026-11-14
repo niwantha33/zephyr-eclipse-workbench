@@ -109,6 +109,12 @@ public final class SocRegistersView extends ViewPart {
     private String discoveryExplanation = "No exact project / SVD selected.";
     private volatile long discoveryGeneration;
     private final Map<String, BigInteger> values = new HashMap<>();
+    private final Map<String, BigInteger> previousValues = new HashMap<>();
+    private int currentReadTotal;
+    private int currentReadOk;
+    private int currentReadFailed;
+    private String lastReadError;
+    private java.time.Instant lastReadAt;
     private final RegisterHistory history = new RegisterHistory();
     private boolean liveWatch; // always off at startup
     private int watchEpoch;
@@ -289,13 +295,10 @@ public final class SocRegistersView extends ViewPart {
             }
             showRegisterDetails(r);
             if (!r.readable()) {
-                status.setText("Read blocked for " + r.key() + ": " + r.readBlockReason()
-                        + ". The exact device SVD prohibits this read. Select a readable register; "
-                        + "no target memory was accessed.");
+                status.setText(RegisterPresentation.state(r, null, null) + " — "
+                        + r.key() + ". " + RegisterPresentation.explanation(r, null));
             } else {
-                status.setText("Selected " + r.key() + " at 0x" + r.address().toString(16)
-                        + ". Halt the target, then click Refresh Selected + Watches to read it. "
-                        + "Selection alone never reads hardware.");
+                status.setText("Selected " + r.name() + ". Refresh selected to read it while paused.");
             }
         });
         installRegisterMenu();
@@ -393,7 +396,8 @@ public final class SocRegistersView extends ViewPart {
         selectedSvdTarget = null;
         discoveryExplanation = "Finding vendor register descriptions for project " + selectedProjectName + "…";
         device = null; svdPath = null; svdIdentity = null;
-        values.clear(); errors.clear(); watches.clear(); history.clear();
+        values.clear(); previousValues.clear(); errors.clear(); watches.clear(); history.clear();
+                        lastReadAt = null;
         if (tree != null && !tree.isDisposed()) {
             tree.removeAll();
             summary.setText("Looking up exact SoC for " + selectedProjectName + "…");
@@ -426,6 +430,8 @@ public final class SocRegistersView extends ViewPart {
                         roots.add(root.resolve("svd"));
                     }
                     Path userHome = Path.of(System.getProperty("user.home"));
+                    // Older managed installs cached exact vendor SVDs here.
+                    roots.add(userHome.resolve(".zew/svd-cache"));
                     roots.add(userHome.resolve(".cmsis/packs"));
                     roots.add(userHome.resolve(".cmsis-packs"));
                     // Standard Arm CMSIS-Pack managers and vendor IDE installations.
@@ -786,23 +792,37 @@ public final class SocRegistersView extends ViewPart {
         var selectedSession = target == null ? null : target.session();
         boolean changed = selectedSession != listenedSession;
         if (changed) {
-            generation++; busy = false; values.clear(); errors.clear(); render();
+            generation++; busy = false; values.clear(); previousValues.clear();
+            errors.clear(); lastReadAt = null; render();
             quietUntil = System.currentTimeMillis() + 350;
             listenTo(selectedSession);
         }
-        contextInfo.setText(selectedSession == null
-                ? debugResolution
-                : "Native GDB/OpenOCD session " + selectedSession.getId()
-                    + (target.context() == null
-                        ? "; Refresh resolves its unique halted thread."
-                        : "; selected " + target.context().getClass().getSimpleName()));
-        contextInfo.getParent().layout(true, true);
+        updateConnectionPath();
         if (changed) {
             status.setText(device == null ? discoveryExplanation
                     : "SVD " + device.name() + ": native debugger attached. "
                         + "SVD-safe registers are sampled after suspension.");
             if (selectedSession != null) scheduleAutoSnapshot();
         }
+    }
+
+    /** Visible diagnostic chain: build → exact MCU → SVD → active GDB → real reads. */
+    private void updateConnectionPath() {
+        if (contextInfo == null || contextInfo.isDisposed()) return;
+        String part = selectedSvdTarget == null ? verifiedSvdPart(selectedBoard, null)
+                : SvdAutoDiscovery.partFromBoard(selectedSvdTarget);
+        String pipeline = "Project  " + (selectedProjectName == null ? "not selected" : selectedProjectName)
+                + "   ›   Chip  " + (part.isBlank() ? "unknown" : part.toUpperCase(Locale.ROOT))
+                + "   ›   SVD  " + (device == null ? "missing" : device.name())
+                + "   ›   GDB  " + (listenedSession == null ? "disconnected" : "connected")
+                + "   ›   Read  " + values.size();
+        if (!pipeline.equals(contextInfo.getText())) {
+            contextInfo.setText(pipeline);
+            contextInfo.getParent().layout(true, true);
+        }
+        contextInfo.setToolTipText("Data route: Zephyr project/build → exact device SVD "
+                + "→ existing CDT DSF-GDB session → debug server (OpenOCD if configured) "
+                + "→ halted memory-mapped register. No second OpenOCD connection.");
     }
 
     /** Snapshot only after a real stop; no second probe connection or target halt. */
@@ -842,7 +862,8 @@ public final class SocRegistersView extends ViewPart {
                 || ui.isDisposed()) return;
         ui.asyncExec(() -> {
             if (tree.isDisposed() || listenedSession != session) return;
-            generation++; busy = false; values.clear(); errors.clear(); render();
+            generation++; busy = false; values.clear(); previousValues.clear();
+            errors.clear(); lastReadAt = null; render();
             status.setText(message);
             if (suspended) scheduleAutoSnapshot();
         });
@@ -923,7 +944,8 @@ public final class SocRegistersView extends ViewPart {
                         String verifiedTarget = selectedSvdTarget == null ? board : selectedSvdTarget;
                         rememberSvd(verifiedTarget, file, identity, loaded.name());
                         svdIdentity = identity;
-                        values.clear(); errors.clear(); watches.clear(); history.clear();
+                        values.clear(); previousValues.clear(); errors.clear(); watches.clear(); history.clear();
+                        lastReadAt = null;
                         render();
                         discoveryExplanation = (exactPackDeviceMapping
                                 ? "Installed CMSIS pack maps " + board + " to " + loaded.name()
@@ -1141,9 +1163,12 @@ public final class SocRegistersView extends ViewPart {
                 var row = new TableItem(watchTable, SWT.NONE);
                 row.setData(reg);
                 var value = values.get(reg.key());
+                boolean changed = value != null && previousValues.containsKey(reg.key())
+                        && !previousValues.get(reg.key()).equals(value);
                 row.setText(new String[] { reg.key(),
                         value == null ? "—" : hex(value, reg.size()),
-                        RegisterPresentation.state(reg, value, errors.get(reg.key())) });
+                        changed ? "Changed" : RegisterPresentation.state(reg, value,
+                                errors.get(reg.key())) });
                 if (reg.key().equals(key)) watchTable.setSelection(row);
             }
         } finally { watchTable.setRedraw(true); }
@@ -1214,6 +1239,7 @@ public final class SocRegistersView extends ViewPart {
                     + (history.baseline() != null ? "  •  Baseline pinned" : ""));
         } finally { tree.setRedraw(true); }
         renderWatches();
+        updateConnectionPath();
     }
 
     private static String bits(BigInteger value, int width) {
@@ -1291,6 +1317,11 @@ public final class SocRegistersView extends ViewPart {
         Set<String> changedKeys = history.changes().stream()
                 .map(RegisterHistory.Delta::registerKey)
                 .collect(java.util.stream.Collectors.toSet());
+        for (var previous : previousValues.entrySet()) {
+            var current = values.get(previous.getKey());
+            if (current != null && !current.equals(previous.getValue()))
+                changedKeys.add(previous.getKey());
+        }
         for (Register r : registers) {
             TreeItem item = new TreeItem(peripheral, SWT.NONE);
             item.setData(r);
