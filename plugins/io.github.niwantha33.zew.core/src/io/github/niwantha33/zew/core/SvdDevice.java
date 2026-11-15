@@ -356,6 +356,7 @@ public record SvdDevice(String name, List<Register> registers) {
         String s = value.trim().replace("_", "");
         if (s.startsWith("0x") || s.startsWith("0X")) return new BigInteger(s.substring(2), 16);
         if (s.startsWith("#")) return new BigInteger(s.substring(1), 2);
+        if (s.startsWith("0b") || s.startsWith("0B")) return new BigInteger(s.substring(2), 2);
         return new BigInteger(s);
     }
     private static Element child(Element e, String name) {
