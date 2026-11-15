@@ -178,3 +178,84 @@ safe; compare chunked vs offline semantic outputs; test installed Eclipse UI,
 package CI and documented unsupported combinations. Until then,
 `LIVE_STREAMING_ENABLED` stays `false` and the stub must not be advertised
 as an available capability.
+
+
+## 9. Pinned Zephyr 4.4.0 implementation audit (2026-11-15)
+
+**Live CTF remains NOT SUPPORTED.** The first core-only code slice adds
+`TraceKconfigProfile` (configuration request templates) and
+`KconfigTraceEvidence.inspectGenerated` (bounded check of the effective
+`zephyr/.config`). These APIs neither apply an overlay nor enable a menu or
+create a socket. The existing `ConfigurationEvidenceReceipt` must also be
+CURRENT for build-input freshness; a matching requested symbol does *not*
+prove a matching flashed image or safe trace transport.
+
+**Source of truth:** `tools/setup-lock.json` in the UI bundle pins Zephyr
+4.4.0 at `684c9e8f32e4373a21098559f748f06915f950c9` (not a floating tag).
+The following were checked against that exact revision:
+
+| Upstream pinned file | Verified Kconfig/behaviour |
+| --- | --- |
+| `subsys/tracing/Kconfig` | `TRACING`, `TRACING_CTF`, `TRACING_SYNC`, `TRACING_ASYNC`, `TRACING_BACKEND_RAM`, `TRACING_BACKEND_UART`, `RAM_TRACING_BUFFER_SIZE`, `TRACING_BUFFER_SIZE`, `TRACING_OBJECT_TRACKING`. **No `TRACING_BACKEND_RTT`** |
+| `kernel/Kconfig` | `THREAD_NAME`, `THREAD_MONITOR`, `THREAD_STACK_INFO`, `INIT_STACKS`, `THREAD_RUNTIME_STATS`, `SCHED_THREAD_USAGE` |
+| `subsys/debug/Kconfig` | `DEBUG_THREAD_INFO` depends on **!SMP**; never force from vendor name alone |
+| `modules/segger/Kconfig` | `USE_SEGGER_RTT`, `SEGGER_RTT_MAX_NUM_UP_BUFFERS`, `SEGGER_RTT_BUFFER_SIZE_UP`, `SEGGER_RTT_MODE_NO_BLOCK_SKIP`; default console RTT channel 0 is **not** a dedicated CTF channel |
+| `subsys/tracing/CMakeLists.txt` | no CTF RTT backend is compiled; `tracing_backend_rtt.c` **does not exist** |
+| `subsys/tracing/tracing_backend_uart.c` | output iterates `uart_poll_out` for every byte; cannot assert nonblocking |
+| `subsys/tracing/tracing_backend_ram.c` | `ram_tracing[]`, `pos`, `buffer_full`; stops on capacity, does not wrap |
+| `subsys/tracing/ctf/ctf_top.h` and bundled `zephyr_ctf_binary.py` | packed timestamp/ID records; **no CTF packet framing**. A corrupt/unframed stream cannot be safely resynchronised by guessing a plausible event ID |
+
+Relevant upstream source:
+[tracing Kconfig](https://github.com/zephyrproject-rtos/zephyr/blob/684c9e8f32e4373a21098559f748f06915f950c9/subsys/tracing/Kconfig),
+[SEGGER Kconfig](https://github.com/zephyrproject-rtos/zephyr/blob/684c9e8f32e4373a21098559f748f06915f950c9/modules/segger/Kconfig),
+[UART backend](https://github.com/zephyrproject-rtos/zephyr/blob/684c9e8f32e4373a21098559f748f06915f950c9/subsys/tracing/tracing_backend_uart.c),
+[RAM backend](https://github.com/zephyrproject-rtos/zephyr/blob/684c9e8f32e4373a21098559f748f06915f950c9/subsys/tracing/tracing_backend_ram.c).
+
+**Plan deviation:** Do not manufacture `CONFIG_TRACING_BACKEND_RTT=y`,
+assume RTT channel index 1, treat `SEGGER_SYSTEMVIEW` as CTF, or enable
+the menu based on `CONFIG_TRACING_CTF=y` alone. An upstream-compatible,
+bounded, nonblocking, *firmware-side* binary transport with an independently
+verified channel, framing, epoch/sequence/checksum, loss receipts and target
+build identity must be designed and tested before the host live pipeline.
+
+### Transport × vendor readiness (design only)
+
+| SoC families | Candidate route, not a support claim | Evidence status |
+| --- | --- | --- |
+| nRF52 / nRF91 | Probe-specific RTT subject to CTF firmware adapter; UART only after bounded drain | PENDING |
+| nRF53 application core | Single-core application tracing only; no claimed network-core cross-clock stream | PENDING |
+| STM32 | Probe-specific RTT candidate; UART/RAM as explicit alternatives | PENDING |
+| TI MSPM0 | TI OpenOCD/XDS110 ownership and running-memory reads unverified; saved RAM remains separate | PENDING |
+| ESP32 / S2 / S3 / C2 / C3 / C6 / H2 / P4 | Espressif OpenOCD fork required by registry; USB-Serial-JTAG availability must be proven per board | PENDING |
+| RP2040 / RP2350 | Probe and core ownership need verification; no assumed RTT control-block RAM range | PENDING |
+| NXP LPC / i.MX RT | Probe/SoC memory-map and channel evidence required | PENDING |
+| Microchip SAMD / SAME | Probe/SoC memory-map and channel evidence required | PENDING |
+| Renesas RA6 | Probe/SoC memory-map and channel evidence required | PENDING |
+| Silicon Labs EFR32 | Probe/SoC memory-map and channel evidence required | PENDING |
+| WCH and niche RISC-V | Tier-3 study only; UART/RAM must first satisfy data integrity and CPU-safety rules | PENDING |
+
+No `rttRamBase`, `rttRamSize`, OpenOCD target cfg or `tracingChannel`
+can be seeded as a real value without generated Devicetree, selected runner
+and real firmware evidence. Do not silently use a default or autodiscovery
+guess. Hardware acceptance: **nrf52840dk — PENDING; STM32 Nucleo — PENDING;
+LP-MSPM0G3507 — PENDING; ESP32-S3 — PENDING; RP2040 — PENDING.**
+
+### Remaining exit gates, in order
+
+1. Complete **ELF symbol/CTF metadata/build receipt identity** for the exact
+   selected build and prove the running target image independently. Verify
+   `_SEGGER_RTT` only for a genuinely compiled RTT backend; names alone are
+   not runtime evidence.
+2. Implement a versioned, nonblocking target-side transport with dedicated
+   binary channel, bounded drain, integrity framing, sequence/epoch and
+   explicit drop counters. UART text and CTF are separate endpoints.
+3. Validate the host ingestion/streaming semantic append *against the same
+   saved trace*, arbitrary boundaries, corruption and lost frames. Preserve
+   the raw bytes and checkpoint; never pretend resynchronisation without a
+   verified frame boundary.
+4. Attach via shared probe/port/physical-operation ownership; no extra GDB
+   client, reset, automatic halt or running-target RAM scan. Rate-limit and
+   bound all host consumption; seal only independently valid offline CTF.
+5. Gate the actual UI on all receipts, exercise fake transport in CI and
+   qualify each hardware row with attached reproducible captures before
+   removing the existing disabled menu label.

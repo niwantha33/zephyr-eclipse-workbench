@@ -152,4 +152,78 @@ public final class KconfigTraceEvidence {
     private static Result unknown(String symbol, String detail) {
         return new Result(State.UNKNOWN, symbol, "", "", "", detail);
     }
+
+    /**
+     * Effective-value check against ONLY the generated zephyr/.config, not
+     * prj.conf or Kconfig's unproven requested values. This verifies selected
+     * values, NOT build freshness: combine with a CURRENT
+     * ConfigurationEvidenceReceipt and matching ELF before any use as a gate.
+     */
+    public record EffectiveReceipt(State state, String configSha256,
+                                   List<String> diagnostics) {
+        public EffectiveReceipt { diagnostics = List.copyOf(diagnostics); }
+        public boolean matched() { return state == State.OBSERVED; }
+    }
+
+    public static EffectiveReceipt inspectGenerated(Path build, java.util.Map<String, String> expected) {
+        if (expected == null || expected.isEmpty() || expected.size() > 64)
+            return new EffectiveReceipt(State.UNKNOWN, "", List.of("No bounded set of exact symbols was provided."));
+        for (var entry : expected.entrySet()) {
+            if (entry.getKey() == null || !entry.getKey().matches("[A-Z][A-Z0-9_]{0,159}")
+                    || entry.getValue() == null || !entry.getValue().matches("(?:y|m|n|[0-9]{1,8})"))
+                return new EffectiveReceipt(State.UNKNOWN, "", List.of("Invalid requested Kconfig symbol/value."));
+        }
+        if (build == null || Files.isSymbolicLink(build)
+                || Files.isSymbolicLink(build.resolve("zephyr")))
+            return new EffectiveReceipt(State.MISSING, "", List.of("Selected build path is absent or unsafe."));
+        Path config = build.resolve("zephyr/.config");
+        if (!regular(config))
+            return new EffectiveReceipt(State.MISSING, "", List.of("Generated zephyr/.config is missing."));
+        try {
+            long beforeSize = Files.size(config);
+            var beforeTime = Files.getLastModifiedTime(config);
+            if (beforeSize == 0 || beforeSize > LIMIT)
+                return new EffectiveReceipt(State.UNKNOWN, "", List.of("Generated .config is empty or oversized."));
+            String raw = Files.readString(config, StandardCharsets.UTF_8);
+            if (Files.size(config) != beforeSize
+                    || !Files.getLastModifiedTime(config).equals(beforeTime)
+                    || Files.isSymbolicLink(config))
+                return new EffectiveReceipt(State.UNKNOWN, "", List.of("Generated .config changed during inspection."));
+            var found = new java.util.HashMap<String, String>();
+            var duplicates = new java.util.HashSet<String>();
+            for (String line : raw.split("\\R")) {
+                String key = null;
+                String value = null;
+                if (line.startsWith("CONFIG_")) {
+                    int eq = line.indexOf('=');
+                    if (eq > 7) {
+                        key = line.substring(7, eq);
+                        value = line.substring(eq + 1);
+                    }
+                } else if (line.startsWith("# CONFIG_") && line.endsWith(" is not set")) {
+                    key = line.substring(9, line.length() - " is not set".length());
+                    value = "n";
+                }
+                if (key != null && expected.containsKey(key) && found.put(key, value) != null)
+                    duplicates.add(key);
+            }
+            var issues = new ArrayList<String>();
+            for (var entry : expected.entrySet()) {
+                String key = entry.getKey();
+                if (duplicates.contains(key))
+                    issues.add("CONFIG_" + key + " occurs more than once.");
+                else if (!found.containsKey(key))
+                    issues.add("CONFIG_" + key + " is absent from generated .config.");
+                else if (!entry.getValue().equals(found.get(key)))
+                    issues.add("CONFIG_" + key + " does not equal the requested effective value.");
+            }
+            return new EffectiveReceipt(issues.isEmpty() ? State.OBSERVED : State.UNKNOWN,
+                    digest(raw), issues.isEmpty()
+                            ? List.of("Requested values observed in generated .config; "
+                                + "not proof of build freshness, flashed identity, or transport safety.")
+                            : issues);
+        } catch (IOException | SecurityException failed) {
+            return new EffectiveReceipt(State.UNKNOWN, "", List.of("Generated .config could not be inspected safely."));
+        }
+    }
 }

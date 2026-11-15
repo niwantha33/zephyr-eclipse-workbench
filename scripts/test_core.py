@@ -99,6 +99,8 @@ subprocess.run([tool('java'), '-cp', str(out), 'StudioEvidenceInspectorTests'], 
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationEvidenceReceiptTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationFailureEvidenceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'KconfigTraceEvidenceTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'TraceKconfigProfileTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'ElfSymbolsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'GuidedOverlaySaveTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DevicetreeSourceTraceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'DevicetreeOverlaySupportTests'], check=True, cwd=root, timeout=90)
