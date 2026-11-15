@@ -36,6 +36,23 @@ public final class RegisterWriteValueTests {
         rejects(() -> RegisterWriteValue.parse(r, "not_a_number"), "injection rejected");
         rejects(() -> RegisterWriteValue.toggle(r, null, 0), "no made-up zero snapshot");
         rejects(() -> RegisterWriteValue.toggle(r, BigInteger.ONE, 32), "out-of-range bit rejected");
+        var output = reg("<access>write-only</access>");
+        check(!output.readable() && !output.writable() && output.directWritable()
+                        && output.writeAllowed(), "write-only data register supports explicit whole write");
+        check(RegisterWriteValue.parse(output, "0xAB").equals(BigInteger.valueOf(0xAB)),
+                "write-only register accepts bounded numeric data without prior read");
+        rejects(() -> RegisterWriteValue.toggle(output, BigInteger.ZERO, 0),
+                "write-only register must never read/modify/write an invented snapshot");
+        check(!reg("<access>writeOnce</access>").writeAllowed(),
+                "write-once command must not be treated as repeatable data");
+        check(!reg("<access>write-only</access><modifiedWriteValues>oneToClear</modifiedWriteValues>")
+                .writeAllowed(), "write-one-to-clear commands require specialised semantics");
+        check(!reg("<access>write-only</access><writeConstraint writeAsRead='true'/>")
+                .writeAllowed(), "constrained write-only registers still blocked");
+        check(!reg("<access>write-only</access><fields><field><name>RO</name>"
+                + "<bitOffset>0</bitOffset><bitWidth>1</bitWidth>"
+                + "<access>read-only</access></field></fields>").writeAllowed(),
+                "mixed-access write-only field must be blocked");
         check(!reg("<access>read-only</access>").writable(), "read-only register blocked");
         check(!reg("<readAction>clear</readAction>").writable(), "read side effect blocks RMW");
         check(!reg("<modifiedWriteValues>oneToClear</modifiedWriteValues>").writable(),
