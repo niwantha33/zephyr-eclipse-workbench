@@ -29,7 +29,7 @@ public final class VendorSvdProvisioner {
         var entry = SvdDownloadCatalog.forBoard(board);
         if (entry == null || !entry.pinned() || !"pack".equals(entry.type())
                 || entry.pdsc().isBlank()
-                || !"software-dl.ti.com".equals(entry.url().getHost())) return null;
+                || !SvdDownloadCatalog.approvedHost(entry.url().getHost())) return null;
         return entry;
     }
 
@@ -81,7 +81,10 @@ public final class VendorSvdProvisioner {
                             throw new IOException("Insecure redirect from vendor pack host.");
                         // Follow only TI's official CMSIS-pack download endpoints.
                         String host = next.getHost().toLowerCase(java.util.Locale.ROOT);
-                        if (!isApprovedRedirectHost(host))
+                        if (!SvdDownloadCatalog.approvedHost(host)
+                                || !(host.equals(entry.url().getHost())
+                                    || ("software-dl.ti.com".equals(entry.url().getHost())
+                                        && isApprovedRedirectHost(host))))
                             throw new IOException("Unexpected vendor redirect host: " + host);
                         uri = next;
                     }
