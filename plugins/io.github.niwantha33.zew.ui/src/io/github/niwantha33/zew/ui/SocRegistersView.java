@@ -23,6 +23,8 @@ import org.eclipse.cdt.dsf.debug.service.IProcesses;
 import org.eclipse.cdt.dsf.debug.service.IStack;
 import org.eclipse.cdt.dsf.gdb.launching.GdbLaunch;
 import org.eclipse.cdt.dsf.gdb.service.command.IGDBControl;
+import org.eclipse.cdt.dsf.mi.service.command.commands.MIDataEvaluateExpression;
+import org.eclipse.cdt.dsf.mi.service.command.output.MIDataEvaluateExpressionInfo;
 import org.eclipse.cdt.dsf.debug.service.ICachingService;
 import org.eclipse.cdt.dsf.service.DsfServicesTracker;
 import org.eclipse.cdt.dsf.service.DsfSession;
@@ -1217,7 +1219,7 @@ public final class SocRegistersView extends ViewPart {
             Register reg = selected();
             periphRead.setEnabled(selectedPeripheral() != null);
             add.setEnabled(reg != null && (watches.contains(reg.key()) || reg.readable()));
-            write.setEnabled(reg != null && reg.writable());
+            write.setEnabled(reg != null && reg.writeAllowed());
             SvdDevice.Field field = selectedField();
             bit.setEnabled(reg != null && reg.writable() && values.containsKey(reg.key())
                     && field != null && field.width() == 1);
@@ -1244,7 +1246,7 @@ public final class SocRegistersView extends ViewPart {
         menu.addListener(SWT.Show, e -> {
             Register reg = watchedSelection();
             remove.setEnabled(reg != null);
-            write.setEnabled(reg != null && reg.writable());
+            write.setEnabled(reg != null && reg.writeAllowed());
         });
         watchTable.addListener(SWT.MenuDetect, e -> {
             var point = watchTable.toControl(e.x, e.y);
@@ -1716,7 +1718,7 @@ public final class SocRegistersView extends ViewPart {
 
     private void editRegister(Register register) {
         if (register == null || device == null) return;
-        if (!register.writable()) {
+        if (!register.writeAllowed()) {
             status.setText("Register write blocked by SVD: " + register.writeBlockReason());
             return;
         }
@@ -1724,7 +1726,9 @@ public final class SocRegistersView extends ViewPart {
         var dialog = new org.eclipse.jface.dialogs.InputDialog(getSite().getShell(),
                 "Write " + register.key(),
                 "Set an unsigned " + register.size() + "-bit value (0x... or decimal).\n"
-                        + "This writes to the physical MCU through the active halted GDB/OpenOCD session.",
+                        + (register.directWritable()
+                            ? "Write-only register: explicit physical write; no register readback is possible."
+                            : "This writes to the physical MCU through the halted GDB session."),
                 current == null ? "" : hex(current, register.size()), entered -> {
                     try { RegisterWriteValue.parse(register, entered); return null; }
                     catch (IllegalArgumentException invalid) { return invalid.getMessage(); }
@@ -1752,7 +1756,7 @@ public final class SocRegistersView extends ViewPart {
 
     private void submitRegisterWrite(Register register, BigInteger value) {
         if (device == null || register == null || !device.registers().contains(register)
-                || !register.writable()) {
+                || !register.writeAllowed()) {
             status.setText("Write blocked: the exact current SVD does not authorise this register.");
             return;
         }
@@ -1769,6 +1773,7 @@ public final class SocRegistersView extends ViewPart {
                 "This will change real hardware. The target must be halted.\n\n"
                         + register.key() + " @ 0x" + register.address().toString(16)
                         + "\nNew value: " + intended
+                        + (register.directWritable() ? "\nWrite-only: physical readback unavailable." : "")
                         + "\n\nSome peripheral writes can affect clocks, interrupts, power or pins. "
                         + "Proceed only if the register is appropriate for this board and state."))
             return;
