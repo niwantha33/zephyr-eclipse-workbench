@@ -34,7 +34,9 @@ public final class SvdDownloadCatalog {
         if (part.isBlank()) return null;
         String[] segments = board.split("/", -1);
         String core = segments.length == 3 ? segments[2] : "";
-        return ENTRIES.get(part + (core.isBlank() ? "" : "/" + core));
+        Entry exact = ENTRIES.get(part + (core.isBlank() ? "" : "/" + core));
+        return exact != null ? exact : SvdPartCompatibility.requiresQualifier(part)
+                ? null : ENTRIES.get(part);
     }
     public static Entry pinned(String board, String type) {
         Entry entry = find(board);
