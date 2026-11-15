@@ -1439,7 +1439,7 @@ public final class SocRegistersView extends ViewPart {
                             ? " [DTS disabled]" : ""));
                 peripheral.setData("peripheralName", entry.getKey());
                 if (link != null) {
-                    peripheral.setToolTipText(link.explanation()
+                    peripheral.setData("description", link.explanation()
                             + (link.nodePath().isBlank() ? "" : " — " + link.nodePath()));
                     if (link.state() == SvdDevicetreeLinker.State.DISABLED_IN_DTS)
                         peripheral.setForeground(tree.getDisplay().getSystemColor(SWT.COLOR_DARK_GRAY));
