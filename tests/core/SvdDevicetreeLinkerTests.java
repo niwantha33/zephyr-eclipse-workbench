@@ -45,6 +45,29 @@ public final class SvdDevicetreeLinkerTests {
         check(SvdDevicetreeLinker.link(svd, invalid).get("UART0").state()
                 == SvdDevicetreeLinker.State.UNKNOWN,
                 "unknown phandle expression cannot be used to claim a match");
+        var multiregion = List.of(new DevicetreeHardware.Device("/soc/multi", "multi",
+                "", "", "okay", "<0x40001000 0x100>, <0x400A2000 0x1000>", 1));
+        var multi = SvdDevicetreeLinker.link(svd, multiregion);
+        check(multi.get("UART0").state() == SvdDevicetreeLinker.State.ENABLED_IN_DTS
+                && multi.get("GPIOB").state() == SvdDevicetreeLinker.State.ENABLED_IN_DTS,
+                "two independent bounded DTS reg regions must both match");
+        var malformed = List.of(new DevicetreeHardware.Device("/soc/bad", "bad",
+                "", "", "okay", "<0x40001000 0x100>, <&bad 0x400A2000>", 1));
+        check(SvdDevicetreeLinker.link(svd, malformed).get("UART0").state()
+                == SvdDevicetreeLinker.State.UNKNOWN,
+                "any malformed region rejects the entire node, not a partial match");
+        StringBuilder excess = new StringBuilder();
+        for (int i = 0; i < 9; i++) {
+            if (i > 0) excess.append(", ");
+            excess.append("<0x").append(Integer.toHexString(0x40001000 + i * 0x100))
+                    .append(" 0x100>");
+        }
+        check(SvdDevicetreeLinker.link(svd, List.of(new DevicetreeHardware.Device(
+                "/soc/too-many", "too-many", "", "", "okay", excess.toString(), 1)))
+                .get("UART0").state() == SvdDevicetreeLinker.State.UNKNOWN,
+                "at most eight DTS regions allowed");
+        check(SvdDevicetreeLinker.link(svd, List.of()).get("UART0").explanation()
+                .contains("zephyr.dts"), "missing DTS reason surfaced explicitly");
         System.out.println("SvdDevicetreeLinkerTests PASS");
     }
 }
