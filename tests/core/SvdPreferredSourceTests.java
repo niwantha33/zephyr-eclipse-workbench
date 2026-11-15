@@ -28,6 +28,12 @@ public final class SvdPreferredSourceTests {
             Files.writeString(file, xml("MSPM0G3507", "0x50000000"));
             check(SvdPreferredSource.reopen("lp_mspm0g3507/mspm0g3507",
                     file, verified.sha256()) == null, "changed source invalidates cached approval");
+            Files.writeString(file, xml("nrf5340_application", "0x50000000"));
+            var application = SvdPreferredSource.inspect("nrf5340dk/nrf5340/cpuapp", file);
+            check(application != null, "selected core accepts its exact reviewed SVD model");
+            check(SvdPreferredSource.reopen("nrf5340dk/nrf5340/cpunet",
+                    file, application.sha256()) == null,
+                    "cached application SVD cannot be reopened by network core");
             Files.writeString(file, xml("OTHERCHIP", "0x40000000"));
             check(SvdPreferredSource.inspect("lp_mspm0g3507/mspm0g3507", file) == null,
                     "another chip must never populate the explorer");
