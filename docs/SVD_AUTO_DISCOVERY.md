@@ -35,10 +35,10 @@ preferences are isolated by part **and** core qualifier.
 | Vendor | Local discovery source | Automatic pinned download | Parser fixture / hardware acceptance |
 |---|---|---|---|
 | Texas Instruments MSPM0 | CMSIS pack PDSC and the exact alias above | **Disabled:** former TI URL has no reviewed SHA-256 pin | Synthetic PDSC tests; XDS110 **pending** |
-| Nordic nRF52/nRF53 | Official Nordic MDK/PDSC and qualified nRF5340 SVDs | Not configured | Core identity tests; nRF52/nRF53 physical **pending** |
+| Nordic nRF52/nRF53 | Official Nordic MDK/PDSC and qualified nRF5340 SVDs | Not configured | Bundled license-preserving real nRF52840 SVD subset plus core tests; physical **pending** |
 | Espressif ESP32 | Installed SVD or published Espressif SVD | Eight exact models, immutable source commit and original digest pins retained | Checksum tests; ESP32 JTAG hardware **pending** |
 | STMicroelectronics STM32 | Installed STM32 CMSIS DFP, exact device/PDSC | Not configured | Exact/PDSC parser tests; ST-Link hardware **pending** |
-| Raspberry Pi RP2040 | Installed pico-sdk `RP2040.svd` | Not configured | Parser acceptance against complete upstream file **pending**; Pico probe **pending** |
+| Raspberry Pi RP2040 | Installed pico-sdk `RP2040.svd` | Not configured | Bundled license-preserving real RP2040 SVD subset (PLL/SYSINFO); full-file and probe **pending** |
 | Microchip SAMD21 | Official SAMD21 DFP, exact PDSC mapping | Not configured | DFP fixture and physical CMSIS-DAP **pending** |
 | Renesas RA | Installed FSP/DFP, exact PDSC mapping | Not configured | Vendor parser/hardware **pending** |
 | Silicon Labs EFR32 | Installed Device Family Pack, exact PDSC mapping | Not configured | Vendor parser/hardware **pending** |
@@ -75,9 +75,7 @@ writes remain subject to the halted native DSF-GDB and SVD safety checks.
 
 **Hardware-in-loop acceptance is pending for every vendor.** Tycho,
 CodeQL and synthetic regression tests do not prove physical peripheral
-register reads, writes or power-domain safety. Full vendor source fixtures
-and license-review gates must be completed before claiming broad device
-compatibility.
+register reads, writes or power-domain safety. Only Nordic nRF52840 and Raspberry Pi RP2040 currently have committed original-vendor XML subsets with their license text preserved (`tests/fixtures/svd-vendors`). STM32F103 and Microchip SAMD21 pack-sourced fixtures, full vendor file acceptance and hardware/driver qualification remain pending before claiming broad compatibility.
 
 ---
 
