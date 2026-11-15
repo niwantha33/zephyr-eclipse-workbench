@@ -96,6 +96,8 @@ public final class SocRegistersView extends ViewPart {
     private static final int MAX_WATCH_POLL_REGISTERS = 8;
     private int readPageOffset;
     private int readPageTotal;
+    private int currentPageStart;
+    private boolean currentReadPaged;
     private ReadScope readPageScope = ReadScope.ALL_SAFE;
     private String readPagePeripheral;
     private boolean writing;
@@ -421,6 +423,7 @@ public final class SocRegistersView extends ViewPart {
         writing = false;
         readPageOffset = 0;
         readPageTotal = 0;
+        currentReadPaged = false;
         pendingReads.clear();
         listenTo(null);
         stopLiveWatch();
@@ -1092,6 +1095,7 @@ public final class SocRegistersView extends ViewPart {
                         pendingReads.clear();
                         readPageOffset = 0;
                         readPageTotal = 0;
+                        currentReadPaged = false;
                         currentReadTotal = currentReadOk = currentReadFailed = 0;
                         lastReadAt = null;
                         render();
@@ -1625,6 +1629,7 @@ public final class SocRegistersView extends ViewPart {
         if (writing) { status.setText("A confirmed physical write cannot be cancelled."); return; }
         ++generation; // old callbacks cannot start the next GDB request
         busy = false;
+        if (currentReadPaged) readPageOffset = currentPageStart; // retry incomplete page
         pendingReads.clear();
         render();
         status.setText("Read queue stopped. One already-issued GDB command may still complete.");
@@ -1689,8 +1694,9 @@ public final class SocRegistersView extends ViewPart {
         listenTo(session);
         busy = true;
         writing = false;
-        if (scope == ReadScope.ALL_SAFE || scope == ReadScope.PERIPHERAL)
-            readPageOffset += targets.size();
+        currentReadPaged = scope == ReadScope.ALL_SAFE || scope == ReadScope.PERIPHERAL;
+        currentPageStart = readPageOffset;
+        if (currentReadPaged) readPageOffset += targets.size();
         previousValues.clear();
         previousValues.putAll(values);
         currentReadTotal = targets.size();
@@ -2072,8 +2078,8 @@ public final class SocRegistersView extends ViewPart {
                 currentReadFailed++;
             }
             // One render per 32 GDB commands rather than thousands of SWT rebuilds.
-            if (index % 32 == 31 || index == total - 1) {
-                render();
+            if (index % 8 == 7 || index == total - 1) {
+                // Cheap status update only. Full tree reconstruction happens once at finish.
                 status.setText("GDB read " + (currentReadOk + currentReadFailed)
                         + "/" + currentReadTotal + " — " + currentReadOk
                         + " OK, " + currentReadFailed + " failed. Open diagnostics for details.");
@@ -2089,6 +2095,9 @@ public final class SocRegistersView extends ViewPart {
                 busy = false;
                 writing = false;
                 pendingReads.clear();
+                if (!message.startsWith("Refresh complete.") && currentReadPaged) {
+                    readPageOffset = currentPageStart; // retry cancelled/failed page
+                }
                 if (message.startsWith("Refresh complete.") && !values.isEmpty()
                         && svdIdentity != null && listenedSession != null) {
                     try {
@@ -2106,12 +2115,16 @@ public final class SocRegistersView extends ViewPart {
                     String report = "Read " + currentReadOk + " of " + currentReadTotal
                             + " registers through halted debugger";
                     if (currentReadFailed > 0) report += "  •  " + currentReadFailed + " failed";
+                    if (currentReadPaged)
+                        report += "  •  " + Math.max(0, readPageTotal - readPageOffset)
+                                + " remaining; More → Read next 32";
                     status.setText(report + ". Select a register to see its bits.");
                     status.setToolTipText(lastReadError == null ? "All attempted reads succeeded."
                             : "Last GDB read failure: " + lastReadError);
                 } else {
                     status.setText(message);
                 }
+                currentReadPaged = false;
                 render();
                 updateConnectionPath();
             }
