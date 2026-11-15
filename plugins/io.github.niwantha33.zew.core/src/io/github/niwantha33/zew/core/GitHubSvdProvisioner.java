@@ -3,7 +3,6 @@ package io.github.niwantha33.zew.core;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -13,87 +12,84 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HexFormat;
-import java.util.Locale;
-import java.util.Map;
 
-/** Opt-in official Espressif SVD download. Never guesses registers or another chip. */
+/** Opt-in, pinned vendor SVD download. No mutable refs or unpinned source fallback. */
 public final class GitHubSvdProvisioner {
     private GitHubSvdProvisioner() {}
     private static final int MAX_SVD_SIZE = 32 * 1024 * 1024;
-    public static boolean trusted(byte[] bytes, String part) throws Exception {
-        var entry = SvdDownloadCatalog.byIdentity(part, "", "svd");
-        String expected = entry == null ? null : entry.sha256();
-        if (expected == null || bytes.length == 0 || bytes.length > MAX_SVD_SIZE) return false;
-        return MessageDigest.isEqual(MessageDigest.getInstance("SHA-256").digest(bytes),
-                HexFormat.of().parseHex(expected));
-    }
-
-    public static String pinnedSha256(String part) {
-        var entry = SvdDownloadCatalog.byIdentity(part, "", "svd");
-        return entry == null ? null : entry.sha256();
-    }
-
     public record Downloaded(Path file, String sha256, String source) {}
 
+    private static SvdDownloadCatalog.Entry pinned(String part) {
+        var entry = SvdDownloadCatalog.forPart(part);
+        if (entry == null || !entry.pinned() || !"svd".equals(entry.type())
+                || !SvdDownloadCatalog.approvedHost(entry.url().getHost()))
+            return null;
+        return entry;
+    }
+    public static boolean trusted(byte[] bytes, String part) throws Exception {
+        return trusted(bytes, pinned(part));
+    }
+    private static boolean trusted(byte[] bytes, SvdDownloadCatalog.Entry entry) throws Exception {
+        if (entry == null || bytes.length == 0 || bytes.length > MAX_SVD_SIZE) return false;
+        return MessageDigest.isEqual(MessageDigest.getInstance("SHA-256").digest(bytes),
+                HexFormat.of().parseHex(entry.sha256()));
+    }
+    public static String pinnedSha256(String part) {
+        var entry = pinned(part);
+        return entry == null ? null : entry.sha256();
+    }
     public static boolean supports(String board) {
-        String part = SvdAutoDiscovery.partFromBoard(board);
-        return SvdDownloadCatalog.pinned(board, "svd") != null;
+        var entry = SvdDownloadCatalog.forBoard(board);
+        return entry != null && entry.pinned() && "svd".equals(entry.type())
+                && SvdDownloadCatalog.approvedHost(entry.url().getHost())
+                && (!SvdPartCompatibility.requiresQualifier(entry.part())
+                    || SvdPartCompatibility.knownQualifier(entry.part(), entry.qualifier()));
     }
     public static Downloaded download(String board, Path root) throws Exception {
-        String part = SvdAutoDiscovery.partFromBoard(board);
-        var entry = SvdDownloadCatalog.pinned(board, "svd");
-        if (entry == null)
-            throw new IOException("No SHA-256-pinned catalog SVD for " + part);
-        String name = entry.filename();
+        if (!supports(board)) throw new IOException("No pinned exact vendor SVD for selected board.");
+        var entry = SvdDownloadCatalog.forBoard(board);
+        String part = entry.part();
         Files.createDirectories(root);
-        if (Files.isSymbolicLink(root)) throw new IOException("SVD root is a symbolic link");
-        Path destination = root.resolve(name);
-        String source = entry.url().toString();
+        if (Files.isSymbolicLink(root)) throw new IOException("Refusing symlink SVD directory");
+        Path destination = root.resolve(entry.filename());
         if (Files.isRegularFile(destination) && !Files.isSymbolicLink(destination)
                 && Files.size(destination) <= MAX_SVD_SIZE) {
             byte[] cached = Files.readAllBytes(destination);
-            if (trusted(cached, part) && exact(cached, part))
-                return new Downloaded(destination, hash(cached), source);
-            // Forged or stale cache is never accepted, even if the XML part name matches.
+            if (trusted(cached, entry) && exact(cached, part, entry.qualifier()))
+                return new Downloaded(destination, entry.sha256(), entry.url().toString());
         }
-        Path temp = Files.createTempFile(root, "esp-svd-", ".tmp");
+        Path temp = Files.createTempFile(root, "verified-svd-", ".tmp");
         try {
             HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15))
                     .followRedirects(HttpClient.Redirect.NEVER).build();
-            HttpRequest request = HttpRequest.newBuilder(URI.create(source))
-                    .timeout(Duration.ofSeconds(90)).GET().build();
+            var request = HttpRequest.newBuilder(entry.url()).timeout(Duration.ofSeconds(90))
+                    .GET().build();
             HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() != 200) {
                 response.body().close();
-                throw new IOException("Official GitHub raw SVD returned HTTP " + response.statusCode());
+                throw new IOException("Pinned vendor SVD endpoint returned HTTP " + response.statusCode());
             }
-            byte[] content;
-            try (InputStream in = response.body()) {
-                content = in.readNBytes(MAX_SVD_SIZE + 1);
-                if (content.length > MAX_SVD_SIZE) throw new IOException("SVD exceeds size limit");
+            byte[] bytes;
+            try (InputStream input = response.body()) {
+                bytes = input.readNBytes(MAX_SVD_SIZE + 1);
+                if (bytes.length > MAX_SVD_SIZE) throw new IOException("Vendor SVD size exceeded");
             }
-            if (!trusted(content, part))
-                throw new IOException("Downloaded official SVD has an unexpected SHA-256 for " + part);
-            if (!exact(content, part))
-                throw new IOException("Downloaded SVD does not identify the exact SoC " + part);
-            Files.write(temp, content);
+            if (!trusted(bytes, entry) || !exact(bytes, part, entry.qualifier()))
+                throw new IOException("SVD digest or exact device identity did not match bundled pin");
+            Files.write(temp, bytes);
             Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING);
-            return new Downloaded(destination, hash(content), source);
-        } finally {
-            Files.deleteIfExists(temp);
-        }
+            return new Downloaded(destination, entry.sha256(), entry.url().toString());
+        } finally { Files.deleteIfExists(temp); }
     }
     public static boolean exact(byte[] bytes, String part) {
+        return exact(bytes, part, "");
+    }
+    private static boolean exact(byte[] bytes, String part, String qualifier) {
         try {
             if (bytes.length == 0 || bytes.length > MAX_SVD_SIZE) return false;
             SvdDevice device = SvdDevice.read(new java.io.ByteArrayInputStream(bytes));
-            return device.name().replaceAll("[^A-Za-z0-9]", "").toLowerCase(Locale.ROOT)
-                    .equals(part.toLowerCase(Locale.ROOT)) && !device.registers().isEmpty();
-        } catch (Exception ignored) {
-            return false;
-        }
-    }
-    private static String hash(byte[] bytes) throws Exception {
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+            return SvdPartCompatibility.matches(part, qualifier, device.name())
+                    && !device.registers().isEmpty();
+        } catch (Exception ignored) { return false; }
     }
 }

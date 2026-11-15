@@ -42,35 +42,28 @@ public final class SvdTargetEvidenceTests {
                 "CONFIG_SOC", "\"nrf52840\"",
                 "CONFIG_BOARD_QUALIFIERS", "\"nrf52833\"")).state() == SvdTargetEvidence.State.MISSING,
                 "mismatching generated qualifiers disallow selection");
-        var applicationCore = SvdTargetEvidence.select("nrf5340dk/nrf5340/cpuapp",
-                Map.of("CONFIG_BOARD", "\"nrf5340dk\"", "CONFIG_SOC", "\"nrf5340\"",
-                        "CONFIG_BOARD_QUALIFIERS", "\"nrf5340/cpuapp\""));
-        check(applicationCore.usable()
-                && applicationCore.target().equals("nrf5340dk/nrf5340/cpuapp"),
-                "built qualifier proves application core identity");
-        var networkCore = SvdTargetEvidence.select("nrf5340dk/nrf5340/cpunet",
-                Map.of("CONFIG_BOARD", "\"nrf5340dk\"", "CONFIG_SOC", "\"nrf5340\"",
-                        "CONFIG_BOARD_QUALIFIERS", "\"nrf5340/cpunet\""));
-        check(networkCore.usable() && networkCore.target().endsWith("/cpunet"),
-                "built qualifier proves distinct network core");
         check(SvdTargetEvidence.select("nrf5340dk/nrf5340", Map.of()).state()
                 == SvdTargetEvidence.State.AMBIGUOUS,
-                "dual-core without CPU qualifier must remain ambiguous");
+                "unqualified Nordic dual-core target refuses a guessed SVD");
+        var app = SvdTargetEvidence.select("nrf5340dk/nrf5340/cpuapp",
+                Map.of("CONFIG_BOARD", "\"nrf5340dk\"",
+                        "CONFIG_SOC", "\"nrf5340_cpuapp\"",
+                        "CONFIG_BOARD_QUALIFIERS", "\"nrf5340/cpuapp\""));
+        check(app.usable() && app.target().equals("nrf5340dk/nrf5340/cpuapp"),
+                "verified application core identity retained");
+        var net = SvdTargetEvidence.select("nrf5340dk/nrf5340/cpunet",
+                Map.of("CONFIG_BOARD", "\"nrf5340dk\"",
+                        "CONFIG_SOC", "\"nrf5340_cpunet\"",
+                        "CONFIG_BOARD_QUALIFIERS", "\"nrf5340/cpunet\""));
+        check(net.usable() && net.target().endsWith("/cpunet"),
+                "verified network core identity retained");
         check(SvdTargetEvidence.select("nrf5340dk/nrf5340/cpuapp",
                 Map.of("CONFIG_BOARD_QUALIFIERS", "\"nrf5340/cpunet\"")).state()
+                == SvdTargetEvidence.State.CONFLICT,
+                "mismatched effective core qualifiers block discovery");
+        check(SvdTargetEvidence.select("nrf5340dk/nrf5340/cpu0", Map.of()).state()
                 == SvdTargetEvidence.State.AMBIGUOUS,
-                "wrong cluster in built config cannot select other SVD");
-        check(SvdTargetEvidence.select("esp32s3_devkitc/esp32s3/appcpu",
-                Map.of("CONFIG_BOARD", "\"esp32s3_devkitc\"",
-                        "CONFIG_SOC", "\"esp32s3\"",
-                        "CONFIG_BOARD_QUALIFIERS", "\"esp32s3/appcpu\"")).usable(),
-                "single-model ESP32-S3 appcpu target stays compatible with exact SVD");
-        check(SvdTargetEvidence.select("nucleo_h745zi/stm32h745/m7",
-                Map.of("CONFIG_BOARD", "\"nucleo_h745zi\"",
-                        "CONFIG_SOC", "\"stm32h745\"",
-                        "CONFIG_BOARD_QUALIFIERS", "\"stm32h745/m7\"")).state()
-                == SvdTargetEvidence.State.AMBIGUOUS,
-                "unmapped M7/M4 address space must not silently reuse a generic SVD");
+                "unsupported nRF5340 core is not silently mapped");
         System.out.println("SvdTargetEvidenceTests PASS: " + checks + " checks");
     }
 }

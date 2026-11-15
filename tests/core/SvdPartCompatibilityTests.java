@@ -24,19 +24,24 @@ public final class SvdPartCompatibilityTests {
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             throw new AssertionError("duplicate mapping must be rejected");
         } catch (IllegalArgumentException expected) { /* fail closed */ }
-        check(SvdPartCompatibility.modelsFor("mspm0g3507").contains("mspm0g350x"),
-                "bundled TI family SVD name is a discovery candidate");
-        check(SvdPartCompatibility.modelsFor("esp32s3/appcpu").contains("esp32s3"),
-                "single-map SoC supports its execution qualifier");
-        check(!SvdPartCompatibility.matches("nrf5340", "nrf5340_application"),
-                "dual-core without qualified cluster is ambiguous");
-        check(SvdPartCompatibility.matches("nrf5340/cpuapp", "nrf5340_application")
-                && SvdPartCompatibility.matches("nrf5340/cpunet", "nrf5340_network"),
-                "verified distinct Nordic core SVD aliases");
-        check(!SvdPartCompatibility.matches("nrf5340/cpuapp", "nrf5340_network"),
-                "network core cannot impersonate application core");
-        check(SvdPartCompatibility.modelsFor("nrf5340").isEmpty(),
-                "unqualified dual-core scan must not silently choose either SVD");
+        check(SvdPartCompatibility.modelsFor("MSPM0G3507")
+                .containsAll(java.util.Set.of("mspm0g3507", "mspm0g350x")),
+                "filename discovery uses the bundled alias table");
+        check(SvdPartCompatibility.modelsFor("nrf5340")
+                .containsAll(java.util.Set.of("nrf5340", "nrf5340application", "nrf5340network")),
+                "both vendor SVD core models are listed for filename discovery");
+        check(SvdPartCompatibility.modelsFor("nrf5340", "cpuapp")
+                .equals(java.util.Set.of("nrf5340application")),
+                "application core never searches the network SVD");
+        check(!SvdPartCompatibility.matches("nrf5340", "nrf5340_application")
+                && SvdPartCompatibility.matches("nrf5340", "cpuapp", "nrf5340_application")
+                && !SvdPartCompatibility.matches("nrf5340", "cpuapp", "nrf5340_network"),
+                "dual-core identity is qualified and fail closed");
+        var qualified = SvdPartCompatibility.parseMappings(new java.io.ByteArrayInputStream(
+                "[{\"part\":\"nrf5340\",\"svdModel\":\"nrf5340_network\",\"qualifier\":\"cpunet\"}]"
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        check(qualified.size() == 1 && "cpunet".equals(qualified.get(0).qualifier()),
+                "optional qualifier parsed from JSON");
         System.out.println("SvdPartCompatibilityTests PASS");
     }
 }

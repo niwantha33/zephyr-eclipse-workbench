@@ -5,113 +5,101 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-/** Offline vetted acquisition manifests. Missing SHA means NO network permission. */
+/** Offline bundled catalog. Only independently pinned SHA-256 records can contact a vendor. */
 public final class SvdDownloadCatalog {
     private SvdDownloadCatalog() {}
-
     public record Entry(String part, String qualifier, URI url, String sha256,
-                        String type, String pdsc) {
-        public boolean pinned() { return sha256.matches("[0-9a-f]{64}"); }
-        public String identity() {
-            return part + (qualifier.isBlank() ? "" : "/" + qualifier);
-        }
+            String type, String pdsc) {
+        public boolean pinned() { return sha256.matches("[a-f0-9]{64}"); }
         public String filename() {
             String path = url.getPath();
             return path.substring(path.lastIndexOf('/') + 1);
         }
     }
-
-    private static final Map<String, Entry> ENTRIES = load();
-
-    public static Entry find(String board) {
-        String part = SvdAutoDiscovery.partFromBoard(board);
-        if (part.isBlank()) return null;
-        String[] segments = board.split("/", -1);
-        String core = segments.length == 3 ? segments[2] : "";
-        Entry exact = ENTRIES.get(part + (core.isBlank() ? "" : "/" + core));
-        return exact != null ? exact : SvdPartCompatibility.requiresQualifier(part)
-                ? null : ENTRIES.get(part);
-    }
-    public static Entry pinned(String board, String type) {
-        Entry entry = find(board);
-        return entry != null && entry.type().equals(type) && entry.pinned() ? entry : null;
-    }
-    public static Entry byIdentity(String part, String core, String type) {
-        Entry entry = ENTRIES.get(part + (core == null || core.isBlank() ? "" : "/" + core));
-        return entry != null && entry.type().equals(type) && entry.pinned() ? entry : null;
-    }
-    public static List<Entry> entries() { return List.copyOf(ENTRIES.values()); }
-
-    private static Map<String, Entry> load() {
-        try (InputStream in = SvdDownloadCatalog.class.getResourceAsStream("/svd-download-catalog.json")) {
-            return in == null ? Map.of() : parse(in);
-        } catch (Exception failed) {
-            return Map.of();
+    private static final Pattern ITEM = Pattern.compile(
+            "\\s*\\{\\s*\"part\"\\s*:\\s*\"([A-Za-z0-9_-]{1,64})\""
+            + "(?:\\s*,\\s*\"qualifier\"\\s*:\\s*\"([A-Za-z0-9_-]{1,32})\")?"
+            + "\\s*,\\s*\"url\"\\s*:\\s*\"(https://[A-Za-z0-9:/._?&=%+-]{1,510})\""
+            + "\\s*,\\s*\"sha256\"\\s*:\\s*\"([a-f0-9]{64})?\""
+            + "\\s*,\\s*\"type\"\\s*:\\s*\"(pack|svd)\""
+            + "(?:\\s*,\\s*\"pdsc\"\\s*:\\s*\"([A-Za-z0-9._/-]{1,200})\")?"
+            + "\\s*}\\s*");
+    private static final List<Entry> ENTRIES = load();
+    private static List<Entry> load() {
+        try (InputStream stream = SvdDownloadCatalog.class.getResourceAsStream("/svd-download-catalog.json")) {
+            return stream == null ? List.of() : parse(stream);
+        } catch (Exception invalid) {
+            return List.of(); // no permissive fallback
         }
     }
+    public static List<Entry> entries() { return ENTRIES; }
+    public static Entry forBoard(String board) {
+        String part = SvdAutoDiscovery.partFromBoard(board);
+        String[] segments = board == null ? new String[0] : board.split("/", -1);
+        String qualifier = segments.length == 3 ? SvdPartCompatibility.normal(segments[2]) : "";
+        var options = ENTRIES.stream().filter(e -> e.part().equals(part)
+                && (e.qualifier().isEmpty() || e.qualifier().equals(qualifier))).toList();
+        return options.size() == 1 ? options.get(0) : null;
+    }
+    public static Entry forPart(String part) {
+        var matches = ENTRIES.stream().filter(e -> e.part().equals(SvdPartCompatibility.normal(part))
+                && e.qualifier().isEmpty()).toList();
+        return matches.size() == 1 ? matches.get(0) : null;
+    }
+    /** Only official vendor-origin domains; a pinned digest alone is not host approval. */
+    public static boolean approvedHost(String host) {
+        if (host == null) return false;
+        String name = host.toLowerCase(Locale.ROOT);
+        if (Set.of("raw.githubusercontent.com", "software-dl.ti.com", "downloads.ti.com",
+                "packs.download.microchip.com", "www.keil.com", "www.nordicsemi.com")
+                .contains(name)) return true;
+        return false;
+    }
 
-    /** Reject unknown keys, duplicate entries, script syntax, redirects or unbounded JSON. */
-    public static Map<String, Entry> parse(InputStream input) throws Exception {
-        byte[] bytes = input.readNBytes(16_385);
-        if (bytes.length > 16_384) throw new IllegalArgumentException("Download catalog >16 KiB");
+    public static List<Entry> parse(InputStream stream) throws Exception {
+        byte[] bytes = stream.readNBytes(32_769);
+        if (bytes.length > 32_768) throw new IllegalArgumentException("Catalog exceeds 32 KiB");
         String json = new String(bytes, StandardCharsets.UTF_8).strip();
         if (!json.startsWith("[") || !json.endsWith("]"))
-            throw new IllegalArgumentException("Expected JSON catalog array");
+            throw new IllegalArgumentException("Catalog must be a JSON array");
         String body = json.substring(1, json.length() - 1).strip();
-        if (body.isEmpty()) return Map.of();
-        Pattern object = Pattern.compile("\\s*\\{([^{}]{1,1024})}\\s*(?:,|$)");
-        Pattern field = Pattern.compile("\\s*\"([a-zA-Z0-9]+)\"\\s*:\\s*\"([^\"\\\\]{0,360})\"\\s*(?:,|$)");
-        var catalog = new LinkedHashMap<String, Entry>();
-        int offset = 0;
-        while (offset < body.length()) {
-            var match = object.matcher(body);
-            match.region(offset, body.length());
-            if (!match.lookingAt()) throw new IllegalArgumentException("Invalid catalog object");
-            String members = match.group(1);
-            var fields = new LinkedHashMap<String, String>();
-            int position = 0;
-            while (position < members.length()) {
-                var token = field.matcher(members);
-                token.region(position, members.length());
-                if (!token.lookingAt()) throw new IllegalArgumentException("Malformed catalog field");
-                String name = token.group(1);
-                if (!Set.of("part", "qualifier", "url", "sha256", "type", "pdsc").contains(name)
-                        || fields.putIfAbsent(name, token.group(2)) != null)
-                    throw new IllegalArgumentException("Unknown/duplicate catalog field");
-                position = token.end();
-            }
-            String part = fields.getOrDefault("part", "").toLowerCase(java.util.Locale.ROOT);
-            String core = fields.getOrDefault("qualifier", "").toLowerCase(java.util.Locale.ROOT);
-            String digest = fields.getOrDefault("sha256", "");
-            String type = fields.getOrDefault("type", "");
-            String pdsc = fields.getOrDefault("pdsc", "");
-            if (!part.matches("[a-z0-9_+-]{5,72}")
-                    || !core.matches("[a-z0-9_-]{0,24}")
-                    || !(digest.isEmpty() || digest.matches("[a-f0-9]{64}"))
-                    || !Set.of("svd", "pack").contains(type)
-                    || !pdsc.matches("[A-Za-z0-9_.-]{0,180}"))
-                throw new IllegalArgumentException("Unsafe catalog entry");
-            URI url = URI.create(fields.getOrDefault("url", ""));
-            if (!"https".equalsIgnoreCase(url.getScheme()) || url.getHost() == null
-                    || url.getUserInfo() != null || url.getFragment() != null
-                    || url.getQuery() != null
-                    || !Set.of("raw.githubusercontent.com", "software-dl.ti.com")
-                        .contains(url.getHost().toLowerCase(java.util.Locale.ROOT)))
-                throw new IllegalArgumentException("Unapproved catalog origin");
-            if (url.getPath().contains("..") || !url.getPath().endsWith("." + type))
-                throw new IllegalArgumentException("Unapproved catalog file path");
-            var entry = new Entry(part, core, url, digest, type, pdsc);
-            if (catalog.putIfAbsent(entry.identity(), entry) != null)
-                throw new IllegalArgumentException("Duplicate catalog identity");
-            if (catalog.size() > 128) throw new IllegalArgumentException("Too many catalog entries");
-            offset = match.end();
+        if (body.isEmpty()) return List.of();
+        var entries = new ArrayList<Entry>();
+        var seen = new HashSet<String>();
+        for (int pos = 0; pos < body.length();) {
+            var m = ITEM.matcher(body).region(pos, body.length());
+            if (!m.lookingAt()) throw new IllegalArgumentException("Malformed catalog entry");
+            String part = SvdPartCompatibility.normal(m.group(1));
+            String qualifier = SvdPartCompatibility.normal(m.group(2));
+            String pdsc = m.group(6) == null ? "" : m.group(6);
+            URI url = URI.create(m.group(3));
+            String host = url.getHost() == null ? "" : url.getHost().toLowerCase(Locale.ROOT);
+            if (!"https".equals(url.getScheme()) || url.getUserInfo() != null
+                    || url.getPort() != -1 || url.getQuery() != null || url.getFragment() != null
+                    || !approvedHost(host))
+                throw new IllegalArgumentException("Unapproved SVD catalog download host");
+            String filename = url.getPath().substring(url.getPath().lastIndexOf('/') + 1);
+            if (!filename.matches("[A-Za-z0-9_.-]{1,180}")
+                    || (!filename.endsWith("." + m.group(5))))
+                throw new IllegalArgumentException("Invalid catalog filename/type");
+            if (!pdsc.isEmpty() && (pdsc.startsWith("/") || pdsc.contains("..")))
+                throw new IllegalArgumentException("Unsafe PDSC path");
+            if (!seen.add(part + "/" + qualifier))
+                throw new IllegalArgumentException("Duplicate SVD catalog key");
+            entries.add(new Entry(part, qualifier, url,
+                    m.group(4) == null ? "" : m.group(4), m.group(5), pdsc));
+            if (entries.size() > 64) throw new IllegalArgumentException("Catalog entry limit exceeded");
+            pos = m.end();
+            if (pos == body.length()) break;
+            if (body.charAt(pos++) != ',' || pos == body.length())
+                throw new IllegalArgumentException("Catalog entry separator invalid");
         }
-        return Map.copyOf(catalog);
+        return List.copyOf(entries);
     }
 }

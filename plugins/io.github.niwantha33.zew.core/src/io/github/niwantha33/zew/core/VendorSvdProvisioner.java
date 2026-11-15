@@ -25,28 +25,35 @@ public final class VendorSvdProvisioner {
     private VendorSvdProvisioner() {}
 
     private static final long MAX_BYTES = 120L * 1024 * 1024;
+    private static SvdDownloadCatalog.Entry pinnedPack(String board) {
+        var entry = SvdDownloadCatalog.forBoard(board);
+        if (entry == null || !entry.pinned() || !"pack".equals(entry.type())
+                || entry.pdsc().isBlank()
+                || !SvdDownloadCatalog.approvedHost(entry.url().getHost())) return null;
+        return entry;
+    }
+
     public record Provisioned(Path pack, String sha256, SvdAutoDiscovery.Result device) {}
 
     public static boolean supports(String board) {
-        return SvdDownloadCatalog.pinned(board, "pack") != null;
+        return pinnedPack(board) != null; // no network for missing official SHA-256
     }
 
     public static Provisioned download(String board, Path root) throws Exception {
-        var entry = SvdDownloadCatalog.pinned(board, "pack");
+        var entry = pinnedPack(board);
         if (entry == null)
-            throw new IOException("No SHA-256-pinned vendor pack for this SoC. "
-                    + "Use an installed official CMSIS pack until its upstream digest is verified.");
+            throw new IOException("Vendor pack download is disabled until its bytes have an approved SHA-256 pin.");
         Files.createDirectories(root);
         if (Files.isSymbolicLink(root))
             throw new IOException("Refusing a symbolic-link vendor-pack directory.");
         Path destination = root.resolve(entry.filename());
         // Validate an already downloaded pack too; no trust based on filenames.
-        if (Files.isRegularFile(destination) && !Files.isSymbolicLink(destination)) {
+        if (Files.isRegularFile(destination) && !Files.isSymbolicLink(destination)
+                && Files.size(destination) <= MAX_BYTES
+                && sha256(destination).equals(entry.sha256())) {
             var existing = SvdAutoDiscovery.resolve(board, List.of(root), root.resolve("cache"));
-            if (existing.state() == SvdAutoDiscovery.State.MATCHED
-                    && sha256(destination).equals(entry.sha256())
-                    && existing.mappedByPack())
-                return new Provisioned(destination, sha256(destination), existing);
+            if (existing.state() == SvdAutoDiscovery.State.MATCHED && existing.mappedByPack())
+                return new Provisioned(destination, entry.sha256(), existing);
         }
         Path temp = Files.createTempFile(root, "vendor-pack-", ".tmp");
         try {
@@ -74,7 +81,10 @@ public final class VendorSvdProvisioner {
                             throw new IOException("Insecure redirect from vendor pack host.");
                         // Follow only TI's official CMSIS-pack download endpoints.
                         String host = next.getHost().toLowerCase(java.util.Locale.ROOT);
-                        if (!isApprovedRedirectHost(host))
+                        if (!SvdDownloadCatalog.approvedHost(host)
+                                || !(host.equals(entry.url().getHost())
+                                    || ("software-dl.ti.com".equals(entry.url().getHost())
+                                        && isApprovedRedirectHost(host))))
                             throw new IOException("Unexpected vendor redirect host: " + host);
                         uri = next;
                     }
@@ -101,9 +111,8 @@ public final class VendorSvdProvisioner {
             }
             if (!complete) throw new IOException("Too many vendor-pack redirects.");
             if (!sha256(temp).equals(entry.sha256()))
-                throw new IOException("Vendor-pack SHA-256 differs from pinned catalog. No file installed.");
-            // Never accept a login/HTML response, invalid ZIP, or archive without
-            // a device-specific PDSC -> SVD mapping. No register reads occur here.
+                throw new IOException("Vendor pack SHA-256 differs from pinned catalog digest");
+            // No archive may supply register data without a PDSC exact-part link.
             try (ZipFile zip = new ZipFile(temp.toFile())) {
                 if (zip.size() == 0) throw new IOException("Empty CMSIS pack.");
             }
@@ -115,7 +124,7 @@ public final class VendorSvdProvisioner {
                 Files.copy(temp, probePack);
                 var result = SvdAutoDiscovery.resolve(board, List.of(probeDir), probeDir.resolve("cache"));
                 if (result.state() != SvdAutoDiscovery.State.MATCHED || !result.mappedByPack())
-                    throw new IOException("Pack lacks an unambiguous exact part/PDSC SVD mapping: "
+                    throw new IOException("Vendor pack lacks unambiguous exact-part PDSC mapping: "
                             + result.explanation());
             } finally {
                 try (var paths = Files.walk(probeDir)) {
@@ -129,7 +138,7 @@ public final class VendorSvdProvisioner {
             var result = SvdAutoDiscovery.resolve(board, List.of(root), root.resolve("cache"));
             if (result.state() != SvdAutoDiscovery.State.MATCHED)
                 throw new IOException("Downloaded pack could not be registered: " + result.explanation());
-            return new Provisioned(staging, sha256(staging), result);
+            return new Provisioned(staging, entry.sha256(), result);
         } finally {
             Files.deleteIfExists(temp);
         }

@@ -45,29 +45,31 @@ public final class SvdDevicetreeLinkerTests {
         check(SvdDevicetreeLinker.link(svd, invalid).get("UART0").state()
                 == SvdDevicetreeLinker.State.UNKNOWN,
                 "unknown phandle expression cannot be used to claim a match");
-        var multiregion = List.of(new DevicetreeHardware.Device("/soc/multi", "multi",
-                "", "", "okay", "<0x40001000 0x100>, <0x400A2000 0x1000>", 1));
-        var multi = SvdDevicetreeLinker.link(svd, multiregion);
-        check(multi.get("UART0").state() == SvdDevicetreeLinker.State.ENABLED_IN_DTS
-                && multi.get("GPIOB").state() == SvdDevicetreeLinker.State.ENABLED_IN_DTS,
-                "two independent bounded DTS reg regions must both match");
-        var malformed = List.of(new DevicetreeHardware.Device("/soc/bad", "bad",
-                "", "", "okay", "<0x40001000 0x100>, <&bad 0x400A2000>", 1));
-        check(SvdDevicetreeLinker.link(svd, malformed).get("UART0").state()
+        var multiRegions = List.of(new DevicetreeHardware.Device("/soc/peripheral",
+                "peripheral", "", "vendor,test", "okay",
+                "<0x40005000 0x100>, <0x40001000 0x100>", 1));
+        check(SvdDevicetreeLinker.link(svd, multiRegions).get("UART0").state()
+                == SvdDevicetreeLinker.State.ENABLED_IN_DTS,
+                "second of multiple explicit DTS reg regions maps SVD UART");
+        var malformedRegions = List.of(new DevicetreeHardware.Device("/soc/peripheral",
+                "peripheral", "", "vendor,test", "okay",
+                "<0x40005000 0x100>, <&unresolved 0x40001000>", 1));
+        var broken = SvdDevicetreeLinker.link(svd, malformedRegions).get("UART0");
+        check(broken.state() == SvdDevicetreeLinker.State.UNKNOWN
+                && broken.explanation().contains("unparseable"),
+                "unparseable partial reg must never claim another region enabled");
+        String tooMany = java.util.stream.IntStream.range(0, 9)
+                .mapToObj(i -> "<0x" + Integer.toHexString(0x40001000 + i*0x100)
+                        + " 0x100>").collect(java.util.stream.Collectors.joining(", "));
+        check(SvdDevicetreeLinker.link(svd, List.of(
+                new DevicetreeHardware.Device("/soc/large", "large", "", "",
+                        "okay", tooMany, 1))).get("UART0").state()
                 == SvdDevicetreeLinker.State.UNKNOWN,
-                "any malformed region rejects the entire node, not a partial match");
-        StringBuilder excess = new StringBuilder();
-        for (int i = 0; i < 9; i++) {
-            if (i > 0) excess.append(", ");
-            excess.append("<0x").append(Integer.toHexString(0x40001000 + i * 0x100))
-                    .append(" 0x100>");
-        }
-        check(SvdDevicetreeLinker.link(svd, List.of(new DevicetreeHardware.Device(
-                "/soc/too-many", "too-many", "", "", "okay", excess.toString(), 1)))
-                .get("UART0").state() == SvdDevicetreeLinker.State.UNKNOWN,
-                "at most eight DTS regions allowed");
-        check(SvdDevicetreeLinker.link(svd, List.of()).get("UART0").explanation()
-                .contains("zephyr.dts"), "missing DTS reason surfaced explicitly");
+                "more than eight regions cannot authorize memory access");
+        var none = SvdDevicetreeLinker.unknown(svd, "No generated build/zephyr.dts");
+        check(none.get("GPIOB").state() == SvdDevicetreeLinker.State.UNKNOWN
+                && none.get("GPIOB").explanation().contains("build/zephyr.dts"),
+                "missing built devicetree gets explicit provenance explanation");
         System.out.println("SvdDevicetreeLinkerTests PASS");
     }
 }

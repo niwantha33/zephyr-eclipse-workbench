@@ -39,50 +39,40 @@ public final class SvdTargetEvidence {
         if (!board.matches("[a-z0-9_+-]{2,100}"))
             return new Selection(State.MISSING, "", "Unrecognised board target; manual exact-device SVD required.");
         if (segments.length > 3)
-            return new Selection(State.CONFLICT, "", "Too many board qualifier segments.");
+            return new Selection(State.CONFLICT, "", "Unexpected SoC/core path segments; no automatic SVD.");
         String qualifier = segments.length > 1 ? segments[1] : "";
-        String cluster = segments.length == 3 ? segments[2] : "";
+        String core = segments.length == 3 ? segments[2] : "";
+        if (!core.isEmpty() && !Set.of("cpuapp", "cpunet", "cpu0", "cpu1",
+                "m7", "m4", "appcpu", "netcore").contains(core))
+            return new Selection(State.CONFLICT, "", "Unverified core-cluster suffix: " + core);
         String source = config == null ? "" : scalar(config.get("CONFIG_BOARD"));
         String soc = config == null ? "" : scalar(config.get("CONFIG_SOC"));
         String configQualifiers = config == null ? "" : scalar(config.get("CONFIG_BOARD_QUALIFIERS"));
         if (!source.isEmpty() && !source.equals(board))
             return new Selection(State.CONFLICT, "", "Generated .config names board " + source
                     + " but the selected project names " + board + ". Rebuild this profile before SVD discovery.");
-        if (segments.length == 3) {
-            if (!part(qualifier) || !Set.of("cpuapp", "cpunet", "cpu0", "cpu1", "m7", "m4", "appcpu", "netcore")
-                    .contains(cluster))
-                return new Selection(State.AMBIGUOUS, "",
-                        "Unrecognised multicore cluster; no SVD core is selected.");
-            String qualified = qualifier + "/" + cluster;
-            String effective = configQualifiers.replaceFirst("^/", "");
-            if (configQualifiers.isEmpty() || !effective.equals(qualified))
-                return new Selection(State.AMBIGUOUS, "",
-                        "Multicore build requires exact CONFIG_BOARD_QUALIFIERS=" + qualified);
-            if (part(soc) && !soc.equals(qualifier))
-                return new Selection(State.CONFLICT, "",
-                        "Selected SoC conflicts with CONFIG_SOC; no SVD selected.");
-            // Cluster-specific address spaces require an explicit catalog
-            // entry. The ESP32 appcpu execution qualifier is not a distinct
-            // SVD register model, so it can reuse an exact one-model SoC.
-            boolean coreSpecific = Set.of("cpuapp", "cpunet", "netcore",
-                    "cpu0", "cpu1", "m7", "m4").contains(cluster);
-            if ((coreSpecific || SvdPartCompatibility.requiresQualifier(qualifier))
-                    && !SvdPartCompatibility.hasQualifier(qualifier, cluster))
-                return new Selection(State.AMBIGUOUS, "",
-                        "No documented SVD mapping for core " + qualified);
-            return new Selection(State.EXACT_QUALIFIER, selectedBoard,
-                    "Exact multicore SoC and cluster verified from generated qualifiers: " + qualified);
-        }
-        if (part(qualifier) && SvdPartCompatibility.requiresQualifier(qualifier))
-            return new Selection(State.AMBIGUOUS, "",
-                    "Dual-core SoC requires the exact CPU cluster and CONFIG_BOARD_QUALIFIERS.");
         if (part(qualifier)) {
-            if (part(soc) && !soc.equals(qualifier))
+            if (SvdPartCompatibility.requiresQualifier(qualifier)
+                    && !SvdPartCompatibility.knownQualifier(qualifier, core))
+                return new Selection(State.AMBIGUOUS, "",
+                        "Multiple official SVD cores exist for " + qualifier
+                        + "; select an explicit matching cpuapp/cpunet board target.");
+            if (SvdPartCompatibility.requiresQualifier(qualifier) && configQualifiers.isEmpty())
+                return new Selection(State.AMBIGUOUS, "",
+                        "Generated CONFIG_BOARD_QUALIFIERS is required to verify the "
+                        + qualifier + "/" + core + " core; rebuild before selecting an SVD.");
+            if (part(soc) && !soc.equals(qualifier)
+                    && !(SvdPartCompatibility.knownQualifier(qualifier, core)
+                        && soc.equals(qualifier + "_" + core)))
                 return new Selection(State.CONFLICT, "", "Selected board qualifier " + qualifier
                         + " conflicts with generated CONFIG_SOC=" + soc + "; no automatic SVD.");
-            if (!configQualifiers.isEmpty() && !configQualifiers.replaceFirst("^/", "").startsWith(qualifier))
-                return new Selection(State.CONFLICT, "", "Selected qualifiers conflict with generated CONFIG_BOARD_QUALIFIERS="
-                        + configQualifiers + "; rebuild the selected board.");
+            String expected = qualifier + (core.isEmpty() ? "" : "/" + core);
+            if (!configQualifiers.isEmpty()
+                    && !configQualifiers.replaceFirst("^/", "").equals(expected))
+                return new Selection(State.CONFLICT, "",
+                        "Selected core/SoC " + expected
+                        + " conflicts with CONFIG_BOARD_QUALIFIERS=" + configQualifiers
+                        + "; rebuild the exact selected profile.");
             return new Selection(State.EXACT_QUALIFIER, selectedBoard,
                     "Exact selected board qualifier " + qualifier
                     + (source.isEmpty() ? " (no matching build metadata observed)." : " (board identity matches .config).")
@@ -90,14 +80,14 @@ public final class SvdTargetEvidence {
         }
         // A board-only target is valid Zephyr syntax. Accept a SoC only from
         // its generated effective config, never by guessing from the board name.
+        if (SvdPartCompatibility.requiresQualifier(soc))
+            return new Selection(State.AMBIGUOUS, "",
+                    "Generated SoC " + soc + " is multi-core; select the exact application/network core.");
         if (!source.equals(board) || !part(soc) || !configQualifiers.isEmpty()
-                && !configQualifiers.replaceFirst("^/", "").startsWith(soc))
+                && !configQualifiers.replaceFirst("^/", "").equals(soc))
             return new Selection(State.MISSING, "", "Board-only target needs generated .config"
                     + " with matching CONFIG_BOARD, exact CONFIG_SOC and compatible qualifiers."
                     + " Rebuild or choose an exact vendor SVD manually.");
-        if (SvdPartCompatibility.requiresQualifier(soc))
-            return new Selection(State.AMBIGUOUS, "",
-                    "Generated SoC has multiple SVD core maps; select explicit core qualifiers.");
         return new Selection(State.VERIFIED_BUILD_SOC, selectedBoard + "/" + soc,
                 "Effective generated CONFIG_SOC=" + soc + " for board " + board
                 + "; SVD file/model still requires exact verification.");

@@ -57,9 +57,10 @@ public final class DevicetreeHardware {
                 if (i < 0) continue;
                 Device old = result.get(i);
                 String value = property.group(2).trim();
-                if (value.length() > 180) value = value.substring(0, 180) + "...";
-                value = value.replace("\"", "");
                 String key = property.group(1);
+                int maximum = "reg".equals(key) ? 1024 : 180;
+                if (value.length() > maximum) value = value.substring(0, maximum) + "...";
+                value = value.replace("\"", "");
                 result.set(i, new Device(old.path(), old.name(),
                         "label".equals(key) ? value : old.label(),
                         "compatible".equals(key) ? value : old.compatible(),
