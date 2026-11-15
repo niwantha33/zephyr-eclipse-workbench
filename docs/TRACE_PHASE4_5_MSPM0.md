@@ -3,6 +3,13 @@
 
 **Status: opt-in firmware build and offline RAM evidence; NOT a live feature.**
 Use this with your TI **LP-MSPM0G3507**. You do NOT need an nRF board.
+The opt-in demo uses `CONFIG_TEST_RANDOM_GENERATOR=y` and
+`CONFIG_TIMER_RANDOM_GENERATOR=y` so the MSPM0 build can emit a
+**test-only, untrusted epoch marker** without assuming hardware entropy.
+Never accept that marker as a secure boot identity or enable live capture
+based on it. Hardware entropy or independently authenticated host nonces
+remain mandatory for eventual production qualification.
+
 The transport implementation is vendor-neutral: the **same** `ZEWF`
 frame encoder and finite RAM backend are compiled on MSPM0, STM32 and
 ESP32-C3 by the Windows CI matrix. Nordic hardware is NOT a prerequisite.
