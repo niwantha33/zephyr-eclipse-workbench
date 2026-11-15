@@ -55,7 +55,7 @@ support; the RAM backend never accesses SEGGER/USB/UART or OpenOCD.
 The Windows CI job builds a real Zephyr application (`examples/trace_framed_probe`)
 after explicitly patching a **disposable**, clean Zephyr checkout at
 `684c9e8f32e4373a21098559f748f06915f950c9`.
-MSPM0G3507 is built **first**, followed by STM32F446 and ESP32-C3.
+MSPM0G3507 is built **first**, followed by STM32F446, ESP32-C3 (RISC-V) and ESP32-S3 (Xtensa app core).
 The same RAM backend is selected on all three boards. The build gate
 requires generated `CONFIG_TRACING_CTF=y`, `CONFIG_TRACING_ASYNC=y` and
 `CONFIG_TRACING_BACKEND_ZEW_RAM=y`, no SMP or competing RTT backend;
@@ -118,6 +118,7 @@ Existing seven-target Windows CI and Eclipse packaging checks remain.
 | TI MSPM0G3507 / XDS110 | Bounded framed RAM | CI real build gate | PENDING |
 | STM32F446 / ST-Link | Same RAM, optional dedicated RTT if proven | CI real build gate | PENDING |
 | Espressif ESP32-C3 / Espressif OpenOCD | Same RAM; RTT only if proven | CI real build gate | PENDING |
+| Espressif ESP32-S3 / Espressif OpenOCD | Same RAM on one selected Xtensa core | CI real build gate | PENDING |
 | Nordic nRF52/nRF53 | Same RAM or dedicated RTT if probe supports it | Not included in this new physical-first matrix | PENDING (no board owned) |
 | RP2040/RP2350, NXP, Renesas, Microchip, Silicon Labs, other Zephyr SoCs | Same RAM interface subject to memory limits and single-core gate | PENDING | PENDING |
 
