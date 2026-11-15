@@ -202,10 +202,36 @@ static void zew_trace_rtt_output(const struct tracing_backend *backend,
         zew_trace_rtt_diagnostic.raw_bytes += n;
         zew_trace_rtt_diagnostic.frames = encoder.committed_frames;
     }
-    /*
-     * No automatic END. The host must mark a stopped/disconnected epoch
-     * INCOMPLETE until a verified coordinated stop/drain is implemented.
-     */
+}
+
+/* The tracing thread calls this ONLY after producers are disabled and
+ * the entire Zephyr async ring is drained. No target reset or polling. */
+void zew_trace_backend_close(void)
+{
+    uint32_t drops = tracing_packet_drop_count_get();
+
+    zew_trace_rtt_diagnostic.source_drops = drops;
+    if (!zew_trace_rtt_diagnostic.ready || drops ||
+        zew_trace_rtt_diagnostic.raw_bytes == 0U) {
+        zew_trace_rtt_diagnostic.ready = 0U;
+        if (drops) {
+            zew_trace_rtt_diagnostic.error = ZEW_TRACE_ERROR_SOURCE_LOSS;
+        } else if (zew_trace_rtt_diagnostic.error == ZEW_TRACE_ERROR_NONE) {
+            zew_trace_rtt_diagnostic.error = ZEW_TRACE_ERROR_FRAME;
+        }
+        return;
+    }
+    if (!zew_trace_encoder_send(&encoder, ZEW_TRACE_FRAME_END,
+                                NULL, 0U, 0U)) {
+        zew_trace_rtt_diagnostic.ready = 0U;
+        if (zew_trace_rtt_diagnostic.error == ZEW_TRACE_ERROR_NONE) {
+            zew_trace_rtt_diagnostic.error = ZEW_TRACE_ERROR_FRAME;
+        }
+        return;
+    }
+    zew_trace_rtt_diagnostic.frames = encoder.committed_frames;
+    zew_trace_rtt_diagnostic.ready = 0U;
+    /* An END frame was emitted; host-side flashed identity is still PENDING. */
 }
 
 static const struct tracing_backend_api zew_trace_rtt_api = {
