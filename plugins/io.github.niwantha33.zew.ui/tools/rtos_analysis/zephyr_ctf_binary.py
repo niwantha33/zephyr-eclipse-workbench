@@ -103,6 +103,65 @@ def _layout(metadata: str):
     return layouts
 
 
+def _record_size(fields):
+    """Exact fixed encoded size for one verified packed Zephyr 4.4 event."""
+    size = 6  # uint32 timestamp + uint16 event id
+    for kind, _, count, _ in fields:
+        size += struct.calcsize('<B' if kind == 'ctf_bounded_string_t'
+                                else FORMATS[kind]) * count
+    return size
+
+
+def _decode_one(binary, offset, layouts):
+    """Shared decoding primitive for offline and bounded incremental adapters.
+
+    Never scans forward on error: packed Zephyr CTF has no resync marker.
+    Returns timestamp32, event name, observed field values, end offset.
+    """
+    start = offset
+    if len(binary) - offset < 6:
+        raise ValueError(f'Truncated Zephyr CTF header at byte {start}')
+    ts, event_id = struct.unpack_from('<IH', binary, offset)
+    offset += 6
+    if event_id not in layouts:
+        raise ValueError(f'Unknown Zephyr CTF event ID 0x{event_id:x} at byte {start}')
+    event_name, fields = layouts[event_id]
+    values = {}
+    for kind, label, count, is_array in fields:
+        fmt = '<B' if kind == 'ctf_bounded_string_t' else FORMATS[kind]
+        width = struct.calcsize(fmt)
+        size = width * count
+        if offset + size > len(binary):
+            raise ValueError(f'Truncated {event_name}.{label} at byte {offset}')
+        payload = binary[offset:offset + size]
+        offset += size
+        if kind == 'ctf_bounded_string_t':
+            value = payload.split(b'\\0', 1)[0].decode('ascii', 'replace')
+        elif is_array:
+            value = [struct.unpack_from(fmt, payload, i * width)[0]
+                     for i in range(count)]
+        else:
+            value = struct.unpack_from(fmt, payload)[0]
+        values[label] = value
+    return ts, event_name, values, offset
+
+
+def _event_record(timestamp_ns, event_name, values, wire_offset):
+    """Identical schema for saved and incremental complete events."""
+    return {
+        'kind': 'event', 'stream': 0, 'name': event_name,
+        'timestamp_ns': timestamp_ns,
+        'thread_id': values.get('thread_id'),
+        'thread_name': values.get('name') if event_name != 'named_event' else None,
+        'named_event_name': values.get('name') if event_name == 'named_event' else None,
+        'priority': values.get('prio'), 'core_id': values.get('cpu'),
+        'object_id': values.get('id'), 'ret': values.get('ret'),
+        'arg0': values.get('arg0'), 'arg1': values.get('arg1'),
+        'size': values.get('size'), 'value': values.get('value'),
+        'wire_offset': wire_offset,
+    }
+
+
 def decode_packed(path: Path):
     """Yield observed Zephyr records; never skip unknown IDs or partial bytes."""
     path = Path(path)
@@ -119,30 +178,7 @@ def decode_packed(path: Path):
         if total >= MAX_EVENTS:
             raise ValueError('CTF event limit reached; only observed prefix decoded')
         start = offset
-        if len(binary) - offset < 6:
-            raise ValueError(f'Truncated Zephyr CTF header at byte {start}')
-        ts, event_id = struct.unpack_from('<IH', binary, offset)
-        offset += 6
-        if event_id not in layouts:
-            raise ValueError(f'Unknown Zephyr CTF event ID 0x{event_id:x} at byte {start}')
-        event_name, fields = layouts[event_id]
-        values = {}
-        for kind, label, count, is_array in fields:
-            fmt = '<B' if kind == 'ctf_bounded_string_t' else FORMATS[kind]
-            width = struct.calcsize(fmt)
-            size = width * count
-            if offset + size > len(binary):
-                raise ValueError(f'Truncated {event_name}.{label} at byte {offset}')
-            payload = binary[offset:offset + size]
-            offset += size
-            if kind == 'ctf_bounded_string_t':
-                value = payload.split(b'\0', 1)[0].decode('ascii', 'replace')
-            elif is_array:
-                value = [struct.unpack_from(fmt, payload, i * width)[0]
-                         for i in range(count)]
-            else:
-                value = struct.unpack_from(fmt, payload)[0]
-            values[label] = value
+        ts, event_name, values, offset = _decode_one(binary, offset, layouts)
         if last is not None and ts < last:
             # A backwards clock jump is NOT automatically a 32-bit wrap.
             # Accept only the signature of an actual near-boundary rollover.
@@ -151,18 +187,7 @@ def decode_packed(path: Path):
             wrap += 1 << 32
         last = ts
         total += 1
-        yield {
-            'kind': 'event', 'stream': 0, 'name': event_name,
-            'timestamp_ns': wrap + ts,
-            'thread_id': values.get('thread_id'),
-            'thread_name': values.get('name') if event_name != 'named_event' else None,
-            'named_event_name': values.get('name') if event_name == 'named_event' else None,
-            'priority': values.get('prio'), 'core_id': values.get('cpu'),
-            'object_id': values.get('id'), 'ret': values.get('ret'),
-            'arg0': values.get('arg0'), 'arg1': values.get('arg1'),
-            'size': values.get('size'), 'value': values.get('value'),
-            'wire_offset': start,
-        }
+        yield _event_record(wrap + ts, event_name, values, start)
 
 
 def supports(path: Path) -> bool:
