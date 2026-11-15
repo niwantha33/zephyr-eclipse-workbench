@@ -5,13 +5,25 @@ public final class SvdPartCompatibilityTests {
     private static void check(boolean result, String reason) {
         if (!result) throw new AssertionError(reason);
     }
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         check(SvdPartCompatibility.matches("mspm0g3507", "MSPM0G350X"), "real TI family");
         check(SvdPartCompatibility.matches("mspm0g3507", "MSPM0G3507"), "exact TI");
         check(!SvdPartCompatibility.matches("mspm0g3506", "MSPM0G350X"), "wrong TI chip");
         check(!SvdPartCompatibility.matches("esp32s3", "MSPM0G350X"), "wrong vendor");
         check(!SvdPartCompatibility.matches("", "MSPM0G350X"), "missing device");
         check(!SvdPartCompatibility.matches("mspm0g3507", ""), "missing description");
+        var mappings = SvdPartCompatibility.parse(new java.io.ByteArrayInputStream(
+                ("[{\"part\":\"stm32u585\",\"svdModel\":\"stm32u585xx\"}]")
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        check("stm32u585xx".equals(mappings.get("stm32u585")),
+                "exact additional part mapping loads from JSON without code changes");
+        try {
+            SvdPartCompatibility.parse(new java.io.ByteArrayInputStream(
+                    "[{\"part\":\"stm32u585\",\"svdModel\":\"stm32u585xx\"},"
+                    .concat("{\"part\":\"stm32u585\",\"svdModel\":\"other\"}]")
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            throw new AssertionError("duplicate mapping must be rejected");
+        } catch (IllegalArgumentException expected) { /* fail closed */ }
         System.out.println("SvdPartCompatibilityTests PASS");
     }
 }
