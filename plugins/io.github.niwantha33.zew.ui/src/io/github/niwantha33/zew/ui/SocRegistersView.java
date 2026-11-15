@@ -1725,8 +1725,9 @@ public final class SocRegistersView extends ViewPart {
 
     private DebugTarget debugTarget() {
         // A manually imported SVD is a definition, not proof of the debug
-        // target's SoC. Never send MMIO commands until generated build evidence
-        // has selected an exact SoC for this launch's named Zephyr project.
+        // target's SoC. Never send MMIO commands until exact SoC evidence
+        // (qualified board target or matching generated .config) is bound to
+        // this launch's named Zephyr project.
         if (device == null || selectedProjectName == null || selectedProjectName.isBlank()
                 || selectedSvdTarget == null || selectedSvdTarget.isBlank()) {
             debugResolution = "Unresolved: no verified project/SoC/SVD binding. "
