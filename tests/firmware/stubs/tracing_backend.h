@@ -10,6 +10,6 @@ struct tracing_backend_api {
 struct tracing_backend {
     const struct tracing_backend_api *api;
 };
-#define TRACING_BACKEND_DEFINE(name, api) \
-    static const struct tracing_backend name = { .api = &(api) }
+#define TRACING_BACKEND_DEFINE(name, backend_api) \
+    static const struct tracing_backend name = { .api = &(backend_api) }
 #endif
