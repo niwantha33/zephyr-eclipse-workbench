@@ -866,7 +866,7 @@ public final class SocRegistersView extends ViewPart {
                 device == null ? "Missing" : "Loaded",
                 listenedSession == null ? "No session" : "Selected",
                 busy ? currentReadOk + "/" + currentReadTotal + " OK"
-                        : values.isEmpty() ? "No reads yet" : values.size() + " read
+                        : values.isEmpty() ? "No reads yet" : values.size() + " read"
         };
         boolean[] okay = { selectedProjectName != null, !part.isBlank(),
                 device != null, listenedSession != null, !values.isEmpty() };
@@ -1371,7 +1371,7 @@ public final class SocRegistersView extends ViewPart {
                     + (busy ? "GDB read " + (currentReadOk + currentReadFailed) + "/"
                         + currentReadTotal + " (" + currentReadOk + " OK, "
                         + currentReadFailed + " failed)" : values.size() + " sampled values")
-                    + "  •  " + watches.size() + " watches
+                    + "  •  " + watches.size() + " watches"
                     + (liveWatch ? "  •  Polling while paused" : "")
                     + (history.baseline() != null ? "  •  Baseline pinned" : ""));
         } finally { tree.setRedraw(true); }
