@@ -183,8 +183,17 @@ public final class SocRegistersSmoke {
                 throw new AssertionError("Watch polling interval must be adjustable");
             var autoField = type.getDeclaredField("autoReadOnHalt"); autoField.setAccessible(true);
             var onHalt = (org.eclipse.swt.widgets.Button) autoField.get(view);
-            if (!onHalt.getSelection())
-                throw new AssertionError("Safe snapshot on GDB halt must be enabled by default");
+            if (onHalt.getSelection())
+                throw new AssertionError("Bulk register scans must not start automatically on debug halt");
+            var pageLimitField = type.getDeclaredField("MAX_READ_BATCH");
+            pageLimitField.setAccessible(true);
+            if (pageLimitField.getInt(null) > 32)
+                throw new AssertionError("Manual MMIO batches must be strictly bounded");
+            var stopRead = type.getDeclaredMethod("stopReadBatch");
+            stopRead.setAccessible(true);
+            stopRead.invoke(view);
+            if (!status.getText().contains("No register read"))
+                throw new AssertionError("Stop must safely handle the idle state");
             if (tree.getMenu() == null || watchTable.getMenu() == null)
                 throw new AssertionError("Register and Watch right-click actions are missing");
             var write = type.getDeclaredMethod("submitRegisterWrite",
