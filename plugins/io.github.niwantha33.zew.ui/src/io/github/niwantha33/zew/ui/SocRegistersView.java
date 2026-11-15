@@ -1419,9 +1419,9 @@ public final class SocRegistersView extends ViewPart {
                     if (child.getData("arrayGroup") instanceof String group) {
                         if (child.getExpanded()) expandedGroups.add(
                                 peripheral.getData("peripheralName") + "::" + group);
-                        for (TreeItem reg : child.getItems())
-                            if (reg.getExpanded() && reg.getData() instanceof Register reg)
-                                expandedRegisters.add(reg.key());
+                        for (TreeItem nested : child.getItems())
+                            if (nested.getExpanded() && nested.getData() instanceof Register registerModel)
+                                expandedRegisters.add(registerModel.key());
                     } else if (child.getExpanded() && child.getData() instanceof Register reg) {
                         expandedRegisters.add(reg.key());
                     }
