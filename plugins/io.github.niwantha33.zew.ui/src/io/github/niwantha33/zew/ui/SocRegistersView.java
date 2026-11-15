@@ -1815,8 +1815,8 @@ public final class SocRegistersView extends ViewPart {
             var run = tracker.getService(IRunControl.class);
             var expressions = tracker.getService(IExpressions.class);
             var stack = tracker.getService(IStack.class);
-            if (run == null || expressions == null || stack == null) {
-                finish(request, "Native GDB run-control, expressions or stack service unavailable.");
+            if (run == null) {
+                finish(request, "Native GDB run-control is unavailable.");
                 return;
             }
             if (selected != null) {
@@ -1837,8 +1837,9 @@ public final class SocRegistersView extends ViewPart {
                     if (!run.isSuspended(execution)) {
                         finish(request, "Selected debug thread is running; halt it before Refresh.");
                     } else {
-                        readFromThreads(session, stack, run, expressions,
-                                java.util.List.of(execution), 0, targets, request, write);
+                        // MMIO addresses are absolute: no stack frame is required.
+                        operateInFrame(session, expressions, run, execution, null,
+                                targets, request, write);
                     }
                     return;
                 }
@@ -1876,9 +1877,12 @@ public final class SocRegistersView extends ViewPart {
                                         + "the register explorer will not halt firmware automatically.");
                                 return;
                             }
-                            if (!DebugSessionSelection.uniqueHaltedThread(suspended.size())) {
-                                finish(request, "Ambiguous halted GDB threads; select the exact suspended "
-                                        + "thread or frame in Debug. No peripheral registers were read.");
+                            // A unique verified inferior with all threads suspended is
+                            // sufficient for absolute MMIO. Zephyr can expose several
+                            // virtual halted threads referring to this one device.
+                            if (suspended.size() != getData().length) {
+                                finish(request, "Some GDB execution contexts are running; "
+                                        + "halt the whole target or select a suspended thread.");
                                 return;
                             }
                             readFromThreads(session, stack, run, expressions,
@@ -1907,6 +1911,10 @@ public final class SocRegistersView extends ViewPart {
             readFromThreads(session, stack, run, expressions, threads, index + 1, targets, request, write);
             return;
         }
+        if (stack == null) {
+            operateInFrame(session, expressions, run, execution, null, targets, request, write);
+            return;
+        }
         stack.getFrames(execution, 0, 0,
                 new DataRequestMonitor<IStack.IFrameDMContext[]>(session.getExecutor(), null) {
             @Override protected void handleCompleted() {
@@ -1914,8 +1922,10 @@ public final class SocRegistersView extends ViewPart {
                 if (isSuccess() && getData() != null && getData().length > 0) {
                     operateInFrame(session, expressions, run, execution, getData()[0], targets, request, write);
                 } else {
-                    readFromThreads(session, stack, run, expressions,
-                            threads, index + 1, targets, request, write);
+                    // No stack frame does not prevent an absolute-address
+                    // GDB/MI MMIO operation on a verified suspended inferior.
+                    operateInFrame(session, expressions, run, execution, null,
+                            targets, request, write);
                 }
             }
         });
@@ -1974,7 +1984,7 @@ public final class SocRegistersView extends ViewPart {
                             finish(request, "GDB accepted write but target resumed; no readback.");
                             return;
                         }
-                        if (expressions instanceof ICachingService cache) cache.flushCache(frame);
+                        if (frame != null && expressions instanceof ICachingService cache) cache.flushCache(frame);
                         currentReadTotal = 1;
                         currentReadOk = currentReadFailed = 0;
                         readNext(session, expressions, run, execution, frame,
@@ -1991,7 +2001,7 @@ public final class SocRegistersView extends ViewPart {
             finish(request, "Target resumed while resolving its frame; no registers were read.");
             return;
         }
-        if (expressions instanceof ICachingService cache) cache.flushCache(frame);
+        if (frame != null && expressions instanceof ICachingService cache) cache.flushCache(frame);
         readNext(session, expressions, run, execution, frame, targets, 0, request);
     }
     /** One GDB/MI command per bounded SVD register, without expensive var-object creation. */
