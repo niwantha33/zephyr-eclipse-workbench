@@ -36,6 +36,12 @@ public final class VendorSvdFixtureTests {
                 r.peripheral().equals("FSMC") && r.name().equals("BCR1")
                         && r.address().equals(new BigInteger("a0000000", 16))),
                 "STM32 original FSMC register and vendor fields");
+        var samd = load("atsamd21g18a");
+        check(samd.name().equalsIgnoreCase("ATSAMD21G18A"), "Microchip exact part name preserved");
+        check(samd.registers().stream().anyMatch(r ->
+                r.peripheral().equals("AC") && r.name().equals("CTRLA")
+                        && r.address().equals(new BigInteger("42004400", 16))),
+                "Microchip authentic comparator register and offset");
         check(nordic.registers().stream().anyMatch(r -> r.fields().stream()
                 .anyMatch(field -> !field.enumeratedValues().isEmpty())),
                 "Authentic Nordic field enums survive trimmed parser fixture");
