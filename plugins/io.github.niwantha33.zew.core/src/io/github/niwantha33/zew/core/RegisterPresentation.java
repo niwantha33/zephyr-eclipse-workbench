@@ -25,7 +25,8 @@ public final class RegisterPresentation {
                         : "This register accepts write commands. ")
                         + "The chip's register description says it cannot be read; "
                         + "a blank value does not mean zero. "
-                        + "For pin state, look for a readable input/status register in the same peripheral.";
+                        + "For pin state, look for a readable input/status register in the same peripheral."
+                        + (reg.directWritable() ? " Right-click to explicitly write this register; readback is unavailable." : "");
             if (!reg.readAction().isBlank() || reg.readBlockReason().contains("readAction"))
                 return "Reading this register can change hardware state (such as clearing a flag). "
                         + "Workbench will not read it automatically.";
