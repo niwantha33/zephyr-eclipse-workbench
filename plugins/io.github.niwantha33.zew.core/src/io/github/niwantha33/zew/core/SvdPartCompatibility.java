@@ -47,8 +47,11 @@ public final class SvdPartCompatibility {
         String chip = sourcePart(part), core = sourceQualifier(part), model = normal(svdModel);
         if (chip.isBlank() || model.isBlank()) return false;
         if (requiresQualifier(chip) && core.isBlank()) return false;
-        if (core.isBlank() && chip.equals(model)) return true;
-        return model.equals(MAPPINGS.get(key(chip, core)));
+        if (!requiresQualifier(chip) && chip.equals(model)) return true;
+        String alias = MAPPINGS.get(key(chip, core));
+        if (alias == null && !requiresQualifier(chip))
+            alias = MAPPINGS.get(chip);
+        return model.equals(alias);
     }
     /** Normalised SVD file stems accepted as discovery *candidates*, never proof. */
     public static Set<String> modelsFor(String part) {
@@ -56,8 +59,9 @@ public final class SvdPartCompatibility {
         if (chip.isBlank()) return Set.of();
         if (requiresQualifier(chip) && qualifier.isBlank()) return Set.of();
         var names = new LinkedHashSet<String>();
-        if (qualifier.isBlank()) names.add(chip);
+        if (!requiresQualifier(chip)) names.add(chip);
         String alias = MAPPINGS.get(key(chip, qualifier));
+        if (alias == null && !requiresQualifier(chip)) alias = MAPPINGS.get(chip);
         if (alias != null) names.add(alias);
         return Set.copyOf(names);
     }
