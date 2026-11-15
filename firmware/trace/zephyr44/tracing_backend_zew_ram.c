@@ -132,7 +132,7 @@ static void zew_trace_ram_output(const struct tracing_backend *backend,
     if (!zew_trace_ram_receipt.ready || !length) {
         return;
     }
-    if (data == NULL || length > CONFIG_TRACING_BUFFER_SIZE) {
+    if (data == NULL || length > (CONFIG_TRACING_BUFFER_SIZE + 1U)) {
         zew_trace_ram_receipt.error = ZEW_TRACE_RAM_ERROR_ENCODE;
         zew_trace_ram_receipt.ready = 0U;
         return;
