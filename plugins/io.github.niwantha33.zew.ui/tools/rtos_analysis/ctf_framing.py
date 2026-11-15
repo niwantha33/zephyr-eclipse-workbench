@@ -93,8 +93,10 @@ class FramedCtfGate:
         raise FrameError(reason)
 
     def feed(self, chunk: bytes) -> list[bytes]:
-        if self._invalid or self._ended:
-            raise FrameError("Epoch is invalid or ended; start a new verified epoch")
+        if self._invalid:
+            raise FrameError("Epoch is invalid; start a new verified epoch")
+        if self._ended:
+            self._reject("Trailing bytes after END; no implicit new epoch")
         if not isinstance(chunk, (bytes, bytearray)) or len(chunk) > MAX_CHUNK:
             self._reject("Transport chunk exceeds fixed 16 KiB bound")
         self._pending.extend(chunk)
