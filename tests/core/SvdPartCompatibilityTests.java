@@ -24,6 +24,19 @@ public final class SvdPartCompatibilityTests {
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             throw new AssertionError("duplicate mapping must be rejected");
         } catch (IllegalArgumentException expected) { /* fail closed */ }
+        check(SvdPartCompatibility.modelsFor("mspm0g3507").contains("mspm0g350x"),
+                "bundled TI family SVD name is a discovery candidate");
+        check(SvdPartCompatibility.modelsFor("esp32s3/appcpu").contains("esp32s3"),
+                "single-map SoC supports its execution qualifier");
+        check(!SvdPartCompatibility.matches("nrf5340", "nrf5340_application"),
+                "dual-core without qualified cluster is ambiguous");
+        check(SvdPartCompatibility.matches("nrf5340/cpuapp", "nrf5340_application")
+                && SvdPartCompatibility.matches("nrf5340/cpunet", "nrf5340_network"),
+                "verified distinct Nordic core SVD aliases");
+        check(!SvdPartCompatibility.matches("nrf5340/cpuapp", "nrf5340_network"),
+                "network core cannot impersonate application core");
+        check(SvdPartCompatibility.modelsFor("nrf5340").isEmpty(),
+                "unqualified dual-core scan must not silently choose either SVD");
         System.out.println("SvdPartCompatibilityTests PASS");
     }
 }
