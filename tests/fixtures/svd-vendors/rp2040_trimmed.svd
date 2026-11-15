@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Copyright (c) 2021 Raspberry Pi Ltd.
+
+SPDX-License-Identifier: BSD-3-Clause
+-->
+<device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd">
+    <vendor>Raspberry Pi</vendor>
+    <name>RP2040</name>
+    <series>RP</series>
+    <version>0.1</version>
+    <description>
+        Dual-core Arm Cortex-M0+ processor, flexible clock running up to 133 MHz
+        264KB on-chip SRAM
+        2 x UART, 2 x SPI controllers, 2 x I2C controllers, 16 x PWM channels
+        1 x USB 1.1 controller and PHY, with host and device support
+        8 x Programmable I/O (PIO) state machines for custom peripheral support
+        Supported input power 1.8-5.5V DC
+        Operating temperature -20C to +85C
+        Drag-and-drop programming using mass storage over USB
+        Low-power sleep and dormant modes
+        Accurate on-chip clock
+        Temperature sensor
+        Accelerated integer and floating-point libraries on-chip
+    </description>
+    <width>32</width>
+    <size>32</size>
+    <resetMask>0xffffffff</resetMask>
+    <resetValue>0x00000000</resetValue>
+    <access>read-write</access>
+    <licenseText>
+        Copyright (c) 2021 Raspberry Pi Ltd.
+
+        SPDX-License-Identifier: BSD-3-Clause
+    </licenseText>
+    <cpu>
+        <name>CM0PLUS</name>
+        <revision>r0p1</revision>
+        <endian>little</endian>
+        <mpuPresent>true</mpuPresent>
+        <fpuPresent>false</fpuPresent>
+        <vtorPresent>1</vtorPresent>
+        <nvicPrioBits>2</nvicPrioBits>
+        <vendorSystickConfig>false</vendorSystickConfig>
+        <deviceNumInterrupts>32</deviceNumInterrupts>
+    </cpu>
+    <addressUnitBits>8</addressUnitBits>
+    <!-- Real vendor SVD subset: upstream blob 4c4e249ca06f6c5750c7bf5d3dd40eeb7ecab24e; source license preserved -->
+    <peripherals>
+<peripheral>
+        <name>PLL_SYS</name>
+        <baseAddress>0x40028000</baseAddress>
+        <addressBlock>
+            <offset>0</offset>
+            <size>16</size>
+            <usage>registers</usage>
+        </addressBlock>
+        <registers>
+            <register>
+                <name>CS</name>
+                <addressOffset>0x00000000</addressOffset>
+                <description>Control and Status 
+                    GENERAL CONSTRAINTS: 
+                    Reference clock frequency min=5MHz, max=800MHz 
+                    Feedback divider min=16, max=320 
+                    VCO frequency min=750MHz, max=1600MHz</description>
+                <resetValue>0x00000001</resetValue>
+                <fields>
+                    <field>
+                        <name>LOCK</name>
+                        <description>PLL is locked</description>
+                        <bitRange>[31:31]</bitRange>
+                        <access>read-only</access>
+                    </field>
+                    <field>
+                        <name>BYPASS</name>
+                        <description>Passes the reference clock to the output instead of the divided VCO. The VCO continues to run so the user can switch between the reference clock and the divided VCO but the output will glitch when doing so.</description>
+                        <bitRange>[8:8]</bitRange>
+                        <access>read-write</access>
+                    </field>
+                    <field>
+                        <name>REFDIV</name>
+                        <description>Divides the PLL input reference clock. 
+                            Behaviour is undefined for div=0. 
+                            PLL output will be unpredictable during refdiv changes, wait for lock=1 before using it.</description>
+                        <bitRange>[5:0]</bitRange>
+                        <access>read-write</access>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>PWR</name>
+                <addressOffset>0x00000004</addressOffset>
+                <description>Controls the PLL power modes.</description>
+                <resetValue>0x0000002d</resetValue>
+                <fields>
+                    <field>
+                        <name>VCOPD</name>
+                        <description>PLL VCO powerdown 
+                            To save power set high when PLL output not required or bypass=1.</description>
+                        <bitRange>[5:5]</bitRange>
+                        <access>read-write</access>
+                    </field>
+                    <field>
+                        <name>POSTDIVPD</name>
+                        <description>PLL post divider powerdown 
+                            To save power set high when PLL output not required or bypass=1.</description>
+                        <bitRange>[3:3]</bitRange>
+                        <access>read-write</access>
+                    </field>
+                    <field>
+                        <name>DSMPD</name>
+                        <description>PLL DSM powerdown 
+                            Nothing is achieved by setting this low.</description>
+                        <bitRange>[2:2]</bitRange>
+                        <access>read-write</access>
+                    </field>
+                    <field>
+                        <name>PD</name>
+                        <description>PLL powerdown 
+                            To save power set high when PLL output not required.</description>
+                        <bitRange>[0:0]</bitRange>
+                        <access>read-write</access>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>FBDIV_INT</name>
+                <addressOffset>0x00000008</addressOffset>
+                <description>Feedback divisor 
+                    (note: this PLL does not support fractional division)</description>
+                <resetValue>0x00000000</resetValue>
+                <fields>
+                    <field>
+                        <name>FBDIV_INT</name>
+                        <description>see ctrl reg description for constraints</description>
+                        <bitRange>[11:0]</bitRange>
+                        <access>read-write</access>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>PRIM</name>
+                <addressOffset>0x0000000c</addressOffset>
+                <description>Controls the PLL post dividers for the primary output 
+                    (note: this PLL does not have a secondary output) 
+                    the primary output is driven from VCO divided by postdiv1*postdiv2</description>
+                <resetValue>0x00077000</resetValue>
+                <fields>
+                    <field>
+                        <name>POSTDIV1</name>
+                        <description>divide by 1-7</description>
+                        <bitRange>[18:16]</bitRange>
+                        <access>read-write</access>
+                    </field>
+                    <field>
+                        <name>POSTDIV2</name>
+                        <description>divide by 1-7</description>
+                        <bitRange>[14:12]</bitRange>
+                        <access>read-write</access>
+                    </field>
+                </fields>
+            </register>
+        </registers>
+    </peripheral>
+<peripheral derivedFrom="PLL_SYS">
+        <name>PLL_USB</name>
+        <baseAddress>0x4002c000</baseAddress>
+    </peripheral>
+<peripheral>
+        <name>SYSINFO</name>
+        <baseAddress>0x40000000</baseAddress>
+        <addressBlock>
+            <offset>0</offset>
+            <size>68</size>
+            <usage>registers</usage>
+        </addressBlock>
+        <registers>
+            <register>
+                <name>CHIP_ID</name>
+                <addressOffset>0x00000000</addressOffset>
+                <description>JEDEC JEP-106 compliant chip identifier.</description>
+                <resetValue>0x20002927</resetValue>
+                <fields>
+                    <field>
+                        <name>REVISION</name>
+                        <bitRange>[31:28]</bitRange>
+                        <access>read-only</access>
+                    </field>
+                    <field>
+                        <name>PART</name>
+                        <bitRange>[27:12]</bitRange>
+                        <access>read-only</access>
+                    </field>
+                    <field>
+                        <name>MANUFACTURER</name>
+                        <bitRange>[11:0]</bitRange>
+                        <access>read-only</access>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>PLATFORM</name>
+                <addressOffset>0x00000004</addressOffset>
+                <description>Platform register. Allows software to know what environment it is running in.</description>
+                <resetValue>0x00000000</resetValue>
+                <fields>
+                    <field>
+                        <name>ASIC</name>
+                        <bitRange>[1:1]</bitRange>
+                        <access>read-only</access>
+                    </field>
+                    <field>
+                        <name>FPGA</name>
+                        <bitRange>[0:0]</bitRange>
+                        <access>read-only</access>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>GITREF_RP2040</name>
+                <addressOffset>0x00000040</addressOffset>
+                <description>Git hash of the chip source. Used to identify chip version.</description>
+                <resetMask>0x00000000</resetMask>
+                <fields>
+                    <field>
+                        <name>GITREF_RP2040</name>
+                        <bitRange>[31:0]</bitRange>
+                        <access>read-only</access>
+                    </field>
+                </fields>
+            </register>
+        </registers>
+    </peripheral>
+<peripheral>
+        <name>TBMAN</name>
+        <baseAddress>0x4006c000</baseAddress>
+        <description>Testbench manager. Allows the programmer to know what platform their software is running on.</description>
+        <addressBlock>
+            <offset>0</offset>
+            <size>4</size>
+            <usage>registers</usage>
+        </addressBlock>
+        <registers>
+            <register>
+                <name>PLATFORM</name>
+                <addressOffset>0x00000000</addressOffset>
+                <description>Indicates the type of platform in use</description>
+                <resetValue>0x00000005</resetValue>
+                <fields>
+                    <field>
+                        <name>FPGA</name>
+                        <description>Indicates the platform is an FPGA</description>
+                        <bitRange>[1:1]</bitRange>
+                        <access>read-only</access>
+                    </field>
+                    <field>
+                        <name>ASIC</name>
+                        <description>Indicates the platform is an ASIC</description>
+                        <bitRange>[0:0]</bitRange>
+                        <access>read-only</access>
+                    </field>
+                </fields>
+            </register>
+        </registers>
+    </peripheral>
+    </peripherals>
+</device>
