@@ -1919,38 +1919,55 @@ public final class SocRegistersView extends ViewPart {
         else writeInFrame(session, expressions, run, execution, frame, write, request);
     }
 
+    /** Typed assignment via the existing GDB/MI connection; write-only needs no preliminary read. */
     private void writeInFrame(DsfSession session, IExpressions expressions, IRunControl run,
             IRunControl.IExecutionDMContext execution, IStack.IFrameDMContext frame,
             WriteIntent write, long request) {
         if (closed || request != generation) return;
         Register reg = write.register();
-        if (!run.isSuspended(execution) || !reg.writable() || device == null
+        if (!run.isSuspended(execution) || !reg.writeAllowed() || device == null
                 || !device.registers().contains(reg)) {
             finish(request, "Hardware write cancelled: stopped session/SVD identity not valid.");
             return;
         }
+        var control = sessionCommandControl(session);
+        if (control == null) {
+            finish(request, "GDB command control is unavailable; register not written.");
+            return;
+        }
         String type = reg.size() == 8 ? "unsigned char"
                 : reg.size() == 16 ? "unsigned short" : "unsigned int";
-        String addressExpression = "*(volatile " + type + " *)0x"
-                + reg.address().toString(16);
-        var location = expressions.createExpression(frame, addressExpression);
-        // DSF routes this write through the *existing* GDB remote target; it
-        // never creates a second OpenOCD control socket or executes shell commands.
-        expressions.writeExpression(location, "0x" + write.value().toString(16),
-                IFormattedValues.HEX_FORMAT,
-                new RequestMonitor(session.getExecutor(), null) {
+        // Exact-SVD address and prevalidated unsigned value only. Never execute
+        // arbitrary user-supplied GDB/CLI strings, and never bypass SVD constraints.
+        String expression = "*(volatile " + type + " *)0x" + reg.address().toString(16)
+                + " = (" + type + ")0x" + write.value().toString(16);
+        lastGdbExpression = expression;
+        lastGdbReply = null;
+        control.queueCommand(new MIDataEvaluateExpression<MIDataEvaluateExpressionInfo>(
+                control.getContext(), expression),
+                new DataRequestMonitor<MIDataEvaluateExpressionInfo>(session.getExecutor(), null) {
                     @Override protected void handleCompleted() {
                         if (closed || request != generation) return;
                         if (!isSuccess()) {
-                            finish(request, "GDB register write failed: " + getStatus().getMessage());
+                            lastGdbReply = getStatus().getMessage();
+                            finish(request, "GDB physical register write failed: " + getStatus().getMessage());
+                            return;
+                        }
+                        lastGdbReply = getData() == null ? "GDB command accepted"
+                                : getData().getValue();
+                        if (reg.directWritable()) {
+                            // GPIO output/command register is SVD-declared write-only.
+                            finish(request, "GDB accepted write to " + reg.key()
+                                    + "; no readback is possible for this write-only register.");
                             return;
                         }
                         if (!run.isSuspended(execution)) {
-                            finish(request, "GDB write returned but target resumed; no readback performed.");
+                            finish(request, "GDB accepted write but target resumed; no readback.");
                             return;
                         }
                         if (expressions instanceof ICachingService cache) cache.flushCache(frame);
-                        // A readback is an observation, not an atomic hardware proof.
+                        currentReadTotal = 1;
+                        currentReadOk = currentReadFailed = 0;
                         readNext(session, expressions, run, execution, frame,
                                 java.util.List.of(reg), 0, request);
                     }
