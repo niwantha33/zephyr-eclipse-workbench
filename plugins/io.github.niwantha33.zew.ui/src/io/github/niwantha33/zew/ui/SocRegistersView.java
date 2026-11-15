@@ -1667,8 +1667,11 @@ public final class SocRegistersView extends ViewPart {
         if (targets.isEmpty()) {
             if (scope == ReadScope.PERIPHERAL)
                 status.setText("Select a peripheral heading or register with SVD-readable registers.");
+            else if (scope == ReadScope.SELECTION && chosen != null)
+                status.setText(chosen.key() + " cannot be read: " + chosen.readBlockReason()
+                        + ". For GPIO pin levels, select a readable DIN register instead.");
             else if (scope != ReadScope.ALL_SAFE)
-                status.setText("Select an SVD-readable register or add one to Watch.");
+                status.setText("Select a readable register, or add one to Watch.");
             else status.setText("This SVD contains no registers declared safe to read.");
             return;
         }
