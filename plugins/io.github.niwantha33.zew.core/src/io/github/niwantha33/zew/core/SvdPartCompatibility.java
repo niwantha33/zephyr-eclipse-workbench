@@ -16,7 +16,6 @@ public final class SvdPartCompatibility {
     private SvdPartCompatibility() {}
 
     private static final Map<String, String> MAPPINGS = loadBundled();
-    private static final Set<String> DUAL_CORE = Set.of("nrf5340");
 
     private static String normal(String value) {
         return value == null ? "" : value.replaceAll("[^A-Za-z0-9]", "")
