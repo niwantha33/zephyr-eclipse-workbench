@@ -1405,12 +1405,20 @@ public final class SocRegistersView extends ViewPart {
         Register chosen = selected();
         var expandedPeripherals = new HashSet<String>();
         var expandedRegisters = new HashSet<String>();
+        var expandedGroups = new HashSet<String>();
         for (TreeItem peripheral : tree.getItems()) {
             if (peripheral.getExpanded()) expandedPeripherals.add(
                     peripheral.getData("peripheralName") instanceof String name ? name : peripheral.getText());
-            for (TreeItem register : peripheral.getItems()) {
-                if (register.getExpanded() && register.getData() instanceof Register r)
+            for (TreeItem child : peripheral.getItems()) {
+                if (child.getData("arrayGroup") instanceof String group) {
+                    if (child.getExpanded()) expandedGroups.add(
+                            peripheral.getData("peripheralName") + "::" + group);
+                    for (TreeItem reg : child.getItems())
+                        if (reg.getExpanded() && reg.getData() instanceof Register r)
+                            expandedRegisters.add(r.key());
+                } else if (child.getExpanded() && child.getData() instanceof Register r) {
                     expandedRegisters.add(r.key());
+                }
             }
         }
         tree.setRedraw(false);
@@ -1447,12 +1455,14 @@ public final class SocRegistersView extends ViewPart {
                     populatePeripheral(peripheral);
                     peripheral.setExpanded(true);
                     for (TreeItem child : peripheral.getItems()) {
-                        if (child.getData() instanceof Register r && expandedRegisters.contains(r.key())) {
-                            populateFields(child, r);
-                            child.setExpanded(true);
+                        if (child.getData("arrayGroup") instanceof String group) {
+                            child.setExpanded(expandedGroups.contains(entry.getKey() + "::" + group)
+                                    || !query.isBlank());
+                            for (TreeItem nested : child.getItems())
+                                restoreRegister(nested, expandedRegisters, chosen);
+                        } else {
+                            restoreRegister(child, expandedRegisters, chosen);
                         }
-                        if (child.getData() instanceof Register r && chosen != null
-                                && chosen.key().equals(r.key())) tree.setSelection(child);
                     }
                 }
             }
@@ -1468,6 +1478,24 @@ public final class SocRegistersView extends ViewPart {
         } finally { tree.setRedraw(true); }
         renderWatches();
         updateConnectionPath();
+    }
+
+    private void restoreRegister(TreeItem item, Set<String> expanded, Register chosen) {
+        if (!(item.getData() instanceof Register reg)) return;
+        if (expanded.contains(reg.key())) {
+            populateFields(item, reg);
+            item.setExpanded(true);
+        }
+        if (chosen != null && chosen.key().equals(reg.key())) tree.setSelection(item);
+    }
+
+    private static String arrayGroupName(String name) {
+        int bracket = name.indexOf('[');
+        if (bracket > 0) return name.substring(0, bracket) + "[]";
+        var match = java.util.regex.Pattern
+                .compile("^(.{2,}?)([0-9]+)(\\..*)?$").matcher(name);
+        if (match.matches()) return match.group(1) + "[]" + (match.group(3) == null ? "" : match.group(3));
+        return "";
     }
 
     private static String bits(BigInteger value, int width) {
@@ -1557,8 +1585,25 @@ public final class SocRegistersView extends ViewPart {
             if (current != null && !current.equals(previous.getValue()))
                 changedKeys.add(previous.getKey());
         }
+        var counts = new HashMap<String, Integer>();
+        for (Register reg : registers) {
+            String group = arrayGroupName(reg.name());
+            if (!group.isEmpty()) counts.merge(group, 1, Integer::sum);
+        }
+        var groups = new java.util.LinkedHashMap<String, TreeItem>();
         for (Register r : registers) {
-            TreeItem item = new TreeItem(peripheral, SWT.NONE);
+            String group = arrayGroupName(r.name());
+            TreeItem parent = peripheral;
+            if (counts.getOrDefault(group, 0) >= 2) {
+                parent = groups.get(group);
+                if (parent == null) {
+                    parent = new TreeItem(peripheral, SWT.NONE);
+                    parent.setText(group + " (" + counts.get(group) + ")");
+                    parent.setData("arrayGroup", group);
+                    groups.put(group, parent);
+                }
+            }
+            TreeItem item = new TreeItem(parent, SWT.NONE);
             item.setData(r);
             item.setData("description", r.description());
             BigInteger value = values.get(r.key());
@@ -1713,6 +1758,7 @@ public final class SocRegistersView extends ViewPart {
         if (tree == null || tree.isDisposed() || tree.getSelectionCount() != 1) return null;
         TreeItem item = tree.getSelection()[0];
         if (item.getData() instanceof Register reg) return reg.peripheral();
+        while (item.getParentItem() != null) item = item.getParentItem();
         return item.getData("registers") instanceof List<?> ? (String) item.getData("peripheralName") : null;
     }
     private SvdDevicetreeLinker.Link dtsLink(Register reg) {
