@@ -434,7 +434,7 @@ public final class SocRegistersView extends ViewPart {
         selectedBoard = null;
         selectedSvdTarget = null;
         discoveryExplanation = "Finding vendor register descriptions for project " + selectedProjectName + "…";
-        device = null; svdPath = null; svdIdentity = null;
+        device = null; svdPath = null; svdIdentity = null; dtsLinks = Map.of();
         values.clear(); previousValues.clear(); errors.clear(); watches.clear(); history.clear();
                         lastReadAt = null;
         if (tree != null && !tree.isDisposed()) {
@@ -1047,6 +1047,26 @@ public final class SocRegistersView extends ViewPart {
         var button = new Button(parent, SWT.PUSH); button.setText(label);
         button.addListener(SWT.Selection, e -> action.run());
     }
+    private Map<String, SvdDevicetreeLinker.Link> loadDtsLinks(
+            SvdDevice model, String projectName) {
+        if (projectName == null || projectName.isBlank()) return Map.of();
+        try {
+            Path build = selectedBuildContext;
+            if (build == null) {
+                var project = ResourcesPlugin.getWorkspace().getRoot().getProject(projectName);
+                if (project == null || !project.isAccessible()) return Map.of();
+                build = ProjectContext.buildDirectory(project, ProjectContext.settings(project));
+            }
+            Path generated = build.resolve("zephyr/zephyr.dts");
+            if (!Files.isRegularFile(generated) || Files.size(generated) > 2_000_000)
+                return Map.of();
+            return SvdDevicetreeLinker.link(model,
+                    DevicetreeHardware.inspect(Files.readString(generated)));
+        } catch (Exception unavailable) {
+            return Map.of();
+        }
+    }
+
     private void load(String path) { load(path, false); }
 
     private void load(String path, boolean exactPackDeviceMapping) {
@@ -1075,6 +1095,8 @@ public final class SocRegistersView extends ViewPart {
                         while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
                     }
                     final String identity = java.util.HexFormat.of().formatHex(digest.digest());
+                    final Map<String, SvdDevicetreeLinker.Link> verifiedDtsLinks =
+                            loadDtsLinks(loaded, project);
                     if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
                         if (closed || tree.isDisposed() || request != discoveryGeneration) return;
                         if (!exactPackDeviceMapping && board != null && !board.isBlank()
@@ -1088,6 +1110,7 @@ public final class SocRegistersView extends ViewPart {
                             return;
                         }
                         generation++; busy = false; device = loaded; svdPath = path;
+                        dtsLinks = verifiedDtsLinks;
                         // Direct/manual SVDs and exact-model pack SVDs can be
                         // safely revalidated and reopened on the next launch.
                         String verifiedTarget = selectedSvdTarget == null ? board : selectedSvdTarget;
@@ -1141,6 +1164,7 @@ public final class SocRegistersView extends ViewPart {
     private void toggleLiveWatch() {
         if (liveWatch) { stopLiveWatch(); status.setText("Live Watch stopped."); return; }
         if (device == null || watches.isEmpty() || watches.size() > MAX_WATCH_POLL_REGISTERS
+                || (device != null && device.registers().stream().anyMatch(r -> watches.contains(r.key()) && dtsAccessBlocked(r)))
                 || debugTarget() == null) {
             status.setText("Live polling needs 1–8 readable watched registers and one halted GDB session.");
             return;
@@ -1372,7 +1396,8 @@ public final class SocRegistersView extends ViewPart {
         var expandedPeripherals = new HashSet<String>();
         var expandedRegisters = new HashSet<String>();
         for (TreeItem peripheral : tree.getItems()) {
-            if (peripheral.getExpanded()) expandedPeripherals.add(peripheral.getText());
+            if (peripheral.getExpanded()) expandedPeripherals.add(
+                    peripheral.getData("peripheralName") instanceof String name ? name : peripheral.getText());
             for (TreeItem register : peripheral.getItems()) {
                 if (register.getExpanded() && register.getData() instanceof Register r)
                     expandedRegisters.add(r.key());
@@ -1390,7 +1415,17 @@ public final class SocRegistersView extends ViewPart {
             }
             for (var entry : matches.entrySet()) {
                 TreeItem peripheral = new TreeItem(tree, SWT.NONE);
-                peripheral.setText(entry.getKey());
+                var link = dtsLinks.get(entry.getKey());
+                peripheral.setText(entry.getKey()
+                        + (link != null && link.state() == SvdDevicetreeLinker.State.DISABLED_IN_DTS
+                            ? " [DTS disabled]" : ""));
+                peripheral.setData("peripheralName", entry.getKey());
+                if (link != null) {
+                    peripheral.setToolTipText(link.explanation()
+                            + (link.nodePath().isBlank() ? "" : " — " + link.nodePath()));
+                    if (link.state() == SvdDevicetreeLinker.State.DISABLED_IN_DTS)
+                        peripheral.setForeground(tree.getDisplay().getSystemColor(SWT.COLOR_DARK_GRAY));
+                }
                 peripheral.setData("registers", entry.getValue());
                 // Lightweight placeholder: no register or field widgets until expanded.
                 new TreeItem(peripheral, SWT.NONE).setText("Expand to show "
@@ -1443,6 +1478,8 @@ public final class SocRegistersView extends ViewPart {
                 ? "Waiting for the current GDB read queue. Use Read this peripheral for a smaller inspection."
                 : RegisterPresentation.explanation(r, errors.get(r.key()));
         var details = new StringBuilder(r.peripheral()).append("  /  ").append(r.name()).append("\n\n")
+                .append("Devicetree     ").append(dtsLink(r).state())
+                .append(" — ").append(dtsLink(r).nodePath()).append("\n")
                 .append("Live value     ")
                 .append(value == null ? "—  (" + state + ")" : hex(value, r.size()))
                 .append("\n")
@@ -1515,14 +1552,15 @@ public final class SocRegistersView extends ViewPart {
             item.setData(r);
             item.setData("description", r.description());
             BigInteger value = values.get(r.key());
-            String access = !r.readable() ? "Read blocked: " + r.readBlockReason() : r.access();
+            String access = dtsAccessBlocked(r) ? dtsLink(r).explanation()
+                    : !r.readable() ? "Read blocked: " + r.readBlockReason() : r.access();
             if (errors.containsKey(r.key())) access = errors.get(r.key());
             else if (value != null && r.reset() != null
                     && value.xor(r.reset()).and(r.resetMask()).signum() != 0)
                 access += " — differs from reset";
             if (changedKeys.contains(r.key()))
                 access += " — CHANGED since pinned snapshot";
-            String state = readState(r);
+            String state = dtsAccessBlocked(r) ? "DTS disabled/ambiguous" : readState(r);
             if (changedKeys.contains(r.key())) state += "  • changed";
             item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(),
                     value == null ? "—" : hex(value, r.size()), state });
@@ -1665,8 +1703,19 @@ public final class SocRegistersView extends ViewPart {
         if (tree == null || tree.isDisposed() || tree.getSelectionCount() != 1) return null;
         TreeItem item = tree.getSelection()[0];
         if (item.getData() instanceof Register reg) return reg.peripheral();
-        return item.getData("registers") instanceof List<?> ? item.getText(0) : null;
+        return item.getData("registers") instanceof List<?> ? (String) item.getData("peripheralName") : null;
     }
+    private SvdDevicetreeLinker.Link dtsLink(Register reg) {
+        return dtsLinks.getOrDefault(reg.peripheral(),
+                new SvdDevicetreeLinker.Link(SvdDevicetreeLinker.State.UNKNOWN, "",
+                        "No verified generated Devicetree address mapping"));
+    }
+    private boolean dtsAccessBlocked(Register reg) {
+        var state = dtsLink(reg).state();
+        return state == SvdDevicetreeLinker.State.DISABLED_IN_DTS
+                || state == SvdDevicetreeLinker.State.AMBIGUOUS;
+    }
+
     private String readState(Register reg) {
         return pendingReads.contains(reg.key()) ? "Pending GDB read"
                 : RegisterPresentation.state(reg, values.get(reg.key()), errors.get(reg.key()));
@@ -1768,6 +1817,7 @@ public final class SocRegistersView extends ViewPart {
 
     private void editRegister(Register register) {
         if (register == null || device == null) return;
+        if (dtsAccessBlocked(register)) { status.setText(dtsLink(register).explanation()); return; }
         if (!register.writeAllowed()) {
             status.setText("Register write blocked by SVD: " + register.writeBlockReason());
             return;
@@ -1806,7 +1856,7 @@ public final class SocRegistersView extends ViewPart {
 
     private void submitRegisterWrite(Register register, BigInteger value) {
         if (device == null || register == null || !device.registers().contains(register)
-                || !register.writeAllowed()) {
+                || dtsAccessBlocked(register) || !register.writeAllowed()) {
             status.setText("Write blocked: the exact current SVD does not authorise this register.");
             return;
         }
