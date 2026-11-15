@@ -22,13 +22,14 @@ public final class GitHubSvdProvisioner {
     private static SvdDownloadCatalog.Entry pinned(String part) {
         var entry = SvdDownloadCatalog.forPart(part);
         if (entry == null || !entry.pinned() || !"svd".equals(entry.type())
-                || !"raw.githubusercontent.com".equals(entry.url().getHost())
-                || !entry.url().getPath().matches("/espressif/svd/[a-f0-9]{40}/svd/[a-z0-9]+\\.svd"))
+                || !SvdDownloadCatalog.approvedHost(entry.url().getHost()))
             return null;
         return entry;
     }
     public static boolean trusted(byte[] bytes, String part) throws Exception {
-        var entry = pinned(part);
+        return trusted(bytes, pinned(part));
+    }
+    private static boolean trusted(byte[] bytes, SvdDownloadCatalog.Entry entry) throws Exception {
         if (entry == null || bytes.length == 0 || bytes.length > MAX_SVD_SIZE) return false;
         return MessageDigest.isEqual(MessageDigest.getInstance("SHA-256").digest(bytes),
                 HexFormat.of().parseHex(entry.sha256()));
@@ -39,7 +40,8 @@ public final class GitHubSvdProvisioner {
     }
     public static boolean supports(String board) {
         var entry = SvdDownloadCatalog.forBoard(board);
-        return entry != null && pinned(entry.part()) != null
+        return entry != null && entry.pinned() && "svd".equals(entry.type())
+                && SvdDownloadCatalog.approvedHost(entry.url().getHost())
                 && (!SvdPartCompatibility.requiresQualifier(entry.part())
                     || SvdPartCompatibility.knownQualifier(entry.part(), entry.qualifier()));
     }
@@ -53,7 +55,7 @@ public final class GitHubSvdProvisioner {
         if (Files.isRegularFile(destination) && !Files.isSymbolicLink(destination)
                 && Files.size(destination) <= MAX_SVD_SIZE) {
             byte[] cached = Files.readAllBytes(destination);
-            if (trusted(cached, part) && exact(cached, part))
+            if (trusted(cached, entry) && exact(cached, part, entry.qualifier()))
                 return new Downloaded(destination, entry.sha256(), entry.url().toString());
         }
         Path temp = Files.createTempFile(root, "verified-svd-", ".tmp");
@@ -72,7 +74,7 @@ public final class GitHubSvdProvisioner {
                 bytes = input.readNBytes(MAX_SVD_SIZE + 1);
                 if (bytes.length > MAX_SVD_SIZE) throw new IOException("Vendor SVD size exceeded");
             }
-            if (!trusted(bytes, part) || !exact(bytes, part))
+            if (!trusted(bytes, entry) || !exact(bytes, part, entry.qualifier()))
                 throw new IOException("SVD digest or exact device identity did not match bundled pin");
             Files.write(temp, bytes);
             Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING);
@@ -80,10 +82,14 @@ public final class GitHubSvdProvisioner {
         } finally { Files.deleteIfExists(temp); }
     }
     public static boolean exact(byte[] bytes, String part) {
+        return exact(bytes, part, "");
+    }
+    private static boolean exact(byte[] bytes, String part, String qualifier) {
         try {
             if (bytes.length == 0 || bytes.length > MAX_SVD_SIZE) return false;
             SvdDevice device = SvdDevice.read(new java.io.ByteArrayInputStream(bytes));
-            return SvdPartCompatibility.matches(part, device.name()) && !device.registers().isEmpty();
+            return SvdPartCompatibility.matches(part, qualifier, device.name())
+                    && !device.registers().isEmpty();
         } catch (Exception ignored) { return false; }
     }
 }
