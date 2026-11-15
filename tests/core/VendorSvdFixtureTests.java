@@ -42,6 +42,28 @@ public final class VendorSvdFixtureTests {
                 r.peripheral().equals("AC") && r.name().equals("CTRLA")
                         && r.address().equals(new BigInteger("42004400", 16))),
                 "Microchip authentic comparator register and offset");
+        Path packRoot = Files.createTempDirectory("zew-stm32-pdsc-");
+        try {
+            Path svdDir = Files.createDirectories(packRoot.resolve("SVD"));
+            Files.copy(Path.of("tests/fixtures/vendor-svd/stm32f103.svd"),
+                    svdDir.resolve("STM32F103.svd"));
+            // Synthetic PDSC route with an unmodified authentic STM32 SVD
+            // excerpt; this tests selection, not an upstream DFP revision.
+            Files.writeString(packRoot.resolve("ST.DFP.pdsc"),
+                    "<package><devices><family Dfamily='STM32F1'>"
+                    + "<device Dname='STM32F103'><debug svd='SVD/STM32F103.svd'/>"
+                    + "</device></family></devices></package>");
+            var mapped = io.github.niwantha33.zew.core.SvdAutoDiscovery.resolve(
+                    "nucleo_f103rb/stm32f103", java.util.List.of(packRoot),
+                    packRoot.resolve("cache"));
+            check(mapped.state() == io.github.niwantha33.zew.core.SvdAutoDiscovery.State.MATCHED
+                    && mapped.mappedByPack(), "exact STM32F103 synthetic PDSC selects vendor register XML");
+        } finally {
+            try (var walk = Files.walk(packRoot)) {
+                for (var file : walk.sorted(java.util.Comparator.reverseOrder()).toList())
+                    Files.deleteIfExists(file);
+            }
+        }
         check(nordic.registers().stream().anyMatch(r -> r.fields().stream()
                 .anyMatch(field -> !field.enumeratedValues().isEmpty())),
                 "Authentic Nordic field enums survive trimmed parser fixture");
