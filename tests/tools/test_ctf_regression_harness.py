@@ -189,6 +189,7 @@ class TraceRegressionHarnessTests(unittest.TestCase):
         self.assertEqual(set(names), set(MODULE_FEATURES.values()) | {
             "Live streaming", "Custom trace event injection",
             "Hardware validation breadth", "Licensing model", "Runs inside the IDE",
+            "Experimental pinned-Zephyr CTF RTT firmware adapter",
         })
         self.assertTrue(all(row[1] in {"Implemented", "Partial", "Not implemented"}
                             and row[2] and row[3] and row[4] == "No" for row in entries),

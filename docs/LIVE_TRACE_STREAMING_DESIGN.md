@@ -298,3 +298,36 @@ backend/drain, exact channel and RAM evidence, physical image identity,
 shared probe ownership, trusted source-loss counters, halted/running state,
 live semantic/UI append, validated Save/Trace Compass and physical captures.
 All vendor hardware acceptance entries remain PENDING.
+
+## 11. Pinned Zephyr 4.4 opt-in firmware prototype (source only)
+
+**Not production support or a hardware qualification.** The isolated source
+in [`firmware/trace/zephyr44/`](../firmware/trace/zephyr44/README.md)
+adds a portable ZEWF v1 frame encoder and proposed Zephyr tracing backend.
+The explicit checked installer patches only pristine Zephyr commit
+`684c9e8f32e4373a21098559f748f06915f950c9`; default mode only
+checks exact source anchors, and `--apply` must be requested deliberately.
+It augments the backend Kconfig choice, CMake source list, and the existing
+Zephyr core atomic tracing drop counter getter. It changes no existing
+Workbench startup or application and does not patch managed workspaces.
+
+The proposed runtime relies on `CONFIG_TRACING_ASYNC=y` so source hooks
+use the bounded async ring instead of doing RTT writes. The tracing worker
+allocates one named binary RTT up buffer using NO_BLOCK_SKIP, refuses
+anything other than channel index 1, sends HELLO plus bounded DATA frames,
+checks Zephyr ring source drops and permanently latches nonblocking RTT
+write failure. No sleeping or retrying takes place in ISR callbacks.
+
+**Important integrity limits:** the firmware emits a supplied prebuild
+image contract digest, not the SHA256 of the finished ELF; building the
+complete ELF digest into the same ELF is self-referential. Host-side
+independent memory/flash readback is still mandatory. The boot epoch
+candidate is generated using sys_rand_get, not yet independently qualified
+for uniqueness/entropy on any target. The backend does not yet emit an END
+frame: a receiver must therefore report incomplete capture rather than
+promoting it to qualified offline CTF. RTT channel/probe support, low
+overhead, resets, source loss and all hardware rows remain PENDING.
+
+Native CI must validate portable C frame bytes against the Python verifier.
+An actual pinned Zephyr build, real RTT capture and coordinated end/drain
+test are separate gates. Do not enable Start Live Trace from this source.
