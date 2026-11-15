@@ -16,11 +16,11 @@ import java.util.regex.Pattern;
 public final class SvdPartCompatibility {
     private SvdPartCompatibility() {}
     public record Mapping(String part, String svdModel, String qualifier) {}
-    private static final List<Mapping> MAPPINGS = loadBundled();
     private static final Pattern ENTRY = Pattern.compile(
             "\\s*\\{\\s*\\\"part\\\"\\s*:\\s*\\\"([A-Za-z0-9_-]{1,64})\\\""
             + "\\s*,\\s*\\\"svdModel\\\"\\s*:\\s*\\\"([A-Za-z0-9_-]{1,64})\\\""
             + "(?:\\s*,\\s*\\\"qualifier\\\"\\s*:\\s*\\\"([A-Za-z0-9_-]{1,32})\\\")?\\s*}\\s*");
+    private static final List<Mapping> MAPPINGS = loadBundled();
 
     public static String normal(String value) {
         return value == null ? "" : value.replaceAll("[^A-Za-z0-9]", "")
