@@ -40,6 +40,7 @@ MODULE_FEATURES = {
     "capture_snapshot": "RAM CTF snapshot capture",
     "contention_detector": "Priority inversion detection",
     "contention_report": "Long resource contention detection",
+    "ctf_incremental": "Incremental packed-CTF decoding (format adapter only)",
     "coredump_offline": "Offline core-dump assessment",
     "cpu_analysis": "Zephyr CPU Load view",
     "offline_trace_json": "Zephyr Contention Report view",
