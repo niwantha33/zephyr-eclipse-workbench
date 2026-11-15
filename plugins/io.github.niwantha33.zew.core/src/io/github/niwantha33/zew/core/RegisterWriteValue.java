@@ -42,10 +42,14 @@ public final class RegisterWriteValue {
     public static BigInteger specialBit(SvdDevice.Register register,
             SvdDevice.Field field) {
         if (register == null || field == null || field.width() != 1
-                || register.size() > 32
-                || !java.util.List.of("read-write", "write-only").contains(register.access()))
+                || register.size() > 32 || !register.fields().contains(field)
+                || !java.util.List.of("read-write", "write-only").contains(register.access())
+                || !java.util.List.of("read-write", "write-only").contains(field.access()))
             throw new IllegalArgumentException("No safe one-bit special write for this register");
         String action = register.modifiedWriteValues();
+        if (register.fields().stream().anyMatch(f ->
+                !java.util.List.of("read-write", "write-only").contains(f.access())))
+            throw new IllegalArgumentException("Read-only field shares the special write register");
         if (action.isBlank()) {
             if (register.fields().isEmpty())
                 throw new IllegalArgumentException("Missing vendor bit semantics");
