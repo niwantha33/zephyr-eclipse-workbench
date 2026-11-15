@@ -61,7 +61,8 @@ public final class SvdTargetEvidence {
             if (part(soc) && !soc.equals(qualifier))
                 return new Selection(State.CONFLICT, "",
                         "Selected SoC conflicts with CONFIG_SOC; no SVD selected.");
-            if (!SvdPartCompatibility.hasQualifier(qualifier, cluster))
+            if (SvdPartCompatibility.requiresQualifier(qualifier)
+                    && !SvdPartCompatibility.hasQualifier(qualifier, cluster))
                 return new Selection(State.AMBIGUOUS, "",
                         "No documented SVD mapping for core " + qualified);
             return new Selection(State.EXACT_QUALIFIER, selectedBoard,
