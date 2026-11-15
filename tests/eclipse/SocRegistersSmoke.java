@@ -94,6 +94,17 @@ public final class SocRegistersSmoke {
                 throw new AssertionError("Plain-language register inspector and structured fields");
             if (tree.getColumnCount() != 3 || fieldTable.getColumnCount() != 3)
                 throw new AssertionError("Compact register and field tables must use three columns");
+            var peripheralFamily = type.getDeclaredMethod("peripheralFamilyName", String.class);
+            peripheralFamily.setAccessible(true);
+            if (!"UART[]".equals(peripheralFamily.invoke(null, "UART0"))
+                    || !"UART[]".equals(peripheralFamily.invoke(null, "UART12"))
+                    || !"".equals(peripheralFamily.invoke(null, "GPIOB")))
+                throw new AssertionError("Vendor peripheral instances must group without merging unrelated names");
+            var registerArray = type.getDeclaredMethod("arrayGroupName", String.class);
+            registerArray.setAccessible(true);
+            if (!"INT_EVENT[]".equals(registerArray.invoke(null, "INT_EVENT[0]"))
+                    || !"CHANNEL[].CTRL".equals(registerArray.invoke(null, "CHANNEL2.CTRL")))
+                throw new AssertionError("SVD register arrays and clusters must have expandable group names");
             var contextInfoField = type.getDeclaredField("contextInfo");
             contextInfoField.setAccessible(true);
             var pathStatus = (Label) contextInfoField.get(view);
