@@ -130,6 +130,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'SvdAutoDiscoveryTests'], check=T
 subprocess.run([tool('java'), '-cp', str(out), 'SvdDiscoveryRootsTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdDownloadCatalogTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdVendorFixturesTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'VendorSvdFixtureTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdTargetEvidenceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdPartCompatibilityTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'GitHubSvdProvisionerTests'], check=True, cwd=root, timeout=90)
