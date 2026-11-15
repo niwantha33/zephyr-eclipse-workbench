@@ -53,6 +53,31 @@ public record SvdDevice(String name, List<Register> registers) {
             return "";
         }
         public boolean writable() { return writeBlockReason().isEmpty(); }
+
+        /**
+         * Explicit *whole-register* writes for write-only command/data registers.
+         * These must never require a preliminary read or claim an MMIO readback.
+         * Exclude write-once, field mixed access, write constraints and all
+         * modified-write semantics until a dedicated peripheral writer exists.
+         */
+        public String directWriteBlockReason() {
+            if (size > 32) return "64-bit writes are not supported";
+            if (!"write-only".equals(access)) return "register access: " + access;
+            if (!modifiedWriteValues.isBlank())
+                return "register modifiedWriteValues: " + modifiedWriteValues;
+            if (!writeConstraint.isBlank()) return "register writeConstraint: " + writeConstraint;
+            for (var field : fields) {
+                if (!"write-only".equals(field.access()))
+                    return "field " + field.name() + " access: " + field.access();
+                if (!field.modifiedWriteValues().isBlank())
+                    return "field " + field.name() + " modifiedWriteValues: " + field.modifiedWriteValues();
+                if (!field.writeConstraint().isBlank())
+                    return "field " + field.name() + " writeConstraint: " + field.writeConstraint();
+            }
+            return "";
+        }
+        public boolean directWritable() { return directWriteBlockReason().isEmpty(); }
+        public boolean writeAllowed() { return writable() || directWritable(); }
         public String key() { return peripheral + "." + name; }
     }
     public static SvdDevice read(InputStream input) throws Exception {
