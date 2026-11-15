@@ -22,6 +22,7 @@ config TRACING_BACKEND_ZEW_RTT
 	bool "ZEW prototype: CTF over dedicated nonblocking SEGGER RTT"
 	depends on TRACING_CTF && TRACING_ASYNC && USE_SEGGER_RTT && !SMP
 	depends on !TRACING_HANDLE_HOST_CMD
+	depends on ENTROPY_HAS_DRIVER || TEST_RANDOM_GENERATOR
 	help
 	  Explicit experimental pinned-Zephyr CTF binary backend. This
 	  requires separately verified probe and boot/image evidence.
@@ -31,6 +32,7 @@ config TRACING_BACKEND_ZEW_RAM
 	bool "ZEW prototype: bounded framed CTF RAM capture (vendor-neutral)"
 	depends on TRACING_CTF && TRACING_ASYNC && !SMP
 	depends on !TRACING_HANDLE_HOST_CMD
+	depends on ENTROPY_HAS_DRIVER || TEST_RANDOM_GENERATOR
 	help
 	  A finite RAM recording of integrity-framed CTF events. No RTT,
 	  UART, OpenOCD running read or vendor-specific device is assumed.
