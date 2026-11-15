@@ -24,7 +24,9 @@ public final class SvdPreferredSource {
                 || Files.size(file) > SvdAutoDiscovery.MAX_SVD_BYTES) return null;
         byte[] bytes = Files.readAllBytes(file);
         var model = SvdDevice.read(new java.io.ByteArrayInputStream(bytes));
-        if (!SvdPartCompatibility.matches(part, model.name())) return null;
+        String[] components = qualifiedBoard.split("/", -1);
+        String core = components.length == 3 ? components[2] : "";
+        if (!SvdPartCompatibility.matches(part, core, model.name())) return null;
         String sha = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         return new Verified(file.toAbsolutePath().normalize(), sha,
                 model.name(), model.registers().size());
