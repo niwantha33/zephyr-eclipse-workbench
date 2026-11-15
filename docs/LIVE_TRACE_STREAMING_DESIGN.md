@@ -349,7 +349,8 @@ still fails closed. A clean END is framing integrity, **not** independent
 target attestation. The RAM capture is read only with a halted target.
 
 Phase 5 adds a disposable, exact-version pinned Zephyr source patch and
-real Windows CI builds for MSPM0G3507, STM32F446 and ESP32-C3, each
+real Windows CI builds for MSPM0G3507, STM32F446, ESP32-C3 and
+ESP32-S3, each
 checking generated .config, ELF/map CTF and backend symbols, metadata
 hashes and a CURRENT source/config receipt. Hardware tests are not
 implied by a compiler PASS. The existing OpenOCD runtime, live menu,
