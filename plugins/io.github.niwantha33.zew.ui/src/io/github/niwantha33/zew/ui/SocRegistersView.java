@@ -1074,6 +1074,8 @@ public final class SocRegistersView extends ViewPart {
                         rememberSvd(verifiedTarget, file, identity, loaded.name());
                         svdIdentity = identity;
                         values.clear(); previousValues.clear(); errors.clear(); watches.clear(); history.clear();
+                        pendingReads.clear();
+                        currentReadTotal = currentReadOk = currentReadFailed = 0;
                         lastReadAt = null;
                         render();
                         discoveryExplanation = (exactPackDeviceMapping
@@ -1931,8 +1933,10 @@ public final class SocRegistersView extends ViewPart {
                 new DataRequestMonitor<IFormattedValues.FormattedValueDMData>(session.getExecutor(), null) {
             @Override protected void handleCompleted() {
                 BigInteger value = null; String error = null;
-                if (!isSuccess()) error = "Read failed: " + getStatus().getMessage();
-                else try {
+                if (!isSuccess()) {
+                    error = "Read failed: " + getStatus().getMessage();
+                    lastGdbReply = error;
+                } else try {
                     String raw = getData().getFormattedValue().trim();
                     lastGdbReply = raw;
                     if (!raw.matches("0[xX][0-9a-fA-F]+")) throw new IllegalArgumentException();
