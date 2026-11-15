@@ -42,6 +42,24 @@ public final class SvdTargetEvidenceTests {
                 "CONFIG_SOC", "\"nrf52840\"",
                 "CONFIG_BOARD_QUALIFIERS", "\"nrf52833\"")).state() == SvdTargetEvidence.State.MISSING,
                 "mismatching generated qualifiers disallow selection");
+        var applicationCore = SvdTargetEvidence.select("nrf5340dk/nrf5340/cpuapp",
+                Map.of("CONFIG_BOARD", "\"nrf5340dk\"", "CONFIG_SOC", "\"nrf5340\"",
+                        "CONFIG_BOARD_QUALIFIERS", "\"nrf5340/cpuapp\""));
+        check(applicationCore.usable()
+                && applicationCore.target().equals("nrf5340dk/nrf5340/cpuapp"),
+                "built qualifier proves application core identity");
+        var networkCore = SvdTargetEvidence.select("nrf5340dk/nrf5340/cpunet",
+                Map.of("CONFIG_BOARD", "\"nrf5340dk\"", "CONFIG_SOC", "\"nrf5340\"",
+                        "CONFIG_BOARD_QUALIFIERS", "\"nrf5340/cpunet\""));
+        check(networkCore.usable() && networkCore.target().endsWith("/cpunet"),
+                "built qualifier proves distinct network core");
+        check(SvdTargetEvidence.select("nrf5340dk/nrf5340", Map.of()).state()
+                == SvdTargetEvidence.State.AMBIGUOUS,
+                "dual-core without CPU qualifier must remain ambiguous");
+        check(SvdTargetEvidence.select("nrf5340dk/nrf5340/cpuapp",
+                Map.of("CONFIG_BOARD_QUALIFIERS", "\"nrf5340/cpunet\"")).state()
+                == SvdTargetEvidence.State.AMBIGUOUS,
+                "wrong cluster in built config cannot select other SVD");
         System.out.println("SvdTargetEvidenceTests PASS: " + checks + " checks");
     }
 }
