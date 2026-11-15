@@ -94,7 +94,7 @@ incomplete, do not add the mapping.
 | nRF52840 | Exact named nrf52840 | `source:` Nordic MDK at https://github.com/zephyrproject-rtos/hal_nordic (fixture trimmed, BSD-3-Clause header retained) | Pending |
 | RP2040 | Exact named RP2040 | `source:` Raspberry Pi pico-sdk https://github.com/raspberrypi/pico-sdk/blob/master/src/rp2040/hardware_regs/RP2040.svd | Pending |
 | STM32F103 | Exact named STM32F103 or verified device PDSC | `source:` ST distribution mirrored under Apache-2.0 at https://github.com/modm-io/cmsis-svd-stm32/tree/main/stm32f1 | Pending |
-| ATSAMD21* | Only an exact matching part or DFP PDSC | `source:` Microchip SAMD21_DFP https://www.keil.arm.com/packs/samd21_dfp-microchip/overview/ ; no family alias inferred | Pending |
+| ATSAMD21G18A | Exact part or DFP PDSC | `source:` Microchip SAMD21_DFP https://www.keil.arm.com/packs/samd21_dfp-microchip/overview/ ; authentic Apache-2.0 Microchip SVD excerpt sourced from https://github.com/EmbeddedNim/svd2nim/blob/master/tests/ATSAMD21G18A.svd ; no family alias inferred | Pending |
 
 A multicore target such as `nrf5340dk/nrf5340/cpuapp` must match
 the **full** generated `CONFIG_BOARD_QUALIFIERS=nrf5340/cpuapp` and
