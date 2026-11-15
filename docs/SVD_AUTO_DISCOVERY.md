@@ -53,35 +53,75 @@ The tool automatically locates already installed packs; it does not silently dow
 
 Automated source-matching and UI tests are necessary but do not demonstrate that a genuine TI pack is already installed on the user's PC or that halted register reads work on real hardware.
 
-## Opt-in official vendor pack provisioning (MSPM0G3507)
+## Offline pinned download catalog (November 2026)
 
-The **Get Device Registers…** command offers an official TI MSPM0G1X0X_G3X0X_DFP 1.3.1
-CMSIS Device Family Pack from the Arm Keil distribution. It asks for consent
-before contacting the vendor and caches the pack in the managed setup's
-`vendor-svd` directory. A bounded HTTPS download and ZIP parse are followed
-by an exact device/variant PDSC-to-SVD mapping check using the existing
-SvdAutoDiscovery parser. The command fails closed on mismatched or ambiguous
-descriptions; it does **not** generate register addresses from guesses or
-access the physical target during provisioning.
+The Workbench now loads the bounded, bundled `svd-download-catalog.json`
+instead of executable per-vendor URL, model and checksum maps. The catalog
+stores `part`, optional `qualifier`, `url`, `sha256`, `type`
+(`pack` or `svd`) and optional `pdsc`. An HTTPS URL is **not**
+authorisation to download. A full, separately verified SHA-256 pin, an allowed
+origin, bounded response and matching exact part identity are all required.
+Cached content is rehashed before reuse; `.pack` payloads additionally need
+a PDSC mapping for the actual named part. Redirects remain disabled for direct
+Espressif SVDs and restricted to existing official TI hosts for packs.
 
-The pack's SHA-256 is shown after installation for provenance. This is a
-content fingerprint, **not** a substitute for a separately published and
-trusted upstream checksum or signature. The downloaded pack remains vendor
-content subject to its own license; it is not bundled into this repository.
+The eight Espressif SVD entries retain their pre-existing SHA-256 pins exactly,
+against upstream `espressif/svd` commit
+`be20aa12560889d6125d144cdb48cf615ac17628`.
 
-This download route is currently pinned only for MSPM0G3507. Other SoCs
-continue using installed official vendor packs or manual exact-device SVD
-selection. The downloaded description can populate the register names,
-addresses, and fields even when no debugger is connected. **Live register
-values require a successfully attached and suspended GDB session**; the
-terminated session in the reported screenshot cannot produce values.
+**TI caveat:** The prior MSPM0 pack URL had no independently verified SHA-256
+pin; it relied on XML/PDSC inspection and a post-download content fingerprint.
+It is recorded in the catalog with an **empty** SHA field and automatic network
+download is **disabled** until a trusted digest is established. No checksum
+has been guessed or borrowed. Locally installed official TI packs can still
+be discovered with exact PDSC evidence. This security restriction is
+intentional.
 
-### Validation still required
+## Exact SVD model aliases and evidence sources
 
-Run the Eclipse/Tycho build, verify that the official pack URL responds on
-Windows, inspect its exact MSPM0G3507 device mapping, and perform a
-hardware-in-loop halted-register read using XDS110. No build or hardware
-success is claimed by this source change alone.
+`src/svd-part-mappings.json` stores exact chip/cluster mappings, not
+heuristic `X` wildcards. Every new mapping should carry its provenance as a
+documentation row with `source:` and an exact named device/core mapping,
+a reviewed upstream revision and the expected SVD basename. If evidence is
+incomplete, do not add the mapping.
+
+| Part / qualified core | SVD model | Evidence (`source:`) | Hardware-in-loop |
+|---|---|---|---|
+| MSPM0G3507 | MSPM0G350X | `source:` Arm Keil TI MSPM0G1X0X_G3X0X Device Family Pack; installed PDSC must explicitly name MSPM0G3507: https://www.keil.com/boards2/texasinstruments/lp_mspm0g3507/ | Pending XDS110 |
+| nRF5340/cpuapp | nrf5340_application | `source:` Nordic nRF MDK DFP https://www.keil.arm.com/packs/nrf_devicefamilypack-nordicsemiconductor/versions/ and Zephyr HAL Kconfig/SVD selection https://pigweed.googlesource.com/third_party/github/zephyrproject-rtos/zephyr/+/b0afa1e571d143af0d9e29d6c13eb3b43c222a7a/modules/hal_nordic/nrfx/CMakeLists.txt | Pending app-core probe |
+| nRF5340/cpunet | nrf5340_network | `source:` same Nordic DFP and Zephyr HAL core-specific mapping above | Pending net-core probe |
+| Espressif 8 exact parts | Exact part-named SVDs | `source:` https://github.com/espressif/svd/tree/be20aa12560889d6125d144cdb48cf615ac17628/svd and pinned Git SHA-256 byte digests in catalog | Pending each chip |
+| nRF52840 | Exact named nrf52840 | `source:` Nordic MDK at https://github.com/zephyrproject-rtos/hal_nordic (fixture trimmed, BSD-3-Clause header retained) | Pending |
+| RP2040 | Exact named RP2040 | `source:` Raspberry Pi pico-sdk https://github.com/raspberrypi/pico-sdk/blob/master/src/rp2040/hardware_regs/RP2040.svd | Pending |
+| STM32F103 | Exact named STM32F103 or verified device PDSC | `source:` ST distribution mirrored under Apache-2.0 at https://github.com/modm-io/cmsis-svd-stm32/tree/main/stm32f1 | Pending |
+| ATSAMD21* | Only an exact matching part or DFP PDSC | `source:` Microchip SAMD21_DFP https://www.keil.arm.com/packs/samd21_dfp-microchip/overview/ ; no family alias inferred | Pending |
+
+A multicore target such as `nrf5340dk/nrf5340/cpuapp` must match
+the **full** generated `CONFIG_BOARD_QUALIFIERS=nrf5340/cpuapp` and
+the exact bundled core mapping; otherwise discovery returns ambiguous.
+This does not prove which actual physical core was flashed.
+
+## Traversal and DTS honesty
+
+Installed local roots are reordered to inspect the matching vendor HAL first
+(STM32, Nordic, Espressif, TI, Raspberry Pi, Microchip/Atmel, Renesas,
+Silicon Labs); order never changes the identity policy.
+Each root has its own 8,000-path budget plus a global 80,000-path ceiling,
+and truncation is reported by root. Any incomplete root makes discovery
+`INCOMPLETE_SCAN` rather than silently trusting a partial match.
+
+The register/DTS linker accepts up to eight fully parseable `reg`
+address-size ranges per node, including comma-separated `<address size>`
+regions. Malformed, symbolic, missing, overlong or ambiguous cell layouts
+remain `UNKNOWN`, with a reason. A DTS status of `okay` is not a
+guarantee the peripheral clock is powered and does not substitute for
+target-halt + GDB evidence.
+
+**Release qualification is not the same as hardware validation.** The
+remaining acceptance work for each vendor is exact installed DFP/PDSC
+resolution, CPU/core match, sample readable MMIO address, a safe
+confirmed write, suspend/resume, live watch without target starvation and
+a hardware-in-loop trace from a real probe. All remain pending until observed.
 
 ## Cross-vendor register-source discovery extension
 
