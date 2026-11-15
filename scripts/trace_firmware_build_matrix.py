@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """CI-only REAL Zephyr 4.4 builds of optional vendor-neutral framed CTF RAM.
 
-MSPM0G3507 is first. STM32 and Espressif are compile-only regressions; no
+MSPM0G3507 is first. STM32 and both Espressif architectures are compile-only regressions; no
 physical boards are required or touched. No flash, probe, OpenOCD or Live UI.
 The checkout is a disposable, verified pinned managed CI workspace.
 """
@@ -25,6 +25,7 @@ TARGETS = (
     ("mspm0", "lp_mspm0g3507", "mspm0g3507", None),
     ("stm32", "nucleo_f446re", "stm32f446xx", None),
     ("esp32c3", "esp32c3_devkitm", "esp32c3", None),
+    ("esp32s3", "esp32s3_devkitc", "esp32s3", "procpu"),
 )
 
 
