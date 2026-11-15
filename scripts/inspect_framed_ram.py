@@ -31,12 +31,14 @@ def read_file(path: Path, maximum: int) -> bytes:
 
 
 def configured_hash(config: str, key: str) -> str:
-    # Exact line matching after splitlines() handles both Windows CRLF and
-    # Unix LF; a final carriage return must not invalidate valid Kconfig.
-    pattern = re.compile(r'^CONFIG_' + re.escape(key) + r'="([0-9a-f]{64})"    if len(match) != 1:
-        raise ValueError("Missing or duplicate 64-hex generated CONFIG_" + key)
-    return match[0]
-
+    # Exact line matching after splitlines() handles Windows CRLF and LF.
+    # fullmatch() rejects trailing text, duplicates and unsafe hash values.
+    pattern = re.compile(r'CONFIG_' + re.escape(key) + r'="([0-9a-f]{64})"')
+    matches = [hit.group(1) for line in config.splitlines()
+               if (hit := pattern.fullmatch(line)) is not None]
+    if len(matches) != 1:
+        raise ValueError('Missing or duplicate 64-hex generated CONFIG_' + key)
+    return matches[0]
 
 def inspect(wire_path: Path, build: Path, metadata_path: Path) -> dict:
     wire = read_file(wire_path, MAX_CAPTURE)
