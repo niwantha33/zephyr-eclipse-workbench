@@ -68,6 +68,7 @@ import io.github.niwantha33.zew.core.SvdDevice;
 import io.github.niwantha33.zew.core.SvdDevicetreeLinker;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.SvdAutoDiscovery;
+import io.github.niwantha33.zew.core.SvdDiscoveryRoots;
 import io.github.niwantha33.zew.core.SvdTargetEvidence;
 import io.github.niwantha33.zew.core.BuildArtifacts;
 import io.github.niwantha33.zew.core.SvdPartCompatibility;
@@ -498,6 +499,10 @@ public final class SocRegistersView extends ViewPart {
                         roots.add(workspace.resolve("modules/hal/stm32"));
                         roots.add(workspace.resolve("modules/hal/nordic"));
                         roots.add(workspace.resolve("modules/hal/ti"));
+                        roots.add(workspace.resolve("modules/hal/raspberrypi"));
+                        roots.add(workspace.resolve("modules/hal/atmel"));
+                        roots.add(workspace.resolve("modules/hal/renesas"));
+                        roots.add(workspace.resolve("modules/hal/silabs"));
                         roots.add(workspace.resolve("modules/hal"));
                         roots.add(workspace.resolve("zephyr"));
                     }
@@ -520,7 +525,8 @@ public final class SocRegistersView extends ViewPart {
                                     "Reusing the verified register definitions you imported earlier.",
                                     List.of(remembered.path().toString()));
                         } else {
-                            result = SvdAutoDiscovery.resolve(target.target(), roots,
+                            result = SvdAutoDiscovery.resolve(target.target(),
+                                    SvdDiscoveryRoots.prioritize(target.target(), roots),
                                     userHome.resolve(".zew/svd-cache"));
                         }
                     }
@@ -561,7 +567,12 @@ public final class SocRegistersView extends ViewPart {
     /** Eclipse-local preferences: do not commit licensed vendor SVDs into projects. */
     private static String preferredKey(String qualifiedTarget) {
         String part = SvdAutoDiscovery.partFromBoard(qualifiedTarget);
-        return part.isBlank() ? null : "svd.preferred." + part;
+        if (part.isBlank()) return null;
+        String[] components = qualifiedTarget.split("/", -1);
+        String core = components.length == 3 ? SvdPartCompatibility.normal(components[2]) : "";
+        if (SvdPartCompatibility.requiresQualifier(part)
+                && !SvdPartCompatibility.knownQualifier(part, core)) return null;
+        return "svd.preferred." + part + (core.isBlank() ? "" : "." + core);
     }
 
     private static SvdPreferredSource.Verified preferredSvd(String target, String legacy) {
@@ -589,8 +600,10 @@ public final class SocRegistersView extends ViewPart {
 
     private static void rememberSvd(String target, Path file, String sha256, String model) {
         String key = preferredKey(target);
+        String[] components = target == null ? new String[0] : target.split("/", -1);
+        String qualifier = components.length == 3 ? components[2] : "";
         if (key == null || !SvdPartCompatibility.matches(
-                SvdAutoDiscovery.partFromBoard(target), model)) return;
+                SvdAutoDiscovery.partFromBoard(target), qualifier, model)) return;
         var preferences = InstanceScope.INSTANCE.getNode(Activator.ID);
         preferences.put(key + ".path", file.toAbsolutePath().normalize().toString());
         preferences.put(key + ".sha256", sha256);
@@ -1099,8 +1112,13 @@ public final class SocRegistersView extends ViewPart {
                             loadDtsLinks(loaded, project);
                     if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
                         if (closed || tree.isDisposed() || request != discoveryGeneration) return;
+                        String exactTarget = selectedSvdTarget == null ? board : selectedSvdTarget;
+                        String[] targetParts = exactTarget == null ? new String[0] : exactTarget.split("/", -1);
+                        String coreSuffix = targetParts.length == 3 ? targetParts[2] : "";
                         if (!exactPackDeviceMapping && board != null && !board.isBlank()
-                                && !SvdPartCompatibility.matches(verifiedSvdPart(board, selectedSvdTarget), loaded.name())) {
+                                && !SvdPartCompatibility.matches(
+                                        verifiedSvdPart(board, selectedSvdTarget),
+                                        coreSuffix, loaded.name())) {
                             status.setText("Rejected SVD model: register definitions are for "
                                     + loaded.name() + ", not the selected "
                                     + (verifiedSvdPart(board, selectedSvdTarget).isBlank()
@@ -1550,6 +1568,8 @@ public final class SocRegistersView extends ViewPart {
         var details = new StringBuilder(r.peripheral()).append("  /  ").append(r.name()).append("\n\n")
                 .append("Devicetree     ").append(dtsLink(r).state())
                 .append(" — ").append(dtsLink(r).nodePath()).append("\n")
+                .append(dtsLink(r).state() == SvdDevicetreeLinker.State.UNKNOWN
+                        ? "DTS evidence    " + dtsLink(r).explanation() + "\n" : "")
                 .append("Live value     ")
                 .append(value == null ? "—  (" + state + ")" : hex(value, r.size()))
                 .append("\n")
