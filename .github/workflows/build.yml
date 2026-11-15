@@ -179,6 +179,10 @@ jobs:
         env:
           ZEW_CI_SDK_ASSET_API: '1'
         run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --setup-only
+      - name: Check optional CTF RTT patch against exact pinned Zephyr (read-only)
+        shell: pwsh
+        run: |
+          python firmware/trace/zephyr44/apply_pinned_backend.py --zephyr-base C:/zew-ci/workspace/zephyr
       - name: Cross-vendor managed firmware matrix including ADC diagnostic
         env:
           ZEW_CI_SDK_ASSET_API: '1'
