@@ -346,7 +346,10 @@ Phase 4 adds a Zephyr async producer stop recheck **inside** its IRQ lock;
 tracing worker, which drains all buffered CTF and attempts one final END.
 A partial/nonblocking write, nonzero source loss or RAM capacity overflow
 still fails closed. A clean END is framing integrity, **not** independent
-target attestation. The RAM capture is read only with a halted target.
+target attestation. The RAM capture is read only with a halted target. The demo/CI opts in to
+Zephyr's TEST_RANDOM_GENERATOR + TIMER_RANDOM_GENERATOR for unsupported
+entropy devices such as MSPM0; these epochs are explicitly untrusted
+and cannot certify physical capture identity.
 
 Phase 5 adds a disposable, exact-version pinned Zephyr source patch and
 real Windows CI builds for MSPM0G3507, STM32F446, ESP32-C3 and
