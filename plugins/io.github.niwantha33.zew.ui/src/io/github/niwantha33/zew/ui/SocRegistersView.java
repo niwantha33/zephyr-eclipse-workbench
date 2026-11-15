@@ -1968,45 +1968,77 @@ public final class SocRegistersView extends ViewPart {
         if (expressions instanceof ICachingService cache) cache.flushCache(frame);
         readNext(session, expressions, run, execution, frame, targets, 0, request);
     }
+    /** One GDB/MI command per bounded SVD register, without expensive var-object creation. */
     private void readNext(DsfSession session, IExpressions expressions, IRunControl run,
             IRunControl.IExecutionDMContext execution, IDMContext context, java.util.List<Register> targets,
             int index, long request) {
-        // UI generation is checked on delivery; DSF also checks liveness before every command.
         if (closed || request != generation) return;
-        if (index == targets.size()) { finish(request, "Refresh complete. Snapshot from halted GDB."); return; }
+        if (index == targets.size()) {
+            finish(request, "Refresh complete. Snapshot from halted GDB.");
+            return;
+        }
         var r = targets.get(index);
-        if (!run.isSuspended(execution)) { finish(request, "Target resumed; refresh stopped."); return; }
+        if (!run.isSuspended(execution)) {
+            finish(request, "Target resumed; refresh stopped.");
+            return;
+        }
         if (!r.readable()) {
             deliver(request, r, null, "Read blocked: " + r.readBlockReason(), index, targets.size());
-            readNext(session, expressions, run, execution, context, targets, index + 1, request); return;
+            readNext(session, expressions, run, execution, context, targets, index + 1, request);
+            return;
         }
-        String type = r.size() == 8 ? "unsigned char" : r.size() == 16 ? "unsigned short" : "unsigned int";
-        // GDB decodes target endianness; the width guard prevents ABI-dependent reads.
+        var control = sessionCommandControl(session);
+        if (control == null) {
+            finish(request, "GDB command control is unavailable; no further reads attempted.");
+            return;
+        }
+        String type = r.size() == 8 ? "unsigned char"
+                : r.size() == 16 ? "unsigned short" : "unsigned int";
+        // Fails closed when target type widths do not match the SVD.
         String expression = "sizeof(" + type + ") == " + (r.size() / 8)
-                + " ? (unsigned long long)(*(volatile " + type + " *)0x" + r.address().toString(16) + ") : -1LL";
+                + " ? (unsigned long long)(*(volatile " + type + " *)0x"
+                + r.address().toString(16) + ") : -1LL";
         lastGdbExpression = expression;
         lastGdbReply = null;
-        var expr = expressions.createExpression(context, expression);
-        var formatted = expressions.getFormattedValueContext(expr, IFormattedValues.HEX_FORMAT);
-        expressions.getFormattedExpressionValue(formatted,
-                new DataRequestMonitor<IFormattedValues.FormattedValueDMData>(session.getExecutor(), null) {
-            @Override protected void handleCompleted() {
-                BigInteger value = null; String error = null;
-                if (!isSuccess()) {
-                    error = "Read failed: " + getStatus().getMessage();
-                    lastGdbReply = error;
-                } else try {
-                    String raw = getData().getFormattedValue().trim();
-                    lastGdbReply = raw;
-                    if (!raw.matches("0[xX][0-9a-fA-F]+")) throw new IllegalArgumentException();
-                    value = new BigInteger(raw.substring(2), 16);
-                    if (value.signum() < 0 || value.bitLength() > r.size()) throw new IllegalArgumentException();
-                } catch (Exception ex) { value = null; error = "Unsupported target ABI or nonnumeric GDB response"; }
-                deliver(request, r, value, error, index, targets.size());
-                readNext(session, expressions, run, execution, context, targets, index + 1, request);
-            }
-        });
+        control.queueCommand(new MIDataEvaluateExpression<MIDataEvaluateExpressionInfo>(
+                control.getContext(), expression),
+                new DataRequestMonitor<MIDataEvaluateExpressionInfo>(session.getExecutor(), null) {
+                    @Override protected void handleCompleted() {
+                        if (closed || request != generation) return;
+                        BigInteger value = null;
+                        String error = null;
+                        if (!isSuccess()) {
+                            error = "GDB/MI read failed: " + getStatus().getMessage();
+                            lastGdbReply = error;
+                        } else try {
+                            String raw = getData().getValue().trim();
+                            lastGdbReply = raw;
+                            if (raw.matches("0[xX][0-9a-fA-F]+"))
+                                value = new BigInteger(raw.substring(2), 16);
+                            else if (raw.matches("[0-9]+"))
+                                value = new BigInteger(raw, 10);
+                            else throw new IllegalArgumentException("Unrecognized GDB numeric format");
+                            if (value.signum() < 0 || value.bitLength() > r.size())
+                                throw new IllegalArgumentException("Value outside SVD register width");
+                        } catch (Exception invalid) {
+                            value = null;
+                            error = "Unsupported GDB response or target ABI: "
+                                    + (lastGdbReply == null ? "no value" : lastGdbReply);
+                        }
+                        deliver(request, r, value, error, index, targets.size());
+                        readNext(session, expressions, run, execution, context, targets, index + 1, request);
+                    }
+                });
     }
+
+    /** Only the selected DSF session's own GDB command-control service may access MMIO. */
+    private IGDBControl sessionCommandControl(DsfSession session) {
+        var tracker = new DsfServicesTracker(Activator.getDefault().getBundle()
+                .getBundleContext(), session.getId());
+        try { return tracker.getService(IGDBControl.class); }
+        finally { tracker.dispose(); }
+    }
+
     private void deliver(long request, Register r, BigInteger value, String error, int index, int total) {
         if (closed || ui.isDisposed()) return;
         ui.asyncExec(() -> {
