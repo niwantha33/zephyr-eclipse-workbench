@@ -68,6 +68,14 @@ class HaltedRamInspectorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "metadata digest"):
             inspect(self.wire, self.build, self.meta)
 
+    def test_config_line_endings_and_duplicate_values(self):
+        conf = self.conf.read_text(encoding="utf-8")
+        self.conf.write_bytes(conf.replace("\n", "\r\n").encode("utf-8"))
+        self.assertEqual(inspect(self.wire, self.build, self.meta)["frame_count"], 3)
+        self.conf.write_bytes((conf + conf.splitlines()[-1] + "\n").encode("utf-8"))
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            inspect(self.wire, self.build, self.meta)
+
     def test_missing_end_or_corrupt_crc_fails_closed(self):
         self.wire.write_bytes(self.frames[:-116])
         with self.assertRaisesRegex(ValueError, "Missing END"):
