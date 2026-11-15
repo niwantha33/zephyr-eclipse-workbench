@@ -23,8 +23,14 @@ public final class DebugSessionSelectionTests {
                 == DebugSessionSelection.State.UNRESOLVED,
                 "unrecognized explicit session cannot fall back");
         check(DebugSessionSelection.choose(null, null, launches).state()
-                == DebugSessionSelection.State.AMBIGUOUS,
-                "multiple live projects cannot be guessed");
+                == DebugSessionSelection.State.UNRESOLVED,
+                "unbound SVD must never choose a live project");
+        check(DebugSessionSelection.choose(null, "a1", launches).state()
+                == DebugSessionSelection.State.UNRESOLVED,
+                "explicit session without verified project must be rejected");
+        check(DebugSessionSelection.choose("", "a1", launches).state()
+                == DebugSessionSelection.State.UNRESOLVED,
+                "blank project must not authorise physical register access");
         var two = List.of(new DebugSessionSelection.Candidate("a1", "projectA", true),
                 new DebugSessionSelection.Candidate("a2", "projectA", true));
         check(DebugSessionSelection.choose("projectA", null, two).state()
