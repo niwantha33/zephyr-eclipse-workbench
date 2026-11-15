@@ -183,8 +183,13 @@ public final class SocRegistersSmoke {
                 throw new AssertionError("Watch polling interval must be adjustable");
             var autoField = type.getDeclaredField("autoReadOnHalt"); autoField.setAccessible(true);
             var onHalt = (org.eclipse.swt.widgets.Button) autoField.get(view);
-            if (onHalt.getSelection())
-                throw new AssertionError("Bulk register scans must not start automatically on debug halt");
+            if (!onHalt.getSelection())
+                throw new AssertionError("Bounded SVD-safe capture should be enabled on debug halt");
+            var semanticRead = type.getDeclaredMethod("readState",
+                    io.github.niwantha33.zew.core.SvdDevice.Register.class);
+            semanticRead.setAccessible(true);
+            if (!"Not sampled".equals(semanticRead.invoke(view, reg)))
+                throw new AssertionError("Halt capture must not invent a register value");
             var pageLimitField = type.getDeclaredField("MAX_READ_BATCH");
             pageLimitField.setAccessible(true);
             if (pageLimitField.getInt(null) > 32)
