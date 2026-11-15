@@ -136,7 +136,7 @@ def _decode_one(binary, offset, layouts):
         payload = binary[offset:offset + size]
         offset += size
         if kind == 'ctf_bounded_string_t':
-            value = payload.split(b'\\0', 1)[0].decode('ascii', 'replace')
+            value = payload.split(b'\0', 1)[0].decode('ascii', 'replace')
         elif is_array:
             value = [struct.unpack_from(fmt, payload, i * width)[0]
                      for i in range(count)]
