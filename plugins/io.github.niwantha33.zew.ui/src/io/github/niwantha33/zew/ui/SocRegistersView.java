@@ -1404,20 +1404,27 @@ public final class SocRegistersView extends ViewPart {
         }
         Register chosen = selected();
         var expandedPeripherals = new HashSet<String>();
+        var expandedFamilies = new HashSet<String>();
         var expandedRegisters = new HashSet<String>();
         var expandedGroups = new HashSet<String>();
-        for (TreeItem peripheral : tree.getItems()) {
-            if (peripheral.getExpanded()) expandedPeripherals.add(
-                    peripheral.getData("peripheralName") instanceof String name ? name : peripheral.getText());
-            for (TreeItem child : peripheral.getItems()) {
-                if (child.getData("arrayGroup") instanceof String group) {
-                    if (child.getExpanded()) expandedGroups.add(
-                            peripheral.getData("peripheralName") + "::" + group);
-                    for (TreeItem reg : child.getItems())
-                        if (reg.getExpanded() && reg.getData() instanceof Register r)
-                            expandedRegisters.add(r.key());
-                } else if (child.getExpanded() && child.getData() instanceof Register r) {
-                    expandedRegisters.add(r.key());
+        for (TreeItem root : tree.getItems()) {
+            if (root.getData("familyName") instanceof String family && root.getExpanded())
+                expandedFamilies.add(family);
+            TreeItem[] peripherals = root.getData("familyName") instanceof String
+                    ? root.getItems() : new TreeItem[] {root};
+            for (TreeItem peripheral : peripherals) {
+                if (peripheral.getExpanded()) expandedPeripherals.add(
+                        peripheral.getData("peripheralName") instanceof String name ? name : peripheral.getText());
+                for (TreeItem child : peripheral.getItems()) {
+                    if (child.getData("arrayGroup") instanceof String group) {
+                        if (child.getExpanded()) expandedGroups.add(
+                                peripheral.getData("peripheralName") + "::" + group);
+                        for (TreeItem reg : child.getItems())
+                            if (reg.getExpanded() && reg.getData() instanceof Register reg)
+                                expandedRegisters.add(reg.key());
+                    } else if (child.getExpanded() && child.getData() instanceof Register reg) {
+                        expandedRegisters.add(reg.key());
+                    }
                 }
             }
         }
@@ -1431,8 +1438,27 @@ public final class SocRegistersView extends ViewPart {
                         .toLowerCase(Locale.ROOT).contains(query)) continue;
                 matches.computeIfAbsent(r.peripheral(), key -> new java.util.ArrayList<>()).add(r);
             }
+            var familyCounts = new HashMap<String, Integer>();
+            for (String name : matches.keySet()) {
+                String family = peripheralFamilyName(name);
+                if (!family.isEmpty()) familyCounts.merge(family, 1, Integer::sum);
+            }
+            var familyItems = new java.util.LinkedHashMap<String, TreeItem>();
             for (var entry : matches.entrySet()) {
-                TreeItem peripheral = new TreeItem(tree, SWT.NONE);
+                TreeItem familyItem = null;
+                String family = peripheralFamilyName(entry.getKey());
+                if (familyCounts.getOrDefault(family, 0) >= 2) {
+                    familyItem = familyItems.get(family);
+                    if (familyItem == null) {
+                        familyItem = new TreeItem(tree, SWT.NONE);
+                        familyItem.setText(family + " (" + familyCounts.get(family) + " peripherals)");
+                        familyItem.setData("familyName", family);
+                        familyItem.setExpanded(expandedFamilies.contains(family) || !query.isBlank());
+                        familyItems.put(family, familyItem);
+                    }
+                }
+                TreeItem peripheral = familyItem == null
+                        ? new TreeItem(tree, SWT.NONE) : new TreeItem(familyItem, SWT.NONE);
                 var link = dtsLinks.get(entry.getKey());
                 peripheral.setText(entry.getKey()
                         + (link != null && link.state() == SvdDevicetreeLinker.State.DISABLED_IN_DTS
@@ -1487,6 +1513,12 @@ public final class SocRegistersView extends ViewPart {
             item.setExpanded(true);
         }
         if (chosen != null && chosen.key().equals(reg.key())) tree.setSelection(item);
+    }
+
+    private static String peripheralFamilyName(String name) {
+        var matcher = java.util.regex.Pattern.compile("^([A-Za-z][A-Za-z_-]*)([0-9]+)$")
+                .matcher(name);
+        return matcher.matches() ? matcher.group(1) + "[]" : "";
     }
 
     private static String arrayGroupName(String name) {
@@ -1758,8 +1790,11 @@ public final class SocRegistersView extends ViewPart {
         if (tree == null || tree.isDisposed() || tree.getSelectionCount() != 1) return null;
         TreeItem item = tree.getSelection()[0];
         if (item.getData() instanceof Register reg) return reg.peripheral();
-        while (item.getParentItem() != null) item = item.getParentItem();
-        return item.getData("registers") instanceof List<?> ? (String) item.getData("peripheralName") : null;
+        while (item != null) {
+            if (item.getData("peripheralName") instanceof String name) return name;
+            item = item.getParentItem();
+        }
+        return null;
     }
     private SvdDevicetreeLinker.Link dtsLink(Register reg) {
         return dtsLinks.getOrDefault(reg.peripheral(),
