@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0; modm-io archive of ST vendor SVD under its original license. -->
+
+<!-- Vendor-trimmed fixture from https://github.com/modm-io/cmsis-svd-stm32/blob/main/stm32f1/STM32F103.svd; one original register block, not a complete device map. -->
+<device><name>STM32F103</name><size>32</size><addressUnitBits>8</addressUnitBits>
+
+<peripherals><peripheral><name>FSMC</name><baseAddress>0xA0000000</baseAddress><registers><register>
+          <name>BCR1</name>
+          <displayName>BCR1</displayName>
+          <description>SRAM/NOR-Flash chip-select control register
+          1</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x000030D0</resetValue>
+          <fields>
+            <field>
+              <name>CBURSTRW</name>
+              <description>CBURSTRW</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ASYNCWAIT</name>
+              <description>ASYNCWAIT</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>EXTMOD</name>
+              <description>EXTMOD</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WAITEN</name>
+              <description>WAITEN</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WREN</name>
+              <description>WREN</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WAITCFG</name>
+              <description>WAITCFG</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WAITPOL</name>
+              <description>WAITPOL</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BURSTEN</name>
+              <description>BURSTEN</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>FACCEN</name>
+              <description>FACCEN</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>MWID</name>
+              <description>MWID</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>MTYP</name>
+              <description>MTYP</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>MUXEN</name>
+              <description>MUXEN</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>MBKEN</name>
+              <description>MBKEN</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register></registers></peripheral></peripherals>
+</device>

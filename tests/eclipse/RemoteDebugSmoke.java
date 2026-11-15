@@ -109,15 +109,17 @@ public final class RemoteDebugSmoke {
             check(launch.getLaunchConfiguration().getAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUGGER_UPDATE_THREADLIST_ON_SUSPEND, false),
                     "saved launch now refreshes threads at every halt");
             var session = launch.getSession();
-            // The SVD explorer must recognize a unique live GdbLaunch even if the
-            // Debug view's active context is unset. Never bind a different project.
+            // An SVD explorer without a project must NOT bind an unrelated native GDB
+            // session, even if it is unique. A matching named project may resolve
+            // the session without a selected Debug frame, but not without SoC evidence
+            // for real MMIO access.
             var viewType = Platform.getBundle("io.github.niwantha33.zew.ui")
                     .loadClass("io.github.niwantha33.zew.ui.SocRegistersView");
             var registerView = viewType.getConstructor().newInstance();
             var resolveLaunch = viewType.getDeclaredMethod("uniqueZephyrLaunch");
             resolveLaunch.setAccessible(true);
-            check(resolveLaunch.invoke(registerView) == launch,
-                    "register explorer discovers unique native Zephyr GDB session without selected frame");
+            check(resolveLaunch.invoke(registerView) == null,
+                    "register explorer refuses unique GDB fallback without a verified project");
             var projectField = viewType.getDeclaredField("selectedProjectName");
             projectField.setAccessible(true);
             projectField.set(registerView, "DifferentTarget");

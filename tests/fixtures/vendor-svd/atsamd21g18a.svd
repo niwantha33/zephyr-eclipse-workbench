@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Authentic Microchip vendor SVD excerpt, copied from EmbeddedNim/svd2nim tests/ATSAMD21G18A.svd; original Apache-2.0 vendor license retained. -->
+<device><name>ATSAMD21G18A</name><size>32</size><addressUnitBits>8</addressUnitBits>
+<licenseText>
+  Copyright (c) 2018 Microchip Technology Inc.\n
+\n
+  SPDX-License-Identifier: Apache-2.0\n
+\n
+  Licensed under the Apache License, Version 2.0 (the "License");\n
+  you may not use this file except in compliance with the License.\n
+  You may obtain a copy of the License at\n
+\n
+  http://www.apache.org/licenses/LICENSE-2.0\n
+\n
+  Unless required by applicable law or agreed to in writing, software\n
+  distributed under the License is distributed on an "AS IS" BASIS,\n
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n
+  See the License for the specific language governing permissions and\n
+  limitations under the License.
+  </licenseText>
+<peripherals><peripheral><name>AC</name><baseAddress>0x42004400</baseAddress><registers><register>
+          <name>CTRLA</name>
+          <description>Control A</description>
+          <addressOffset>0x00</addressOffset>
+          <size>8</size>
+          <fields>
+            <field>
+              <name>SWRST</name>
+              <description>Software Reset</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+            <field>
+              <name>ENABLE</name>
+              <description>Enable</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RUNSTDBY</name>
+              <description>Run in Standby</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>LPMUX</name>
+              <description>Low-Power Mux</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register></registers></peripheral></peripherals></device>

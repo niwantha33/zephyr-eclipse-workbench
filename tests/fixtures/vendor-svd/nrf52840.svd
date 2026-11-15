@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- File naming: <vendor>_<part/series name>_svd.xml -->
+<!-- Vendor-trimmed fixture from https://github.com/zephyrproject-rtos/hal_nordic/blob/master/nrfx/bsp/stable/mdk/nrf52/nrf52840/nrf52840.svd; one original register block, not a complete device map. -->
+<device><name>nrf52840</name><size>32</size><addressUnitBits>8</addressUnitBits>
+<licenseText>
+Copyright (c) 2010 - 2026, Nordic Semiconductor ASA All rights reserved.
+
+SPDX-License-Identifier: BSD-3-Clause
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+3. Neither the name of Nordic Semiconductor ASA nor the names of its
+   contributors may be used to endorse or promote products derived from this
+   software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+      </licenseText>
+<peripherals><peripheral><name>FICR</name><baseAddress>0x10000000</baseAddress><registers><register>
+          <name>CODEPAGESIZE</name>
+          <description>Code memory page size</description>
+          <addressOffset>0x010</addressOffset>
+          <access>read-only</access>
+          <resetValue>0xFFFFFFFF</resetValue>
+          <size>0x20</size>
+          <fields>
+            <field>
+              <name>CODEPAGESIZE</name>
+              <description>Code memory page size</description>
+              <lsb>0</lsb>
+              <msb>31</msb>
+            </field>
+          </fields>
+        </register></registers></peripheral><peripheral>
+      <name>P0</name>
+      <description>GPIO Port 0</description>
+      <baseAddress>0x50000000</baseAddress>
+      <headerStructName>GPIO</headerStructName>
+      <addressBlock>
+        <offset>0</offset>
+        <size>0x1000</size>
+        <usage>registers</usage>
+      </addressBlock>
+      <groupName>GPIO</groupName>
+      <size>0x20</size>
+      <registers><register>
+          <name>OUT</name>
+          <description>Write GPIO port</description>
+          <addressOffset>0x504</addressOffset>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <size>0x20</size>
+          <fields>
+            <field>
+              <name>PIN0</name>
+              <description>Pin 0</description>
+              <lsb>0</lsb>
+              <msb>0</msb>
+              <enumeratedValues>
+                <enumeratedValue>
+                  <name>Low</name>
+                  <description>Pin driver is low</description>
+                  <value>0x0</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>High</name>
+                  <description>Pin driver is high</description>
+                  <value>0x1</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field></fields>
+        </register></registers></peripheral>
+<peripheral derivedFrom="P0">
+      <name>P1</name>
+      <description>GPIO Port 1</description>
+      <baseAddress>0x50000300</baseAddress>
+      <alternatePeripheral>P0</alternatePeripheral>
+    </peripheral>
+</peripherals>
+</device>
