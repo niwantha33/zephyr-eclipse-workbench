@@ -72,6 +72,7 @@ import io.github.niwantha33.zew.core.SvdDiscoveryRoots;
 import io.github.niwantha33.zew.core.SvdTargetEvidence;
 import io.github.niwantha33.zew.core.BuildArtifacts;
 import io.github.niwantha33.zew.core.SvdPartCompatibility;
+import io.github.niwantha33.zew.core.SvdSourceSnapshot;
 import io.github.niwantha33.zew.core.SvdPreferredSource;
 import io.github.niwantha33.zew.core.RegisterPresentation;
 import org.eclipse.core.runtime.preferences.InstanceScope;
@@ -1014,6 +1015,9 @@ public final class SocRegistersView extends ViewPart {
                 .append("   File: ").append(svdPath == null ? "none" : svdPath).append("\n")
                 .append("   SHA-256: ").append(svdIdentity == null
                         ? "unavailable" : svdIdentity).append("\n")
+                .append("   Verified build target: ").append(selectedSvdTarget == null
+                        ? "NOT VERIFIED" : selectedSvdTarget).append("\n")
+                .append("   Session selection: ").append(debugResolution).append("\n")
                 .append("4. Native CDT GDB: ").append(listenedSession == null
                         ? "NOT ATTACHED" : "session " + listenedSession.getId()).append("\n")
                 .append("5. Debug server: existing GDB remote transport (OpenOCD when configured)\n")
@@ -1106,19 +1110,12 @@ public final class SocRegistersView extends ViewPart {
             @Override protected IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 try {
                     Path file = Path.of(path);
-                    if (Files.size(file) > 32 * 1024 * 1024)
-                        throw new IllegalArgumentException("SVD exceeds 32 MiB");
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
-                    SvdDevice loaded;
-                    try (var input = Files.newInputStream(file)) { loaded = SvdDevice.read(input); }
-                    if (monitor.isCanceled()) return Status.CANCEL_STATUS;
-                    var digest = java.security.MessageDigest.getInstance("SHA-256");
-                    try (var input = Files.newInputStream(file)) {
-                        byte[] buffer = new byte[4096];
-                        int count;
-                        while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
-                    }
-                    final String identity = java.util.HexFormat.of().formatHex(digest.digest());
+                    // One offline, no-follow, bounded snapshot supplies BOTH the
+                    // parsed register definitions and their SHA-256 identity.
+                    var source = SvdSourceSnapshot.read(file);
+                    SvdDevice loaded = source.device();
+                    final String identity = source.sha256();
                     final Map<String, SvdDevicetreeLinker.Link> verifiedDtsLinks =
                             loadDtsLinks(loaded, project);
                     if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
@@ -1727,6 +1724,16 @@ public final class SocRegistersView extends ViewPart {
     private record DebugTarget(DsfSession session, IDMContext context) {}
 
     private DebugTarget debugTarget() {
+        // A manually imported SVD is a definition, not proof of the debug
+        // target's SoC. Never send MMIO commands until exact SoC evidence
+        // (qualified board target or matching generated .config) is bound to
+        // this launch's named Zephyr project.
+        if (device == null || selectedProjectName == null || selectedProjectName.isBlank()
+                || selectedSvdTarget == null || selectedSvdTarget.isBlank()) {
+            debugResolution = "Unresolved: no verified project/SoC/SVD binding. "
+                    + "Choose the exact Zephyr project and build before using live registers.";
+            return null;
+        }
         IDMContext selected = debugContext();
         var decision = DebugSessionSelection.choose(selectedProjectName,
                 selected == null ? null : selected.getSessionId(), zephyrCandidates());
