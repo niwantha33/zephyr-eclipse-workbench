@@ -77,7 +77,11 @@ public final class SvdDevicetreeLinker {
         String raw = node.reg();
         if (!raw.startsWith("<") || !raw.contains(">") || raw.contains("&")
                 || raw.contains("...")) return List.of();
-        var matcher = CELL.matcher(raw.substring(raw.indexOf('<') + 1, raw.indexOf('>')));
+        String cells = raw.substring(raw.indexOf('<') + 1, raw.indexOf('>'));
+        // Reject any unrecognized syntax, symbols or phandles, not only unknown numbers.
+        if (!CELL.matcher(cells).replaceAll("").replaceAll("\\s+", "").isEmpty())
+            return List.of();
+        var matcher = CELL.matcher(cells);
         var tokens = new ArrayList<BigInteger>();
         while (matcher.find()) {
             try {
@@ -91,7 +95,11 @@ public final class SvdDevicetreeLinker {
         BigInteger address, size;
         if (tokens.size() == 2) {
             address = tokens.get(0); size = tokens.get(1);
-        } else if (tokens.size() == 4) {
+        } else if (tokens.size() == 4
+                && BigInteger.ZERO.equals(tokens.get(0))
+                && BigInteger.ZERO.equals(tokens.get(2))) {
+            // Only unambiguous 64-bit pairs with zero high words.
+            // Four arbitrary cells could also represent *two* 32-bit regions.
             address = tokens.get(0).shiftLeft(32).or(tokens.get(1));
             size = tokens.get(2).shiftLeft(32).or(tokens.get(3));
         } else return List.of();
