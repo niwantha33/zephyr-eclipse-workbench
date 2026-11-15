@@ -52,6 +52,16 @@ public final class SvdDownloadCatalog {
                 && e.qualifier().isEmpty()).toList();
         return matches.size() == 1 ? matches.get(0) : null;
     }
+    /** Only official vendor-origin domains; a pinned digest alone is not host approval. */
+    public static boolean approvedHost(String host) {
+        if (host == null) return false;
+        String name = host.toLowerCase(Locale.ROOT);
+        if (Set.of("raw.githubusercontent.com", "software-dl.ti.com", "downloads.ti.com",
+                "packs.download.microchip.com", "www.keil.com", "www.nordicsemi.com")
+                .contains(name)) return true;
+        return false;
+    }
+
     public static List<Entry> parse(InputStream stream) throws Exception {
         byte[] bytes = stream.readNBytes(32_769);
         if (bytes.length > 32_768) throw new IllegalArgumentException("Catalog exceeds 32 KiB");
@@ -72,7 +82,7 @@ public final class SvdDownloadCatalog {
             String host = url.getHost() == null ? "" : url.getHost().toLowerCase(Locale.ROOT);
             if (!"https".equals(url.getScheme()) || url.getUserInfo() != null
                     || url.getPort() != -1 || url.getQuery() != null || url.getFragment() != null
-                    || !Set.of("software-dl.ti.com", "raw.githubusercontent.com").contains(host))
+                    || !approvedHost(host))
                 throw new IllegalArgumentException("Unapproved SVD catalog download host");
             String filename = url.getPath().substring(url.getPath().lastIndexOf('/') + 1);
             if (!filename.matches("[A-Za-z0-9_.-]{1,180}")
