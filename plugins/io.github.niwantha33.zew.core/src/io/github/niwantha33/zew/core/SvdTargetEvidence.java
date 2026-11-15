@@ -57,6 +57,10 @@ public final class SvdTargetEvidence {
                 return new Selection(State.AMBIGUOUS, "",
                         "Multiple official SVD cores exist for " + qualifier
                         + "; select an explicit matching cpuapp/cpunet board target.");
+            if (SvdPartCompatibility.requiresQualifier(qualifier) && configQualifiers.isEmpty())
+                return new Selection(State.AMBIGUOUS, "",
+                        "Generated CONFIG_BOARD_QUALIFIERS is required to verify the "
+                        + qualifier + "/" + core + " core; rebuild before selecting an SVD.");
             if (part(soc) && !soc.equals(qualifier)
                     && !(SvdPartCompatibility.knownQualifier(qualifier, core)
                         && soc.equals(qualifier + "_" + core)))
