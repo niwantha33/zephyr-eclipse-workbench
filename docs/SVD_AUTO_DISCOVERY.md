@@ -86,9 +86,9 @@ When importing or auto-loading SVD definitions, the workbench now reads at most
 fingerprint consume the **same in-memory bytes**, avoiding a race where edited
 source files produce different map and fingerprint revisions.
 
-Physical MMIO operations additionally require both a **verified exact SoC
-from generated build metadata** and the **same named project's active native
-DSF-GDB launch**. A manual SVD import without a verified build can be inspected
+Physical MMIO operations additionally require both an **exact SoC selected
+from the qualified board or generated build metadata** and the **same named
+project's active native DSF-GDB launch**. A manual SVD import without a verified build can be inspected
 offline, but cannot authorise physical reads, live polling or writes. The
 connection diagnostics report shows the verified build target and selection
 failure reason, not fabricated register data.
