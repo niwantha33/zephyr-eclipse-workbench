@@ -1,3 +1,5 @@
 [
-  {"part":"mspm0g3507","svdModel":"mspm0g350x"}
+  {"part":"mspm0g3507","svdModel":"mspm0g350x"},
+  {"part":"nrf5340","qualifier":"cpuapp","svdModel":"nrf5340_application"},
+  {"part":"nrf5340","qualifier":"cpunet","svdModel":"nrf5340_network"}
 ]
