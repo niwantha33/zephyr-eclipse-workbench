@@ -176,7 +176,8 @@ void zew_trace_backend_close(void)
     uint32_t drops = tracing_packet_drop_count_get();
 
     zew_trace_ram_receipt.source_drops = drops;
-    if (!zew_trace_ram_receipt.ready || drops) {
+    if (!zew_trace_ram_receipt.ready || drops ||
+        zew_trace_ram_receipt.raw_ctf_bytes == 0U) {
         zew_trace_ram_receipt.ready = 0U;
         if (drops && !zew_trace_ram_receipt.error) {
             zew_trace_ram_receipt.error = ZEW_TRACE_RAM_ERROR_SOURCE_LOSS;
