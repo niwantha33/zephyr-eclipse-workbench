@@ -133,7 +133,8 @@ static void zew_trace_rtt_init(void)
         zew_trace_rtt_diagnostic.error = ZEW_TRACE_ERROR_INIT;
         return;
     }
-    SEGGER_RTT_Init();
+    /* AllocUpBuffer performs INIT() if necessary; do NOT call
+     * SEGGER_RTT_Init(), which could reset a pre-existing text console. */
     channel = SEGGER_RTT_AllocUpBuffer(
             "ZEW-CTF-V1", dedicated_up_buffer, sizeof(dedicated_up_buffer),
             SEGGER_RTT_MODE_NO_BLOCK_SKIP);
