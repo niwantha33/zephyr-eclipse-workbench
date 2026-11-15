@@ -33,6 +33,10 @@ public final class DebugSessionSelection {
     public static Decision choose(String project, String selectedSessionId,
                                   List<Candidate> launches) {
         Objects.requireNonNull(launches);
+        // Without a verified project, an unrelated active MCU could be chosen,
+        // causing SVD addresses from a manually imported file to be read/written.
+        if (project == null || project.isBlank())
+            return new Decision(State.UNRESOLVED, null);
         var unique = new HashSet<String>();
         boolean foreign = false;
         for (Candidate candidate : launches) {
