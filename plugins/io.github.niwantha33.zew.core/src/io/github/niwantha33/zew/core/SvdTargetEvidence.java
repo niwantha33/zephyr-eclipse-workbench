@@ -61,7 +61,12 @@ public final class SvdTargetEvidence {
             if (part(soc) && !soc.equals(qualifier))
                 return new Selection(State.CONFLICT, "",
                         "Selected SoC conflicts with CONFIG_SOC; no SVD selected.");
-            if (SvdPartCompatibility.requiresQualifier(qualifier)
+            // Cluster-specific address spaces require an explicit catalog
+            // entry. The ESP32 appcpu execution qualifier is not a distinct
+            // SVD register model, so it can reuse an exact one-model SoC.
+            boolean coreSpecific = Set.of("cpuapp", "cpunet", "netcore",
+                    "cpu0", "cpu1", "m7", "m4").contains(cluster);
+            if ((coreSpecific || SvdPartCompatibility.requiresQualifier(qualifier))
                     && !SvdPartCompatibility.hasQualifier(qualifier, cluster))
                 return new Selection(State.AMBIGUOUS, "",
                         "No documented SVD mapping for core " + qualified);
