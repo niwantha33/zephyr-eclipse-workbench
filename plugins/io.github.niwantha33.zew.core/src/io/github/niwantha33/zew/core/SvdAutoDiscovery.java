@@ -205,6 +205,19 @@ public final class SvdAutoDiscovery {
                         if (candidate != null) candidates.add(candidate);
                     } catch (Exception ignored) { /* Invalid mapped SVD cannot authorize reads. */ }
                 }
+                // A pack carrying a PDSC must be selected solely by its
+                // exact declared device/variant mapping. Do not bypass an
+                // explicit *different-device* PDSC using a matching filename.
+                boolean hasPdsc = false;
+                var descriptors = zip.entries();
+                int descriptorCount = 0;
+                while (descriptors.hasMoreElements() && ++descriptorCount <= MAX_PACK_ENTRIES) {
+                    if (descriptors.nextElement().getName().toLowerCase(Locale.ROOT).endsWith(".pdsc")) {
+                        hasPdsc = true;
+                        break;
+                    }
+                }
+                if (hasPdsc) return;
                 var entries = zip.entries();
                 int count = 0;
                 while (entries.hasMoreElements() && ++count <= MAX_PACK_ENTRIES) {
