@@ -65,6 +65,8 @@ import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 import io.github.niwantha33.zew.core.SvdDevice;
+import io.github.niwantha33.zew.core.SvdDevicetreeLinker;
+import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.SvdAutoDiscovery;
 import io.github.niwantha33.zew.core.SvdTargetEvidence;
 import io.github.niwantha33.zew.core.BuildArtifacts;
@@ -101,8 +103,8 @@ public final class SocRegistersView extends ViewPart {
     private ReadScope readPageScope = ReadScope.ALL_SAFE;
     private String readPagePeripheral;
     private boolean writing;
-    private enum ReadScope { SELECTION, WATCHES, PERIPHERAL, ALL_SAFE }
-    private boolean autoSnapshotEnabled = false; // opt-in, no full-chip reads on halt
+    private enum ReadScope { SELECTION, WATCHES, HALT, PERIPHERAL, ALL_SAFE }
+    private boolean autoSnapshotEnabled = true; // bounded halt capture, never a full-chip scan
     private Label status;
     private Label summary;
     private Label contextInfo;
@@ -111,6 +113,7 @@ public final class SocRegistersView extends ViewPart {
     private volatile DsfSession listenedSession;
     private Text search;
     private SvdDevice device;
+    private Map<String, SvdDevicetreeLinker.Link> dtsLinks = Map.of();
     private String svdPath;
     private String legacySavedPath;
     private String selectedProjectName;
@@ -208,7 +211,7 @@ public final class SocRegistersView extends ViewPart {
         watchInterval.addModifyListener(e -> watchIntervalMs = watchInterval.getSelection());
         autoReadOnHalt = new Button(options, SWT.CHECK);
         autoReadOnHalt.setText("Read on halt");
-        autoReadOnHalt.setToolTipText("Opt in to reading the selected register when halted. Never scans all registers automatically.");
+        autoReadOnHalt.setToolTipText("On halt, automatically read up to eight SVD-safe selected/watched or DTS-enabled registers.");
         autoReadOnHalt.setSelection(autoSnapshotEnabled);
         autoReadOnHalt.addListener(SWT.Selection, e -> {
             autoSnapshotEnabled = autoReadOnHalt.getSelection();
@@ -914,15 +917,14 @@ public final class SocRegistersView extends ViewPart {
 
     /** Snapshot only after a real stop; no second probe connection or target halt. */
     private void scheduleAutoSnapshot() {
-        if (!autoSnapshotEnabled || device == null || selected() == null
-                || !selected().readable() || closed || ui == null || ui.isDisposed()) return;
+        if (!autoSnapshotEnabled || device == null || closed || ui == null || ui.isDisposed()) return;
         final long expectedGeneration = generation;
         final DsfSession expectedSession = listenedSession;
         if (expectedSession == null) return;
         ui.timerExec(400, () -> {
             if (closed || tree.isDisposed() || !autoSnapshotEnabled || busy
                     || generation != expectedGeneration || listenedSession != expectedSession) return;
-            refresh(ReadScope.SELECTION);
+            refresh(ReadScope.HALT);
         });
     }
 
@@ -1182,9 +1184,27 @@ public final class SocRegistersView extends ViewPart {
                     10 + i * width / (points.size() - 1),
                     29 + (int) ((1 - points.get(i).level()) * height));
     }
+    private void startSelectedLiveWatch(Register register) {
+        if (register == null || !register.readable() || dtsAccessBlocked(register)) {
+            status.setText("Live Watch refused: select a readable register enabled in Devicetree.");
+            return;
+        }
+        if (!watches.contains(register.key()) && watches.size() >= MAX_WATCH_POLL_REGISTERS) {
+            status.setText("Live Watch supports at most eight selected registers. Unwatch another first.");
+            return;
+        }
+        watches.add(register.key());
+        render();
+        if (!liveWatch) toggleLiveWatch();
+    }
+
     private void toggleWatch(Register register) {
         if (register == null) return;
         if (!watches.remove(register.key())) {
+            if (dtsAccessBlocked(register)) {
+                status.setText(dtsLink(register).explanation());
+                return;
+            }
             if (!register.readable()) {
                 status.setText("Watch unavailable: " + register.readBlockReason());
                 return;
@@ -1210,6 +1230,9 @@ public final class SocRegistersView extends ViewPart {
         var periphRead = new MenuItem(menu, SWT.PUSH);
         periphRead.setText("Read this peripheral (halted)");
         periphRead.addListener(SWT.Selection, e -> refreshPeripheral());
+        var liveSelected = new MenuItem(menu, SWT.PUSH);
+        liveSelected.setText("Live watch this register");
+        liveSelected.addListener(SWT.Selection, e -> startSelectedLiveWatch(selected()));
         var add = new MenuItem(menu, SWT.PUSH);
         add.setText("Add / remove watch");
         add.addListener(SWT.Selection, e -> toggleWatch(selected()));
@@ -1222,6 +1245,7 @@ public final class SocRegistersView extends ViewPart {
         menu.addListener(SWT.Show, e -> {
             Register reg = selected();
             periphRead.setEnabled(selectedPeripheral() != null);
+            liveSelected.setEnabled(reg != null && reg.readable() && !dtsAccessBlocked(reg));
             add.setEnabled(reg != null && (watches.contains(reg.key()) || reg.readable()));
             write.setEnabled(reg != null && reg.writeAllowed());
             SvdDevice.Field field = selectedField();
@@ -1458,8 +1482,11 @@ public final class SocRegistersView extends ViewPart {
                         : value.shiftRight(field.offset()).and(mask);
                 String label = field.name() + " [" + (field.offset() + field.width() - 1)
                         + ":" + field.offset() + "]";
-                String formatted = fieldValue == null ? "—" :
-                        field.width() == 1 ? (fieldValue.signum() == 0 ? "0 / CLEAR" : "1 / SET")
+                String formatted = fieldValue == null ? "—"
+                        : !field.enumeratedValues().isEmpty()
+                            ? field.displayValue(fieldValue) + " (" + hex(fieldValue, field.width()) + ")"
+                            : field.width() == 1
+                                ? (fieldValue.signum() == 0 ? "0 / CLEAR" : "1 / SET")
                                 : hex(fieldValue, field.width());
                 String meaning = field.description().isBlank()
                         ? field.access() : field.description().replace('\n', ' ').trim();
@@ -1516,7 +1543,7 @@ public final class SocRegistersView extends ViewPart {
             var mask = BigInteger.ONE.shiftLeft(f.width()).subtract(BigInteger.ONE);
             field.setText(new String[] { f.name() + " [" + (f.offset() + f.width() - 1)
                     + ":" + f.offset() + "]",
-                    value == null ? "—" : hex(value.shiftRight(f.offset()).and(mask), f.width()),
+                    value == null ? "—" : f.displayValue(value.shiftRight(f.offset()).and(mask)),
                     readState(r) });
         }
         item.setData("populated", Boolean.TRUE);
@@ -1657,18 +1684,27 @@ public final class SocRegistersView extends ViewPart {
         }
         var chosen = selected();
         var eligible = device.registers().stream()
-                .filter(r -> r.readable() && switch (scope) {
+                .filter(r -> r.readable() && !dtsAccessBlocked(r) && switch (scope) {
                     case ALL_SAFE -> true;
                     case WATCHES -> watches.contains(r.key());
                     case PERIPHERAL -> readPagePeripheral != null && readPagePeripheral.equals(r.peripheral());
                     case SELECTION -> r.equals(chosen);
-                }).sorted(java.util.Comparator.comparingInt(
-                        r -> watches.contains(r.key()) ? 0 : 1)).toList();
+                    case HALT -> (chosen != null && chosen.equals(r))
+                            || watches.contains(r.key())
+                            || (chosen == null && watches.isEmpty()
+                                && dtsLink(r).state() == SvdDevicetreeLinker.State.ENABLED_IN_DTS);
+                }).sorted(java.util.Comparator
+                        .comparingInt((Register r) -> chosen != null && chosen.equals(r) ? 0
+                            : watches.contains(r.key()) ? 1 : 2)
+                        .thenComparing(Register::key)).toList();
         if (eligible.isEmpty()) {
             if (scope == ReadScope.PERIPHERAL)
                 status.setText("Select a peripheral heading or register with SVD-readable registers.");
+            else if (scope == ReadScope.HALT)
+                status.setText("Halted: no selected, watched or DTS-enabled registers safe for automatic read.");
             else if (scope == ReadScope.SELECTION && chosen != null)
-                status.setText(chosen.key() + " cannot be read: " + chosen.readBlockReason()
+                status.setText(chosen.key() + " cannot be read: "
+                        + (dtsAccessBlocked(chosen) ? dtsLink(chosen).explanation() : chosen.readBlockReason())
                         + ". For GPIO pin levels, select a readable DIN register instead.");
             else if (scope != ReadScope.ALL_SAFE)
                 status.setText("Select a readable register, or add one to Watch.");
@@ -1684,6 +1720,8 @@ public final class SocRegistersView extends ViewPart {
             }
             targets = eligible.subList(readPageOffset,
                     Math.min(readPageOffset + MAX_READ_BATCH, readPageTotal));
+        } else if (scope == ReadScope.HALT) {
+            targets = eligible.subList(0, Math.min(MAX_WATCH_POLL_REGISTERS, eligible.size()));
         } else {
             targets = eligible;
         }
