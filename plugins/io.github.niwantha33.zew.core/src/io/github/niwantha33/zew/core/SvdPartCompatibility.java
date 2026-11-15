@@ -36,8 +36,7 @@ public final class SvdPartCompatibility {
         return segments.length > 1 ? normal(segments[1]) : "";
     }
     public static boolean requiresQualifier(String part) {
-        return DUAL_CORE.contains(normal(part))
-                || MAPPINGS.keySet().stream().anyMatch(k -> k.startsWith(normal(part) + "/"));
+        return MAPPINGS.keySet().stream().anyMatch(k -> k.startsWith(normal(part) + "/"));
     }
     public static boolean hasQualifier(String part, String qualifier) {
         return MAPPINGS.containsKey(key(part, qualifier));
