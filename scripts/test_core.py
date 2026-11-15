@@ -13,6 +13,7 @@ subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/tools
 out = root / 'build-core-tests'
 out.mkdir(exist_ok=True)
 shutil.copyfile(root / 'plugins/io.github.niwantha33.zew.core/src/svd-part-mappings.json', out / 'svd-part-mappings.json')
+shutil.copyfile(root / 'plugins/io.github.niwantha33.zew.core/src/svd-download-catalog.json', out / 'svd-download-catalog.json')
 suffix = '.exe' if os.name == 'nt' else ''
 java_home = os.environ.get('JAVA_HOME')
 def tool(name):
@@ -126,6 +127,9 @@ subprocess.run([tool('java'), '-cp', str(out), 'SvdPreferredSourceTests'], check
 subprocess.run([tool('java'), '-cp', str(out), 'RegisterPresentationTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'RegisterWriteValueTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdAutoDiscoveryTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'SvdDiscoveryRootsTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'SvdDownloadCatalogTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'SvdVendorFixturesTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdTargetEvidenceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdPartCompatibilityTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'GitHubSvdProvisionerTests'], check=True, cwd=root, timeout=90)

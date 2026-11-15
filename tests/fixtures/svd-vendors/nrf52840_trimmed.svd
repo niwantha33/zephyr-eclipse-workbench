@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- File naming: <vendor>_<part/series name>_svd.xml -->
+<device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" noNamespaceSchemaLocation="CMSIS-SVD.xsd">
+  <vendor>Nordic Semiconductor</vendor>
+  <vendorID>Nordic</vendorID>
+  <name>nrf52840</name>
+  <series>nrf52</series>
+  <version>1</version>
+  <description>nRF52840 reference description for radio MCU with ARM 32-bit Cortex-M4 Microcontroller</description>
+  <licenseText>
+Copyright (c) 2010 - 2026, Nordic Semiconductor ASA All rights reserved.
+
+SPDX-License-Identifier: BSD-3-Clause
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+3. Neither the name of Nordic Semiconductor ASA nor the names of its
+   contributors may be used to endorse or promote products derived from this
+   software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+      </licenseText>
+  <addressUnitBits>8</addressUnitBits>
+  <width>32</width>
+  <size>32</size>
+  <resetValue>0x00000000</resetValue>
+  <resetMask>0xFFFFFFFF</resetMask>
+  <headerDefinitionsPrefix>NRF_</headerDefinitionsPrefix>
+  <cpu>
+    <name>CM4</name>
+    <revision>r0p1</revision>
+    <endian>little</endian>
+    <mpuPresent>1</mpuPresent>
+    <fpuPresent>1</fpuPresent>
+    <nvicPrioBits>3</nvicPrioBits>
+    <vendorSystickConfig>0</vendorSystickConfig>
+    <deviceNumInterrupts>112</deviceNumInterrupts>
+    <sauNumRegions>0</sauNumRegions>
+  </cpu>
+  <headerSystemFilename>system_nrf52840</headerSystemFilename>
+  <vendorExtensions>
+    <MaxInterrupts>112</MaxInterrupts>
+  </vendorExtensions>
+  <!-- Fixture subset: selected unchanged vendor peripheral elements; source nrf52840.svd blob 739949b39ab286ece4cd6c54919d70238dc1a957 -->
+  <peripherals>
+<peripheral>
+      <name>APPROTECT</name>
+      <description>Access Port Protection</description>
+      <baseAddress>0x40000000</baseAddress>
+      <addressBlock>
+        <offset>0</offset>
+        <size>0x1000</size>
+        <usage>registers</usage>
+      </addressBlock>
+      <groupName>APPROTECT</groupName>
+      <size>0x20</size>
+      <registers>
+        <register>
+          <name>FORCEPROTECT</name>
+          <description>Software force enable APPROTECT mechanism until next reset.</description>
+          <addressOffset>0x550</addressOffset>
+          <access>read-writeonce</access>
+          <resetValue>0xFFFFFFFF</resetValue>
+          <size>0x20</size>
+          <fields>
+            <field>
+              <name>FORCEPROTECT</name>
+              <description>Write 0x0 to force enable APPROTECT mechanism</description>
+              <lsb>0</lsb>
+              <msb>7</msb>
+              <enumeratedValues>
+                <usage>write</usage>
+                <enumeratedValue>
+                  <name>Force</name>
+                  <description>Software force enable APPROTECT mechanism</description>
+                  <value>0x00</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>DISABLE</name>
+          <description>Software disable APPROTECT mechanism</description>
+          <addressOffset>0x558</addressOffset>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <size>0x20</size>
+          <fields>
+            <field>
+              <name>DISABLE</name>
+              <description>Software disable APPROTECT mechanism</description>
+              <lsb>0</lsb>
+              <msb>7</msb>
+              <enumeratedValues>
+                <enumeratedValue>
+                  <name>SwDisable</name>
+                  <description>Software disable APPROTECT mechanism</description>
+                  <value>0x5A</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+<peripheral>
+      <name>SWI0</name>
+      <description>Software interrupt 0</description>
+      <baseAddress>0x40014000</baseAddress>
+      <alternatePeripheral>EGU0</alternatePeripheral>
+      <headerStructName>SWI</headerStructName>
+      <addressBlock>
+        <offset>0</offset>
+        <size>0x1000</size>
+        <usage>registers</usage>
+      </addressBlock>
+      <interrupt>
+        <name>EGU0_SWI0</name>
+        <value>20</value>
+      </interrupt>
+      <groupName>SWI</groupName>
+      <size>0x20</size>
+      <registers>
+        <register>
+          <name>UNUSED</name>
+          <description>Unused.</description>
+          <addressOffset>0x000</addressOffset>
+          <resetValue>0x00000000</resetValue>
+          <access>read-only</access>
+        </register>
+      </registers>
+    </peripheral>
+<peripheral derivedFrom="SWI0">
+      <name>SWI1</name>
+      <description>Software interrupt 1</description>
+      <baseAddress>0x40015000</baseAddress>
+      <alternatePeripheral>EGU1</alternatePeripheral>
+      <interrupt>
+        <name>EGU1_SWI1</name>
+        <value>21</value>
+      </interrupt>
+    </peripheral>
+  </peripherals>
+</device>
