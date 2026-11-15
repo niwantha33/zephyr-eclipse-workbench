@@ -123,6 +123,45 @@ public final class SvdAutoDiscoveryTests {
                     List.of(packRoot, other), root.resolve("cache"));
             check(ambiguous.state() == SvdAutoDiscovery.State.AMBIGUOUS && ambiguous.path() == null,
                     "divergent vendor packs require explicit selection, no silent revision selection");
+            // Core-specific application/network SVDs must not be interchangeable,
+            // regardless of filename traversal order or a matching family prefix.
+            Path multicore = Files.createDirectories(root.resolve("dual-core"));
+            Files.writeString(multicore.resolve("nrf5340_application.svd"), svd("nrf5340_application"));
+            Files.writeString(multicore.resolve("nrf5340_network.svd"), svd("nrf5340_network"));
+            check(SvdAutoDiscovery.resolve("nrf5340dk/nrf5340", List.of(multicore), null)
+                    .state() == SvdAutoDiscovery.State.AMBIGUOUS,
+                    "unqualified dual-core SVD discovery never guesses a target");
+            var appCore = SvdAutoDiscovery.resolve("nrf5340dk/nrf5340/cpuapp",
+                    List.of(multicore), null);
+            check(appCore.state() == SvdAutoDiscovery.State.MATCHED
+                    && appCore.path().getFileName().toString().equals("nrf5340_application.svd"),
+                    "application qualifier accepts only application content");
+            var networkCore = SvdAutoDiscovery.resolve("nrf5340dk/nrf5340/cpunet",
+                    List.of(multicore), null);
+            check(networkCore.state() == SvdAutoDiscovery.State.MATCHED
+                    && networkCore.path().getFileName().toString().equals("nrf5340_network.svd"),
+                    "network qualifier accepts only network content");
+            check(SvdAutoDiscovery.resolve("nrf5340dk/nrf5340/cpu0", List.of(multicore), null)
+                    .state() == SvdAutoDiscovery.State.AMBIGUOUS,
+                    "unsupported core does not inherit a generic nRF SVD");
+            // A huge unrelated first HAL truncates *that root*, but the next
+            // exact vendor root must still be visited; incomplete scans remain
+            // untrusted regardless of matching candidates.
+            Path huge = Files.createDirectories(root.resolve("oversized-hal"));
+            for (int i = 0; i < 12; i++)
+                Files.writeString(huge.resolve("unrelated-" + i + ".txt"), "skip");
+            Path nextVendor = Files.createDirectories(root.resolve("next-hal"));
+            Files.writeString(nextVendor.resolve("MSPM0G3507.svd"), svd("MSPM0G3507"));
+            var partial = SvdAutoDiscovery.resolveWithBudget("board/mspm0g3507",
+                    List.of(huge, nextVendor), null, 5, 100);
+            check(partial.state() == SvdAutoDiscovery.State.INCOMPLETE_SCAN
+                    && partial.inspected().stream().anyMatch(path -> path.contains("Truncated root:"))
+                    && partial.inspected().stream().anyMatch(path -> path.contains("next-hal")),
+                    "per-root scan budget does not starve subsequent HALs but fails closed");
+            var complete = SvdAutoDiscovery.resolveWithBudget("board/mspm0g3507",
+                    List.of(nextVendor), null, 5, 100);
+            check(complete.state() == SvdAutoDiscovery.State.MATCHED,
+                    "a complete exact vendor root can still succeed with tiny budgets");
             System.out.println("SvdAutoDiscoveryTests PASS");
         } finally {
             try (var walk = Files.walk(root)) {
