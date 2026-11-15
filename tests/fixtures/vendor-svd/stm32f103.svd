@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0; modm-io archive of ST vendor SVD under its original license. -->
 
 <!-- Vendor-trimmed fixture from https://github.com/modm-io/cmsis-svd-stm32/blob/main/stm32f1/STM32F103.svd; one original register block, not a complete device map. -->
 <device><name>STM32F103</name><size>32</size><addressUnitBits>8</addressUnitBits>
