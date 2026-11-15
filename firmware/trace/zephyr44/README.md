@@ -52,7 +52,7 @@ must be read while **halted**; running-target reads are unproven.
 ## Build and test evidence
 
 The Windows CI runs real pinned Zephyr builds of the same RAM backend for
-**TI MSPM0G3507 first**, then STM32F446 and ESP32-C3. It verifies generated
+**TI MSPM0G3507 first**, then STM32F446, ESP32-C3 (RISC-V) and ESP32-S3 (Xtensa). It verifies generated
 config, CTF/stop/RAM symbols in the linked ELF/map, and a CURRENT
 configuration provenance receipt. It writes `trace-firmware-matrix.json`.
 Linux host tests compile the **actual backend C source** using test-only
