@@ -89,9 +89,16 @@ public final class SocRegistersView extends ViewPart {
     private Spinner watchInterval;
     private Button autoReadOnHalt;
     private int watchIntervalMs = 1500;
-    private static final int MAX_SNAPSHOT_REGISTERS = 4096;
+    // MMIO access is a remote GDB operation, not a local memory scan.
+    private static final int MAX_READ_BATCH = 32;
+    private static final int MAX_WATCH_POLL_REGISTERS = 8;
+    private int readPageOffset;
+    private int readPageTotal;
+    private ReadScope readPageScope = ReadScope.ALL_SAFE;
+    private String readPagePeripheral;
+    private boolean writing;
     private enum ReadScope { SELECTION, WATCHES, PERIPHERAL, ALL_SAFE }
-    private boolean autoSnapshotEnabled = true;
+    private boolean autoSnapshotEnabled = false; // opt-in, no full-chip reads on halt
     private Label status;
     private Label summary;
     private Label contextInfo;
@@ -147,12 +154,13 @@ public final class SocRegistersView extends ViewPart {
         // Primary actions fit narrow Debug perspectives. Rare actions live in
         // the native More menu rather than occupying the whole top of the view.
         var bar = new Composite(parent, SWT.NONE);
-        bar.setLayout(new GridLayout(5, false));
+        bar.setLayout(new GridLayout(6, false));
         bar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         button(bar, "Choose project", this::chooseProjectForDiscovery);
         button(bar, "Get SVD", this::downloadVendorSvd);
         button(bar, "Refresh selected", this::refresh);
-        button(bar, "Read available", this::refreshAll);
+        button(bar, "Read first 32", this::refreshAll);
+        button(bar, "Stop reads", this::stopReadBatch);
         var more = new Button(bar, SWT.PUSH);
         more.setText("More…");
         var advanced = new Menu(more);
@@ -165,6 +173,7 @@ public final class SocRegistersView extends ViewPart {
         menuAction(advanced, "Why no value? / Connection diagnostics…",
                 this::showConnectionDiagnostics);
         menuAction(advanced, "Read selected peripheral (halted)…", this::refreshPeripheral);
+        menuAction(advanced, "Read next 32 (halted)…", this::refreshNext);
         menuAction(advanced, "Pin snapshot as baseline", this::pinBaseline);
         menuAction(advanced, "Export register history as CSV…", this::exportHistory);
         more.addListener(SWT.Selection, e -> {
@@ -195,7 +204,7 @@ public final class SocRegistersView extends ViewPart {
         watchInterval.addModifyListener(e -> watchIntervalMs = watchInterval.getSelection());
         autoReadOnHalt = new Button(options, SWT.CHECK);
         autoReadOnHalt.setText("Read on halt");
-        autoReadOnHalt.setToolTipText("Read SVD-safe registers after the debugger pauses. Disable for sensitive peripherals.");
+        autoReadOnHalt.setToolTipText("Opt in to reading the selected register when halted. Never scans all registers automatically.");
         autoReadOnHalt.setSelection(autoSnapshotEnabled);
         autoReadOnHalt.addListener(SWT.Selection, e -> {
             autoSnapshotEnabled = autoReadOnHalt.getSelection();
@@ -407,6 +416,9 @@ public final class SocRegistersView extends ViewPart {
         // before replacing its SVD and session association.
         generation++;
         busy = false;
+        writing = false;
+        readPageOffset = 0;
+        readPageTotal = 0;
         pendingReads.clear();
         listenTo(null);
         stopLiveWatch();
@@ -811,7 +823,7 @@ public final class SocRegistersView extends ViewPart {
         var selectedSession = target == null ? null : target.session();
         boolean changed = selectedSession != listenedSession;
         if (changed) {
-            generation++; busy = false; values.clear(); previousValues.clear();
+            generation++; busy = false; writing = false; values.clear(); previousValues.clear();
             pendingReads.clear();
             errors.clear(); lastReadAt = null; render();
             quietUntil = System.currentTimeMillis() + 350;
@@ -897,14 +909,15 @@ public final class SocRegistersView extends ViewPart {
 
     /** Snapshot only after a real stop; no second probe connection or target halt. */
     private void scheduleAutoSnapshot() {
-        if (!autoSnapshotEnabled || device == null || closed || ui == null || ui.isDisposed()) return;
+        if (!autoSnapshotEnabled || device == null || selected() == null
+                || !selected().readable() || closed || ui == null || ui.isDisposed()) return;
         final long expectedGeneration = generation;
         final DsfSession expectedSession = listenedSession;
         if (expectedSession == null) return;
         ui.timerExec(400, () -> {
             if (closed || tree.isDisposed() || !autoSnapshotEnabled || busy
                     || generation != expectedGeneration || listenedSession != expectedSession) return;
-            refresh(ReadScope.ALL_SAFE);
+            refresh(ReadScope.SELECTION);
         });
     }
 
@@ -918,7 +931,7 @@ public final class SocRegistersView extends ViewPart {
         }
         @DsfServiceEventHandler public void eventDispatched(IRunControl.ISuspendedDMEvent event) {
             quietUntil = System.currentTimeMillis() + 350;
-            invalidateSnapshot(event.getDMContext(), "Target suspended. Taking SVD-safe register snapshot…", true);
+            invalidateSnapshot(event.getDMContext(), "Target suspended. Opt-in selected-register read only.", true);
         }
         @DsfServiceEventHandler public void eventDispatched(IRunControl.IExitedDMEvent event) {
             quietUntil = Long.MAX_VALUE;
@@ -932,7 +945,7 @@ public final class SocRegistersView extends ViewPart {
                 || ui.isDisposed()) return;
         ui.asyncExec(() -> {
             if (tree.isDisposed() || listenedSession != session) return;
-            generation++; busy = false; values.clear(); previousValues.clear();
+            generation++; busy = false; writing = false; values.clear(); previousValues.clear();
             pendingReads.clear();
             errors.clear(); lastReadAt = null; render();
             status.setText(message);
@@ -1075,6 +1088,8 @@ public final class SocRegistersView extends ViewPart {
                         svdIdentity = identity;
                         values.clear(); previousValues.clear(); errors.clear(); watches.clear(); history.clear();
                         pendingReads.clear();
+                        readPageOffset = 0;
+                        readPageTotal = 0;
                         currentReadTotal = currentReadOk = currentReadFailed = 0;
                         lastReadAt = null;
                         render();
@@ -1117,8 +1132,9 @@ public final class SocRegistersView extends ViewPart {
     }
     private void toggleLiveWatch() {
         if (liveWatch) { stopLiveWatch(); status.setText("Live Watch stopped."); return; }
-        if (device == null || watches.isEmpty() || watches.size() > 64 || debugTarget() == null) {
-            status.setText("Load an exact SVD; watch 1–64 safe registers; start a unique native GDB session and halt the target.");
+        if (device == null || watches.isEmpty() || watches.size() > MAX_WATCH_POLL_REGISTERS
+                || debugTarget() == null) {
+            status.setText("Live polling needs 1–8 readable watched registers and one halted GDB session.");
             return;
         }
         liveWatch = true;
@@ -1134,9 +1150,9 @@ public final class SocRegistersView extends ViewPart {
         if (closed || ui == null || ui.isDisposed()) return;
         ui.timerExec(watchIntervalMs, () -> {
             if (closed || tree.isDisposed() || !liveWatch || epoch != watchEpoch) return;
-            if (watches.isEmpty() || watches.size() > 64) {
+            if (watches.isEmpty() || watches.size() > MAX_WATCH_POLL_REGISTERS) {
                 stopLiveWatch();
-                status.setText("Live Watch stopped: watch count outside 1–64.");
+                status.setText("Live Watch stopped: use 1–8 watched registers for responsive polling.");
                 return;
             }
             if (!busy && debugTarget() != null && System.currentTimeMillis() >= quietUntil)
@@ -1583,9 +1599,34 @@ public final class SocRegistersView extends ViewPart {
     }
 
     private void refresh() { refresh(ReadScope.SELECTION); }
-    private void refreshAll() { refresh(ReadScope.ALL_SAFE); }
-    private void refreshPeripheral() { refresh(ReadScope.PERIPHERAL); }
+    private void refreshAll() { beginPage(ReadScope.ALL_SAFE); }
+    private void refreshPeripheral() { beginPage(ReadScope.PERIPHERAL); }
     private void refreshWatches() { refresh(ReadScope.WATCHES); }
+
+    private void beginPage(ReadScope scope) {
+        if (busy) { status.setText("Stop the current read before starting a different scope."); return; }
+        readPageOffset = 0;
+        readPageTotal = 0;
+        readPageScope = scope;
+        readPagePeripheral = scope == ReadScope.PERIPHERAL ? selectedPeripheral() : null;
+        refresh(scope);
+    }
+
+    private void refreshNext() {
+        if (busy) { status.setText("The current read batch is still running."); return; }
+        refresh(readPageScope);
+    }
+
+    /** Stop the queue after the in-flight GDB read. Never cancel a physical write. */
+    private void stopReadBatch() {
+        if (!busy) { status.setText("No register read is running."); return; }
+        if (writing) { status.setText("A confirmed physical write cannot be cancelled."); return; }
+        ++generation; // old callbacks cannot start the next GDB request
+        busy = false;
+        pendingReads.clear();
+        render();
+        status.setText("Read queue stopped. One already-issued GDB command may still complete.");
+    }
     private String selectedPeripheral() {
         if (tree == null || tree.isDisposed() || tree.getSelectionCount() != 1) return null;
         TreeItem item = tree.getSelection()[0];
@@ -1608,13 +1649,12 @@ public final class SocRegistersView extends ViewPart {
             return;
         }
         var chosen = selected();
-        String peripheral = selectedPeripheral();
         var targets = device.registers().stream()
                 .filter(r -> r.readable() && switch (scope) {
                     case ALL_SAFE -> true;
                     case WATCHES -> watches.contains(r.key());
-                    case PERIPHERAL -> peripheral != null && peripheral.equals(r.peripheral());
-                    case SELECTION -> watches.contains(r.key()) || r.equals(chosen);
+                    case PERIPHERAL -> readPagePeripheral != null && readPagePeripheral.equals(r.peripheral());
+                    case SELECTION -> r.equals(chosen);
                 }).sorted(java.util.Comparator.comparingInt(
                         r -> watches.contains(r.key()) ? 0 : 1)).toList();
         if (targets.isEmpty()) {
@@ -1625,9 +1665,17 @@ public final class SocRegistersView extends ViewPart {
             else status.setText("This SVD contains no registers declared safe to read.");
             return;
         }
-        if (targets.size() > MAX_SNAPSHOT_REGISTERS) {
-            status.setText("Snapshot refused: " + targets.size() + " SVD-readable registers exceed "
-                    + MAX_SNAPSHOT_REGISTERS + ". Narrow the selection; no target access occurred.");
+        if (scope == ReadScope.ALL_SAFE || scope == ReadScope.PERIPHERAL) {
+            readPageTotal = targets.size();
+            if (readPageOffset >= readPageTotal) {
+                status.setText("All " + readPageTotal + " available registers in this scope were requested.");
+                return;
+            }
+            targets = targets.subList(readPageOffset,
+                    Math.min(readPageOffset + MAX_READ_BATCH, readPageTotal));
+        }
+        if (scope == ReadScope.WATCHES && targets.size() > MAX_WATCH_POLL_REGISTERS) {
+            status.setText("Polling is limited to eight registers. Remove extra watches.");
             return;
         }
         DebugTarget target = debugTarget();
@@ -1638,6 +1686,9 @@ public final class SocRegistersView extends ViewPart {
         DsfSession session = target.session();
         listenTo(session);
         busy = true;
+        writing = false;
+        if (scope == ReadScope.ALL_SAFE || scope == ReadScope.PERIPHERAL)
+            readPageOffset += targets.size();
         previousValues.clear();
         previousValues.putAll(values);
         currentReadTotal = targets.size();
@@ -1652,8 +1703,10 @@ public final class SocRegistersView extends ViewPart {
         }
         render();
         long request = ++generation;
-        status.setText("Reading " + targets.size() + " SVD-safe registers using existing halted "
-                + "GDB/OpenOCD session (no second OpenOCD connection)…");
+        status.setText("Reading " + targets.size() + " registers through existing halted GDB. "
+                + ((scope == ReadScope.ALL_SAFE || scope == ReadScope.PERIPHERAL)
+                        ? "Page " + readPageOffset + "/" + readPageTotal + ". " : "")
+                + "No second OpenOCD connection.");
         try {
             session.getExecutor().execute(() -> resolveReadFrame(session, target.context(), targets, request));
         } catch (RejectedExecutionException ended) {
@@ -1722,6 +1775,7 @@ public final class SocRegistersView extends ViewPart {
         var session = target.session();
         listenTo(session);
         busy = true;
+        writing = true;
         long request = ++generation;
         status.setText("Writing " + register.key() + " through the existing halted GDB/OpenOCD session…");
         var intent = new WriteIntent(register, value);
@@ -1979,6 +2033,7 @@ public final class SocRegistersView extends ViewPart {
         ui.asyncExec(() -> {
             if (!tree.isDisposed() && request == generation) {
                 busy = false;
+                writing = false;
                 pendingReads.clear();
                 if (message.startsWith("Refresh complete.") && !values.isEmpty()
                         && svdIdentity != null && listenedSession != null) {
