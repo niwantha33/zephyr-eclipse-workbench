@@ -212,9 +212,10 @@ public final class SvdAutoDiscovery {
                 while (entries.hasMoreElements() && ++count <= MAX_PACK_ENTRIES) {
                     ZipEntry entry = entries.nextElement();
                     String name = entry.getName().replace('\\', '/');
+                    // In a pack, a family-named SVD needs the *PDSC* exact
+                    // Dname/Dvariant mapping, not merely a bundled alias.
                     if (entry.isDirectory() || !name.toLowerCase(Locale.ROOT).endsWith(".svd")
-                            || SvdPartCompatibility.modelsFor(part, qualifier).stream()
-                               .noneMatch(model -> normal(Path.of(name).getFileName().toString()).contains(model))
+                            || !normal(Path.of(name).getFileName().toString()).contains(normal(part))
                             || entry.getSize() > MAX_SVD_BYTES) continue;
                     byte[] bytes;
                     try (InputStream input = zip.getInputStream(entry)) { bytes = bounded(input); }
