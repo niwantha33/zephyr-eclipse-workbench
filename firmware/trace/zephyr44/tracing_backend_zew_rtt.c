@@ -50,6 +50,7 @@ struct zew_trace_rtt_diagnostic {
     uint32_t frames;
     uint32_t raw_bytes;
     uint32_t source_drops;
+    uint32_t ended;
 };
 
 /* Halted debugger evidence only; this is not a stable running-time counter API. */
@@ -230,8 +231,9 @@ void zew_trace_backend_close(void)
         return;
     }
     zew_trace_rtt_diagnostic.frames = encoder.committed_frames;
+    zew_trace_rtt_diagnostic.ended = zew_trace_encoder_complete(&encoder);
     zew_trace_rtt_diagnostic.ready = 0U;
-    /* An END frame was emitted; host-side flashed identity is still PENDING. */
+    /* END still does not independently attest the flashed target. */
 }
 
 static const struct tracing_backend_api zew_trace_rtt_api = {
