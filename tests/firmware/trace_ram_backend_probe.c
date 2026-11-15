@@ -38,6 +38,9 @@ int main(int argc, char **argv)
     bool overflow = argc == 2 && strcmp(argv[1], "overflow") == 0;
     bool duplicate_stop = argc == 2 && strcmp(argv[1], "duplicate") == 0;
 
+    if (tracing_backend_zew_ram.api == NULL) {
+        return 7;
+    }
     zew_trace_ram_init();
     if (!zew_trace_ram_receipt.ready || !zew_trace_ram_receipt.committed) {
         return 2;
