@@ -164,7 +164,7 @@ static void zew_trace_rtt_output(const struct tracing_backend *backend,
     if (length == 0U) {
         return;
     }
-    if (data == NULL || length > CONFIG_TRACING_BUFFER_SIZE) {
+    if (data == NULL || length > (CONFIG_TRACING_BUFFER_SIZE + 1U)) {
         zew_trace_rtt_diagnostic.ready = 0U;
         zew_trace_rtt_diagnostic.error = ZEW_TRACE_ERROR_FRAME;
         return;
