@@ -494,10 +494,8 @@ public final class SocRegistersView extends ViewPart {
                     roots.add(userHome.resolve("AppData/Local/Espressif"));
                     roots.add(userHome.resolve("esp/esp-idf"));
                     if (workspace != null) {
-                        roots.add(workspace.resolve("modules/hal/espressif"));
-                        roots.add(workspace.resolve("modules/hal/stm32"));
-                        roots.add(workspace.resolve("modules/hal/nordic"));
-                        roots.add(workspace.resolve("modules/hal/ti"));
+                        roots.addAll(io.github.niwantha33.zew.core.SvdVendorRoots.prioritized(
+                                workspace, SvdAutoDiscovery.partFromBoard(target.target())));
                         roots.add(workspace.resolve("modules/hal"));
                         roots.add(workspace.resolve("zephyr"));
                     }
