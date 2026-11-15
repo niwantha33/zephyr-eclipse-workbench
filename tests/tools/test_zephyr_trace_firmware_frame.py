@@ -92,6 +92,8 @@ class ZephyrTraceFirmwareFrameContractTests(unittest.TestCase):
         self.assertIn("SEGGER_RTT_MODE_NO_BLOCK_SKIP", backend)
         self.assertIn("tracing_packet_drop_count_get()", backend)
         self.assertIn("ZEW_TRACE_RTT_CHANNEL = 1", backend)
+        self.assertNotIn("SEGGER_RTT_Init();", backend,
+                         "Never reset a pre-existing RTT channel-0 console")
         self.assertIn("No automatic END", backend)
 
 
