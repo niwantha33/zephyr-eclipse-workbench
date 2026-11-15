@@ -40,6 +40,10 @@ public final class SvdDownloadCatalog {
         Entry entry = find(board);
         return entry != null && entry.type().equals(type) && entry.pinned() ? entry : null;
     }
+    public static Entry byIdentity(String part, String core, String type) {
+        Entry entry = ENTRIES.get(part + (core == null || core.isBlank() ? "" : "/" + core));
+        return entry != null && entry.type().equals(type) && entry.pinned() ? entry : null;
+    }
     public static List<Entry> entries() { return List.copyOf(ENTRIES.values()); }
 
     private static Map<String, Entry> load() {
