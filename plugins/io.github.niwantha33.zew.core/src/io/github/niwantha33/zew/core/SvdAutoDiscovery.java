@@ -34,7 +34,8 @@ import org.w3c.dom.Node;
 public final class SvdAutoDiscovery {
     public static final long MAX_SVD_BYTES = 32L * 1024 * 1024;
     private static final long MAX_PACK_BYTES = 512L * 1024 * 1024;
-    private static final int MAX_VISITED = 40000;
+    private static final int MAX_VISITED_PER_ROOT = 8000;
+    private static final int MAX_VISITED_GLOBAL = 80000;
     private static final int MAX_PACK_ENTRIES = 50000;
     private SvdAutoDiscovery() {}
 
@@ -71,7 +72,8 @@ public final class SvdAutoDiscovery {
         SvdDevice device = SvdDevice.read(new ByteArrayInputStream(bytes));
         // Either exact SVD model identity OR an installed vendor pack's explicit
         // PDSC Dname/Dvariant -> debug svd mapping for this exact target.
-        if (!vendorPackMapped && !SvdPartCompatibility.matches(part, device.name())) return null;
+        if ((part.contains("/") || !vendorPackMapped)
+                && !SvdPartCompatibility.matches(part, device.name())) return null;
         String sha = fingerprint(bytes);
         Path chosen = source;
         if (cache != null) {
@@ -146,7 +148,8 @@ public final class SvdAutoDiscovery {
                     if (!(devices.item(i) instanceof Element element)) continue;
                     String name = element.getAttribute("Dname");
                     String variant = element.getAttribute("Dvariant");
-                    if (!normal(name).equals(normal(part)) && !normal(variant).equals(normal(part)))
+                    if (!normal(name).equals(normal(part.split("/")[0]))
+                            && !normal(variant).equals(normal(part.split("/")[0])))
                         continue;
                     // Device-specific debug wins; inherited family debug is
                     // accepted only when a named device/variant selects it.
@@ -208,7 +211,7 @@ public final class SvdAutoDiscovery {
                     ZipEntry entry = entries.nextElement();
                     String name = entry.getName().replace('\\', '/');
                     if (entry.isDirectory() || !name.toLowerCase(Locale.ROOT).endsWith(".svd")
-                            || !normal(Path.of(name).getFileName().toString()).contains(normal(part))
+                            || !matchesModelFile(name, part)
                             || entry.getSize() > MAX_SVD_BYTES) continue;
                     byte[] bytes;
                     try (InputStream input = zip.getInputStream(entry)) { bytes = bounded(input); }
@@ -221,9 +224,19 @@ public final class SvdAutoDiscovery {
         }
     }
 
+    static boolean matchesModelFile(String filename, String identity) {
+        String normalized = normal(Path.of(filename).getFileName().toString());
+        return SvdPartCompatibility.modelsFor(identity).stream().anyMatch(normalized::contains);
+    }
+
     public static Result resolve(String board, List<Path> roots, Path cache) {
         String part = partFromBoard(board);
-        if (part.isEmpty() || Set.of("appcpu", "netcore", "cpu0", "atom", "soc").contains(part)) {
+        String[] qualified = board == null ? new String[0] : board.split("/", -1);
+        String identity = part + (qualified.length == 3 ? "/" + qualified[2] : "");
+        if (part.isEmpty() || Set.of("appcpu", "netcore", "cpu0", "atom", "soc").contains(part)
+                || (SvdPartCompatibility.requiresQualifier(part)
+                    && (qualified.length != 3
+                        || !SvdPartCompatibility.hasQualifier(part, qualified[2])))) {
             return new Result(State.INVALID_TARGET, part, null, 0, false,
                     "Board target lacks an exact SoC identifier; no SVD was guessed.", List.of());
         }
@@ -238,38 +251,52 @@ public final class SvdAutoDiscovery {
                 Path root = raw.toRealPath();
                 if (!seenRoots.add(root)) continue;
                 inspected.add(root.toString());
+                int[] rootVisited = {0};
+                boolean[] rootTruncated = {false};
                 Files.walkFileTree(root, java.util.EnumSet.noneOf(java.nio.file.FileVisitOption.class), 11,
                     new SimpleFileVisitor<Path>() {
                         @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                            if (++visited[0] > MAX_VISITED) {
-                                truncated[0] = true; return FileVisitResult.TERMINATE;
+                            rootVisited[0]++;
+                            visited[0]++;
+                            if (rootVisited[0] > MAX_VISITED_PER_ROOT
+                                    || visited[0] > MAX_VISITED_GLOBAL) {
+                                rootTruncated[0] = true;
+                                truncated[0] = true;
+                                return FileVisitResult.TERMINATE;
                             }
                             return FileVisitResult.CONTINUE;
                         }
                         @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                            if (++visited[0] > MAX_VISITED) {
-                                truncated[0] = true; return FileVisitResult.TERMINATE;
+                            rootVisited[0]++;
+                            visited[0]++;
+                            if (rootVisited[0] > MAX_VISITED_PER_ROOT
+                                    || visited[0] > MAX_VISITED_GLOBAL) {
+                                rootTruncated[0] = true;
+                                truncated[0] = true;
+                                return FileVisitResult.TERMINATE;
                             }
                             if (attrs.isSymbolicLink() || !attrs.isRegularFile()) return FileVisitResult.CONTINUE;
                             String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
-                            if (name.endsWith(".svd") && (normal(name).contains(normal(part))
-                                    || ("mspm0g3507".equals(part) && normal(name).contains("mspm0g350x")))) {
-                                Candidate candidate = fileCandidate(file, part);
+                            if (name.endsWith(".svd") && matchesModelFile(name, identity)) {
+                                Candidate candidate = fileCandidate(file, identity);
                                 if (candidate != null) found.add(candidate);
                             } else if (name.endsWith(".pack"))
-                                packCandidates(file, part, cache, found);
+                                packCandidates(file, identity, cache, found);
                             else if (name.endsWith(".pdsc"))
-                                pdscCandidates(file, part, found);
+                                pdscCandidates(file, identity, found);
                             return FileVisitResult.CONTINUE;
                         }
                         @Override public FileVisitResult visitFileFailed(Path path, IOException failure) {
                             return FileVisitResult.CONTINUE;
                         }
                     });
+                if (rootTruncated[0])
+                    inspected.add("TRUNCATED root " + root + " after " + rootVisited[0]
+                            + " visited paths; root limit " + MAX_VISITED_PER_ROOT);
             } catch (Exception ignored) {
                 inspected.add("Inaccessible root: " + raw);
             }
-            if (truncated[0]) break;
+            if (visited[0] > MAX_VISITED_GLOBAL) break;
         }
         Map<String, Candidate> unique = new LinkedHashMap<>();
         for (var candidate : found) {
