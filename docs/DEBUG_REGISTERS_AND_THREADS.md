@@ -104,6 +104,43 @@ in the tree and watch pane; a separately pinned baseline remains available
 for longer comparisons. The command path continues to be DSF-GDB's existing
 remote connection to the debug server, not an independent raw OpenOCD socket.
 
+### Targeted MSPM0 register-read troubleshooting
+
+When **Read available** is running, a number such as `480 read` means
+that many successful register readings *so far*, not that only 480
+registers exist or that the GDB/OpenOCD connection is broken.
+The live progress now distinguishes **Pending GDB read**, **Read OK**,
+**Read failed** and SVD-prohibited **Write only**. Selecting a write-only
+register such as `GPIOB.DOUT23_20` must not issue a memory read.
+
+For a faster, evidence-based check, stop the bulk scan if necessary
+(by resuming and halting the target deliberately), select the **GPIOB**
+peripheral heading or one of its registers, then right-click
+**Read this peripheral (halted)**. Only SVD-declared readable registers
+inside that peripheral are requested. To check one address instead,
+select a readable GPIOB `DIN` or status register and choose
+**Refresh selected**. If it succeeds, its numeric value proves that
+one particular read travelled successfully through the existing GDB
+session. It does not prove every other peripheral is accessible.
+
+To isolate transport problems, while the exact MSPM0G3507 image is
+halted, use the same GDB session's console to read the **readable**
+GPIOB input register address shown by the matching SVD, e.g.
+`x/1wx 0x400A3314` for `GPIOB.DIN23_20` in the TI register layout.
+Do **not** test by reading `GPIOB.DOUT23_20`; it is write-only.
+Compare the value/error with **More… → Why no value? / Connection
+diagnostics…**, including attempted/queued/failed counts and the
+most recent GDB failure. For failures, investigate target halt state,
+selected ELF/board, power/clock enable, OpenOCD response and the
+GDB memory map. Do not globally disable memory-access protection,
+force an access to an unknown address or open a second OpenOCD server.
+
+The upstream references are the
+[TI MSPM0G3507 SDK device header](https://github.com/TexasInstruments/mspm0-sdk/blob/main/source/ti/devices/msp/m0p/mspm0g350x.h),
+[TI MSPM0G3507 documentation](https://www.ti.com/product/MSPM0G3507),
+[CMSIS-SVD register permissions](https://open-cmsis-pack.github.io/svd-spec/main/elem_registers.html),
+and [OpenOCD's GDB integration](https://openocd.org/doc/html/GDB-and-OpenOCD.html).
+
 ## Snapshot while debugging
 
 - The existing native **CDT DSF-GDB** session sends memory reads through the
