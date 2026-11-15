@@ -1429,7 +1429,7 @@ public final class SocRegistersView extends ViewPart {
         if (value != null) {
             details.append("Binary         ").append(bits(value, r.size())).append("\n");
         }
-        if (r.writable()) details.append("Edit           Right-click register to write\n");
+        if (r.writeAllowed()) details.append("Edit           Right-click to write (confirmation required)\n");
         if (!r.readable() || value == null)
             details.append("\n").append(explanation).append("\n");
         if (!r.readable() && device != null) {
