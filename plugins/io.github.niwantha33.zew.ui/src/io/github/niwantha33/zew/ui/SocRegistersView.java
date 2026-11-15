@@ -65,6 +65,8 @@ import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 import io.github.niwantha33.zew.core.SvdDevice;
+import io.github.niwantha33.zew.core.SvdDevicetreeLinker;
+import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.SvdAutoDiscovery;
 import io.github.niwantha33.zew.core.SvdTargetEvidence;
 import io.github.niwantha33.zew.core.BuildArtifacts;
@@ -101,8 +103,8 @@ public final class SocRegistersView extends ViewPart {
     private ReadScope readPageScope = ReadScope.ALL_SAFE;
     private String readPagePeripheral;
     private boolean writing;
-    private enum ReadScope { SELECTION, WATCHES, PERIPHERAL, ALL_SAFE }
-    private boolean autoSnapshotEnabled = false; // opt-in, no full-chip reads on halt
+    private enum ReadScope { SELECTION, WATCHES, HALT, PERIPHERAL, ALL_SAFE }
+    private boolean autoSnapshotEnabled = true; // bounded halt capture, never a full-chip scan
     private Label status;
     private Label summary;
     private Label contextInfo;
@@ -111,6 +113,7 @@ public final class SocRegistersView extends ViewPart {
     private volatile DsfSession listenedSession;
     private Text search;
     private SvdDevice device;
+    private Map<String, SvdDevicetreeLinker.Link> dtsLinks = Map.of();
     private String svdPath;
     private String legacySavedPath;
     private String selectedProjectName;
@@ -208,7 +211,7 @@ public final class SocRegistersView extends ViewPart {
         watchInterval.addModifyListener(e -> watchIntervalMs = watchInterval.getSelection());
         autoReadOnHalt = new Button(options, SWT.CHECK);
         autoReadOnHalt.setText("Read on halt");
-        autoReadOnHalt.setToolTipText("Opt in to reading the selected register when halted. Never scans all registers automatically.");
+        autoReadOnHalt.setToolTipText("On halt, automatically read up to eight SVD-safe selected/watched or DTS-enabled registers.");
         autoReadOnHalt.setSelection(autoSnapshotEnabled);
         autoReadOnHalt.addListener(SWT.Selection, e -> {
             autoSnapshotEnabled = autoReadOnHalt.getSelection();
@@ -431,7 +434,7 @@ public final class SocRegistersView extends ViewPart {
         selectedBoard = null;
         selectedSvdTarget = null;
         discoveryExplanation = "Finding vendor register descriptions for project " + selectedProjectName + "…";
-        device = null; svdPath = null; svdIdentity = null;
+        device = null; svdPath = null; svdIdentity = null; dtsLinks = Map.of();
         values.clear(); previousValues.clear(); errors.clear(); watches.clear(); history.clear();
                         lastReadAt = null;
         if (tree != null && !tree.isDisposed()) {
@@ -914,15 +917,14 @@ public final class SocRegistersView extends ViewPart {
 
     /** Snapshot only after a real stop; no second probe connection or target halt. */
     private void scheduleAutoSnapshot() {
-        if (!autoSnapshotEnabled || device == null || selected() == null
-                || !selected().readable() || closed || ui == null || ui.isDisposed()) return;
+        if (!autoSnapshotEnabled || device == null || closed || ui == null || ui.isDisposed()) return;
         final long expectedGeneration = generation;
         final DsfSession expectedSession = listenedSession;
         if (expectedSession == null) return;
         ui.timerExec(400, () -> {
             if (closed || tree.isDisposed() || !autoSnapshotEnabled || busy
                     || generation != expectedGeneration || listenedSession != expectedSession) return;
-            refresh(ReadScope.SELECTION);
+            refresh(ReadScope.HALT);
         });
     }
 
@@ -1045,6 +1047,26 @@ public final class SocRegistersView extends ViewPart {
         var button = new Button(parent, SWT.PUSH); button.setText(label);
         button.addListener(SWT.Selection, e -> action.run());
     }
+    private Map<String, SvdDevicetreeLinker.Link> loadDtsLinks(
+            SvdDevice model, String projectName) {
+        if (projectName == null || projectName.isBlank()) return Map.of();
+        try {
+            Path build = selectedBuildContext;
+            if (build == null) {
+                var project = ResourcesPlugin.getWorkspace().getRoot().getProject(projectName);
+                if (project == null || !project.isAccessible()) return Map.of();
+                build = ProjectContext.buildDirectory(project, ProjectContext.settings(project));
+            }
+            Path generated = build.resolve("zephyr/zephyr.dts");
+            if (!Files.isRegularFile(generated) || Files.size(generated) > 2_000_000)
+                return Map.of();
+            return SvdDevicetreeLinker.link(model,
+                    DevicetreeHardware.inspect(Files.readString(generated)));
+        } catch (Exception unavailable) {
+            return Map.of();
+        }
+    }
+
     private void load(String path) { load(path, false); }
 
     private void load(String path, boolean exactPackDeviceMapping) {
@@ -1073,6 +1095,8 @@ public final class SocRegistersView extends ViewPart {
                         while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
                     }
                     final String identity = java.util.HexFormat.of().formatHex(digest.digest());
+                    final Map<String, SvdDevicetreeLinker.Link> verifiedDtsLinks =
+                            loadDtsLinks(loaded, project);
                     if (!closed && !ui.isDisposed()) ui.asyncExec(() -> {
                         if (closed || tree.isDisposed() || request != discoveryGeneration) return;
                         if (!exactPackDeviceMapping && board != null && !board.isBlank()
@@ -1086,6 +1110,7 @@ public final class SocRegistersView extends ViewPart {
                             return;
                         }
                         generation++; busy = false; device = loaded; svdPath = path;
+                        dtsLinks = verifiedDtsLinks;
                         // Direct/manual SVDs and exact-model pack SVDs can be
                         // safely revalidated and reopened on the next launch.
                         String verifiedTarget = selectedSvdTarget == null ? board : selectedSvdTarget;
@@ -1139,6 +1164,7 @@ public final class SocRegistersView extends ViewPart {
     private void toggleLiveWatch() {
         if (liveWatch) { stopLiveWatch(); status.setText("Live Watch stopped."); return; }
         if (device == null || watches.isEmpty() || watches.size() > MAX_WATCH_POLL_REGISTERS
+                || (device != null && device.registers().stream().anyMatch(r -> watches.contains(r.key()) && dtsAccessBlocked(r)))
                 || debugTarget() == null) {
             status.setText("Live polling needs 1–8 readable watched registers and one halted GDB session.");
             return;
@@ -1182,9 +1208,27 @@ public final class SocRegistersView extends ViewPart {
                     10 + i * width / (points.size() - 1),
                     29 + (int) ((1 - points.get(i).level()) * height));
     }
+    private void startSelectedLiveWatch(Register register) {
+        if (register == null || !register.readable() || dtsAccessBlocked(register)) {
+            status.setText("Live Watch refused: select a readable register enabled in Devicetree.");
+            return;
+        }
+        if (!watches.contains(register.key()) && watches.size() >= MAX_WATCH_POLL_REGISTERS) {
+            status.setText("Live Watch supports at most eight selected registers. Unwatch another first.");
+            return;
+        }
+        watches.add(register.key());
+        render();
+        if (!liveWatch) toggleLiveWatch();
+    }
+
     private void toggleWatch(Register register) {
         if (register == null) return;
         if (!watches.remove(register.key())) {
+            if (dtsAccessBlocked(register)) {
+                status.setText(dtsLink(register).explanation());
+                return;
+            }
             if (!register.readable()) {
                 status.setText("Watch unavailable: " + register.readBlockReason());
                 return;
@@ -1210,6 +1254,9 @@ public final class SocRegistersView extends ViewPart {
         var periphRead = new MenuItem(menu, SWT.PUSH);
         periphRead.setText("Read this peripheral (halted)");
         periphRead.addListener(SWT.Selection, e -> refreshPeripheral());
+        var liveSelected = new MenuItem(menu, SWT.PUSH);
+        liveSelected.setText("Live watch this register");
+        liveSelected.addListener(SWT.Selection, e -> startSelectedLiveWatch(selected()));
         var add = new MenuItem(menu, SWT.PUSH);
         add.setText("Add / remove watch");
         add.addListener(SWT.Selection, e -> toggleWatch(selected()));
@@ -1222,8 +1269,9 @@ public final class SocRegistersView extends ViewPart {
         menu.addListener(SWT.Show, e -> {
             Register reg = selected();
             periphRead.setEnabled(selectedPeripheral() != null);
+            liveSelected.setEnabled(reg != null && reg.readable() && !dtsAccessBlocked(reg));
             add.setEnabled(reg != null && (watches.contains(reg.key()) || reg.readable()));
-            write.setEnabled(reg != null && reg.writeAllowed());
+            write.setEnabled(reg != null && reg.writeAllowed() && !dtsAccessBlocked(reg));
             SvdDevice.Field field = selectedField();
             bit.setEnabled(reg != null && reg.writable() && values.containsKey(reg.key())
                     && field != null && field.width() == 1);
@@ -1250,7 +1298,7 @@ public final class SocRegistersView extends ViewPart {
         menu.addListener(SWT.Show, e -> {
             Register reg = watchedSelection();
             remove.setEnabled(reg != null);
-            write.setEnabled(reg != null && reg.writeAllowed());
+            write.setEnabled(reg != null && reg.writeAllowed() && !dtsAccessBlocked(reg));
         });
         watchTable.addListener(SWT.MenuDetect, e -> {
             var point = watchTable.toControl(e.x, e.y);
@@ -1266,6 +1314,13 @@ public final class SocRegistersView extends ViewPart {
     private void installFieldMenu() {
         var menu = new Menu(fieldTable);
         fieldTable.setMenu(menu);
+        var special = new MenuItem(menu, SWT.PUSH);
+        special.setText("Apply vendor W1/W0 field action (confirmed)…");
+        special.addListener(SWT.Selection, e -> {
+            if (fieldTable.getSelectionCount() == 1
+                    && fieldTable.getSelection()[0].getData() instanceof SvdDevice.Field field)
+                applySpecialField(inspectedRegister, field);
+        });
         var toggle = new MenuItem(menu, SWT.PUSH);
         toggle.setText("Toggle this 1-bit field…");
         toggle.addListener(SWT.Selection, e -> {
@@ -1280,6 +1335,9 @@ public final class SocRegistersView extends ViewPart {
                     && inspectedRegister.writable()
                     && values.containsKey(inspectedRegister.key());
             toggle.setEnabled(allowed);
+            special.setEnabled(fieldTable.getSelectionCount() == 1
+                    && fieldTable.getSelection()[0].getData() instanceof SvdDevice.Field field
+                    && canApplySpecialField(inspectedRegister, field));
         });
         fieldTable.addListener(SWT.MenuDetect, e -> {
             var item = fieldTable.getItem(fieldTable.toControl(e.x, e.y));
@@ -1346,12 +1404,28 @@ public final class SocRegistersView extends ViewPart {
         }
         Register chosen = selected();
         var expandedPeripherals = new HashSet<String>();
+        var expandedFamilies = new HashSet<String>();
         var expandedRegisters = new HashSet<String>();
-        for (TreeItem peripheral : tree.getItems()) {
-            if (peripheral.getExpanded()) expandedPeripherals.add(peripheral.getText());
-            for (TreeItem register : peripheral.getItems()) {
-                if (register.getExpanded() && register.getData() instanceof Register r)
-                    expandedRegisters.add(r.key());
+        var expandedGroups = new HashSet<String>();
+        for (TreeItem root : tree.getItems()) {
+            if (root.getData("familyName") instanceof String family && root.getExpanded())
+                expandedFamilies.add(family);
+            TreeItem[] peripherals = root.getData("familyName") instanceof String
+                    ? root.getItems() : new TreeItem[] {root};
+            for (TreeItem peripheral : peripherals) {
+                if (peripheral.getExpanded()) expandedPeripherals.add(
+                        peripheral.getData("peripheralName") instanceof String name ? name : peripheral.getText());
+                for (TreeItem child : peripheral.getItems()) {
+                    if (child.getData("arrayGroup") instanceof String group) {
+                        if (child.getExpanded()) expandedGroups.add(
+                                peripheral.getData("peripheralName") + "::" + group);
+                        for (TreeItem nested : child.getItems())
+                            if (nested.getExpanded() && nested.getData() instanceof Register registerModel)
+                                expandedRegisters.add(registerModel.key());
+                    } else if (child.getExpanded() && child.getData() instanceof Register reg) {
+                        expandedRegisters.add(reg.key());
+                    }
+                }
             }
         }
         tree.setRedraw(false);
@@ -1364,9 +1438,38 @@ public final class SocRegistersView extends ViewPart {
                         .toLowerCase(Locale.ROOT).contains(query)) continue;
                 matches.computeIfAbsent(r.peripheral(), key -> new java.util.ArrayList<>()).add(r);
             }
+            var familyCounts = new HashMap<String, Integer>();
+            for (String name : matches.keySet()) {
+                String family = peripheralFamilyName(name);
+                if (!family.isEmpty()) familyCounts.merge(family, 1, Integer::sum);
+            }
+            var familyItems = new java.util.LinkedHashMap<String, TreeItem>();
             for (var entry : matches.entrySet()) {
-                TreeItem peripheral = new TreeItem(tree, SWT.NONE);
-                peripheral.setText(entry.getKey());
+                TreeItem familyItem = null;
+                String family = peripheralFamilyName(entry.getKey());
+                if (familyCounts.getOrDefault(family, 0) >= 2) {
+                    familyItem = familyItems.get(family);
+                    if (familyItem == null) {
+                        familyItem = new TreeItem(tree, SWT.NONE);
+                        familyItem.setText(family + " (" + familyCounts.get(family) + " peripherals)");
+                        familyItem.setData("familyName", family);
+                        familyItem.setExpanded(expandedFamilies.contains(family) || !query.isBlank());
+                        familyItems.put(family, familyItem);
+                    }
+                }
+                TreeItem peripheral = familyItem == null
+                        ? new TreeItem(tree, SWT.NONE) : new TreeItem(familyItem, SWT.NONE);
+                var link = dtsLinks.get(entry.getKey());
+                peripheral.setText(entry.getKey()
+                        + (link != null && link.state() == SvdDevicetreeLinker.State.DISABLED_IN_DTS
+                            ? " [DTS disabled]" : ""));
+                peripheral.setData("peripheralName", entry.getKey());
+                if (link != null) {
+                    peripheral.setData("description", link.explanation()
+                            + (link.nodePath().isBlank() ? "" : " — " + link.nodePath()));
+                    if (link.state() == SvdDevicetreeLinker.State.DISABLED_IN_DTS)
+                        peripheral.setForeground(tree.getDisplay().getSystemColor(SWT.COLOR_DARK_GRAY));
+                }
                 peripheral.setData("registers", entry.getValue());
                 // Lightweight placeholder: no register or field widgets until expanded.
                 new TreeItem(peripheral, SWT.NONE).setText("Expand to show "
@@ -1378,12 +1481,14 @@ public final class SocRegistersView extends ViewPart {
                     populatePeripheral(peripheral);
                     peripheral.setExpanded(true);
                     for (TreeItem child : peripheral.getItems()) {
-                        if (child.getData() instanceof Register r && expandedRegisters.contains(r.key())) {
-                            populateFields(child, r);
-                            child.setExpanded(true);
+                        if (child.getData("arrayGroup") instanceof String group) {
+                            child.setExpanded(expandedGroups.contains(entry.getKey() + "::" + group)
+                                    || !query.isBlank());
+                            for (TreeItem nested : child.getItems())
+                                restoreRegister(nested, expandedRegisters, chosen);
+                        } else {
+                            restoreRegister(child, expandedRegisters, chosen);
                         }
-                        if (child.getData() instanceof Register r && chosen != null
-                                && chosen.key().equals(r.key())) tree.setSelection(child);
                     }
                 }
             }
@@ -1399,6 +1504,30 @@ public final class SocRegistersView extends ViewPart {
         } finally { tree.setRedraw(true); }
         renderWatches();
         updateConnectionPath();
+    }
+
+    private void restoreRegister(TreeItem item, Set<String> expanded, Register chosen) {
+        if (!(item.getData() instanceof Register reg)) return;
+        if (expanded.contains(reg.key())) {
+            populateFields(item, reg);
+            item.setExpanded(true);
+        }
+        if (chosen != null && chosen.key().equals(reg.key())) tree.setSelection(item);
+    }
+
+    private static String peripheralFamilyName(String name) {
+        var matcher = java.util.regex.Pattern.compile("^([A-Za-z][A-Za-z_-]*)([0-9]+)$")
+                .matcher(name);
+        return matcher.matches() ? matcher.group(1) + "[]" : "";
+    }
+
+    private static String arrayGroupName(String name) {
+        int bracket = name.indexOf('[');
+        if (bracket > 0) return name.substring(0, bracket) + "[]";
+        var match = java.util.regex.Pattern
+                .compile("^(.{2,}?)([0-9]+)(\\..*)?$").matcher(name);
+        if (match.matches()) return match.group(1) + "[]" + (match.group(3) == null ? "" : match.group(3));
+        return "";
     }
 
     private static String bits(BigInteger value, int width) {
@@ -1419,6 +1548,8 @@ public final class SocRegistersView extends ViewPart {
                 ? "Waiting for the current GDB read queue. Use Read this peripheral for a smaller inspection."
                 : RegisterPresentation.explanation(r, errors.get(r.key()));
         var details = new StringBuilder(r.peripheral()).append("  /  ").append(r.name()).append("\n\n")
+                .append("Devicetree     ").append(dtsLink(r).state())
+                .append(" — ").append(dtsLink(r).nodePath()).append("\n")
                 .append("Live value     ")
                 .append(value == null ? "—  (" + state + ")" : hex(value, r.size()))
                 .append("\n")
@@ -1458,8 +1589,11 @@ public final class SocRegistersView extends ViewPart {
                         : value.shiftRight(field.offset()).and(mask);
                 String label = field.name() + " [" + (field.offset() + field.width() - 1)
                         + ":" + field.offset() + "]";
-                String formatted = fieldValue == null ? "—" :
-                        field.width() == 1 ? (fieldValue.signum() == 0 ? "0 / CLEAR" : "1 / SET")
+                String formatted = fieldValue == null ? "—"
+                        : !field.enumeratedValues().isEmpty()
+                            ? field.displayValue(fieldValue) + " (" + hex(fieldValue, field.width()) + ")"
+                            : field.width() == 1
+                                ? (fieldValue.signum() == 0 ? "0 / CLEAR" : "1 / SET")
                                 : hex(fieldValue, field.width());
                 String meaning = field.description().isBlank()
                         ? field.access() : field.description().replace('\n', ' ').trim();
@@ -1483,19 +1617,37 @@ public final class SocRegistersView extends ViewPart {
             if (current != null && !current.equals(previous.getValue()))
                 changedKeys.add(previous.getKey());
         }
+        var counts = new HashMap<String, Integer>();
+        for (Register reg : registers) {
+            String group = arrayGroupName(reg.name());
+            if (!group.isEmpty()) counts.merge(group, 1, Integer::sum);
+        }
+        var groups = new java.util.LinkedHashMap<String, TreeItem>();
         for (Register r : registers) {
-            TreeItem item = new TreeItem(peripheral, SWT.NONE);
+            String group = arrayGroupName(r.name());
+            TreeItem parent = peripheral;
+            if (counts.getOrDefault(group, 0) >= 2) {
+                parent = groups.get(group);
+                if (parent == null) {
+                    parent = new TreeItem(peripheral, SWT.NONE);
+                    parent.setText(group + " (" + counts.get(group) + ")");
+                    parent.setData("arrayGroup", group);
+                    groups.put(group, parent);
+                }
+            }
+            TreeItem item = new TreeItem(parent, SWT.NONE);
             item.setData(r);
             item.setData("description", r.description());
             BigInteger value = values.get(r.key());
-            String access = !r.readable() ? "Read blocked: " + r.readBlockReason() : r.access();
+            String access = dtsAccessBlocked(r) ? dtsLink(r).explanation()
+                    : !r.readable() ? "Read blocked: " + r.readBlockReason() : r.access();
             if (errors.containsKey(r.key())) access = errors.get(r.key());
             else if (value != null && r.reset() != null
                     && value.xor(r.reset()).and(r.resetMask()).signum() != 0)
                 access += " — differs from reset";
             if (changedKeys.contains(r.key()))
                 access += " — CHANGED since pinned snapshot";
-            String state = readState(r);
+            String state = dtsAccessBlocked(r) ? "DTS disabled/ambiguous" : readState(r);
             if (changedKeys.contains(r.key())) state += "  • changed";
             item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(),
                     value == null ? "—" : hex(value, r.size()), state });
@@ -1516,7 +1668,7 @@ public final class SocRegistersView extends ViewPart {
             var mask = BigInteger.ONE.shiftLeft(f.width()).subtract(BigInteger.ONE);
             field.setText(new String[] { f.name() + " [" + (f.offset() + f.width() - 1)
                     + ":" + f.offset() + "]",
-                    value == null ? "—" : hex(value.shiftRight(f.offset()).and(mask), f.width()),
+                    value == null ? "—" : f.displayValue(value.shiftRight(f.offset()).and(mask)),
                     readState(r) });
         }
         item.setData("populated", Boolean.TRUE);
@@ -1638,8 +1790,23 @@ public final class SocRegistersView extends ViewPart {
         if (tree == null || tree.isDisposed() || tree.getSelectionCount() != 1) return null;
         TreeItem item = tree.getSelection()[0];
         if (item.getData() instanceof Register reg) return reg.peripheral();
-        return item.getData("registers") instanceof List<?> ? item.getText(0) : null;
+        while (item != null) {
+            if (item.getData("peripheralName") instanceof String name) return name;
+            item = item.getParentItem();
+        }
+        return null;
     }
+    private SvdDevicetreeLinker.Link dtsLink(Register reg) {
+        return dtsLinks.getOrDefault(reg.peripheral(),
+                new SvdDevicetreeLinker.Link(SvdDevicetreeLinker.State.UNKNOWN, "",
+                        "No verified generated Devicetree address mapping"));
+    }
+    private boolean dtsAccessBlocked(Register reg) {
+        var state = dtsLink(reg).state();
+        return state == SvdDevicetreeLinker.State.DISABLED_IN_DTS
+                || state == SvdDevicetreeLinker.State.AMBIGUOUS;
+    }
+
     private String readState(Register reg) {
         return pendingReads.contains(reg.key()) ? "Pending GDB read"
                 : RegisterPresentation.state(reg, values.get(reg.key()), errors.get(reg.key()));
@@ -1657,18 +1824,27 @@ public final class SocRegistersView extends ViewPart {
         }
         var chosen = selected();
         var eligible = device.registers().stream()
-                .filter(r -> r.readable() && switch (scope) {
+                .filter(r -> r.readable() && !dtsAccessBlocked(r) && switch (scope) {
                     case ALL_SAFE -> true;
                     case WATCHES -> watches.contains(r.key());
                     case PERIPHERAL -> readPagePeripheral != null && readPagePeripheral.equals(r.peripheral());
                     case SELECTION -> r.equals(chosen);
-                }).sorted(java.util.Comparator.comparingInt(
-                        r -> watches.contains(r.key()) ? 0 : 1)).toList();
+                    case HALT -> (chosen != null && chosen.equals(r))
+                            || watches.contains(r.key())
+                            || (chosen == null && watches.isEmpty()
+                                && dtsLink(r).state() == SvdDevicetreeLinker.State.ENABLED_IN_DTS);
+                }).sorted(java.util.Comparator
+                        .comparingInt((Register r) -> chosen != null && chosen.equals(r) ? 0
+                            : watches.contains(r.key()) ? 1 : 2)
+                        .thenComparing(Register::key)).toList();
         if (eligible.isEmpty()) {
             if (scope == ReadScope.PERIPHERAL)
                 status.setText("Select a peripheral heading or register with SVD-readable registers.");
+            else if (scope == ReadScope.HALT)
+                status.setText("Halted: no selected, watched or DTS-enabled registers safe for automatic read.");
             else if (scope == ReadScope.SELECTION && chosen != null)
-                status.setText(chosen.key() + " cannot be read: " + chosen.readBlockReason()
+                status.setText(chosen.key() + " cannot be read: "
+                        + (dtsAccessBlocked(chosen) ? dtsLink(chosen).explanation() : chosen.readBlockReason())
                         + ". For GPIO pin levels, select a readable DIN register instead.");
             else if (scope != ReadScope.ALL_SAFE)
                 status.setText("Select a readable register, or add one to Watch.");
@@ -1684,6 +1860,8 @@ public final class SocRegistersView extends ViewPart {
             }
             targets = eligible.subList(readPageOffset,
                     Math.min(readPageOffset + MAX_READ_BATCH, readPageTotal));
+        } else if (scope == ReadScope.HALT) {
+            targets = eligible.subList(0, Math.min(MAX_WATCH_POLL_REGISTERS, eligible.size()));
         } else {
             targets = eligible;
         }
@@ -1730,6 +1908,7 @@ public final class SocRegistersView extends ViewPart {
 
     private void editRegister(Register register) {
         if (register == null || device == null) return;
+        if (dtsAccessBlocked(register)) { status.setText(dtsLink(register).explanation()); return; }
         if (!register.writeAllowed()) {
             status.setText("Register write blocked by SVD: " + register.writeBlockReason());
             return;
@@ -1742,12 +1921,12 @@ public final class SocRegistersView extends ViewPart {
                             ? "Write-only register: explicit physical write; no register readback is possible."
                             : "This writes to the physical MCU through the halted GDB session."),
                 current == null ? "" : hex(current, register.size()), entered -> {
-                    try { RegisterWriteValue.parse(register, entered); return null; }
+                    try { RegisterWriteValue.parse(register, entered, current); return null; }
                     catch (IllegalArgumentException invalid) { return invalid.getMessage(); }
                 });
         if (dialog.open() != org.eclipse.jface.window.Window.OK) return;
         try {
-            submitRegisterWrite(register, RegisterWriteValue.parse(register, dialog.getValue()));
+            submitRegisterWrite(register, RegisterWriteValue.parse(register, dialog.getValue(), current));
         } catch (IllegalArgumentException rejected) {
             status.setText(rejected.getMessage());
         }
@@ -1764,11 +1943,34 @@ public final class SocRegistersView extends ViewPart {
         }
     }
 
-    private record WriteIntent(Register register, BigInteger value) {}
+    private record WriteIntent(Register register, BigInteger value, boolean special) {}
+
+    private boolean canApplySpecialField(Register register, SvdDevice.Field field) {
+        if (register == null || field == null || dtsAccessBlocked(register)) return false;
+        try { RegisterWriteValue.specialBit(register, field); return true; }
+        catch (IllegalArgumentException refused) { return false; }
+    }
+
+    private void applySpecialField(Register register, SvdDevice.Field field) {
+        if (!canApplySpecialField(register, field)) {
+            status.setText("Special bit operation unavailable for this DTS/SVD register.");
+            return;
+        }
+        submitRegisterWrite(register, RegisterWriteValue.specialBit(register, field), field);
+    }
 
     private void submitRegisterWrite(Register register, BigInteger value) {
+        submitRegisterWrite(register, value, null);
+    }
+
+    private void submitRegisterWrite(Register register, BigInteger value, SvdDevice.Field semantic) {
+        boolean specialized = semantic != null;
         if (device == null || register == null || !device.registers().contains(register)
-                || !register.writeAllowed()) {
+                || dtsAccessBlocked(register)
+                || (specialized
+                    ? !canApplySpecialField(register, semantic)
+                        || !RegisterWriteValue.specialBit(register, semantic).equals(value)
+                    : !register.writeAllowed())) {
             status.setText("Write blocked: the exact current SVD does not authorise this register.");
             return;
         }
@@ -1778,14 +1980,16 @@ public final class SocRegistersView extends ViewPart {
             status.setText("Write blocked: no unique matching native GDB target. Halt it first.");
             return;
         }
-        String intended = "0x" + RegisterWriteValue.parse(
-                register, "0x" + value.toString(16)).toString(16);
+        String intended = "0x" + (specialized ? value
+                : RegisterWriteValue.parse(register, "0x" + value.toString(16),
+                        values.get(register.key()))).toString(16);
         if (!org.eclipse.jface.dialogs.MessageDialog.openConfirm(getSite().getShell(),
                 "Confirm physical MCU register write",
                 "This will change real hardware. The target must be halted.\n\n"
                         + register.key() + " @ 0x" + register.address().toString(16)
                         + "\nNew value: " + intended
-                        + (register.directWritable() ? "\nWrite-only: physical readback unavailable." : "")
+                        + (specialized ? "\nVendor W1/W0 bit write; no read-modify-write."
+                            : register.directWritable() ? "\nWrite-only: physical readback unavailable." : "")
                         + "\n\nSome peripheral writes can affect clocks, interrupts, power or pins. "
                         + "Proceed only if the register is appropriate for this board and state."))
             return;
@@ -1795,7 +1999,7 @@ public final class SocRegistersView extends ViewPart {
         writing = true;
         long request = ++generation;
         status.setText("Writing " + register.key() + " through the existing halted GDB/OpenOCD session…");
-        var intent = new WriteIntent(register, value);
+        var intent = new WriteIntent(register, value, specialized);
         try {
             session.getExecutor().execute(() -> resolveOperationFrame(
                     session, target.context(), java.util.List.of(register), request, intent));
@@ -1947,7 +2151,8 @@ public final class SocRegistersView extends ViewPart {
             WriteIntent write, long request) {
         if (closed || request != generation) return;
         Register reg = write.register();
-        if (!run.isSuspended(execution) || !reg.writeAllowed() || device == null
+        if (!run.isSuspended(execution) || !(reg.writeAllowed() || write.special())
+                || device == null || dtsAccessBlocked(reg)
                 || !device.registers().contains(reg)) {
             finish(request, "Hardware write cancelled: stopped session/SVD identity not valid.");
             return;
@@ -1977,6 +2182,11 @@ public final class SocRegistersView extends ViewPart {
                         }
                         lastGdbReply = getData() == null ? "GDB command accepted"
                                 : getData().getValue();
+                        if (write.special()) {
+                            finish(request, "GDB accepted special bit write to " + reg.key()
+                                    + "; inspect readable status for hardware effects.");
+                            return;
+                        }
                         if (reg.directWritable()) {
                             // GPIO output/command register is SVD-declared write-only.
                             finish(request, "GDB accepted write to " + reg.key()

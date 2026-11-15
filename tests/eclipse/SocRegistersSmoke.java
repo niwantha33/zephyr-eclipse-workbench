@@ -94,6 +94,17 @@ public final class SocRegistersSmoke {
                 throw new AssertionError("Plain-language register inspector and structured fields");
             if (tree.getColumnCount() != 3 || fieldTable.getColumnCount() != 3)
                 throw new AssertionError("Compact register and field tables must use three columns");
+            var peripheralFamily = type.getDeclaredMethod("peripheralFamilyName", String.class);
+            peripheralFamily.setAccessible(true);
+            if (!"UART[]".equals(peripheralFamily.invoke(null, "UART0"))
+                    || !"UART[]".equals(peripheralFamily.invoke(null, "UART12"))
+                    || !"".equals(peripheralFamily.invoke(null, "GPIOB")))
+                throw new AssertionError("Vendor peripheral instances must group without merging unrelated names");
+            var registerArray = type.getDeclaredMethod("arrayGroupName", String.class);
+            registerArray.setAccessible(true);
+            if (!"INT_EVENT[]".equals(registerArray.invoke(null, "INT_EVENT[0]"))
+                    || !"CHANNEL[].CTRL".equals(registerArray.invoke(null, "CHANNEL2.CTRL")))
+                throw new AssertionError("SVD register arrays and clusters must have expandable group names");
             var contextInfoField = type.getDeclaredField("contextInfo");
             contextInfoField.setAccessible(true);
             var pathStatus = (Label) contextInfoField.get(view);
@@ -183,8 +194,13 @@ public final class SocRegistersSmoke {
                 throw new AssertionError("Watch polling interval must be adjustable");
             var autoField = type.getDeclaredField("autoReadOnHalt"); autoField.setAccessible(true);
             var onHalt = (org.eclipse.swt.widgets.Button) autoField.get(view);
-            if (onHalt.getSelection())
-                throw new AssertionError("Bulk register scans must not start automatically on debug halt");
+            if (!onHalt.getSelection())
+                throw new AssertionError("Bounded SVD-safe capture should be enabled on debug halt");
+            var semanticRead = type.getDeclaredMethod("readState",
+                    io.github.niwantha33.zew.core.SvdDevice.Register.class);
+            semanticRead.setAccessible(true);
+            if (!"Not sampled".equals(semanticRead.invoke(view, reg)))
+                throw new AssertionError("Halt capture must not invent a register value");
             var pageLimitField = type.getDeclaredField("MAX_READ_BATCH");
             pageLimitField.setAccessible(true);
             if (pageLimitField.getInt(null) > 32)

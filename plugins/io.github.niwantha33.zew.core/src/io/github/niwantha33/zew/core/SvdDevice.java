@@ -11,9 +11,17 @@ import org.w3c.dom.Element;
 
 /** Bounded, offline CMSIS-SVD reader. Unsupported constructs fail explicitly. */
 public record SvdDevice(String name, List<Register> registers) {
+    public record EnumeratedValue(String name, BigInteger value, String description) {}
     public record Field(String name, int offset, int width, String description,
             String access, String readAction, String modifiedWriteValues,
-            String writeConstraint) {}
+            String writeConstraint, List<EnumeratedValue> enumeratedValues) {
+        public String displayValue(BigInteger raw) {
+            if (raw == null) return "—";
+            for (var option : enumeratedValues)
+                if (option.value().equals(raw)) return option.name();
+            return "0x" + raw.toString(16).toUpperCase(java.util.Locale.ROOT);
+        }
+    }
     public record Register(String peripheral, String name, BigInteger address, int size,
             BigInteger reset, BigInteger resetMask, String access, String readAction,
             String modifiedWriteValues, String writeConstraint,
@@ -40,19 +48,52 @@ public record SvdDevice(String name, List<Register> registers) {
             if (size > 32) return "64-bit writes are not supported";
             if (!"read-write".equals(access)) return "register access: " + access;
             if (!readable()) return "cannot safely read current register: " + readBlockReason();
-            if (!modifiedWriteValues.isBlank()) return "register modifiedWriteValues: " + modifiedWriteValues;
-            if (!writeConstraint.isBlank()) return "register writeConstraint: " + writeConstraint;
+            if (!modifiedWriteValues.isBlank()) return "register modifiedWriteValues: "
+                    + modifiedWriteValues + " (special semantic write required)";
+            if (!writeConstraint.isBlank() && !supportedConstraint(writeConstraint))
+                return "unsupported register writeConstraint: " + writeConstraint;
             for (var field : fields) {
                 if (!"read-write".equals(field.access()))
                     return "field " + field.name() + " access: " + field.access();
                 if (!field.modifiedWriteValues().isBlank())
                     return "field " + field.name() + " modifiedWriteValues: " + field.modifiedWriteValues();
-                if (!field.writeConstraint().isBlank())
+                if (!field.writeConstraint().isBlank() && !supportedConstraint(field.writeConstraint()))
                     return "field " + field.name() + " writeConstraint: " + field.writeConstraint();
             }
             return "";
         }
         public boolean writable() { return writeBlockReason().isEmpty(); }
+        private static boolean supportedConstraint(String text) {
+            return text.startsWith("range:") || "writeAsRead".equals(text)
+                    || "enumerated".equals(text);
+        }
+        public boolean validatesConstraint(BigInteger value, BigInteger prior) {
+            if (value == null || !constraintAllows(writeConstraint, value, prior, null)) return false;
+            for (var field : fields) {
+                BigInteger mask = BigInteger.ONE.shiftLeft(field.width()).subtract(BigInteger.ONE);
+                BigInteger part = value.shiftRight(field.offset()).and(mask);
+                BigInteger before = prior == null ? null : prior.shiftRight(field.offset()).and(mask);
+                if (!constraintAllows(field.writeConstraint(), part, before, field)) return false;
+            }
+            return true;
+        }
+        private static boolean constraintAllows(String constraint, BigInteger value,
+                BigInteger previous, Field field) {
+            if (constraint.isBlank()) return true;
+            if ("writeAsRead".equals(constraint)) return previous != null && previous.equals(value);
+            if ("enumerated".equals(constraint))
+                return field != null && field.enumeratedValues().stream()
+                        .anyMatch(e -> e.value().equals(value));
+            if (constraint.startsWith("range:")) {
+                var bounds = constraint.substring(6).split(":", -1);
+                if (bounds.length != 2) return false;
+                try {
+                    return value.compareTo(new BigInteger(bounds[0])) >= 0
+                            && value.compareTo(new BigInteger(bounds[1])) <= 0;
+                } catch (NumberFormatException bad) { return false; }
+            }
+            return false;
+        }
 
         /**
          * Explicit *whole-register* writes for write-only command/data registers.
@@ -184,7 +225,7 @@ public record SvdDevice(String name, List<Register> registers) {
                                 (int) bit, width, text(f, "description", ""),
                                 text(f, "access", access), text(f, "readAction", ""),
                                 text(f, "modifiedWriteValues", ""),
-                                child(f, "writeConstraint") == null ? "" : "SVD field write constraint"));
+                                writeConstraint(f), parseEnums(f, width)));
                     }
                 }
                 if (fields.size() > 4096) throw new IllegalArgumentException("SVD field limit exceeded");
@@ -205,8 +246,9 @@ public record SvdDevice(String name, List<Register> registers) {
                     throw new IllegalArgumentException("Invalid reset value/mask: " + name);
                 out.add(new Register(peripheral, name, address, size, reset, mask, access, action,
                         inherit(r, parent, device, "modifiedWriteValues", ""),
-                        hasConstraint(r) || hasConstraint(parent) || hasConstraint(device)
-                                ? "SVD register write constraint" : "",
+                        child(r, "writeConstraint") != null ? writeConstraint(r)
+                                : child(parent, "writeConstraint") != null ? writeConstraint(parent)
+                                : writeConstraint(device),
                         text(r, "description", ""), List.copyOf(fields)));
             }
         }
@@ -229,8 +271,48 @@ public record SvdDevice(String name, List<Register> registers) {
         String replaced = template.replace("%s", index);
         return count > 1 && !template.contains("%s") ? replaced + index : replaced;
     }
-    private static boolean hasConstraint(Element element) {
-        return element != null && child(element, "writeConstraint") != null;
+    private static String writeConstraint(Element element) {
+        if (element == null) return "";
+        Element constraint = child(element, "writeConstraint");
+        if (constraint == null) return "";
+        Element range = child(constraint, "range");
+        if (range != null) {
+            try {
+                BigInteger lo = number(text(range, "minimum", ""));
+                BigInteger hi = number(text(range, "maximum", ""));
+                if (lo.signum() >= 0 && lo.compareTo(hi) <= 0 && hi.bitLength() <= 64)
+                    return "range:" + lo + ":" + hi;
+            } catch (RuntimeException ignored) { /* invalid constraint stays blocked */ }
+        }
+        if ("true".equalsIgnoreCase(constraint.getAttribute("writeAsRead"))
+                || "true".equalsIgnoreCase(text(constraint, "writeAsRead", "")))
+            return "writeAsRead";
+        if ("true".equalsIgnoreCase(constraint.getAttribute("useEnumeratedValues"))
+                || "true".equalsIgnoreCase(text(constraint, "useEnumeratedValues", "")))
+            return "enumerated";
+        return "unsupported";
+    }
+    private static List<EnumeratedValue> parseEnums(Element field, int width) {
+        var values = new ArrayList<EnumeratedValue>();
+        for (Element group : children(field)) {
+            if (!group.getTagName().equals("enumeratedValues")) continue;
+            for (Element option : children(group)) {
+                if (!option.getTagName().equals("enumeratedValue")) continue;
+                if (values.size() >= 256)
+                    throw new IllegalArgumentException("SVD enumerated values limit exceeded");
+                String name = text(option, "name", "").trim();
+                String raw = text(option, "value", "");
+                if (name.isBlank() || name.length() > 128 || raw.isBlank()) continue;
+                if (raw.startsWith("#") && raw.matches("#[01xX]+") && raw.matches(".*[xX].*"))
+                    continue; // wildcard is not an exact enumerated value
+                try {
+                    BigInteger numeric = number(raw);
+                    if (numeric.signum() < 0 || numeric.bitLength() > width) continue;
+                    values.add(new EnumeratedValue(name, numeric, text(option, "description", "")));
+                } catch (RuntimeException ignored) { /* unknown encoding is not an enum label */ }
+            }
+        }
+        return List.copyOf(values);
     }
 
     private static boolean readAccess(String access) {
@@ -274,6 +356,7 @@ public record SvdDevice(String name, List<Register> registers) {
         String s = value.trim().replace("_", "");
         if (s.startsWith("0x") || s.startsWith("0X")) return new BigInteger(s.substring(2), 16);
         if (s.startsWith("#")) return new BigInteger(s.substring(1), 2);
+        if (s.startsWith("0b") || s.startsWith("0B")) return new BigInteger(s.substring(2), 2);
         return new BigInteger(s);
     }
     private static Element child(Element e, String name) {

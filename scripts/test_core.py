@@ -12,6 +12,7 @@ os.environ['ZEW_TEST_PYTHON'] = sys.executable
 subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/tools', '-v'], check=True, cwd=root, timeout=90)
 out = root / 'build-core-tests'
 out.mkdir(exist_ok=True)
+shutil.copyfile(root / 'plugins/io.github.niwantha33.zew.core/src/svd-part-mappings.json', out / 'svd-part-mappings.json')
 suffix = '.exe' if os.name == 'nt' else ''
 java_home = os.environ.get('JAVA_HOME')
 def tool(name):
@@ -120,6 +121,7 @@ subprocess.run([tool('java'), '-cp', str(out), 'RttTcpReaderTests'], check=True,
 
 subprocess.run([tool('java'), '-cp', str(out), 'DebugSessionSelectionTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdDeviceTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'SvdDevicetreeLinkerTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'SvdPreferredSourceTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'RegisterPresentationTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'RegisterWriteValueTests'], check=True, cwd=root, timeout=90)

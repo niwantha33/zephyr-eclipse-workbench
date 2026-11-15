@@ -150,6 +150,33 @@ public final class SvdDeviceTests {
                 "peripheral arrays require an explicit increment");
         rejects(device(peripheralArray.replace("<dim>2</dim>", "<dim>4097</dim>")),
                 "unbounded peripheral arrays are rejected");
+        String semantic = "<register><name>CTRL</name><addressOffset>0</addressOffset>"
+                + "<fields><field><name>MODE</name><bitOffset>0</bitOffset>"
+                + "<bitWidth>3</bitWidth><enumeratedValues>"
+                + "<enumeratedValue><name>DISABLE</name><value>0</value></enumeratedValue>"
+                + "<enumeratedValue><name>BAUD_9600</name><value>#010</value></enumeratedValue>"
+                + "<enumeratedValue><name>ENABLE</name><value>0b101</value></enumeratedValue>"
+                + "<enumeratedValue><name>WILDCARD</name><value>#1x1</value></enumeratedValue>"
+                + "</enumeratedValues></field></fields></register>";
+        var mode = parse(device(peripheral(semantic))).registers().get(0).fields().get(0);
+        check(mode.enumeratedValues().size() == 3
+                && mode.displayValue(BigInteger.valueOf(2)).equals("BAUD_9600")
+                && mode.displayValue(BigInteger.valueOf(5)).equals("ENABLE")
+                && mode.displayValue(BigInteger.valueOf(7)).equals("0x7"),
+                "named SVD enums decode exact binary values, not unknown/wildcard ones");
+        String ranged = "<register><name>RANGED</name><addressOffset>0</addressOffset>"
+                + "<writeConstraint><range><minimum>1</minimum><maximum>3</maximum>"
+                + "</range></writeConstraint></register>";
+        var limited = parse(device(peripheral(ranged))).registers().get(0);
+        check(limited.writable() && limited.validatesConstraint(BigInteger.ONE, null)
+                && !limited.validatesConstraint(BigInteger.valueOf(4), null),
+                "known write ranges may be edited only within the declared limits");
+        String writeAsRead = "<register><name>LOCKED</name><addressOffset>0</addressOffset>"
+                + "<writeConstraint writeAsRead='true'/></register>";
+        var preserved = parse(device(peripheral(writeAsRead))).registers().get(0);
+        check(preserved.writable() && !preserved.validatesConstraint(BigInteger.ONE, null)
+                && preserved.validatesConstraint(BigInteger.ONE, BigInteger.ONE),
+                "writeAsRead requires a matching observed register snapshot");
         System.out.println("SvdDeviceTests: PASS");
     }
 }

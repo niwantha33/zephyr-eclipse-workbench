@@ -57,19 +57,50 @@ public final class RegisterWriteValueTests {
         check(!reg("<readAction>clear</readAction>").writable(), "read side effect blocks RMW");
         check(!reg("<modifiedWriteValues>oneToClear</modifiedWriteValues>").writable(),
                 "write-one-to-clear requires a specialised writer");
-        check(!reg("<writeConstraint><range><minimum>0</minimum><maximum>1</maximum>"
-                + "</range></writeConstraint>").writable(), "constrained writes blocked");
-        check(!reg("<writeConstraint writeAsRead='true'/>").writable(),
-                "attribute-only SVD write constraints must block edits");
-        check(!reg("<fields><field><name>BIT</name><bitOffset>0</bitOffset>"
+        var constrained = reg("<writeConstraint><range><minimum>0</minimum><maximum>1</maximum>"
+                + "</range></writeConstraint>");
+        check(constrained.writable(), "understood range constraints can be validated");
+        rejects(() -> RegisterWriteValue.parse(constrained, "3"), "out-of-range write blocked");
+        var writeAsReadOnly = reg("<writeConstraint writeAsRead='true'/>");
+        rejects(() -> RegisterWriteValue.parse(writeAsReadOnly, "1"),
+                "writeAsRead without a halted prior value must block");
+        var enumOnly = reg("<fields><field><name>BIT</name><bitOffset>0</bitOffset>"
                 + "<bitWidth>1</bitWidth><writeConstraint useEnumeratedValues='true'/>"
-                + "</field></fields>").writable(), "field write constraint attributes block edits");
+                + "</field></fields>");
+        rejects(() -> RegisterWriteValue.parse(enumOnly, "1"),
+                "unknown enumerated field values must block edits");
         check(!reg("<fields><field><name>STATUS</name><bitOffset>0</bitOffset>"
                 + "<bitWidth>1</bitWidth><access>read-only</access></field></fields>").writable(),
                 "mixed-access field register blocked");
         check(!reg("<fields><field><name>FLAG</name><bitOffset>0</bitOffset>"
                 + "<bitWidth>1</bitWidth><modifiedWriteValues>oneToClear</modifiedWriteValues>"
                 + "</field></fields>").writable(), "field one-to-clear semantics blocked");
+        var range = reg("<writeConstraint><range><minimum>2</minimum><maximum>4</maximum>"
+                + "</range></writeConstraint>");
+        check(RegisterWriteValue.parse(range, "3").equals(BigInteger.valueOf(3)),
+                "valid bounded range accepted");
+        rejects(() -> RegisterWriteValue.parse(range, "5"), "out-of-range writes blocked");
+        var readback = reg("<writeConstraint writeAsRead='true'/>");
+        rejects(() -> RegisterWriteValue.parse(readback, "2"), "writeAsRead requires prior value");
+        check(RegisterWriteValue.parse(readback, "2", BigInteger.valueOf(2))
+                .equals(BigInteger.valueOf(2)), "writeAsRead with matching snapshot");
+        var w1c = reg("<modifiedWriteValues>oneToClear</modifiedWriteValues>"
+                + "<fields><field><name>ACK</name><bitOffset>3</bitOffset><bitWidth>1</bitWidth>"
+                + "</field></fields>");
+        check(RegisterWriteValue.specialBit(w1c, w1c.fields().get(0))
+                .equals(BigInteger.valueOf(8)), "W1C sends only the selected flag bit");
+        var w0c = reg("<modifiedWriteValues>zeroToClear</modifiedWriteValues>"
+                + "<fields><field><name>ACK</name><bitOffset>3</bitOffset><bitWidth>1</bitWidth>"
+                + "</field></fields>");
+        check(RegisterWriteValue.specialBit(w0c, w0c.fields().get(0))
+                .equals(new BigInteger("FFFFFFF7", 16)),
+                "W0C preserves all other bits using neutral ones");
+        var mixed = reg("<fields><field><name>ACK</name><bitOffset>0</bitOffset>"
+                + "<bitWidth>1</bitWidth><modifiedWriteValues>oneToClear</modifiedWriteValues>"
+                + "</field><field><name>CONFIG</name><bitOffset>1</bitOffset>"
+                + "<bitWidth>1</bitWidth></field></fields>");
+        rejects(() -> RegisterWriteValue.specialBit(mixed, mixed.fields().get(0)),
+                "mixed W1C and ordinary register fields must not be clobbered");
         System.out.println("RegisterWriteValueTests PASS");
     }
 }
