@@ -60,6 +60,11 @@ public final class SvdTargetEvidenceTests {
                 Map.of("CONFIG_BOARD_QUALIFIERS", "\"nrf5340/cpunet\"")).state()
                 == SvdTargetEvidence.State.AMBIGUOUS,
                 "wrong cluster in built config cannot select other SVD");
+        check(SvdTargetEvidence.select("esp32s3_devkitc/esp32s3/appcpu",
+                Map.of("CONFIG_BOARD", "\"esp32s3_devkitc\"",
+                        "CONFIG_SOC", "\"esp32s3\"",
+                        "CONFIG_BOARD_QUALIFIERS", "\"esp32s3/appcpu\"")).usable(),
+                "single-model ESP32-S3 appcpu target stays compatible with exact SVD");
         System.out.println("SvdTargetEvidenceTests PASS: " + checks + " checks");
     }
 }
