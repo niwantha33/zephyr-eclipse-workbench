@@ -144,22 +144,24 @@ public final class ElfSymbols {
                     if (end == names.length || end - nameOffset > 255) continue;
                     String name = new String(names, nameOffset, end - nameOffset,
                             StandardCharsets.US_ASCII);
-                    if (name.equals("_SEGGER_RTT")) {
+                    if (name.equals("_SEGGER_RTT") && (owner.flags & 1) != 0) {
+                        // RTT control block must be in allocated, writable RAM.
                         if (rtt != null && !rtt.equals(address))
                             throw new IOException("Conflicting allocated _SEGGER_RTT addresses.");
                         rtt = address;
-                    } else if ((name.startsWith("ctf_top_") || name.startsWith("sys_trace_"))
+                    } else if ((owner.flags & 4) != 0
+                            && (name.startsWith("ctf_top_") || name.startsWith("sys_trace_"))
                             && hooks.size() < MAX_REPORTED_HOOKS) {
                         if (!hooks.contains(name)) hooks.add(name);
                     }
                 }
             }
             if (!symtabFound) throw new IOException("No full ELF symbol table; cannot prove RTT/CTF symbols.");
+            var sha = digest(channel, length);
             var after = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
             if (before.size() != after.size() || !before.lastModifiedTime().equals(after.lastModifiedTime())
                     || !java.util.Objects.equals(before.fileKey(), after.fileKey()))
                 throw new IOException("ELF changed during symbol inspection.");
-            var sha = digest(channel, length);
             return new Report(file.toAbsolutePath().normalize(), elfClass, machine, sha, rtt, hooks);
         } catch (ArithmeticException overflow) {
             throw new IOException("ELF table has an unrepresentable entry count.", overflow);
