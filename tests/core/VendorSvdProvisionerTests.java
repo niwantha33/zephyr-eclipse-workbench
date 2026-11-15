@@ -8,8 +8,8 @@ public final class VendorSvdProvisionerTests {
     }
 
     public static void main(String[] args) {
-        check(VendorSvdProvisioner.supports("lp_mspm0g3507/mspm0g3507"),
-                "exact selected TI target eligible");
+        check(!VendorSvdProvisioner.supports("lp_mspm0g3507/mspm0g3507"),
+                "TI pack has no published trusted SHA-256; network provisioning must stay off");
         check(!VendorSvdProvisioner.supports("lp_mspm0g3507/mspm0g3506"),
                 "other target not silently mapped");
         check(VendorSvdProvisioner.isApprovedRedirectHost("software-dl.ti.com"),
