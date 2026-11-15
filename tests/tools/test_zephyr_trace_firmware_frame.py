@@ -94,7 +94,8 @@ class ZephyrTraceFirmwareFrameContractTests(unittest.TestCase):
         self.assertIn("ZEW_TRACE_RTT_CHANNEL = 1", backend)
         self.assertNotIn("SEGGER_RTT_Init();", backend,
                          "Never reset a pre-existing RTT channel-0 console")
-        self.assertIn("No automatic END", backend)
+        self.assertIn("void zew_trace_backend_close(void)", backend)
+        self.assertIn("ZEW_TRACE_FRAME_END", backend)
 
 
 if __name__ == "__main__":
