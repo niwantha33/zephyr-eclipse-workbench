@@ -31,12 +31,15 @@ public final class TraceFirmwareRealBuildProbe {
         expected.put("TRACING_CTF", "y");
         expected.put("TRACING_ASYNC", "y");
         expected.put("TRACING_BACKEND_ZEW_RAM", "y");
-        expected.put("TRACING_BACKEND_ZEW_RTT", "n");
-        expected.put("SMP", "n");
         var config = KconfigTraceEvidence.inspectGenerated(build, expected);
-        if (!config.matches()) {
+        if (!config.matched()) {
             throw new IllegalStateException("Generated .config does not match the requested "
                     + "vendor-neutral trace backend: " + config);
+        }
+        String generated = Files.readString(build.resolve("zephyr/.config"));
+        if (generated.contains("CONFIG_SMP=y") ||
+                generated.contains("CONFIG_TRACING_BACKEND_ZEW_RTT=y")) {
+            throw new IllegalStateException("Unexpected multicore or conflicting RTT backend");
         }
         Path elf = build.resolve("zephyr/zephyr.elf");
         if (!Files.isRegularFile(elf, LinkOption.NOFOLLOW_LINKS)
