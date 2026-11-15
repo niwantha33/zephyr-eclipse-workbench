@@ -90,7 +90,7 @@ public final class SocRegistersView extends ViewPart {
     private Button autoReadOnHalt;
     private int watchIntervalMs = 1500;
     private static final int MAX_SNAPSHOT_REGISTERS = 4096;
-    private enum ReadScope { SELECTION, WATCHES, ALL_SAFE }
+    private enum ReadScope { SELECTION, WATCHES, PERIPHERAL, ALL_SAFE }
     private boolean autoSnapshotEnabled = true;
     private Label status;
     private Label summary;
@@ -127,6 +127,7 @@ public final class SocRegistersView extends ViewPart {
     private String svdIdentity;
     private final Map<String, String> errors = new HashMap<>();
     private final Set<String> watches = new HashSet<>();
+    private final Set<String> pendingReads = new HashSet<>(); // SWT-thread-only
     private volatile long generation;
     private volatile boolean closed;
     private boolean busy;
@@ -163,6 +164,7 @@ public final class SocRegistersView extends ViewPart {
         });
         menuAction(advanced, "Why no value? / Connection diagnostics…",
                 this::showConnectionDiagnostics);
+        menuAction(advanced, "Read selected peripheral (halted)…", this::refreshPeripheral);
         menuAction(advanced, "Pin snapshot as baseline", this::pinBaseline);
         menuAction(advanced, "Export register history as CSV…", this::exportHistory);
         more.addListener(SWT.Selection, e -> {
@@ -405,6 +407,7 @@ public final class SocRegistersView extends ViewPart {
         // before replacing its SVD and session association.
         generation++;
         busy = false;
+        pendingReads.clear();
         listenTo(null);
         stopLiveWatch();
         selectedProjectName = project.getName();
@@ -809,6 +812,7 @@ public final class SocRegistersView extends ViewPart {
         boolean changed = selectedSession != listenedSession;
         if (changed) {
             generation++; busy = false; values.clear(); previousValues.clear();
+            pendingReads.clear();
             errors.clear(); lastReadAt = null; render();
             quietUntil = System.currentTimeMillis() + 350;
             listenTo(selectedSession);
@@ -860,8 +864,9 @@ public final class SocRegistersView extends ViewPart {
                 selectedProjectName == null ? "Select" : selectedProjectName,
                 part.isBlank() ? "Unknown" : part.toUpperCase(Locale.ROOT),
                 device == null ? "Missing" : "Loaded",
-                listenedSession == null ? "No session" : "Attached",
-                values.isEmpty() ? "No reads yet" : values.size() + " read"
+                listenedSession == null ? "No session" : "Selected",
+                busy ? currentReadOk + "/" + currentReadTotal + " OK"
+                        : values.isEmpty() ? "No reads yet" : values.size() + " read
         };
         boolean[] okay = { selectedProjectName != null, !part.isBlank(),
                 device != null, listenedSession != null, !values.isEmpty() };
@@ -928,6 +933,7 @@ public final class SocRegistersView extends ViewPart {
         ui.asyncExec(() -> {
             if (tree.isDisposed() || listenedSession != session) return;
             generation++; busy = false; values.clear(); previousValues.clear();
+            pendingReads.clear();
             errors.clear(); lastReadAt = null; render();
             status.setText(message);
             if (suspended) scheduleAutoSnapshot();
@@ -976,9 +982,11 @@ public final class SocRegistersView extends ViewPart {
                         ? "NOT ATTACHED" : "session " + listenedSession.getId()).append("\n")
                 .append("5. Debug server: existing GDB remote transport (OpenOCD when configured)\n")
                 .append("6. MMIO registers successfully observed: ").append(values.size()).append("\n")
-                .append("   Last batch: ").append(currentReadOk).append(" / ")
-                .append(currentReadTotal).append(" read, ")
-                .append(currentReadFailed).append(" failures\n")
+                .append("   Last batch: ").append(currentReadOk + currentReadFailed)
+                .append(" / ").append(currentReadTotal).append(" attempted, ")
+                .append(currentReadOk).append(" successful, ")
+                .append(currentReadFailed).append(" failed, ")
+                .append(pendingReads.size()).append(" queued\n")
                 .append("   Last snapshot: ").append(lastReadAt == null
                         ? "none" : lastReadAt).append("\n");
         if (chosen != null) {
@@ -1175,6 +1183,9 @@ public final class SocRegistersView extends ViewPart {
     private void installRegisterMenu() {
         var menu = new Menu(tree);
         tree.setMenu(menu);
+        var periphRead = new MenuItem(menu, SWT.PUSH);
+        periphRead.setText("Read this peripheral (halted)");
+        periphRead.addListener(SWT.Selection, e -> refreshPeripheral());
         var add = new MenuItem(menu, SWT.PUSH);
         add.setText("Add / remove watch");
         add.addListener(SWT.Selection, e -> toggleWatch(selected()));
@@ -1186,6 +1197,7 @@ public final class SocRegistersView extends ViewPart {
         bit.addListener(SWT.Selection, e -> toggleFieldBit(selected(), selectedField()));
         menu.addListener(SWT.Show, e -> {
             Register reg = selected();
+            periphRead.setEnabled(selectedPeripheral() != null);
             add.setEnabled(reg != null && (watches.contains(reg.key()) || reg.readable()));
             write.setEnabled(reg != null && reg.writable());
             SvdDevice.Field field = selectedField();
@@ -1288,8 +1300,7 @@ public final class SocRegistersView extends ViewPart {
                         && !previousValues.get(reg.key()).equals(value);
                 row.setText(new String[] { reg.key(),
                         value == null ? "—" : hex(value, reg.size()),
-                        changed ? "Changed" : RegisterPresentation.state(reg, value,
-                                errors.get(reg.key())) });
+                        changed ? "Changed" : readState(reg) });
                 if (reg.key().equals(key)) watchTable.setSelection(row);
             }
         } finally { watchTable.setRedraw(true); }
@@ -1355,7 +1366,10 @@ public final class SocRegistersView extends ViewPart {
             if (chosen != null) showRegisterDetails(chosen);
             int count = matches.values().stream().mapToInt(java.util.List::size).sum();
             summary.setText(matches.size() + " peripherals  •  " + count + " matching registers  •  "
-                    + values.size() + " values read  •  " + watches.size() + " watches"
+                    + (busy ? "GDB read " + (currentReadOk + currentReadFailed) + "/"
+                        + currentReadTotal + " (" + currentReadOk + " OK, "
+                        + currentReadFailed + " failed)" : values.size() + " sampled values")
+                    + "  •  " + watches.size() + " watches
                     + (liveWatch ? "  •  Polling while paused" : "")
                     + (history.baseline() != null ? "  •  Baseline pinned" : ""));
         } finally { tree.setRedraw(true); }
@@ -1376,8 +1390,10 @@ public final class SocRegistersView extends ViewPart {
         if (registerDetails == null || registerDetails.isDisposed()) return;
         inspectedRegister = r;
         BigInteger value = values.get(r.key());
-        String state = RegisterPresentation.state(r, value, errors.get(r.key()));
-        String explanation = RegisterPresentation.explanation(r, errors.get(r.key()));
+        String state = readState(r);
+        String explanation = pendingReads.contains(r.key())
+                ? "Waiting for the current GDB read queue. Use Read this peripheral for a smaller inspection."
+                : RegisterPresentation.explanation(r, errors.get(r.key()));
         var details = new StringBuilder(r.peripheral()).append("  /  ").append(r.name()).append("\n\n")
                 .append("Live value     ")
                 .append(value == null ? "—  (" + state + ")" : hex(value, r.size()))
@@ -1455,7 +1471,7 @@ public final class SocRegistersView extends ViewPart {
                 access += " — differs from reset";
             if (changedKeys.contains(r.key()))
                 access += " — CHANGED since pinned snapshot";
-            String state = RegisterPresentation.state(r, value, errors.get(r.key()));
+            String state = readState(r);
             if (changedKeys.contains(r.key())) state += "  • changed";
             item.setText(new String[] { (watches.contains(r.key()) ? "★ " : "") + r.name(),
                     value == null ? "—" : hex(value, r.size()), state });
@@ -1477,7 +1493,7 @@ public final class SocRegistersView extends ViewPart {
             field.setText(new String[] { f.name() + " [" + (f.offset() + f.width() - 1)
                     + ":" + f.offset() + "]",
                     value == null ? "—" : hex(value.shiftRight(f.offset()).and(mask), f.width()),
-                    RegisterPresentation.state(r, value, errors.get(r.key())) });
+                    readState(r) });
         }
         item.setData("populated", Boolean.TRUE);
     }
@@ -1566,7 +1582,18 @@ public final class SocRegistersView extends ViewPart {
 
     private void refresh() { refresh(ReadScope.SELECTION); }
     private void refreshAll() { refresh(ReadScope.ALL_SAFE); }
+    private void refreshPeripheral() { refresh(ReadScope.PERIPHERAL); }
     private void refreshWatches() { refresh(ReadScope.WATCHES); }
+    private String selectedPeripheral() {
+        if (tree == null || tree.isDisposed() || tree.getSelectionCount() != 1) return null;
+        TreeItem item = tree.getSelection()[0];
+        if (item.getData() instanceof Register reg) return reg.peripheral();
+        return item.getData("registers") instanceof List<?> ? item.getText(0) : null;
+    }
+    private String readState(Register reg) {
+        return pendingReads.contains(reg.key()) ? "Pending GDB read"
+                : RegisterPresentation.state(reg, values.get(reg.key()), errors.get(reg.key()));
+    }
 
     /** Reuse the active GDB/DSF session, which already owns the OpenOCD connection. */
     private void refresh(ReadScope scope) {
@@ -1579,15 +1606,19 @@ public final class SocRegistersView extends ViewPart {
             return;
         }
         var chosen = selected();
+        String peripheral = selectedPeripheral();
         var targets = device.registers().stream()
                 .filter(r -> r.readable() && switch (scope) {
                     case ALL_SAFE -> true;
                     case WATCHES -> watches.contains(r.key());
+                    case PERIPHERAL -> peripheral != null && peripheral.equals(r.peripheral());
                     case SELECTION -> watches.contains(r.key()) || r.equals(chosen);
                 }).sorted(java.util.Comparator.comparingInt(
                         r -> watches.contains(r.key()) ? 0 : 1)).toList();
         if (targets.isEmpty()) {
-            if (scope != ReadScope.ALL_SAFE)
+            if (scope == ReadScope.PERIPHERAL)
+                status.setText("Select a peripheral heading or register with SVD-readable registers.");
+            else if (scope != ReadScope.ALL_SAFE)
                 status.setText("Select an SVD-readable register or add one to Watch.");
             else status.setText("This SVD contains no registers declared safe to read.");
             return;
@@ -1611,6 +1642,13 @@ public final class SocRegistersView extends ViewPart {
         currentReadOk = 0;
         currentReadFailed = 0;
         lastReadError = null;
+        pendingReads.clear();
+        for (Register reg : targets) {
+            pendingReads.add(reg.key());
+            values.remove(reg.key());
+            errors.remove(reg.key());
+        }
+        render();
         long request = ++generation;
         status.setText("Reading " + targets.size() + " SVD-safe registers using existing halted "
                 + "GDB/OpenOCD session (no second OpenOCD connection)…");
@@ -1911,6 +1949,7 @@ public final class SocRegistersView extends ViewPart {
         ui.asyncExec(() -> {
             if (tree.isDisposed() || request != generation) return;
             values.remove(r.key()); errors.remove(r.key());
+            pendingReads.remove(r.key());
             if (value != null) {
                 values.put(r.key(), value);
                 currentReadOk++;
@@ -1923,6 +1962,9 @@ public final class SocRegistersView extends ViewPart {
             // One render per 32 GDB commands rather than thousands of SWT rebuilds.
             if (index % 32 == 31 || index == total - 1) {
                 render();
+                status.setText("GDB read " + (currentReadOk + currentReadFailed)
+                        + "/" + currentReadTotal + " — " + currentReadOk
+                        + " OK, " + currentReadFailed + " failed. Open diagnostics for details.");
                 var selected = selected();
                 if (selected != null && selected.key().equals(r.key())) showRegisterDetails(r);
             }
@@ -1933,6 +1975,7 @@ public final class SocRegistersView extends ViewPart {
         ui.asyncExec(() -> {
             if (!tree.isDisposed() && request == generation) {
                 busy = false;
+                pendingReads.clear();
                 if (message.startsWith("Refresh complete.") && !values.isEmpty()
                         && svdIdentity != null && listenedSession != null) {
                     try {
@@ -1956,6 +1999,7 @@ public final class SocRegistersView extends ViewPart {
                 } else {
                     status.setText(message);
                 }
+                render();
                 updateConnectionPath();
             }
         });
