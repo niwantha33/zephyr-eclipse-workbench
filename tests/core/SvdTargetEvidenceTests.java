@@ -65,6 +65,12 @@ public final class SvdTargetEvidenceTests {
                         "CONFIG_SOC", "\"esp32s3\"",
                         "CONFIG_BOARD_QUALIFIERS", "\"esp32s3/appcpu\"")).usable(),
                 "single-model ESP32-S3 appcpu target stays compatible with exact SVD");
+        check(SvdTargetEvidence.select("nucleo_h745zi/stm32h745/m7",
+                Map.of("CONFIG_BOARD", "\"nucleo_h745zi\"",
+                        "CONFIG_SOC", "\"stm32h745\"",
+                        "CONFIG_BOARD_QUALIFIERS", "\"stm32h745/m7\"")).state()
+                == SvdTargetEvidence.State.AMBIGUOUS,
+                "unmapped M7/M4 address space must not silently reuse a generic SVD");
         System.out.println("SvdTargetEvidenceTests PASS: " + checks + " checks");
     }
 }
