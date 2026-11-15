@@ -1062,21 +1062,29 @@ public final class SocRegistersView extends ViewPart {
     }
     private Map<String, SvdDevicetreeLinker.Link> loadDtsLinks(
             SvdDevice model, String projectName) {
-        if (projectName == null || projectName.isBlank()) return Map.of();
+        if (projectName == null || projectName.isBlank())
+            return SvdDevicetreeLinker.unknown(model, "No selected project or build/zephyr.dts");
         try {
             Path build = selectedBuildContext;
             if (build == null) {
                 var project = ResourcesPlugin.getWorkspace().getRoot().getProject(projectName);
-                if (project == null || !project.isAccessible()) return Map.of();
+                if (project == null || !project.isAccessible())
+                    return SvdDevicetreeLinker.unknown(model,
+                            "Project is inaccessible; no generated build/zephyr.dts");
                 build = ProjectContext.buildDirectory(project, ProjectContext.settings(project));
             }
             Path generated = build.resolve("zephyr/zephyr.dts");
-            if (!Files.isRegularFile(generated) || Files.size(generated) > 2_000_000)
-                return Map.of();
+            if (!Files.isRegularFile(generated))
+                return SvdDevicetreeLinker.unknown(model,
+                        "No generated build/zephyr.dts for selected project/profile");
+            if (Files.size(generated) > 2_000_000)
+                return SvdDevicetreeLinker.unknown(model,
+                        "Generated build/zephyr.dts exceeds 2 MB parser limit");
             return SvdDevicetreeLinker.link(model,
                     DevicetreeHardware.inspect(Files.readString(generated)));
         } catch (Exception unavailable) {
-            return Map.of();
+            return SvdDevicetreeLinker.unknown(model,
+                    "Cannot parse generated build/zephyr.dts: " + unavailable.getClass().getSimpleName());
         }
     }
 
