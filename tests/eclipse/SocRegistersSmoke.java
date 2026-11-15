@@ -59,7 +59,27 @@ public final class SocRegistersSmoke {
                     || register.getItemCount() != 1
                     || !register.getItem(0).getText().startsWith("EN [0:0]"))
                 throw new AssertionError("Compact register/value/status and lazy field rendering");
+            // Register and peripheral selections must resolve the same bounded
+            // SVD group, without guessing an address or touching hardware.
+            var selectedPeripheral = type.getDeclaredMethod("selectedPeripheral");
+            selectedPeripheral.setAccessible(true);
+            tree.setSelection(peripheral);
+            if (!"GPIO".equals(selectedPeripheral.invoke(view)))
+                throw new AssertionError("Peripheral heading must select its exact SVD group");
             tree.setSelection(register);
+            if (!"GPIO".equals(selectedPeripheral.invoke(view)))
+                throw new AssertionError("Nested register must select its parent SVD group");
+            var pendingField = type.getDeclaredField("pendingReads");
+            pendingField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            var pending = (java.util.Set<String>) pendingField.get(view);
+            pending.add("GPIO.CTRL");
+            var readState = type.getDeclaredMethod("readState",
+                    io.github.niwantha33.zew.core.SvdDevice.Register.class);
+            readState.setAccessible(true);
+            if (!"Pending GDB read".equals(readState.invoke(view, register.getData())))
+                throw new AssertionError("Unfinished reads must never look like completed samples");
+            pending.clear();
             var selectionEvent = new org.eclipse.swt.widgets.Event();
             selectionEvent.item = register;
             tree.notifyListeners(org.eclipse.swt.SWT.Selection, selectionEvent);
@@ -133,6 +153,14 @@ public final class SocRegistersSmoke {
             refresh.invoke(view);
             if (!((Label) statusField.get(view)).getText().contains("Halt"))
                 throw new AssertionError("No-session read was not rejected");
+            var refreshPeripheral = type.getDeclaredMethod("refreshPeripheral");
+            refreshPeripheral.setAccessible(true);
+            tree.setSelection(peripheral);
+            refreshPeripheral.invoke(view);
+            if (!((Label) statusField.get(view)).getText().contains("Halt")
+                    || !pending.isEmpty())
+                throw new AssertionError("Per-peripheral read must fail closed without a halted GDB session");
+            tree.setSelection(register);
             var watchesField = type.getDeclaredField("watches"); watchesField.setAccessible(true);
             @SuppressWarnings("unchecked")
             var watches = (java.util.Set<String>) watchesField.get(view);
