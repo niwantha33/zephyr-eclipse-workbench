@@ -33,6 +33,16 @@ See [complete Phase 4/5 MSPM0 instructions](../../../docs/TRACE_PHASE4_5_MSPM0.m
    `committed`. `scripts/inspect_framed_ram.py` checks offline frame and
    CTF-record integrity but does **not** qualify a physical board.
 
+## Boot-marker constraints
+
+The portable CI/demo explicitly opts into Zephyr's timer-based
+`CONFIG_TEST_RANDOM_GENERATOR=y` and `CONFIG_TIMER_RANDOM_GENERATOR=y`.
+On MSPM0, no hardware entropy is assumed. The resulting epoch is **not**
+unique/secure enough for production; real live trace must first prove a
+trusted reset/session identifier. Both backend Kconfig choices now require
+a selectable Zephyr generator rather than risking a missing sys_rand_get
+symbol at link time.
+
 ## Stop/drain contract
 
 Zephyr's trace hooks enqueue events into its existing bounded async ring.
