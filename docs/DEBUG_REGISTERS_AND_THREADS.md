@@ -141,76 +141,74 @@ The upstream references are the
 [CMSIS-SVD register permissions](https://open-cmsis-pack.github.io/svd-spec/main/elem_registers.html),
 and [OpenOCD's GDB integration](https://openocd.org/doc/html/GDB-and-OpenOCD.html).
 
-## Snapshot while debugging
+## Snapshot while debugging (responsive, bounded)
 
-- The existing native **CDT DSF-GDB** session sends memory reads through the
-  debugger's existing GDB remote connection to OpenOCD. The explorer does **not**
-  open a second Tcl/GDB port, restart OpenOCD or independently halt the CPU.
-- **Snapshot on halt** is enabled by default in this development preview. Once
-  an exact SVD and unambiguous debug session are available, the explorer
-  requests the SVD-declared readable registers after an actual GDB suspension,
-  including a target already halted before SVD load. It samples at most 4,096
-  registers per snapshot; larger maps require narrowing the selection.
-- The snapshot skips SVD-defined write-only, read-to-clear and other
-  read-side-effect registers, as well as 64-bit registers requiring a
-  target-specific safe reader. **SVD-declared readable is not proof of electrical
-  safety**: undocumented side effects, peripheral power domains, probe faults
-  and clock gating can still make a read fail. Disable **Snapshot on halt**
-  when investigating sensitive hardware.
-- **Read All SVD-Safe Registers** explicitly refreshes the same bounded set.
-  **Refresh Selected + Watches** refreshes only the selected readable register
-  and the separately watched registers. Reads run serially and stop on resume,
-  debug-session replacement, selected-model replacement or view disposal.
-  An attempted read may already have reached the target before cancellation.
-- On resume, values become **Not read** until the next halted snapshot.
-  A failed MMIO access is reported, never substituted with zero. The UI
-  refreshes in groups to avoid rebuilding thousands of SWT rows per read.
+- All register reads use the existing native **CDT DSF-GDB → GDB/MI →
+  OpenOCD** connection. No second probe/server connection, MCU reset, flash
+  operation or automatic target halt is created.
+- **Read on halt is OFF by default.** Checking it explicitly opts in to one
+  SVD-readable, selected register when the target suspends. Opening an SVD
+  cannot start a 1,000+ register scan.
+- **Refresh selected** reads exactly one readable register. Right-click a
+  peripheral and choose **Read this peripheral (halted)** to sample its first
+  32 readable registers. **Read first 32** begins a bounded whole-SVD scan;
+  **More… → Read next 32** continues that peripheral or whole-chip scope
+  without re-queuing the first page. A cancelled/incomplete page can be retried.
+- **Stop reads** cancels queued follow-up reads through a generation fence
+  without stopping the debugger. An in-flight GDB operation may have reached
+  the MCU already. Confirmed physical register writes are not cancellable.
+- SVD-defined write-only, read-to-clear, read-side-effect and unknown-width
+  MMIO are not auto-read. A real zero from GDB is different from **Not sampled**
+  and **Read failed**. Peripheral clocks, power domains, target read errors and
+  chip/revision mismatches can still prevent access.
+- GDB/MI `-data-evaluate-expression` now performs one typed, verified-address
+  access per sampled register, rather than creating and formatting a GDB
+  variable object each time. UI tree reconstruction happens when a short
+  batch completes instead of once per incoming reading.
 
 ### Watch and bitwise inspection
 
-Right-click a register to **Add / remove watch**. The independent Watch table
-shows the register name, last observed value and failure/availability status.
-Select 1–64 readable registers and choose **Start Live Watch**. Adjust the
-**Watch (ms)** spinner from 250 ms to 60,000 ms; the interval is a best-effort
-host polling interval, **not a guaranteed real-time sampling rate**. Watch
-polling happens only while the existing GDB target is suspended, and never
-automatically halts firmware or reads a running MCU. Stop it before resuming
-time-critical hardware operation.
+Right-click **Add / remove watch**. Up to 64 readable registers can be tracked,
+but **live polling is limited to 1–8 watched registers** to avoid overloading
+the halted debug session. Watch interval is adjustable 250–60,000 ms. It is a
+best-effort host timer, not real-time continuous capture; it skips requests
+while another read/write is in progress and stops on target resume.
+Use **Refresh selected** for a quick single-register reading.
 
-The inspector displays address, SVD access and reset properties, hex snapshot,
-grouped binary bits with bit indexes, and decoded bit fields with widths,
-positions and values. Values are from one captured snapshot and are not an
-atomic simultaneous snapshot of the device. Use search to locate peripheral,
-register, field or description; the matching tree expands lazily.
+The inspector presents SVD descriptions, address, reset values, captured bits
+and individual fields. A write-only `GPIOB.DOUT...` is not a valid input
+measurement: select a vendor-declared readable `GPIOB.DIN...` register for
+pin state. An input value does not prove the output latch state.
 
 ### Guarded physical writes
 
-Right-click an eligible register and choose **Write register value…**. Enter an
-unsigned hex (0x...) or decimal value, then separately confirm the **physical
-MCU register write**. A one-bit field may also be toggled explicitly from a
-known halted snapshot. Edits use CDT's `IExpressions.writeExpression` through the
-*same* DSF GDB/OpenOCD connection; there is no direct unauthenticated OpenOCD
-command channel and no flash operation. After a successful write the tool
-requests a halted readback; this is not an atomic hardware proof.
+Right-click **Write register value…** to request an explicitly confirmed
+physical MCU write through the existing GDB/MI connection. Input accepts only
+bounded unsigned hexadecimal/decimal data; exact SVD identity, halted target,
+register permissions, write constraints and field semantics are rechecked.
+Read/write registers receive a best-effort halted readback afterward.
 
-Writes fail closed when the exact current register is not read/write,
-the target is running or ambiguous, the SVD declares a read-side-effect or
-write constraint, a read-only field or modified-write semantics (including
-write-one-to-clear), or the register exceeds 32 bits. Missing/unknown
-electrical side effects may remain: consult the vendor reference manual,
-and only write peripheral registers on hardware you control. Neither full
-register writes nor bit edits are performed automatically.
+**Write-only** SVD data/command registers can now accept explicitly confirmed
+full-width writes with **no preliminary read**. This is necessary for GPIO
+write-only output registers. Such writes must never attempt a readback or
+pretend to know the resulting latch/pin value. Write-once registers, modified
+write semantics, read-only fields, constrained writes and widths greater than
+32 bits remain blocked. Bit toggles are allowed only on safe read/write
+registers with a known halted snapshot; no read-modify-write on write-only
+registers is permitted. Consult the manufacturer's reference manual before
+writing clocks, power, interrupt or peripheral controls.
 
 ### Validation
 
-The Java parser and value-policy regression tests run under
-`scripts/test_core.py`; installed Eclipse SWT tests exercise the real
-view, watches and no-debugger write interlock. These are **not** successful
-physical MSPM0/XDS110 readback or write proofs. Before release, test debug
-start, suspend, resume, safe bulk reads, multiple frame selections, polling,
-writable GPIO data registers, readback and error cases on the real selected
-board; check the exact built and flashed ELF. Do not treat a green CI build
-as physical hardware qualification.
+`scripts/test_core.py` checks SVD access policies including write-only edits,
+read-modify-write rejection, special write semantics and constraints. The
+installed Eclipse SWT smoke asserts automatic scans are off, short bounded
+manual batches and no-target safety gates. CI is not a hardware acceptance
+test. Before release, verify an exact flashed MSPM0G3507 image with XDS110:
+compare a readable GPIOB DIN register in the GDB console with **Refresh
+selected**, check short peripheral batches, stop/restart, suspend/resume,
+polling, and explicitly confirmed write-only DOUT behaviour on safe pins.
+Never claim electrical readback from GDB write acknowledgement alone.
 
 ## Optional OpenOCD Tcl transcript
 
