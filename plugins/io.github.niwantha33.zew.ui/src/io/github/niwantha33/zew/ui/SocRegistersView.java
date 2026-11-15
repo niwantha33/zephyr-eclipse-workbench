@@ -512,7 +512,10 @@ public final class SocRegistersView extends ViewPart {
                         roots.add(Path.of("C:/ti"));
                     if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                     if (!target.usable()) {
-                        result = new SvdAutoDiscovery.Result(SvdAutoDiscovery.State.INVALID_TARGET,
+                        result = new SvdAutoDiscovery.Result(
+                                target.state() == SvdTargetEvidence.State.AMBIGUOUS
+                                        ? SvdAutoDiscovery.State.AMBIGUOUS
+                                        : SvdAutoDiscovery.State.INVALID_TARGET,
                                 "", null, 0, false, target.explanation(), List.of());
                     } else {
                         // Honour a previously validated per-device manual import first.
