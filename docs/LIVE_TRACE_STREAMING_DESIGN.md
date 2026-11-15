@@ -259,3 +259,42 @@ LP-MSPM0G3507 — PENDING; ESP32-S3 — PENDING; RP2040 — PENDING.**
 5. Gate the actual UI on all receipts, exercise fake transport in CI and
    qualify each hardware row with attached reproducible captures before
    removing the existing disabled menu label.
+
+## 10. Hardware-free framed transport regression harness
+
+**Status: host-only test infrastructure. Live CTF remains NOT SUPPORTED.**
+The new ctf_framing.py, live_trace.py, scripts/fake_rtt_server.py and
+tests/tools/test_live_trace_framed.py exercise a candidate wire contract
+through 127.0.0.1 only. The test collector requires explicit test_only=True;
+it never opens OpenOCD, GDB, a physical probe or a production socket.
+Artifacts are transport.bin, committed_ctf.bin, events.jsonl and receipt.json.
+These are deliberately not validated offline ctf/channel0_0 sessions.
+
+This is a **candidate test protocol**, not a claim that pinned Zephyr 4.4.0
+produces it. Each frame has a fixed 116-byte little-endian header:
+
+| Field | Width | Requirement |
+| --- | --- | --- |
+| Magic/version/type/reserved | 4+1+1+2 bytes | ZEWF, v1, HELLO=1 / DATA=2 / END=3, reserved zero |
+| Payload length | uint32 | 0..4096 bytes; only DATA has nonempty payload |
+| Sequence | uint64 | HELLO=0; all frames strictly contiguous |
+| Expected boot/session epoch | 16 bytes | Nonzero exact match; not firmware attestation |
+| ELF SHA-256 / metadata SHA-256 | 32+32 bytes | Exact host-expected hashes, not proof of flashed image |
+| Core/stream | uint16 + uint16 | Zero only; multi-core mapping not supported |
+| Cumulative firmware loss count | uint64 | Any reported positive count invalidates interval |
+| CRC32 | uint32 | Checksum over header without CRC plus payload; not authentication |
+
+Arbitrary TCP chunk splits are accepted; only verified complete DATA enters
+the existing shared packed-CTF decoder. Unknown event IDs, CRC corruption,
+metadata drift, sequence gaps/duplicates, loss, wrong core/stream, truncated
+tails, oversized files and missing END invalidate the epoch without unsafe
+resynchronisation. Received raw bytes are preserved. Even a successful
+TEST_ONLY_COMPLETE receipt explicitly sets hardware_capture=false,
+flashed_firmware_identity_verified=false, safe_for_offline_analysis=false
+and live_stream_approved=false. The live UI stub is unchanged.
+
+**Production gates still missing:** firmware-side nonblocking CTF RTT
+backend/drain, exact channel and RAM evidence, physical image identity,
+shared probe ownership, trusted source-loss counters, halted/running state,
+live semantic/UI append, validated Save/Trace Compass and physical captures.
+All vendor hardware acceptance entries remain PENDING.
