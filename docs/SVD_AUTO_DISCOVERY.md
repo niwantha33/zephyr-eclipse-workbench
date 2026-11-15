@@ -79,6 +79,29 @@ register reads, writes or power-domain safety. Only Nordic nRF52840 and Raspberr
 
 ---
 
+## Live register source integrity and target binding
+
+When importing or auto-loading SVD definitions, the workbench now reads at most
+32 MiB **once** from a regular non-symlink file. The CMSIS parser and SHA-256
+fingerprint consume the **same in-memory bytes**, avoiding a race where edited
+source files produce different map and fingerprint revisions.
+
+Physical MMIO operations additionally require both a **verified exact SoC
+from generated build metadata** and the **same named project's active native
+DSF-GDB launch**. A manual SVD import without a verified build can be inspected
+offline, but cannot authorise physical reads, live polling or writes. The
+connection diagnostics report shows the verified build target and selection
+failure reason, not fabricated register data.
+
+For on-board checking with MSPM0G3507/XDS110: launch **Flash and Debug**
+for the exact project and build, halt the target, open **Zephyr Hardware
+Register Explorer**, select a known SVD-readable GPIO DIN register and click
+**Refresh selected**. Open **More → Why no value? / Connection diagnostics**
+to copy the exact DSF-GDB expression and reply. A write-only GPIO DOUT
+register cannot be used as a read test. Live Watch is halted-only (1–8
+registers, 250–60,000 ms). This documents a repeatable HIL procedure,
+**not** a claim that board/probe verification has passed.
+
 ## How it works
 
 1. Launch Debug As → Zephyr Application for an imported project, or open Zephyr Hardware Register Explorer with a unique live Zephyr debug launch.
