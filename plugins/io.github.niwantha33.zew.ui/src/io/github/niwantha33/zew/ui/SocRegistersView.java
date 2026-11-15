@@ -1656,7 +1656,7 @@ public final class SocRegistersView extends ViewPart {
             return;
         }
         var chosen = selected();
-        var targets = device.registers().stream()
+        var eligible = device.registers().stream()
                 .filter(r -> r.readable() && switch (scope) {
                     case ALL_SAFE -> true;
                     case WATCHES -> watches.contains(r.key());
@@ -1664,7 +1664,7 @@ public final class SocRegistersView extends ViewPart {
                     case SELECTION -> r.equals(chosen);
                 }).sorted(java.util.Comparator.comparingInt(
                         r -> watches.contains(r.key()) ? 0 : 1)).toList();
-        if (targets.isEmpty()) {
+        if (eligible.isEmpty()) {
             if (scope == ReadScope.PERIPHERAL)
                 status.setText("Select a peripheral heading or register with SVD-readable registers.");
             else if (scope == ReadScope.SELECTION && chosen != null)
@@ -1675,14 +1675,17 @@ public final class SocRegistersView extends ViewPart {
             else status.setText("This SVD contains no registers declared safe to read.");
             return;
         }
+        final List<Register> targets;
         if (scope == ReadScope.ALL_SAFE || scope == ReadScope.PERIPHERAL) {
-            readPageTotal = targets.size();
+            readPageTotal = eligible.size();
             if (readPageOffset >= readPageTotal) {
                 status.setText("All " + readPageTotal + " available registers in this scope were requested.");
                 return;
             }
-            targets = targets.subList(readPageOffset,
+            targets = eligible.subList(readPageOffset,
                     Math.min(readPageOffset + MAX_READ_BATCH, readPageTotal));
+        } else {
+            targets = eligible;
         }
         if (scope == ReadScope.WATCHES && targets.size() > MAX_WATCH_POLL_REGISTERS) {
             status.setText("Polling is limited to eight registers. Remove extra watches.");
