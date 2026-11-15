@@ -41,6 +41,8 @@ MODULE_FEATURES = {
     "contention_detector": "Priority inversion detection",
     "contention_report": "Long resource contention detection",
     "ctf_incremental": "Incremental packed-CTF decoding (format adapter only)",
+    "ctf_framing": "Framed CTF loopback test harness",
+    "live_trace": "Framed CTF loopback test harness",
     "coredump_offline": "Offline core-dump assessment",
     "cpu_analysis": "Zephyr CPU Load view",
     "offline_trace_json": "Zephyr Contention Report view",
