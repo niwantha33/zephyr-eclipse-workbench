@@ -8,102 +8,127 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-/** Conservative cross-reference from a verified SVD address to the *built* zephyr.dts. */
+/** Strict, read-only address cross-reference to the generated Zephyr Devicetree. */
 public final class SvdDevicetreeLinker {
     private SvdDevicetreeLinker() {}
-
     public enum State { ENABLED_IN_DTS, DISABLED_IN_DTS, UNKNOWN, AMBIGUOUS }
     public record Link(State state, String nodePath, String explanation) {}
     private record Region(DevicetreeHardware.Device node, BigInteger base, BigInteger size) {}
+    private record Parsed(List<Region> regions, boolean unparseable) {}
     private static final Pattern CELL = Pattern.compile("0[xX][0-9a-fA-F]+|[0-9]+");
+    private static final Pattern GROUP = Pattern.compile("<([^<>]{1,300})>");
 
-    /**
-     * Link only confidently decoded single or 64-bit address/size cell pairs.
-     * For anything else, mark UNKNOWN and do not falsely claim hardware enabled.
-     */
+    public static Map<String, Link> unknown(SvdDevice svd, String reason) {
+        if (svd == null) return Map.of();
+        var result = new HashMap<String, Link>();
+        for (var register : svd.registers())
+            result.put(register.peripheral(), new Link(State.UNKNOWN, "", reason));
+        return Map.copyOf(result);
+    }
+
     public static Map<String, Link> link(SvdDevice svd,
             List<DevicetreeHardware.Device> generated) {
-        if (svd == null || generated == null) return Map.of();
+        if (svd == null) return Map.of();
+        if (generated == null || generated.isEmpty())
+            return unknown(svd, "No generated build/zephyr.dts nodes available");
         if (svd.registers().size() > 100_000 || generated.size() > 10_000)
             throw new IllegalArgumentException("SVD/DTS map exceeds bounded limits");
         var byPath = new HashMap<String, DevicetreeHardware.Device>();
         for (var node : generated) byPath.put(node.path(), node);
         var regions = new ArrayList<Region>();
+        boolean unparseable = false;
+        boolean anyReg = false;
         for (var node : generated) {
             if (node.reg().isBlank()) continue;
-            regions.addAll(regions(node));
+            anyReg = true;
+            var parsed = regions(node);
+            if (parsed.unparseable()) unparseable = true;
+            else regions.addAll(parsed.regions());
         }
         var byPeripheral = new HashMap<String, BigInteger>();
-        for (var reg : svd.registers())
-            byPeripheral.merge(reg.peripheral(), reg.address(), BigInteger::min);
-        var result = new HashMap<String, Link>();
+        for (var register : svd.registers())
+            byPeripheral.merge(register.peripheral(), register.address(), BigInteger::min);
+        var results = new HashMap<String, Link>();
         for (var entry : byPeripheral.entrySet()) {
             BigInteger address = entry.getValue();
             var matches = regions.stream()
-                    .filter(r -> address.compareTo(r.base()) >= 0
-                            && address.subtract(r.base()).compareTo(r.size()) < 0)
+                    .filter(region -> address.compareTo(region.base()) >= 0
+                            && address.subtract(region.base()).compareTo(region.size()) < 0)
                     .sorted(java.util.Comparator.comparing(Region::size)).toList();
             if (matches.isEmpty()) {
-                result.put(entry.getKey(), new Link(State.UNKNOWN, "",
-                        "No exact generated Devicetree reg match; not proven active"));
+                String reason = !anyReg ? "No reg properties in generated Devicetree"
+                        : unparseable
+                            ? "No matching reg; some Devicetree reg cells were unparseable"
+                            : "No generated Devicetree reg range matches 0x" + address.toString(16);
+                results.put(entry.getKey(), new Link(State.UNKNOWN, "", reason));
                 continue;
             }
-            Region closest = matches.get(0);
-            if (matches.size() > 1 && matches.get(1).size().equals(closest.size())) {
-                result.put(entry.getKey(), new Link(State.AMBIGUOUS, "",
-                        "Multiple generated Devicetree regions match this SVD address"));
+            Region nearest = matches.get(0);
+            if (matches.size() > 1 && matches.get(1).size().equals(nearest.size())) {
+                results.put(entry.getKey(), new Link(State.AMBIGUOUS, "",
+                        "Multiple equal-specificity generated Devicetree MMIO ranges match"));
                 continue;
             }
             boolean enabled = true;
-            String path = closest.node().path();
-            for (String ancestor = path; !ancestor.isBlank();) {
+            String nodePath = nearest.node().path();
+            for (String ancestor = nodePath; !ancestor.isBlank();) {
                 var node = byPath.get(ancestor);
                 if (node != null && !node.enabled()) { enabled = false; break; }
                 int slash = ancestor.lastIndexOf('/');
                 ancestor = slash <= 0 ? "" : ancestor.substring(0, slash);
             }
-            result.put(entry.getKey(), new Link(
+            results.put(entry.getKey(), new Link(
                     enabled ? State.ENABLED_IN_DTS : State.DISABLED_IN_DTS,
-                    path, enabled ? "Enabled in generated Devicetree"
-                            : "Disabled by node or parent in generated Devicetree"));
+                    nodePath, enabled ? "Enabled in generated Devicetree"
+                            : "Disabled by node/parent in generated Devicetree"));
         }
-        return Map.copyOf(result);
+        return Map.copyOf(results);
     }
 
-    private static List<Region> regions(DevicetreeHardware.Device node) {
-        // Do not guess #address-cells/#size-cells from arbitrary reg strings.
-        // A single region with 32-bit pair or 64-bit address/size quadruple is
-        // sufficient for the common Zephyr SoCs and avoids broad false matches.
-        String raw = node.reg();
-        if (!raw.startsWith("<") || !raw.contains(">") || raw.contains("&")
-                || raw.contains("...")) return List.of();
-        String cells = raw.substring(raw.indexOf('<') + 1, raw.indexOf('>'));
-        // Reject any unrecognized syntax, symbols or phandles, not only unknown numbers.
-        if (!CELL.matcher(cells).replaceAll("").replaceAll("\\s+", "").isEmpty())
-            return List.of();
-        var matcher = CELL.matcher(cells);
-        var tokens = new ArrayList<BigInteger>();
-        while (matcher.find()) {
-            try {
-                String token = matcher.group();
-                BigInteger value = token.startsWith("0x") || token.startsWith("0X")
-                        ? new BigInteger(token.substring(2), 16) : new BigInteger(token);
-                if (value.signum() < 0 || value.bitLength() > 32) return List.of();
-                tokens.add(value);
-            } catch (RuntimeException invalid) { return List.of(); }
+    /** Up to eight explicit angle-bracket groups, each a strict 32/64-bit address-size pair. */
+    private static Parsed regions(DevicetreeHardware.Device node) {
+        String raw = node.reg().strip();
+        if (raw.length() > 1024 || raw.contains("&") || raw.contains("..."))
+            return new Parsed(List.of(), true);
+        var groups = GROUP.matcher(raw);
+        var result = new ArrayList<Region>();
+        int offset = 0;
+        while (groups.find()) {
+            String separator = raw.substring(offset, groups.start()).trim();
+            if (!(result.isEmpty() ? separator.isEmpty() : ",".equals(separator))
+                    || result.size() >= 8) return new Parsed(List.of(), true);
+            String source = groups.group(1);
+            if (!CELL.matcher(source).replaceAll("").replaceAll("\\s+", "").isEmpty())
+                return new Parsed(List.of(), true);
+            var cells = new ArrayList<BigInteger>();
+            var tokens = CELL.matcher(source);
+            while (tokens.find()) {
+                String token = tokens.group();
+                try {
+                    BigInteger value = token.startsWith("0x") || token.startsWith("0X")
+                            ? new BigInteger(token.substring(2), 16) : new BigInteger(token);
+                    if (value.signum() < 0 || value.bitLength() > 32)
+                        return new Parsed(List.of(), true);
+                    cells.add(value);
+                } catch (RuntimeException invalid) { return new Parsed(List.of(), true); }
+            }
+            BigInteger address, size;
+            if (cells.size() == 2) {
+                address = cells.get(0);
+                size = cells.get(1);
+            } else if (cells.size() == 4 && cells.get(0).signum() == 0
+                    && cells.get(2).signum() == 0) {
+                // Only unambiguous 64-bit pairs: arbitrary four cells could be two regions.
+                address = cells.get(0).shiftLeft(32).or(cells.get(1));
+                size = cells.get(2).shiftLeft(32).or(cells.get(3));
+            } else return new Parsed(List.of(), true);
+            if (size.signum() <= 0 || size.bitLength() > 48)
+                return new Parsed(List.of(), true);
+            result.add(new Region(node, address, size));
+            offset = groups.end();
         }
-        BigInteger address, size;
-        if (tokens.size() == 2) {
-            address = tokens.get(0); size = tokens.get(1);
-        } else if (tokens.size() == 4
-                && BigInteger.ZERO.equals(tokens.get(0))
-                && BigInteger.ZERO.equals(tokens.get(2))) {
-            // Only unambiguous 64-bit pairs with zero high words.
-            // Four arbitrary cells could also represent *two* 32-bit regions.
-            address = tokens.get(0).shiftLeft(32).or(tokens.get(1));
-            size = tokens.get(2).shiftLeft(32).or(tokens.get(3));
-        } else return List.of();
-        if (size.signum() <= 0 || size.bitLength() > 48) return List.of();
-        return List.of(new Region(node, address, size));
+        if (result.isEmpty() || !raw.substring(offset).trim().isEmpty())
+            return new Parsed(List.of(), true);
+        return new Parsed(List.copyOf(result), false);
     }
 }
