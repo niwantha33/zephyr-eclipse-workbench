@@ -1271,7 +1271,7 @@ public final class SocRegistersView extends ViewPart {
             periphRead.setEnabled(selectedPeripheral() != null);
             liveSelected.setEnabled(reg != null && reg.readable() && !dtsAccessBlocked(reg));
             add.setEnabled(reg != null && (watches.contains(reg.key()) || reg.readable()));
-            write.setEnabled(reg != null && reg.writeAllowed());
+            write.setEnabled(reg != null && reg.writeAllowed() && !dtsAccessBlocked(reg));
             SvdDevice.Field field = selectedField();
             bit.setEnabled(reg != null && reg.writable() && values.containsKey(reg.key())
                     && field != null && field.width() == 1);
@@ -1298,7 +1298,7 @@ public final class SocRegistersView extends ViewPart {
         menu.addListener(SWT.Show, e -> {
             Register reg = watchedSelection();
             remove.setEnabled(reg != null);
-            write.setEnabled(reg != null && reg.writeAllowed());
+            write.setEnabled(reg != null && reg.writeAllowed() && !dtsAccessBlocked(reg));
         });
         watchTable.addListener(SWT.MenuDetect, e -> {
             var point = watchTable.toControl(e.x, e.y);
@@ -1314,6 +1314,13 @@ public final class SocRegistersView extends ViewPart {
     private void installFieldMenu() {
         var menu = new Menu(fieldTable);
         fieldTable.setMenu(menu);
+        var special = new MenuItem(menu, SWT.PUSH);
+        special.setText("Apply vendor W1/W0 field action (confirmed)…");
+        special.addListener(SWT.Selection, e -> {
+            if (fieldTable.getSelectionCount() == 1
+                    && fieldTable.getSelection()[0].getData() instanceof SvdDevice.Field field)
+                applySpecialField(inspectedRegister, field);
+        });
         var toggle = new MenuItem(menu, SWT.PUSH);
         toggle.setText("Toggle this 1-bit field…");
         toggle.addListener(SWT.Selection, e -> {
@@ -1328,6 +1335,9 @@ public final class SocRegistersView extends ViewPart {
                     && inspectedRegister.writable()
                     && values.containsKey(inspectedRegister.key());
             toggle.setEnabled(allowed);
+            special.setEnabled(fieldTable.getSelectionCount() == 1
+                    && fieldTable.getSelection()[0].getData() instanceof SvdDevice.Field field
+                    && canApplySpecialField(inspectedRegister, field));
         });
         fieldTable.addListener(SWT.MenuDetect, e -> {
             var item = fieldTable.getItem(fieldTable.toControl(e.x, e.y));
@@ -1830,12 +1840,12 @@ public final class SocRegistersView extends ViewPart {
                             ? "Write-only register: explicit physical write; no register readback is possible."
                             : "This writes to the physical MCU through the halted GDB session."),
                 current == null ? "" : hex(current, register.size()), entered -> {
-                    try { RegisterWriteValue.parse(register, entered); return null; }
+                    try { RegisterWriteValue.parse(register, entered, current); return null; }
                     catch (IllegalArgumentException invalid) { return invalid.getMessage(); }
                 });
         if (dialog.open() != org.eclipse.jface.window.Window.OK) return;
         try {
-            submitRegisterWrite(register, RegisterWriteValue.parse(register, dialog.getValue()));
+            submitRegisterWrite(register, RegisterWriteValue.parse(register, dialog.getValue(), current));
         } catch (IllegalArgumentException rejected) {
             status.setText(rejected.getMessage());
         }
@@ -1852,11 +1862,34 @@ public final class SocRegistersView extends ViewPart {
         }
     }
 
-    private record WriteIntent(Register register, BigInteger value) {}
+    private record WriteIntent(Register register, BigInteger value, boolean special) {}
+
+    private boolean canApplySpecialField(Register register, SvdDevice.Field field) {
+        if (register == null || field == null || dtsAccessBlocked(register)) return false;
+        try { RegisterWriteValue.specialBit(register, field); return true; }
+        catch (IllegalArgumentException refused) { return false; }
+    }
+
+    private void applySpecialField(Register register, SvdDevice.Field field) {
+        if (!canApplySpecialField(register, field)) {
+            status.setText("Special bit operation unavailable for this DTS/SVD register.");
+            return;
+        }
+        submitRegisterWrite(register, RegisterWriteValue.specialBit(register, field), field);
+    }
 
     private void submitRegisterWrite(Register register, BigInteger value) {
+        submitRegisterWrite(register, value, null);
+    }
+
+    private void submitRegisterWrite(Register register, BigInteger value, SvdDevice.Field semantic) {
+        boolean specialized = semantic != null;
         if (device == null || register == null || !device.registers().contains(register)
-                || dtsAccessBlocked(register) || !register.writeAllowed()) {
+                || dtsAccessBlocked(register)
+                || (specialized
+                    ? !canApplySpecialField(register, semantic)
+                        || !RegisterWriteValue.specialBit(register, semantic).equals(value)
+                    : !register.writeAllowed())) {
             status.setText("Write blocked: the exact current SVD does not authorise this register.");
             return;
         }
@@ -1866,14 +1899,16 @@ public final class SocRegistersView extends ViewPart {
             status.setText("Write blocked: no unique matching native GDB target. Halt it first.");
             return;
         }
-        String intended = "0x" + RegisterWriteValue.parse(
-                register, "0x" + value.toString(16)).toString(16);
+        String intended = "0x" + (specialized ? value
+                : RegisterWriteValue.parse(register, "0x" + value.toString(16),
+                        values.get(register.key()))).toString(16);
         if (!org.eclipse.jface.dialogs.MessageDialog.openConfirm(getSite().getShell(),
                 "Confirm physical MCU register write",
                 "This will change real hardware. The target must be halted.\n\n"
                         + register.key() + " @ 0x" + register.address().toString(16)
                         + "\nNew value: " + intended
-                        + (register.directWritable() ? "\nWrite-only: physical readback unavailable." : "")
+                        + (specialized ? "\nVendor W1/W0 bit write; no read-modify-write."
+                            : register.directWritable() ? "\nWrite-only: physical readback unavailable." : "")
                         + "\n\nSome peripheral writes can affect clocks, interrupts, power or pins. "
                         + "Proceed only if the register is appropriate for this board and state."))
             return;
@@ -1883,7 +1918,7 @@ public final class SocRegistersView extends ViewPart {
         writing = true;
         long request = ++generation;
         status.setText("Writing " + register.key() + " through the existing halted GDB/OpenOCD session…");
-        var intent = new WriteIntent(register, value);
+        var intent = new WriteIntent(register, value, specialized);
         try {
             session.getExecutor().execute(() -> resolveOperationFrame(
                     session, target.context(), java.util.List.of(register), request, intent));
@@ -2035,7 +2070,8 @@ public final class SocRegistersView extends ViewPart {
             WriteIntent write, long request) {
         if (closed || request != generation) return;
         Register reg = write.register();
-        if (!run.isSuspended(execution) || !reg.writeAllowed() || device == null
+        if (!run.isSuspended(execution) || !(reg.writeAllowed() || write.special())
+                || device == null || dtsAccessBlocked(reg)
                 || !device.registers().contains(reg)) {
             finish(request, "Hardware write cancelled: stopped session/SVD identity not valid.");
             return;
@@ -2065,6 +2101,11 @@ public final class SocRegistersView extends ViewPart {
                         }
                         lastGdbReply = getData() == null ? "GDB command accepted"
                                 : getData().getValue();
+                        if (write.special()) {
+                            finish(request, "GDB accepted special bit write to " + reg.key()
+                                    + "; inspect readable status for hardware effects.");
+                            return;
+                        }
                         if (reg.directWritable()) {
                             // GPIO output/command register is SVD-declared write-only.
                             finish(request, "GDB accepted write to " + reg.key()
