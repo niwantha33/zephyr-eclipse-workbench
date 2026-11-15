@@ -1548,6 +1548,9 @@ public final class SocRegistersView extends ViewPart {
         var details = new StringBuilder(r.peripheral()).append("  /  ").append(r.name()).append("\n\n")
                 .append("Devicetree     ").append(dtsLink(r).state())
                 .append(" — ").append(dtsLink(r).nodePath()).append("\n")
+                .append(dtsLink(r).state() == SvdDevicetreeLinker.State.UNKNOWN
+                        || dtsLink(r).state() == SvdDevicetreeLinker.State.AMBIGUOUS
+                        ? "DTS evidence    " + dtsLink(r).explanation() + "\n" : "")
                 .append("Live value     ")
                 .append(value == null ? "—  (" + state + ")" : hex(value, r.size()))
                 .append("\n")
@@ -1797,7 +1800,7 @@ public final class SocRegistersView extends ViewPart {
     private SvdDevicetreeLinker.Link dtsLink(Register reg) {
         return dtsLinks.getOrDefault(reg.peripheral(),
                 new SvdDevicetreeLinker.Link(SvdDevicetreeLinker.State.UNKNOWN, "",
-                        "No verified generated Devicetree address mapping"));
+                        "No verified build/zephyr.dts available or its mapping could not be parsed"));
     }
     private boolean dtsAccessBlocked(Register reg) {
         var state = dtsLink(reg).state();
