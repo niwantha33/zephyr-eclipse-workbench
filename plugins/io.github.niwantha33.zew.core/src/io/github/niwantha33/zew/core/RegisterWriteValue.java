@@ -8,7 +8,7 @@ public final class RegisterWriteValue {
     private RegisterWriteValue() {}
 
     public static BigInteger parse(SvdDevice.Register register, String entered) {
-        if (register == null || !register.writable())
+        if (register == null || !register.writeAllowed())
             throw new IllegalArgumentException("SVD does not authorise a safe register edit");
         if (entered == null) throw new IllegalArgumentException("Enter a hexadecimal or decimal value");
         String value = entered.strip().replace("_", "");
