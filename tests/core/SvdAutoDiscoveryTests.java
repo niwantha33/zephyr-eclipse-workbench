@@ -123,6 +123,31 @@ public final class SvdAutoDiscoveryTests {
                     List.of(packRoot, other), root.resolve("cache"));
             check(ambiguous.state() == SvdAutoDiscovery.State.AMBIGUOUS && ambiguous.path() == null,
                     "divergent vendor packs require explicit selection, no silent revision selection");
+            // A large unrelated HAL root must not consume the next vendor's
+            // scan budget. Any truncated root still fails qualification.
+            Path massive = Files.createDirectories(root.resolve("oversized-hal"));
+            for (int i = 0; i < 8010; ++i)
+                Files.writeString(massive.resolve(String.format("%05d.txt", i)), "");
+            Path correctVendor = Files.createDirectories(root.resolve("preferred-vendor"));
+            Files.writeString(correctVendor.resolve("MSPM0G350X.svd"), svd("MSPM0G350X"));
+            var truncated = SvdAutoDiscovery.resolve("lp_mspm0g3507/mspm0g3507",
+                    List.of(massive, correctVendor), root.resolve("large-cache"));
+            check(truncated.state() == SvdAutoDiscovery.State.INCOMPLETE_SCAN
+                    && truncated.inspected().stream().anyMatch(p -> p.contains("TRUNCATED root"))
+                    && truncated.inspected().contains(correctVendor.toRealPath().toString()),
+                    "per-root truncation must remain visible and must not starve later vendor roots");
+            check(SvdAutoDiscovery.resolve("nrf5340dk/nrf5340", List.of(correctVendor),
+                    root.resolve("unknown-core-cache")).state() == SvdAutoDiscovery.State.INVALID_TARGET,
+                    "unqualified dual-core chip cannot claim a register map");
+            Path nordic = Files.createDirectories(root.resolve("nordic-cores"));
+            Files.writeString(nordic.resolve("nrf5340_application.svd"), svd("nrf5340_application"));
+            Files.writeString(nordic.resolve("nrf5340_network.svd"), svd("nrf5340_network"));
+            check(SvdAutoDiscovery.resolve("nrf5340dk/nrf5340/cpuapp",
+                    List.of(nordic), root.resolve("nrfapp-cache")).state() == SvdAutoDiscovery.State.MATCHED,
+                    "verified application-core alias discovered by JSON-mapped filename");
+            check(SvdAutoDiscovery.resolve("nrf5340dk/nrf5340/cpunet",
+                    List.of(nordic), root.resolve("nrfnet-cache")).state() == SvdAutoDiscovery.State.MATCHED,
+                    "verified network-core alias discovered separately");
             System.out.println("SvdAutoDiscoveryTests PASS");
         } finally {
             try (var walk = Files.walk(root)) {
