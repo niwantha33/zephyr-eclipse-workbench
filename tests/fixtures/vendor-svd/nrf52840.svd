@@ -48,5 +48,50 @@ POSSIBILITY OF SUCH DAMAGE.
               <msb>31</msb>
             </field>
           </fields>
-        </register></registers></peripheral></peripherals>
+        </register></registers></peripheral><peripheral>
+      <name>P0</name>
+      <description>GPIO Port 0</description>
+      <baseAddress>0x50000000</baseAddress>
+      <headerStructName>GPIO</headerStructName>
+      <addressBlock>
+        <offset>0</offset>
+        <size>0x1000</size>
+        <usage>registers</usage>
+      </addressBlock>
+      <groupName>GPIO</groupName>
+      <size>0x20</size>
+      <registers><register>
+          <name>OUT</name>
+          <description>Write GPIO port</description>
+          <addressOffset>0x504</addressOffset>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <size>0x20</size>
+          <fields>
+            <field>
+              <name>PIN0</name>
+              <description>Pin 0</description>
+              <lsb>0</lsb>
+              <msb>0</msb>
+              <enumeratedValues>
+                <enumeratedValue>
+                  <name>Low</name>
+                  <description>Pin driver is low</description>
+                  <value>0x0</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>High</name>
+                  <description>Pin driver is high</description>
+                  <value>0x1</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field></fields>
+        </register></registers></peripheral>
+<peripheral derivedFrom="P0">
+      <name>P1</name>
+      <description>GPIO Port 1</description>
+      <baseAddress>0x50000300</baseAddress>
+      <alternatePeripheral>P0</alternatePeripheral>
+    </peripheral>
+</peripherals>
 </device>
