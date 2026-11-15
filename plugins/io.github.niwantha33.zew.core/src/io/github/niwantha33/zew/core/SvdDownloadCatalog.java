@@ -82,7 +82,8 @@ public final class SvdDownloadCatalog {
                 throw new IllegalArgumentException("Unsafe PDSC path");
             if (!seen.add(part + "/" + qualifier))
                 throw new IllegalArgumentException("Duplicate SVD catalog key");
-            entries.add(new Entry(part, qualifier, url, m.group(4), m.group(5), pdsc));
+            entries.add(new Entry(part, qualifier, url,
+                    m.group(4) == null ? "" : m.group(4), m.group(5), pdsc));
             if (entries.size() > 64) throw new IllegalArgumentException("Catalog entry limit exceeded");
             pos = m.end();
             if (pos == body.length()) break;
