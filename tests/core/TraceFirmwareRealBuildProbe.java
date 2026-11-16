@@ -62,10 +62,10 @@ public final class TraceFirmwareRealBuildProbe {
             if (!linkMap.contains(name))
                 throw new IllegalStateException("Expected real ELF map symbol absent: " + name);
         }
-        var capture = ConfigurationEvidenceReceipt.capture(app, build, board, "trace-ci");
+        var capture = ConfigurationEvidenceReceipt.capture(app, build, board, "default");
         if (!capture.current())
             throw new IllegalStateException("Trace build source provenance unverified: " + capture);
-        var check = ConfigurationEvidenceReceipt.inspect(app, build, board, "trace-ci");
+        var check = ConfigurationEvidenceReceipt.inspect(app, build, board, "default");
         if (!check.current())
             throw new IllegalStateException("Trace build input receipt changed: " + check);
         System.out.println("ZEW_TRACE_FIRMWARE_BUILD_1");
