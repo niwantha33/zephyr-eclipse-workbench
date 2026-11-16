@@ -55,11 +55,6 @@ def build_all(root: Path, report_path: Path) -> None:
         text=True, timeout=15).strip()
     if git_head != PINS:
         raise ValueError("Refusing to modify a non-pinned Zephyr checkout")
-    patcher = REPO / "firmware/trace/zephyr44/apply_pinned_backend.py"
-    # This is *only* allowed inside the disposable build matrix job; checked
-    # patcher rejects a dirty tree, changed revision and unsafe anchors.
-    subprocess.run([sys.executable, str(patcher), "--zephyr-base",
-                    str(zephyr), "--apply"], check=True, timeout=30)
     env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8",
                PYTHONUNBUFFERED="1", GIT_TERMINAL_PROMPT="0")
     for name in ("PYTHONHOME", "PYTHONPATH", "BOARD", "CONF_FILE",
@@ -79,7 +74,12 @@ def build_all(root: Path, report_path: Path) -> None:
             if len(line.split("\t")) == 7]
     if not rows:
         raise ValueError("Managed Zephyr board catalog did not return evidence")
-    output = []
+    # Managed board_dependencies.py refuses ALL locally modified Zephyr trees
+    # (correctly). Resolve and install every cross-vendor toolchain/module
+    # dependency FIRST while this exact pinned workspace is still clean.
+    # Patch it only afterwards; builds run without invoking the managed
+    # dependency planner again. This workspace belongs to disposable CI.
+    prepared = []
     for label, board_name, soc, core in TARGETS:
         board = select_target(rows, board_name, soc, core)
         app = root / "trace-ci-projects" / label
@@ -102,6 +102,17 @@ def build_all(root: Path, report_path: Path) -> None:
              "--root", root, "--sdk", sdk, "--workspace", workspace,
              "--git", git, "--board", board, "--application", app],
             workspace, env)
+        prepared.append((label, board, app, build, contract_sha))
+        print("TRACE_DEPENDENCIES_PREPARED:", label, board, flush=True)
+
+    # Never run another managed dependency operation on this patched Zephyr
+    # tree. The exact patcher itself enforces a clean pinned revision, source
+    # anchors and git diff --check; no force/dirty override is provided.
+    patcher = REPO / "firmware/trace/zephyr44/apply_pinned_backend.py"
+    subprocess.run([sys.executable, str(patcher), "--zephyr-base",
+                    str(zephyr), "--apply"], check=True, timeout=30)
+    output = []
+    for label, board, app, build, contract_sha in prepared:
         run([python, "-m", "west", "build", "--cmake-only",
              "-b", board, "-d", build, app, "--",
              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
