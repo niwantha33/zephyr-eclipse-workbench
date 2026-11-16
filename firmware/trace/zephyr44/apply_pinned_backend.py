@@ -21,13 +21,42 @@ KCONFIG_CHOICE = """
 config TRACING_BACKEND_ZEW_RTT
 	bool "ZEW prototype: CTF over dedicated nonblocking SEGGER RTT"
 	depends on TRACING_CTF && TRACING_ASYNC && USE_SEGGER_RTT && !SMP
+	depends on !TRACING_HANDLE_HOST_CMD
+	depends on ENTROPY_HAS_DRIVER || TEST_RANDOM_GENERATOR
 	help
 	  Explicit experimental pinned-Zephyr CTF binary backend. This
 	  requires separately verified probe and boot/image evidence.
 	  Not an approved live stream and not a generic SoC feature.
+
+config TRACING_BACKEND_ZEW_RAM
+	bool "ZEW prototype: bounded framed CTF RAM capture (vendor-neutral)"
+	depends on TRACING_CTF && TRACING_ASYNC && !SMP
+	depends on !TRACING_HANDLE_HOST_CMD
+	depends on ENTROPY_HAS_DRIVER || TEST_RANDOM_GENERATOR
+	help
+	  A finite RAM recording of integrity-framed CTF events. No RTT,
+	  UART, OpenOCD running read or vendor-specific device is assumed.
 """
 
 KCONFIG_SETTINGS = """
+if TRACING_BACKEND_ZEW_RTT || TRACING_BACKEND_ZEW_RAM
+
+config ZEW_TRACE_IMAGE_CONTRACT_SHA256
+	string "Prebuild image-contract SHA256 hex (NOT ELF attestation)"
+	default ""
+	help
+	  Exactly 64 lowercase hex characters, not the finished ELF digest.
+	  Separate flashed-image verification remains REQUIRED.
+
+config ZEW_TRACE_METADATA_SHA256
+	string "Exact packed CTF metadata SHA256 hex"
+	default ""
+	help
+	  Exactly 64 lowercase hex characters. Matching metadata is
+	  necessary but NOT hardware evidence or authentication.
+
+endif # selected ZEW backend
+
 if TRACING_BACKEND_ZEW_RTT
 
 config ZEW_TRACE_RTT_UP_BYTES
@@ -35,22 +64,18 @@ config ZEW_TRACE_RTT_UP_BYTES
 	range 1024 16384
 	default 8192
 
-config ZEW_TRACE_IMAGE_CONTRACT_SHA256
-	string "Prebuild image-contract SHA256 hex (NOT ELF attestation)"
-	default ""
-	help
-	  Exactly 64 lowercase hex characters. This is a prebuild contract,
-	  NOT a hash of the finished ELF, and cannot independently attest
-	  what is flashed onto a target.
-
-config ZEW_TRACE_METADATA_SHA256
-	string "Exact packed CTF metadata SHA256 hex"
-	default ""
-	help
-	  Exactly 64 lowercase hex characters. Independent host matching
-	  is mandatory; the firmware-supplied value is not authentication.
-
 endif # TRACING_BACKEND_ZEW_RTT
+
+if TRACING_BACKEND_ZEW_RAM
+
+config ZEW_TRACE_RAM_BYTES
+	int "Max framed CTF bytes retained in target RAM"
+	range 1024 16384
+	default 4096
+	help
+	  Non-wrapping bounded capture. On full, the interval fails closed.
+
+endif # TRACING_BACKEND_ZEW_RAM
 """
 
 
@@ -75,6 +100,7 @@ def propose(root: pathlib.Path) -> dict[pathlib.Path, bytes]:
         "cmake": tracing / "CMakeLists.txt",
         "core": tracing / "tracing_core.c",
         "header": tracing / "include" / "tracing_core.h",
+        "format": tracing / "tracing_format_async.c",
     }
     original = {}
     for name, path in paths.items():
@@ -92,7 +118,8 @@ def propose(root: pathlib.Path) -> dict[pathlib.Path, bytes]:
         kconfig,
         '\tdefault "tracing_backend_ram" if TRACING_BACKEND_RAM\n',
         '\tdefault "tracing_backend_ram" if TRACING_BACKEND_RAM\n'
-        '\tdefault "tracing_backend_zew_rtt" if TRACING_BACKEND_ZEW_RTT\n',
+        '\tdefault "tracing_backend_zew_rtt" if TRACING_BACKEND_ZEW_RTT\n'
+        '\tdefault "tracing_backend_zew_ram" if TRACING_BACKEND_ZEW_RAM\n',
         "Kconfig backend name",
     )
     kconfig = unique_replace(
@@ -108,7 +135,9 @@ def propose(root: pathlib.Path) -> dict[pathlib.Path, bytes]:
         'zephyr_sources_ifdef(\n  CONFIG_TRACING_BACKEND_RAM\n'
         '  tracing_backend_ram.c\n  )\n\n'
         'zephyr_sources_ifdef(\n  CONFIG_TRACING_BACKEND_ZEW_RTT\n'
-        '  tracing_backend_zew_rtt.c\n  zew_trace_frame.c\n  )',
+        '  tracing_backend_zew_rtt.c\n  zew_trace_frame.c\n  )\n\n'
+        'zephyr_sources_ifdef(\n  CONFIG_TRACING_BACKEND_ZEW_RAM\n'
+        '  tracing_backend_zew_ram.c\n  zew_trace_frame.c\n  )',
         "Zephyr tracing source selection",
     )
     header = unique_replace(
@@ -130,14 +159,118 @@ def propose(root: pathlib.Path) -> dict[pathlib.Path, bytes]:
         "Tracing core drop counter",
     )
 
+    # Stop is requested by an APPLICATION thread. It disables new tracing
+    # under the same IRQ lock as the format hooks, so a worker can eventually
+    # drain and seal the exact producer prefix. An async CTF event cannot be
+    # admitted after the stop flag is set on this !SMP backend.
+    core = unique_replace(
+        core,
+        'static atomic_t tracing_packet_drop_num;\n',
+        'static atomic_t tracing_packet_drop_num;\n'
+        '#if defined(CONFIG_TRACING_BACKEND_ZEW_RTT) || '
+        'defined(CONFIG_TRACING_BACKEND_ZEW_RAM)\n'
+        'static atomic_t zew_trace_stop_requested;\n'
+        'void zew_trace_backend_close(void);\n'
+        '#endif\n',
+        "Stop state",
+    )
+    core = unique_replace(
+        core,
+        '\t\tif (tracing_buffer_is_empty()) {\n'
+        '\t\t\tk_sem_take(&tracing_thread_sem, K_FOREVER);\n',
+        '\t\tif (tracing_buffer_is_empty()) {\n'
+        '#if defined(CONFIG_TRACING_BACKEND_ZEW_RTT) || '
+        'defined(CONFIG_TRACING_BACKEND_ZEW_RAM)\n'
+        '\t\t\tif (atomic_cas(&zew_trace_stop_requested, 1, 2)) {\n'
+        '\t\t\t\tzew_trace_backend_close();\n'
+        '\t\t\t}\n'
+        '#endif\n'
+        '\t\t\tk_sem_take(&tracing_thread_sem, K_FOREVER);\n',
+        "Async drained END",
+    )
+    core = unique_replace(
+        core,
+        '\ttracing_buffer_init();\n',
+        '\ttracing_buffer_init();\n'
+        '#if defined(CONFIG_TRACING_BACKEND_ZEW_RTT) || '
+        'defined(CONFIG_TRACING_BACKEND_ZEW_RAM)\n'
+        '\tatomic_set(&zew_trace_stop_requested, 0);\n'
+        '#endif\n',
+        "Stop state reset",
+    )
+    core = unique_replace(
+        core,
+        '#include <string.h>\n',
+        '#include <string.h>\n#include <errno.h>\n',
+        "Stop errno declarations",
+    )
+    core += (
+        '\n#if defined(CONFIG_TRACING_BACKEND_ZEW_RTT) || '
+        'defined(CONFIG_TRACING_BACKEND_ZEW_RAM)\n'
+        '/* Nonblocking request; MUST NOT be invoked from ISR or trace worker. */\n'
+        'int zew_trace_stop_request(void)\n'
+        '{\n'
+        '\tif (k_is_in_isr() || is_tracing_thread()) {\n'
+        '\t\treturn -EWOULDBLOCK;\n'
+        '\t}\n'
+        '\tunsigned int key = irq_lock();\n'
+        '\tif (atomic_get(&zew_trace_stop_requested) != 0 ||\n'
+        '\t    atomic_get(&tracing_state) != TRACING_ENABLE) {\n'
+        '\t\tirq_unlock(key);\n'
+        '\t\treturn -EALREADY;\n'
+        '\t}\n'
+        '\ttracing_set_state(TRACING_DISABLE);\n'
+        '\tatomic_set(&zew_trace_stop_requested, 1);\n'
+        '\tirq_unlock(key);\n'
+        '\tk_sem_give(&tracing_thread_sem);\n'
+        '\treturn 0;\n'
+        '}\n'
+        '#endif\n'
+    )
+    header = unique_replace(
+        header,
+        'uint32_t tracing_packet_drop_count_get(void);\n',
+        'uint32_t tracing_packet_drop_count_get(void);\n'
+        '#if defined(CONFIG_TRACING_BACKEND_ZEW_RTT) || '
+        'defined(CONFIG_TRACING_BACKEND_ZEW_RAM)\n'
+        'int zew_trace_stop_request(void);\n'
+        '#endif\n',
+        "Stop API declaration",
+    )
+    trace_format = original["format"]
+    for func in ("string", "raw_data", "data"):
+        func_call = {
+            "string": "tracing_format_string_put(str, args)",
+            "raw_data": "tracing_format_raw_data_put(data, length)",
+            "data": "tracing_format_data_put(tracing_data_array, count)",
+        }[func]
+        trace_format = unique_replace(
+            trace_format,
+            '\tTRACING_LOCK();\n'
+            '\tbefore_put_is_empty = tracing_buffer_is_empty();\n'
+            f'\tput_success = {func_call};\n'
+            '\tTRACING_UNLOCK();\n',
+            '\tTRACING_LOCK();\n'
+            '\tif (is_tracing_enabled()) {\n'
+            '\t\tbefore_put_is_empty = tracing_buffer_is_empty();\n'
+            f'\t\tput_success = {func_call};\n'
+            '\t} else {\n'
+            '\t\t/* Stop won the IRQ lock: no late ring append. */\n'
+            '\t\tbefore_put_is_empty = false;\n'
+            '\t\tput_success = true;\n'
+            '\t}\n'
+            '\tTRACING_UNLOCK();\n',
+            f"Async producer stop recheck: {func}",
+        )
     changes = {
         paths["kconfig"]: kconfig.encode(),
         paths["cmake"]: cmake.encode(),
         paths["header"]: header.encode(),
+        paths["format"]: trace_format.encode(),
         paths["core"]: core.encode(),
     }
     for name in ("zew_trace_frame.h", "zew_trace_frame.c",
-                 "tracing_backend_zew_rtt.c"):
+                 "tracing_backend_zew_rtt.c", "tracing_backend_zew_ram.c"):
         destination = tracing / name
         if destination.exists() or destination.is_symlink():
             raise ValueError(f"Refusing to replace existing backend source: {destination}")

@@ -189,6 +189,8 @@ jobs:
         run: python scripts/windows_firmware_matrix.py --root C:/zew-ci --run-only
       - name: Qualify all seven real firmware evidence reports
         run: python scripts/qualify_firmware_matrix.py --input windows-firmware-results.json --output windows-firmware-qualification.json
+      - name: Build real pinned Zephyr framed trace firmware on MSPM0 STM32 ESP32-C3
+        run: python scripts/trace_firmware_build_matrix.py --root C:/zew-ci --output trace-firmware-matrix.json
       - name: Retain verified target results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -197,6 +199,7 @@ jobs:
           path: |
             windows-firmware-results.json
             windows-firmware-qualification.json
+            trace-firmware-matrix.json
           if-no-files-found: warn
           retention-days: 7
 

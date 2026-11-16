@@ -323,11 +323,39 @@ image contract digest, not the SHA256 of the finished ELF; building the
 complete ELF digest into the same ELF is self-referential. Host-side
 independent memory/flash readback is still mandatory. The boot epoch
 candidate is generated using sys_rand_get, not yet independently qualified
-for uniqueness/entropy on any target. The backend does not yet emit an END
-frame: a receiver must therefore report incomplete capture rather than
-promoting it to qualified offline CTF. RTT channel/probe support, low
+for uniqueness/entropy on any target. At the time of the original Phase 3 prototype, the backend did not emit
+END. **Phase 4 supersedes this limitation** with an opt-in stop barrier,
+worker drain and conditional END. This still does not prove real hardware. RTT channel/probe support, low
 overhead, resets, source loss and all hardware rows remain PENDING.
 
 Native CI must validate portable C frame bytes against the Python verifier.
 An actual pinned Zephyr build, real RTT capture and coordinated end/drain
 test are separate gates. Do not enable Start Live Trace from this source.
+
+## 12. Phase 4/5: MSPM0-first lifecycle and real build qualification
+
+See [MSPM0 and cross-vendor detailed design](TRACE_PHASE4_5_MSPM0.md).
+RTT is NOT mandatory: `CONFIG_TRACING_BACKEND_ZEW_RAM` uses the same
+portable framing code on any supported single-core Zephyr target with
+enough RAM, and is first built for the user's TI MSPM0G3507. The
+`CONFIG_TRACING_BACKEND_ZEW_RTT` backend remains separately opt-in only
+where a dedicated SEGGER RTT channel and probe actually exist.
+
+Phase 4 adds a Zephyr async producer stop recheck **inside** its IRQ lock;
+`zew_trace_stop_request()` disables tracing and wakes the existing
+tracing worker, which drains all buffered CTF and attempts one final END.
+A partial/nonblocking write, nonzero source loss or RAM capacity overflow
+still fails closed. A clean END is framing integrity, **not** independent
+target attestation. The RAM capture is read only with a halted target. The demo/CI opts in to
+Zephyr's TEST_RANDOM_GENERATOR + TIMER_RANDOM_GENERATOR for unsupported
+entropy devices such as MSPM0; these epochs are explicitly untrusted
+and cannot certify physical capture identity.
+
+Phase 5 adds a disposable, exact-version pinned Zephyr source patch and
+real Windows CI builds for MSPM0G3507, STM32F446, ESP32-C3 and
+ESP32-S3, each
+checking generated .config, ELF/map CTF and backend symbols, metadata
+hashes and a CURRENT source/config receipt. Hardware tests are not
+implied by a compiler PASS. The existing OpenOCD runtime, live menu,
+running-target memory reads and vendor physical qualification are
+unchanged and all remain PENDING.
