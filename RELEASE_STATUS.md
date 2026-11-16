@@ -1,6 +1,25 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+
+## Trace Phase 6 — test-only semantic checkpoints (draft PR, 2026-11-16)
+
+- Added a bounded, epoch-locked semantic append adapter that consumes the
+  complete records emitted by the existing packed CTF decoder. Exact replay
+  is idempotent; conflicting checkpoints, metadata drift, offset gaps,
+  clock reversal, source-loss evidence and multistream input fail closed.
+- Loopback-only framed test capture reports semantic preview counts; original
+  JSONL/raw evidence format, disabled Live Trace menu and offline decoder
+  remain unchanged. No hardware, GDB, UART or RTT session is opened.
+- Synthetic chunk-boundary, replay, corruption, budget and offline-equivalence
+  tests: `tests/tools/test_semantic_checkpoint.py`.
+- The result is NOT an independently attested physical trace, continuous
+  live view, or a CPU-usage measurement. Exact-head CI, installed Eclipse,
+  MSPM0G3507/XDS110 hardware and all other vendor board/probe acceptance
+  remain PENDING. **G0 remains OPEN.**
+- Procedure and limits: [Phase 6 checkpoint evidence](docs/TRACE_PHASE6_SEMANTIC_CHECKPOINTS.md).
+
+
 **Authoritative scope:** [Evidence Engine Program v2](docs/EVIDENCE_ENGINE_PROGRAM_V2.md). Earlier [16-area acceptance](docs/reports/COMMERCIAL_RELEASE_ACCEPTANCE.md) is historical, not the current release plan.
 
 **Current Eclipse-preview stabilisation checklist (2026-11-10):** [release stabilisation board](docs/RELEASE_STABILIZATION_2026-11-10.md). It distinguishes current exact-head CI from outstanding clean-host, hardware, licensing and release-asset acceptance; it does not close G0.

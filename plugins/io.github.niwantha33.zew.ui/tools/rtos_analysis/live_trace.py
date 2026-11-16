@@ -16,6 +16,7 @@ import time
 
 from ctf_framing import FramedCtfGate, MAX_RAW
 from ctf_incremental import IncrementalPackedCtfDecoder
+from semantic_checkpoint import SemanticEpochCheckpoint
 from zephyr_ctf_binary import _read_bounded, MAX_METADATA
 
 MAX_WIRE_BYTES = 12 * 1024 * 1024
@@ -47,6 +48,8 @@ def capture_loopback_test(port: int, metadata_file: Path, elf_sha: str,
     gate = FramedCtfGate(elf_sha, metadata_hash, epoch,
                          max_raw_bytes=max_raw_bytes)
     decoder = IncrementalPackedCtfDecoder(metadata, max_stream_bytes=max_raw_bytes)
+    semantic = SemanticEpochCheckpoint(metadata, metadata_hash, epoch,
+                                       max_events=MAX_INDEX_EVENTS)
     parent = Path(output)
     if parent.is_symlink():
         raise ValueError("Test output cannot be a symlink")
@@ -82,7 +85,13 @@ def capture_loopback_test(port: int, metadata_file: Path, elf_sha: str,
                     raw_wire_bytes += len(chunk)
                     for payload in gate.feed(chunk):
                         ctf.write(payload)
-                        for event in decoder.feed(payload):
+                        decoded = decoder.feed(payload)
+                        # Decoder committed offsets, never TCP read boundaries.
+                        # This cannot certify physical or live capture.
+                        semantic.append(decoded,
+                                        checkpoint=decoder.stats()["committed_bytes"],
+                                        metadata_sha256=metadata_hash, epoch=epoch)
+                        for event in decoded:
                             if emitted >= MAX_INDEX_EVENTS:
                                 raise ValueError("JSONL event-index bound reached")
                             line = json.dumps(event, sort_keys=True, separators=(",", ":"),
@@ -97,12 +106,14 @@ def capture_loopback_test(port: int, metadata_file: Path, elf_sha: str,
                     raise TimeoutError("Test capture duration elapsed before a sealed END")
         gate.finish()
         decoder.seal()
+        semantic.finish(format_sealed=True, source_losses=0)
         completed = True
         reason = "all synthetic frames and CTF records complete"
     except (OSError, ValueError, TimeoutError) as problem:
         # The already received wire and complete prefix are preserved. A
         # malformed interval is NEVER promoted to a validated offline trace.
         reason = (type(problem).__name__ + ": " + str(problem))[:300]
+        semantic.abort(reason)
     finally:
         elapsed = max(0.001, time.monotonic() - started)
         receipt = {
@@ -111,6 +122,7 @@ def capture_loopback_test(port: int, metadata_file: Path, elf_sha: str,
             "reason": reason,
             "protocol": gate.stats(),
             "decoder": decoder.stats(),
+            "semantic_preview": semantic.stats(),
             "wire_bytes": raw_wire_bytes,
             "events_written": emitted,
             "events_jsonl_bytes": json_bytes,

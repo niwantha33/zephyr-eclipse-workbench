@@ -49,6 +49,7 @@ MODULE_FEATURES = {
     "investigation": "Offline investigation report",
     "memory_profile_report": "Memory allocation profiling",
     "memory_profiler": "Memory allocation profiling",
+    "semantic_checkpoint": "Test-only semantic checkpoint replay",
     "semantic_trace": "CTF semantic normalization",
     "zephyr_ctf_binary": "CTF semantic normalization",
     "synchronization_analysis": "Synchronization object activity (mutex, semaphore, Zephyr message queue)",

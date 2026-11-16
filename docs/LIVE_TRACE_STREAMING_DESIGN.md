@@ -13,6 +13,16 @@ stream, and the text receiver must never be treated as one.
 
 ## 1. Contract and boundaries
 
+> **Phase 6 update (2026-11-16):** the independently isolated, test-only
+> `SemanticEpochCheckpoint` adapter now accepts already-verified complete
+> packed-CTF records with epoch/metadata-bound decoder byte checkpoints.
+> The loopback fixture produces a bounded semantic preview in its receipt.
+> This does not enable any production live receiver or Eclipse view;
+> source/hardware identity and live menu remain unverified/disabled. See
+> [Phase 6 checkpoint evidence](TRACE_PHASE6_SEMANTIC_CHECKPOINTS.md).
+> Earlier sections below preserve the original design/limitation history.
+
+
 The existing offline entry points are
 `plugins/io.github.niwantha33.zew.ui/tools/rtos_analysis/analyze_trace.py`
 and `semantic_trace.py`. The current `decode_ctf(path)` uses a Babeltrace 2
