@@ -107,7 +107,7 @@ class SemanticCheckpointTests(unittest.TestCase):
         checkpoint = decoder.stats()["committed_bytes"]
         scenarios = [
             ("wire-offset gap", lambda rows: rows[0].update(wire_offset=1)),
-            ("out-of-order semantic", lambda rows: rows[1].update(timestamp_ns=1)),
+            ("Out-of-order semantic", lambda rows: rows[1].update(timestamp_ns=1)),
             ("Unsupported", lambda rows: rows[1].update(stream=1)),
             ("Unsupported", lambda rows: rows[1].update(kind="discarded_events")),
         ]
