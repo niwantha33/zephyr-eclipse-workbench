@@ -9,7 +9,14 @@ import sys
 
 root = Path(__file__).resolve().parents[1]
 os.environ['ZEW_TEST_PYTHON'] = sys.executable
-subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/tools', '-v'], check=True, cwd=root, timeout=90)
+# The Python tool inventory now contains hundreds of test cases. On the
+# Windows publication runner, startup and mocked network retry tests can
+# exceed the old 90-second *whole-suite* budget even though individual tests
+# continue to pass. Keep a finite 4-minute guard for the complete suite;
+# Java/process tests below retain their tighter 90-second individual limits.
+PYTHON_TOOLS_SUITE_TIMEOUT = 240
+subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/tools', '-v'],
+               check=True, cwd=root, timeout=PYTHON_TOOLS_SUITE_TIMEOUT)
 out = root / 'build-core-tests'
 out.mkdir(exist_ok=True)
 shutil.copyfile(root / 'plugins/io.github.niwantha33.zew.core/src/svd-part-mappings.json', out / 'svd-part-mappings.json')
