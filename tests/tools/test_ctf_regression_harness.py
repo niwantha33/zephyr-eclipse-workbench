@@ -43,6 +43,7 @@ MODULE_FEATURES = {
     "ctf_incremental": "Incremental packed-CTF decoding (format adapter only)",
     "ctf_framing": "Framed CTF loopback test harness",
     "live_trace": "Framed CTF loopback test harness",
+    "rtt_live_preview": "Experimental existing-RTT binary stream preview",
     "coredump_offline": "Offline core-dump assessment",
     "cpu_analysis": "Zephyr CPU Load view",
     "offline_trace_json": "Zephyr Contention Report view",
