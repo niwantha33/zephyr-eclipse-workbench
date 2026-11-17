@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # RTOS causal drift: first offline slice
 
-**Status: offline CLI preview. Not a live view or a qualified production detector.**
+**Status: saved-CTF offline CLI and native Eclipse table preview. Not a live view or a qualified production detector.**
 No firmware is injected and no gates are instrumented. The existing live trace
 menu stays disabled.
 
