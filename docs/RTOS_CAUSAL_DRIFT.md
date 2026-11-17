@@ -91,7 +91,7 @@ python -m unittest discover -s tests/tools -p test_causal_drift.py -v
 
 ## Remaining phases
 
-1. Native Eclipse Task Drift view (tag, thread, period, deadline inputs).
+1. Qualify installed Eclipse Task Drift view and saved-trace capture on physical hardware.
 2. Proven scheduler priority and ISR interference breakdown.
 3. Opt-in gate/interrupt-lock instrumentation and causal dependency graph.
 4. LP-MSPM0G3507 validation, trace loss receipts and tracing overhead study.
