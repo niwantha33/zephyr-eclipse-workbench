@@ -86,6 +86,30 @@ class DriftTests(unittest.TestCase):
             marker("zew_cycle_finish", 200, 0), thread_id="motor")
         self.assertEqual(result["cycles"][0]["paired_mutex_blocks"], [])
 
+    def test_object_only_ctf_mutex_events_use_verified_scheduler_context(self):
+        result = analyse(
+            ev("thread_switched_in", 90),
+            marker("zew_cycle_start", 100, 0),
+            ev("mutex_lock_blocking", 120, tid=None, obj="m"),
+            ev("thread_switched_out", 130),
+            ev("thread_switched_in", 210),
+            ev("mutex_lock_exit", 240, tid=None, obj="m", ret=0),
+            marker("zew_cycle_finish", 300, 0),
+            thread_id="motor")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["cycles"][0]["paired_mutex_blocks"],
+                         [{"object": "object ID m", "blocked_ns": 120}])
+
+    def test_object_only_event_with_no_active_thread_is_not_assigned(self):
+        result = analyse(
+            marker("zew_cycle_start", 100, 0),
+            ev("mutex_lock_blocking", 120, tid=None, obj="m"),
+            ev("mutex_lock_exit", 240, tid=None, obj="m", ret=0),
+            marker("zew_cycle_finish", 300, 0),
+            ev("thread_switched_in", 500),
+            thread_id="motor")
+        self.assertEqual(result["cycles"][0]["paired_mutex_blocks"], [])
+
     def test_duplicate_marker_rejected_instead_of_overwritten(self):
         r = analyse(marker("zew_cycle_start", 100, 0),
                     marker("zew_cycle_start", 101, 0))
