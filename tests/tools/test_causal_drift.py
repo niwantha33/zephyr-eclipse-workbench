@@ -145,6 +145,19 @@ class DriftTests(unittest.TestCase):
         self.assertEqual(r["cycles"][0]["scheduler_interruptions_observed"], 0)
         self.assertEqual(r["cycles"][0]["intervening_threads"], [])
 
+    def test_relative_phase_allows_sequence_that_predates_capture(self):
+        r = analyse(marker("zew_cycle_start", 100, 100),
+                    marker("zew_cycle_start", 1200, 101))
+        self.assertEqual(r["status"], "ok")
+        self.assertEqual(r["phase_trend_ns"], 100)
+        self.assertIsNone(r["cycles"][0]["expected_start_ns"])
+
+    def test_regressed_cycle_sequence_fails_closed(self):
+        r = analyse(marker("zew_cycle_start", 100, 10),
+                    marker("zew_cycle_start", 120, 9))
+        self.assertEqual(r["status"], "incomplete")
+        self.assertEqual(r["cycles"], [])
+
     def test_invalid_parameters(self):
         trace = SemanticTraceParser().parse([marker("zew_cycle_start", 100, 0)])
         for kwargs in ({"tag": -1, "period_ns": 1},
