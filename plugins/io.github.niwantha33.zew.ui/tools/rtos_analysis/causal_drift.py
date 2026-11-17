@@ -8,6 +8,7 @@ Only explicit application cycle markers can establish periodic phase.
 from __future__ import annotations
 
 from collections import defaultdict
+from bisect import bisect_left, bisect_right
 from semantic_trace import EventKind, SemanticTrace
 
 MARKERS = frozenset(("zew_cycle_release", "zew_cycle_start", "zew_cycle_finish"))
@@ -119,6 +120,7 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
     scheduler = [e for e in trace.events if e.kind in (
         EventKind.THREAD_SWITCHED_IN, EventKind.THREAD_SWITCHED_OUT,
         EventKind.THREAD_BLOCKED, EventKind.THREAD_SLEEPING)]
+    scheduler_times = [e.timestamp_ns for e in scheduler]
     known_names = {_tid(e.thread_id): e.thread_name for e in trace.events
                    if e.thread_id is not None and e.thread_name}
     if thread_id is not None and not any(
@@ -172,6 +174,8 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
         elif event.resource_phase == "failed":
             open_mutex.pop(key, None)
 
+    waits.sort(key=lambda item: item[1])
+    wait_starts = [item[1] for item in waits]
     cycles = []
     for seq, phases in ordered:
         start = phases["zew_cycle_start"]
@@ -188,7 +192,8 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
         intervening = set()
         if thread_id is not None and finish is not None:
             outside = False
-            for event in scheduler:
+            for event in scheduler[bisect_left(scheduler_times, start):
+                                   bisect_right(scheduler_times, finish)]:
                 ts = event.timestamp_ns
                 if ts < start or ts > finish:
                     continue
@@ -203,8 +208,10 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
                         intervening.add(known_names.get(tid, "thread ID " + tid))
         paired_waits = [
             {"object": obj, "blocked_ns": end - begin}
-            for tid, begin, end, obj in waits
-            if tid == thread_id and finish is not None and start <= begin <= end <= finish
+            for tid, begin, end, obj in (
+                waits[bisect_left(wait_starts, start):bisect_right(wait_starts, finish)]
+                if finish is not None else ())
+            if tid == thread_id and start <= begin <= end <= finish
         ] if thread_id is not None else []
         phase = start - expected
         completed = finish is not None
