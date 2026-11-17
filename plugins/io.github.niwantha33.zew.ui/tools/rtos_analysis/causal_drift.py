@@ -115,12 +115,37 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
     # an attempt, or attribute an unpaired wait.
     open_mutex = {}
     waits = []
+    active_thread = {}
+    irq_depth = defaultdict(int)
     for event in trace.events:
-        if event.kind != EventKind.MUTEX_TAKE or event.thread_id is None:
+        # Standard Zephyr mutex CTF may record only the object ID. Attribute
+        # it to the scheduler's active thread only while that identity is
+        # observed on the SAME stream and no ISR is active.
+        if event.kind == EventKind.THREAD_SWITCHED_IN:
+            if event.thread_id is not None:
+                active_thread[event.stream] = str(event.thread_id)
+            else:
+                active_thread.pop(event.stream, None)
+        elif event.kind == EventKind.THREAD_SWITCHED_OUT:
+            active_thread.pop(event.stream, None)
+        elif event.kind in (EventKind.THREAD_BLOCKED, EventKind.THREAD_SLEEPING):
+            if (event.thread_id is not None
+                    and active_thread.get(event.stream) == str(event.thread_id)):
+                active_thread.pop(event.stream, None)
+        elif event.kind == EventKind.ISR_ENTER:
+            irq_depth[event.stream] += 1
+        elif event.kind == EventKind.ISR_EXIT:
+            irq_depth[event.stream] = max(0, irq_depth[event.stream] - 1)
+        if event.kind != EventKind.MUTEX_TAKE:
             continue
         if event.object_id is None and not event.object_name:
             continue
-        key = (str(event.thread_id), event.object_id
+        tid = (str(event.thread_id) if event.thread_id is not None
+               else active_thread.get(event.stream) if irq_depth[event.stream] == 0
+               else None)
+        if tid is None:
+            continue
+        key = (tid, event.object_id
                if event.object_id is not None else "name:" + event.object_name)
         if event.resource_phase == "blocking":
             open_mutex[key] = event.timestamp_ns
