@@ -37,6 +37,7 @@ FILES = (
 # When a helper is added, the guard fails until it is classified honestly.
 MODULE_FEATURES = {
     "analyze_trace": "Offline CTF summary",
+    "causal_drift": "Explicit task-cycle drift diagnostics (CLI, offline)",
     "capture_snapshot": "RAM CTF snapshot capture",
     "contention_detector": "Priority inversion detection",
     "contention_report": "Long resource contention detection",
