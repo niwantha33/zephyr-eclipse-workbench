@@ -155,6 +155,10 @@ The update publication process checks packaged p2 artifacts and recorded
 digests separately from the offline Evidence CLI.
 [Debug guide](docs/DEBUG_REGISTERS_AND_THREADS.md) · [Publication design](docs/PRIVATE_UPDATE_PUBLISH.md).
 
+### RTOS Task Drift & Causal Diagnostics (offline preview)
+
+The opt-in [Task Drift analyzer](docs/RTOS_CAUSAL_DRIFT.md) uses explicit Zephyr CTF cycle markers to report **observed periodic phase drift, dispatch delay, scheduler interruptions and paired mutex blocking** from saved captures. Unlike switch-in-based heuristics, it does not mistake repeated preemption for new task activations. CLI-only: no live drift view, injected firmware hooks, gate attribution or physical-hardware validation is claimed.
+
 ### Debug Trace Console and RTOS investigation
 
 The **Zephyr Debug Trace Console** inspects effective build configuration
