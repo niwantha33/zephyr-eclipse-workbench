@@ -9,6 +9,7 @@ from pathlib import Path
 
 from cpu_analysis import account
 from contention_detector import ContentionDetector, DEFAULT_THRESHOLD_US
+from causal_drift import analyze_drift
 from synchronization_analysis import summarize
 from semantic_trace import EventKind, SemanticTraceParser
 from thread_timeline import build_intervals
@@ -148,13 +149,25 @@ def contention_report(trace, threshold_us=DEFAULT_THRESHOLD_US):
                          for f in report.findings]}
 
 
+def drift_report(trace, tag, period_ns, thread_id=None, anchor_ns=None, deadline_ns=None):
+    result = analyze_drift(trace, tag=tag, period_ns=period_ns, thread_id=thread_id,
+                           anchor_ns=anchor_ns, deadline_ns=deadline_ns)
+    return {"schema_version": 1, "kind": "causal_drift", "incomplete": result["status"] == "incomplete",
+            **result}
+
+
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
-    cli.add_argument("--mode", choices=("cpu", "contention"), required=True)
+    cli.add_argument("--mode", choices=("cpu", "contention", "causal_drift"), required=True)
     cli.add_argument("--ctf", required=True, type=Path)
     cli.add_argument("--start-ns", type=int)
     cli.add_argument("--end-ns", type=int)
     cli.add_argument("--threshold-us", type=int, default=DEFAULT_THRESHOLD_US)
+    cli.add_argument("--tag", type=int, help="Explicit application task tag (uint32)")
+    cli.add_argument("--period-us", type=int, help="Declared task cycle period in microseconds")
+    cli.add_argument("--thread-id", help="Optional observed CTF thread ID for scheduler/mutex attribution")
+    cli.add_argument("--anchor-ns", type=int, help="Optional absolute expected release epoch, nanoseconds")
+    cli.add_argument("--deadline-us", type=int, help="Optional completion deadline relative to release/anchor")
     args = cli.parse_args()
     if (args.ctf.is_symlink() or not args.ctf.is_dir()
             or not (args.ctf / "metadata").is_file()
@@ -164,12 +177,24 @@ def main():
         cli.error("Start and end must be supplied together.")
     if not 0 <= args.threshold_us <= 86_400_000_000:
         cli.error("Threshold must be 0..86400000000 microseconds.")
+    if args.mode == "causal_drift":
+        if args.tag is None or not 0 <= args.tag <= 0xFFFFFFFF:
+            cli.error("--tag must be an explicit application uint32 task tag.")
+        if args.period_us is None or not 1 <= args.period_us <= 86_400_000_000:
+            cli.error("--period-us must be a positive period not exceeding one day.")
+        if args.deadline_us is not None and not 1 <= args.deadline_us <= 86_400_000_000:
+            cli.error("--deadline-us must be positive and bounded.")
+        if args.anchor_ns is not None and args.anchor_ns < 0:
+            cli.error("--anchor-ns must be nonnegative.")
     trace = SemanticTraceParser().parse(args.ctf)
     if trace.decoder_unavailable:
         cli.error("Babeltrace 2 bt2 unavailable for the selected Python: " + trace.error)
     try:
         payload = (cpu_report(trace, args.start_ns, args.end_ns) if args.mode == "cpu"
-                   else contention_report(trace, args.threshold_us))
+                   else contention_report(trace, args.threshold_us) if args.mode == "contention"
+                   else drift_report(trace, args.tag, args.period_us * 1000,
+                                     args.thread_id, args.anchor_ns,
+                                     args.deadline_us * 1000 if args.deadline_us is not None else None))
     except ValueError as exc:
         cli.error(str(exc))
     print(json.dumps(payload, ensure_ascii=True, separators=(",", ":")))
