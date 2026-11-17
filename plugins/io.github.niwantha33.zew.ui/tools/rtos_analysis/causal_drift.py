@@ -33,6 +33,17 @@ def _invalid(reason):
             "reference": "unavailable", "observed_max_abs_phase_ns": None}
 
 
+def _tid(value):
+    """Treat numeric Zephyr thread IDs in hex/decimal as the same identity."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    try:
+        return str(int(raw, 0)) if raw.lower().startswith("0x") else str(int(raw))
+    except (ValueError, OverflowError):
+        return raw
+
+
 def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
                   thread_id: str | None = None, anchor_ns: int | None = None,
                   deadline_ns: int | None = None) -> dict:
@@ -93,7 +104,7 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
     if any(m.get("zew_cycle_start") is None for m in marker_by_seq.values()):
         return _invalid("Missing cycle start marker; partial cycle cannot be timed.")
     if thread_id is not None:
-        thread_id = str(thread_id)
+        thread_id = _tid(thread_id)
     ordered = sorted(marker_by_seq.items())
     first_seq, first = ordered[0]
     relative_reference = first["zew_cycle_start"] - first_seq * period_ns
@@ -108,10 +119,10 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
     scheduler = [e for e in trace.events if e.kind in (
         EventKind.THREAD_SWITCHED_IN, EventKind.THREAD_SWITCHED_OUT,
         EventKind.THREAD_BLOCKED, EventKind.THREAD_SLEEPING)]
-    known_names = {str(e.thread_id): e.thread_name for e in trace.events
+    known_names = {_tid(e.thread_id): e.thread_name for e in trace.events
                    if e.thread_id is not None and e.thread_name}
     if thread_id is not None and not any(
-            str(e.thread_id) == thread_id for e in scheduler):
+            _tid(e.thread_id) == thread_id for e in scheduler):
         return _invalid("Selected thread_id has no scheduler evidence.")
 
     # Mutex blocking evidence is an explicitly paired blocking -> acquired
@@ -127,14 +138,14 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
         # observed on the SAME stream and no ISR is active.
         if event.kind == EventKind.THREAD_SWITCHED_IN:
             if event.thread_id is not None:
-                active_thread[event.stream] = str(event.thread_id)
+                active_thread[event.stream] = _tid(event.thread_id)
             else:
                 active_thread.pop(event.stream, None)
         elif event.kind == EventKind.THREAD_SWITCHED_OUT:
             active_thread.pop(event.stream, None)
         elif event.kind in (EventKind.THREAD_BLOCKED, EventKind.THREAD_SLEEPING):
             if (event.thread_id is not None
-                    and active_thread.get(event.stream) == str(event.thread_id)):
+                    and active_thread.get(event.stream) == _tid(event.thread_id)):
                 active_thread.pop(event.stream, None)
         elif event.kind == EventKind.ISR_ENTER:
             irq_depth[event.stream] += 1
@@ -144,7 +155,7 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
             continue
         if event.object_id is None and not event.object_name:
             continue
-        tid = (str(event.thread_id) if event.thread_id is not None
+        tid = (_tid(event.thread_id) if event.thread_id is not None
                else active_thread.get(event.stream) if irq_depth[event.stream] == 0
                else None)
         if tid is None:
@@ -181,7 +192,7 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
                 ts = event.timestamp_ns
                 if ts < start or ts > finish:
                     continue
-                tid = str(event.thread_id) if event.thread_id is not None else None
+                tid = _tid(event.thread_id) if event.thread_id is not None else None
                 if event.kind == EventKind.THREAD_SWITCHED_OUT and tid == thread_id:
                     outside = True
                 elif event.kind == EventKind.THREAD_SWITCHED_IN:
