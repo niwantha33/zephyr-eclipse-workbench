@@ -158,6 +158,16 @@ class DriftTests(unittest.TestCase):
         self.assertEqual(r["status"], "incomplete")
         self.assertEqual(r["cycles"], [])
 
+    def test_hex_cli_thread_id_matches_decimal_ctf_id(self):
+        r = analyse(ev("thread_switched_in", 90, tid="536875572"),
+                    marker("zew_cycle_start", 100, 0),
+                    ev("thread_switched_out", 120, tid="536875572"),
+                    ev("thread_switched_in", 140, tid="536875572"),
+                    marker("zew_cycle_finish", 200, 0),
+                    thread_id="0x20001234")
+        self.assertEqual(r["status"], "ok")
+        self.assertEqual(r["cycles"][0]["scheduler_interruptions_observed"], 1)
+
     def test_invalid_parameters(self):
         trace = SemanticTraceParser().parse([marker("zew_cycle_start", 100, 0)])
         for kwargs in ({"tag": -1, "period_ns": 1},
