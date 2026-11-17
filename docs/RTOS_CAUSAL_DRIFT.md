@@ -39,6 +39,16 @@ Release and start must refer to the same activation, with a race-free sequence
 handoff. The release marker must represent the *actual* schedule release point.
 A marker in a task after it wakes cannot prove it was released on time.
 
+## Open inside Zephyr Eclipse Workbench
+
+Select an imported Zephyr project, then **Zephyr > Advanced Tools >
+Tracing & RTOS > Task Drift (Saved CTF)**. Choose a saved CTF directory,
+enter the task tag and period, optionally the CTF thread ID, explicit expected
+anchor and deadline, then click **Analyze**. The view shows a read-only
+cycle table with phase, start lateness, observed release-to-start time,
+switch interruptions, paired mutex blocks and intervening scheduled threads.
+No automatic capture or running-target reads are performed.
+
 ## Run on a matching saved trace
 
 From the repository root with the managed Python interpreter:
