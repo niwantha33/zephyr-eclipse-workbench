@@ -61,6 +61,7 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
 
     marker_by_seq = defaultdict(dict)
     observed_streams = set()
+    last_sequence_for_phase = {}
     for raw in trace.raw_records:
         if raw.get("kind") != "event" or str(raw.get("name", "")).rsplit(":", 1)[-1] != "named_event":
             continue
@@ -78,6 +79,9 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
             return _invalid("Cycle count exceeds the bounded limit.")
         if phase in marker_by_seq[seq]:
             return _invalid("Duplicate phase marker for one cycle; sequence identity ambiguous.")
+        if phase in last_sequence_for_phase and seq <= last_sequence_for_phase[phase]:
+            return _invalid("Phase sequence wraps or regresses; epoch is ambiguous.")
+        last_sequence_for_phase[phase] = seq
         marker_by_seq[seq][phase] = timestamp
         observed_streams.add(raw.get("stream"))
     if not marker_by_seq:
@@ -95,8 +99,8 @@ def analyze_drift(trace: SemanticTrace, *, tag: int, period_ns: int,
     relative_reference = first["zew_cycle_start"] - first_seq * period_ns
     reference = "explicit_anchor" if anchor_ns is not None else "first_observed_start"
     expected_anchor = anchor_ns if anchor_ns is not None else relative_reference
-    if expected_anchor < 0:
-        return _invalid("Sequence and period yield a negative reference epoch.")
+    # A relative first-observed reference may legitimately be negative if
+    # the application started its sequence before this trace window.
 
     # A scheduler switch is evidence about who ran, not a cycle boundary.
     # Report switch interruption and observed intervening threads; never
