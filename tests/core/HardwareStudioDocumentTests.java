@@ -4,17 +4,18 @@ import io.github.niwantha33.zew.ui.HardwareStudioDocument;
 import java.nio.file.Path;
 import java.util.List;
 
-/** Pure Java browser-handoff contract: no SWT, browser, probe or network. */
+/** Pure Java browser handoff contract: no SWT, browser, probe or network. */
 public final class HardwareStudioDocumentTests {
     private static void check(boolean value, String message) {
         if (!value) throw new AssertionError(message);
     }
     private static void rejects(Runnable code) {
         try { code.run(); throw new AssertionError("Expected fail-closed document"); }
-        catch (IllegalArgumentException expected) { /* invalid template or payload */ }
+        catch (IllegalArgumentException expected) { /* invalid template */ }
     }
     public static void main(String[] args) {
         final String template = "<!doctype html><script>const DATA = __HARDWARE_STUDIO_DATA__;</script>";
+        final String q = Character.toString((char) 34);
         String malicious = "</script><script>alert('x')</script>\n\\\"";
         var nodes = List.of(
                 new DtsGraphModel.Node("/", "/", "okay", "", "", 1),
@@ -33,21 +34,21 @@ public final class HardwareStudioDocumentTests {
                 "project <>", "build\\path", "/leds/blue", false);
         check(html.startsWith("<!doctype html>") && !html.contains("__HARDWARE_STUDIO_DATA__"),
                 "fixed offline resource interpolates exactly once");
-        check(html.contains("\\"observed\\":true") && html.contains("\\"stale\\":false"),
+        check(html.contains(q+"observed"+q+":true") && html.contains(q+"stale"+q+":false"),
                 "observed and stale statuses reflect the snapshot");
-        check(html.contains("\\"kind\\":\\"gpio\\"") && html.contains("\\"line\\":5"),
+        check(html.contains(q+"kind"+q+":"+q+"gpio"+q)
+                && html.contains(q+"line"+q+":5"),
                 "typed verified graph references and source lines survive");
         check(!html.contains(malicious) && !html.contains("</script><script>alert")
                 && html.contains("\\u003c/script\\u003e"),
                 "untrusted node text is inert JSON, never executable script");
         check(!html.contains("project <>") && !html.contains("build\\path"),
                 "project context is escaped as data");
-        check(html.contains("\\"limited\\":false"), "bounded focus evidence declared");
+        check(html.contains(q+"limited"+q+":false"), "bounded focus evidence declared");
         var unavailable = HardwareStudioDocument.render(template,
-                DtsGraphModel.unavailable("Build first"),
-                "","", "", false);
-        check(unavailable.contains("\\"observed\\":false")
-                && unavailable.contains("\\"nodes\\":[]")
+                DtsGraphModel.unavailable("Build first"), "", "", "", false);
+        check(unavailable.contains(q+"observed"+q+":false")
+                && unavailable.contains(q+"nodes"+q+": []".replace(" ",""))
                 && unavailable.contains("Build first"), "empty evidence is not fabricated");
         rejects(() -> HardwareStudioDocument.render("<html>missing</html>",
                 result, "", "", "", false));
