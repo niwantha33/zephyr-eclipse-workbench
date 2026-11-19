@@ -52,7 +52,8 @@ def main():
     expected = {
         "navigation", "search", "cards", "wires", "viewport", "detail",
         "references", "refresh", "fit", "zoomIn", "zoomOut",
-        "theme", "openSource", "openGraph",
+        "theme", "openSource", "openGraph", "help", "helpDialog",
+        "closeHelp", "category",
     }
     assert expected <= parser.ids, "Missing interactive Hardware Studio element"
     assert "const DATA = __HARDWARE_STUDIO_DATA__;" in parser.inline_script
