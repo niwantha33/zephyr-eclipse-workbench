@@ -88,7 +88,9 @@ public final class HardwareStudioSmoke {
             return;
         }
         var previous = shell.getBounds();
+        boolean wasMaximized = shell.getMaximized();
         try {
+            shell.setMaximized(false);
             for (int[] resolution : new int[][] {{1366, 768}, {1920, 1080}}) {
                 shell.setBounds(screen.x, screen.y, resolution[0], resolution[1]);
                 shell.setActive();
@@ -104,6 +106,7 @@ public final class HardwareStudioSmoke {
             }
         } finally {
             shell.setBounds(previous);
+            shell.setMaximized(wasMaximized);
             shell.layout(true, true);
         }
     }
