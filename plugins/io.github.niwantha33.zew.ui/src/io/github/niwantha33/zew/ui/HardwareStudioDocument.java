@@ -15,6 +15,12 @@ public final class HardwareStudioDocument {
 
     public static String render(String template, DtsGraphModel.Snapshot observation,
                                 String project, String build, String focus, boolean stale) {
+        return render(template, observation, project, build, focus, stale, "dark");
+    }
+
+    public static String render(String template, DtsGraphModel.Snapshot observation,
+                                String project, String build, String focus, boolean stale,
+                                String selectedTheme) {
         if (template == null || template.length() > 180_000
                 || template.indexOf(TOKEN) < 0
                 || template.indexOf(TOKEN) != template.lastIndexOf(TOKEN))
@@ -26,6 +32,7 @@ public final class HardwareStudioDocument {
                 + snapshot.edges().size() * 90);
         json.append("{\"project\":"); quote(json, project);
         json.append(",\"build\":"); quote(json, build);
+        json.append(",\"theme\":"); quote(json, "light".equals(selectedTheme) ? "light" : "dark");
         json.append(",\"state\":"); quote(json, snapshot.state());
         json.append(",\"reason\":"); quote(json, snapshot.explanation());
         json.append(",\"sha256\":"); quote(json, snapshot.sha256());
