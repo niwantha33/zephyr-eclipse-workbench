@@ -239,7 +239,9 @@ public final class HardwareStudioView extends ViewPart {
         String buildName = build == null ? "" : build.toString();
         try {
             String document = HardwareStudioDocument.render(template, evidence, projectName,
-                    buildName, selectedFocus, staleSnapshot, theme, boardName, profileName);
+                    buildName, selectedFocus,
+                    staleSnapshot && evidence != null && evidence.observed(),
+                    theme, boardName, profileName);
             browser.setText(document);
         } catch (RuntimeException invalid) {
             browser.setText("<html><body><h2>Hardware Studio unavailable</h2>"
