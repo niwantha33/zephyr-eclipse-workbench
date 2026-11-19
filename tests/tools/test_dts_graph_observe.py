@@ -137,8 +137,8 @@ class DtsObserverTests(unittest.TestCase):
         foreign = self.application.parent / "another-app"
         foreign.mkdir()
         (self.build / "CMakeCache.txt").write_text(
-            "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\\n"
-            "APPLICATION_SOURCE_DIR:PATH=" + str(foreign) + "\\n")
+            "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\n"
+            "APPLICATION_SOURCE_DIR:PATH=" + str(foreign) + "\n")
         state, digest, reason, nodes, edges = graph.observed(
             self.zephyr, self.application, self.build)
         self.assertEqual(state, "mismatch")
@@ -148,8 +148,8 @@ class DtsObserverTests(unittest.TestCase):
         foreign = self.application.parent / "other-app"
         foreign.mkdir()
         (self.build / "CMakeCache.txt").write_text(
-            "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\\n"
-            "CMAKE_HOME_DIRECTORY:INTERNAL=" + str(foreign) + "\\n")
+            "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\n"
+            "CMAKE_HOME_DIRECTORY:INTERNAL=" + str(foreign) + "\n")
         state, digest, reason, nodes, edges = graph.observed(
             self.zephyr, self.application, self.build)
         self.assertEqual(state, "mismatch")
