@@ -54,6 +54,7 @@ public final class HardwareStudioView extends ViewPart {
     private String boardName = "";
     private String profileName = "";
     private DtsGraphModel.Snapshot snapshot;
+    private boolean staleSnapshot = true;
 
     @Override
     public void createPartControl(Composite parent) {
@@ -133,6 +134,7 @@ public final class HardwareStudioView extends ViewPart {
             boardName = "";
             profileName = "";
             snapshot = null;
+            staleSnapshot = true;
             focus = "";
             render(DtsGraphModel.unavailable("Choose an open Zephyr project and configured build."), "");
             return;
@@ -168,6 +170,7 @@ public final class HardwareStudioView extends ViewPart {
         final org.eclipse.swt.widgets.Display uiDisplay = getSite().getShell().getDisplay();
         final String selectedFocus = focus;
         snapshot = null;
+        staleSnapshot = true;
         boardName = "";
         profileName = "";
         render(DtsGraphModel.unavailable("Inspecting selected generated Devicetree…"), "");
@@ -200,6 +203,7 @@ public final class HardwareStudioView extends ViewPart {
                 }
                 if (monitor.isCanceled() || generation.get() != token) return Status.CANCEL_STATUS;
                 final var result = observed;
+                final boolean resultStale = isStale(result, selected, selectedBuild);
                 final String resultBoard = foundBoard;
                 final String resultProfile = foundProfile;
                 uiDisplay.asyncExec(() -> {
@@ -207,6 +211,7 @@ public final class HardwareStudioView extends ViewPart {
                             || !selectedBuild.equals(build) || getSite().getShell().isDisposed())
                         return;
                     snapshot = result;
+                    staleSnapshot = resultStale;
                     boardName = resultBoard;
                     profileName = resultProfile;
                     render(result, selectedFocus);
@@ -223,6 +228,7 @@ public final class HardwareStudioView extends ViewPart {
         generation.incrementAndGet();
         if (job != null) job.cancel();
         snapshot = observation;
+        staleSnapshot = true; // synthetic installed-smoke evidence is never a fresh real build.
         focus = selectedFocus == null ? "" : selectedFocus;
         render(snapshot, focus);
     }
@@ -233,7 +239,7 @@ public final class HardwareStudioView extends ViewPart {
         String buildName = build == null ? "" : build.toString();
         try {
             String document = HardwareStudioDocument.render(template, evidence, projectName,
-                    buildName, selectedFocus, isStale(evidence), theme, boardName, profileName);
+                    buildName, selectedFocus, staleSnapshot, theme, boardName, profileName);
             browser.setText(document);
         } catch (RuntimeException invalid) {
             browser.setText("<html><body><h2>Hardware Studio unavailable</h2>"
@@ -242,12 +248,14 @@ public final class HardwareStudioView extends ViewPart {
         }
     }
 
-    private boolean isStale(DtsGraphModel.Snapshot evidence) {
+    private static boolean isStale(DtsGraphModel.Snapshot evidence,
+                                   IProject selectedProject, Path selectedBuild) {
         if (evidence == null || !evidence.observed()) return false;
-        if (project == null || build == null || evidence.generated() == null) return true;
+        if (selectedProject == null || selectedBuild == null || evidence.generated() == null)
+            return true;
         try {
-            Path root = project.getLocation().toFile().toPath().toRealPath();
-            Path buildRoot = build.toRealPath();
+            Path root = selectedProject.getLocation().toFile().toPath().toRealPath();
+            Path buildRoot = selectedBuild.toRealPath();
             Path generated = evidence.generated().toRealPath();
             if (!generated.equals(buildRoot.resolve("zephyr/zephyr.dts"))
                     || !Files.isRegularFile(generated) || Files.size(generated) > 4_194_304)
@@ -315,7 +323,7 @@ public final class HardwareStudioView extends ViewPart {
             if (!selectedBuild.startsWith(root)
                     || !source.equals(selectedBuild.resolve("zephyr/zephyr.dts"))
                     || !Files.isRegularFile(source) || Files.size(source) > 2_000_000
-                    || isStale(snapshot)) return;
+                    || isStale(snapshot, project, build)) return;
             byte[] content = Files.readAllBytes(source);
             if (content.length > 2_000_000) return;
             String fingerprint = HexFormat.of().formatHex(
