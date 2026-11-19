@@ -192,7 +192,8 @@ public final class HardwareStudioView extends ViewPart {
                     Path script = Path.of(FileLocator.toFileURL(entry).toURI());
                     observed = DtsGraphLoader.load(Path.of(python), script,
                             Path.of(workspace, "zephyr"),
-                            selected.getLocation().toFile().toPath(), selectedBuild);
+                            selected.getLocation().toFile().toPath(), selectedBuild,
+                            monitor::isCanceled);
                 } catch (Exception unavailable) {
                     observed = DtsGraphModel.unavailable(
                             "Devicetree inspection unavailable: " + unavailable.getClass().getSimpleName());
