@@ -222,15 +222,33 @@ public final class HardwareStudioView extends ViewPart {
     }
 
     private boolean isStale(DtsGraphModel.Snapshot evidence) {
-        if (project == null || evidence == null || !evidence.observed()
-                || evidence.generated() == null) return false;
+        if (evidence == null || !evidence.observed()) return false;
+        if (project == null || build == null || evidence.generated() == null) return true;
         try {
-            Path overlay = project.getLocation().toFile().toPath().resolve("app.overlay");
-            Path generated = evidence.generated();
-            return Files.isRegularFile(overlay) && Files.isRegularFile(generated)
-                    && Files.getLastModifiedTime(overlay).compareTo(
-                            Files.getLastModifiedTime(generated)) > 0;
-        } catch (IOException unverified) {
+            Path root = project.getLocation().toFile().toPath().toRealPath();
+            Path buildRoot = build.toRealPath();
+            Path generated = evidence.generated().toRealPath();
+            if (!generated.equals(buildRoot.resolve("zephyr/zephyr.dts"))
+                    || !Files.isRegularFile(generated) || Files.size(generated) > 4_194_304)
+                return true;
+            String actual = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(Files.readAllBytes(generated)));
+            if (!actual.equals(evidence.sha256())) return true;
+            var builtAt = Files.getLastModifiedTime(generated);
+            Path config = root.resolve("prj.conf");
+            if (Files.isRegularFile(config)
+                    && Files.getLastModifiedTime(config).compareTo(builtAt) > 0) return true;
+            int count = 0;
+            try (var overlays = Files.newDirectoryStream(root, "*.overlay")) {
+                for (Path overlay : overlays) {
+                    if (++count > 500 || Files.isSymbolicLink(overlay)
+                            || Files.getLastModifiedTime(overlay).compareTo(builtAt) > 0)
+                        return true;
+                }
+            }
+            return false;
+        } catch (Exception unverified) {
+            // Unknown freshness is never silently promoted to verified evidence.
             return true;
         }
     }
