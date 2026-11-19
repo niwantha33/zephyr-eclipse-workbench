@@ -176,6 +176,9 @@ public final class HardwareStudioSmoke {
             check(String.valueOf(eval(web, "document.getElementById('graphCount').textContent"))
                             .contains("observed"),
                     "real installed renderer displays the explicit test-only node count");
+            check(String.valueOf(eval(web, "document.getElementById('evidencePill').textContent"))
+                            .contains("CI FIXTURE"),
+                    "screenshot fixture must be visibly labelled as NOT REAL HARDWARE");
             check(Boolean.TRUE.equals(eval(web, "document.getElementById('openSource').disabled")),
                     "no source action is offered for an unverified CI fixture");
             check(Boolean.TRUE.equals(eval(web, "document.getElementById('openGraph').disabled")) == false,
