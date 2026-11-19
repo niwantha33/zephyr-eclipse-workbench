@@ -64,6 +64,18 @@ public final class HardwareStudioView extends ViewPart {
             }
             browser = new Browser(parent, SWT.NONE);
             browser.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+            browser.addLocationListener(new org.eclipse.swt.browser.LocationAdapter() {
+                @Override public void changing(org.eclipse.swt.browser.LocationEvent event) {
+                    // The UI is inline and offline. Never navigate to remote or
+                    // local-file pages that could acquire the privileged bridge.
+                    if (event.location != null) {
+                        String uri = event.location.toLowerCase(java.util.Locale.ROOT);
+                        if (uri.startsWith("http:") || uri.startsWith("https:")
+                                || uri.startsWith("file:") || uri.startsWith("ftp:"))
+                            event.doit = false;
+                    }
+                }
+            });
             // Exact, minimal command channel; there is no general file/URL/JS executor.
             new BrowserFunction(browser, "zewHardwareAction") {
                 @Override public Object function(Object[] arguments) {
@@ -71,14 +83,21 @@ public final class HardwareStudioView extends ViewPart {
                             || !(arguments[0] instanceof String action)
                             || !(arguments[1] instanceof String path))
                         return "DENIED";
-                    switch (action) {
-                        case "refresh" -> { if (path.isEmpty()) load(); }
-                        case "focus" -> focus(path);
-                        case "source" -> openSource(path);
-                        case "graph" -> openClassicGraph(path);
-                        default -> { return "DENIED"; }
-                    }
-                    return "OK";
+                    if (!java.util.Set.of("refresh", "focus", "source", "graph").contains(action)
+                            || ("refresh".equals(action) && !path.isEmpty())
+                            || (!"refresh".equals(action) && verifiedNode(path) == null))
+                        return "DENIED";
+                    browser.getDisplay().asyncExec(() -> {
+                        if (browser == null || browser.isDisposed()) return;
+                        switch (action) {
+                            case "refresh" -> load();
+                            case "focus" -> focus(path);
+                            case "source" -> openSource(path);
+                            case "graph" -> openClassicGraph(path);
+                            default -> { /* guarded above */ }
+                        }
+                    });
+                    return "QUEUED";
                 }
             };
             render(DtsGraphModel.unavailable(
