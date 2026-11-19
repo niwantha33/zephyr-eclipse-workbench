@@ -79,7 +79,7 @@ public final class ConfigurationHomeView extends ViewPart {
     private Text[] pageText;
     private Button previous, next, validateApply, example;
     private Composite hardwareAdvanced, systemAdvanced;
-    private Button showHardwareAdvanced, showSystemAdvanced, dtsGraphButton;
+    private Button showHardwareAdvanced, showSystemAdvanced, dtsGraphButton, hardwareStudioButton;
     private Text buildDetails, kconfigOriginSymbol, kconfigOriginResult;
     private final AtomicInteger originGeneration = new AtomicInteger();
     private Job originJob;
@@ -266,6 +266,10 @@ public final class ConfigurationHomeView extends ViewPart {
         validateApply = button(nav, "Open verified review…", this::reviewSelected);
         // Main Hardware view is the default entry point. Make the graph
         // discoverable here, not only in the separate Advanced Studio toolbar.
+        hardwareStudioButton = button(right, "Hardware Studio — interactive explorer",
+                this::openHardwareStudio);
+        hardwareStudioButton.setToolTipText("Open the modern read-only hardware graph "
+                + "inside Eclipse using the exact selected board and build profile.");
         dtsGraphButton = button(right, "DTS Graph Studio — connected blocks",
                 this::openDtsGraph);
         dtsGraphButton.setToolTipText("Visualize selected-build zephyr.dts nodes, "
@@ -1136,6 +1140,30 @@ public final class ConfigurationHomeView extends ViewPart {
      * Configuration Home. Do not recompute a generic build path or infer
      * hardware edges from the selected controller's display name.
      */
+    private void openHardwareStudio() {
+        if (project == null || !project.isAccessible()) {
+            MessageDialog.openInformation(getSite().getShell(), "Hardware Studio",
+                    "Select a Zephyr application in Project Explorer first.");
+            return;
+        }
+        Evidence selected = evidence;
+        if (selected == null || selected.build() == null) {
+            MessageDialog.openInformation(getSite().getShell(), "Hardware Studio",
+                    "Select a board/profile and configure or build to generate zephyr.dts.");
+            return;
+        }
+        String preferred = selected.nodes().stream()
+                .anyMatch(node -> node.path().equals(controllerPath)) ? controllerPath : null;
+        try {
+            var part = getSite().getPage().showView(HardwareStudioView.ID);
+            if (part instanceof HardwareStudioView studio)
+                studio.displayProject(project, selected.build(), preferred);
+        } catch (PartInitException unavailable) {
+            MessageDialog.openError(getSite().getShell(), "Hardware Studio",
+                    "The embedded Hardware Studio is not installed: " + unavailable.getMessage());
+        }
+    }
+
     private void openDtsGraph() {
         if (project == null || !project.isAccessible()) {
             MessageDialog.openInformation(getSite().getShell(), "DTS Graph Studio",
