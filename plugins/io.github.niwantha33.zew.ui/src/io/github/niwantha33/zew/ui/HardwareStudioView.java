@@ -43,6 +43,7 @@ public final class HardwareStudioView extends ViewPart {
     private final AtomicInteger generation = new AtomicInteger();
     private Browser browser;
     private Label fallback;
+    private Button fallbackAction;
     private String template;
     private AutoCloseable contextSubscription;
     private Job job;
@@ -114,9 +115,9 @@ public final class HardwareStudioView extends ViewPart {
                     + "The existing native DTS Graph Studio still works. "
                     + "On Windows check WebView2; on Linux check WebKitGTK. "
                     + unavailable.getClass().getSimpleName());
-            Button classic = new Button(parent, SWT.PUSH);
-            classic.setText("Open classic Devicetree Graph Studio");
-            classic.addListener(SWT.Selection, event -> openClassicGraph(focus));
+            fallbackAction = new Button(parent, SWT.PUSH);
+            fallbackAction.setText("Open classic Devicetree Graph Studio");
+            fallbackAction.addListener(SWT.Selection, event -> openClassicGraph(focus));
         }
         contextSubscription = ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
                 .subscribe(this::onSelection);
@@ -164,6 +165,7 @@ public final class HardwareStudioView extends ViewPart {
         if (job != null) job.cancel();
         final IProject selected = project;
         final Path selectedBuild = build;
+        final org.eclipse.swt.widgets.Display uiDisplay = getSite().getShell().getDisplay();
         final String selectedFocus = focus;
         snapshot = null;
         boardName = "";
@@ -199,7 +201,7 @@ public final class HardwareStudioView extends ViewPart {
                 final var result = observed;
                 final String resultBoard = foundBoard;
                 final String resultProfile = foundProfile;
-                getSite().getShell().getDisplay().asyncExec(() -> {
+                uiDisplay.asyncExec(() -> {
                     if (generation.get() != token || project != selected
                             || !selectedBuild.equals(build) || getSite().getShell().isDisposed())
                         return;
@@ -339,7 +341,7 @@ public final class HardwareStudioView extends ViewPart {
 
     @Override public void setFocus() {
         if (browser != null && !browser.isDisposed()) browser.setFocus();
-        else if (fallback != null && !fallback.isDisposed()) fallback.setFocus();
+        else if (fallbackAction != null && !fallbackAction.isDisposed()) fallbackAction.setFocus();
     }
 
     @Override public void dispose() {
