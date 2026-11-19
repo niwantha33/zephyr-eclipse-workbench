@@ -50,6 +50,8 @@ public final class HardwareStudioView extends ViewPart {
     private Path build;
     private String focus = "";
     private String theme = "dark";
+    private String boardName = "";
+    private String profileName = "";
     private DtsGraphModel.Snapshot snapshot;
 
     @Override
@@ -127,6 +129,8 @@ public final class HardwareStudioView extends ViewPart {
             if (job != null) job.cancel();
             project = null;
             build = null;
+            boardName = "";
+            profileName = "";
             snapshot = null;
             focus = "";
             render(DtsGraphModel.unavailable("Choose an open Zephyr project and configured build."), "");
@@ -162,12 +166,22 @@ public final class HardwareStudioView extends ViewPart {
         final Path selectedBuild = build;
         final String selectedFocus = focus;
         snapshot = null;
+        boardName = "";
+        profileName = "";
         render(DtsGraphModel.unavailable("Inspecting selected generated Devicetree…"), "");
         job = new Job("Hardware Studio · inspect selected Devicetree") {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 DtsGraphModel.Snapshot observed;
+                String foundBoard = "";
+                String foundProfile = "";
                 try {
                     Properties settings = ProjectContext.settings(selected);
+                    Path expected = ProjectContext.buildDirectory(selected, settings)
+                            .toAbsolutePath().normalize();
+                    if (!expected.equals(selectedBuild))
+                        throw new IOException("Selected build does not match current board/profile");
+                    foundBoard = settings.getProperty("board", "");
+                    foundProfile = ProjectContext.profileIdentity(settings);
                     String workspace = settings.getProperty("workspace");
                     String python = settings.getProperty("python");
                     var entry = Activator.getDefault().getBundle().getEntry("scripts/dts_graph_observe.py");
@@ -183,11 +197,15 @@ public final class HardwareStudioView extends ViewPart {
                 }
                 if (monitor.isCanceled() || generation.get() != token) return Status.CANCEL_STATUS;
                 final var result = observed;
+                final String resultBoard = foundBoard;
+                final String resultProfile = foundProfile;
                 getSite().getShell().getDisplay().asyncExec(() -> {
                     if (generation.get() != token || project != selected
                             || !selectedBuild.equals(build) || getSite().getShell().isDisposed())
                         return;
                     snapshot = result;
+                    boardName = resultBoard;
+                    profileName = resultProfile;
                     render(result, selectedFocus);
                 });
                 return Status.OK_STATUS;
@@ -212,7 +230,7 @@ public final class HardwareStudioView extends ViewPart {
         String buildName = build == null ? "" : build.toString();
         try {
             String document = HardwareStudioDocument.render(template, evidence, projectName,
-                    buildName, selectedFocus, isStale(evidence), theme);
+                    buildName, selectedFocus, isStale(evidence), theme, boardName, profileName);
             browser.setText(document);
         } catch (RuntimeException invalid) {
             browser.setText("<html><body><h2>Hardware Studio unavailable</h2>"
