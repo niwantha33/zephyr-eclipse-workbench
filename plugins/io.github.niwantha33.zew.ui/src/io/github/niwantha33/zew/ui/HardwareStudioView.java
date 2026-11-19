@@ -49,6 +49,7 @@ public final class HardwareStudioView extends ViewPart {
     private IProject project;
     private Path build;
     private String focus = "";
+    private String theme = "dark";
     private DtsGraphModel.Snapshot snapshot;
 
     @Override
@@ -68,12 +69,9 @@ public final class HardwareStudioView extends ViewPart {
                 @Override public void changing(org.eclipse.swt.browser.LocationEvent event) {
                     // The UI is inline and offline. Never navigate to remote or
                     // local-file pages that could acquire the privileged bridge.
-                    if (event.location != null) {
-                        String uri = event.location.toLowerCase(java.util.Locale.ROOT);
-                        if (uri.startsWith("http:") || uri.startsWith("https:")
-                                || uri.startsWith("file:") || uri.startsWith("ftp:"))
-                            event.doit = false;
-                    }
+                    if (event.location != null && !event.location.isBlank()
+                            && !"about:blank".equalsIgnoreCase(event.location))
+                        event.doit = false;
                 }
             });
             // Exact, minimal command channel; there is no general file/URL/JS executor.
@@ -83,9 +81,11 @@ public final class HardwareStudioView extends ViewPart {
                             || !(arguments[0] instanceof String action)
                             || !(arguments[1] instanceof String path))
                         return "DENIED";
-                    if (!java.util.Set.of("refresh", "focus", "source", "graph").contains(action)
+                    if (!java.util.Set.of("refresh", "focus", "source", "graph", "theme").contains(action)
                             || ("refresh".equals(action) && !path.isEmpty())
-                            || (!"refresh".equals(action) && verifiedNode(path) == null))
+                            || ("theme".equals(action) && !"dark".equals(path) && !"light".equals(path))
+                            || (!"theme".equals(action) && !"refresh".equals(action)
+                                    && verifiedNode(path) == null))
                         return "DENIED";
                     browser.getDisplay().asyncExec(() -> {
                         if (browser == null || browser.isDisposed()) return;
@@ -94,6 +94,7 @@ public final class HardwareStudioView extends ViewPart {
                             case "focus" -> focus(path);
                             case "source" -> openSource(path);
                             case "graph" -> openClassicGraph(path);
+                            case "theme" -> theme = path;
                             default -> { /* guarded above */ }
                         }
                     });
@@ -122,6 +123,8 @@ public final class HardwareStudioView extends ViewPart {
     /** Explicit exact-build handoff from Configuration Studio; no guessed global build. */
     public void displayProject(IProject selected, Path selectedBuild, String preferredNode) {
         if (selected == null || !selected.isAccessible() || selectedBuild == null) {
+            generation.incrementAndGet();
+            if (job != null) job.cancel();
             project = null;
             build = null;
             snapshot = null;
@@ -209,7 +212,7 @@ public final class HardwareStudioView extends ViewPart {
         String buildName = build == null ? "" : build.toString();
         try {
             String document = HardwareStudioDocument.render(template, evidence, projectName,
-                    buildName, selectedFocus, isStale(evidence));
+                    buildName, selectedFocus, isStale(evidence), theme);
             browser.setText(document);
         } catch (RuntimeException invalid) {
             browser.setText("<html><body><h2>Hardware Studio unavailable</h2>"
