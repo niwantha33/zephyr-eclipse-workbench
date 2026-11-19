@@ -45,6 +45,14 @@ public final class HardwareStudioDocumentTests {
         check(!html.contains("project <>") && !html.contains("build\\path"),
                 "project context is escaped as data");
         check(html.contains(q+"limited"+q+":false"), "bounded focus evidence declared");
+        var lightHtml = HardwareStudioDocument.render(template, result,
+                "project", "build", "/soc", false, "light");
+        check(lightHtml.contains(q+"theme"+q+":"+q+"light"+q),
+                "the browser theme survives exact-build rerenders");
+        var untrustedTheme = HardwareStudioDocument.render(template, result,
+                "project", "build", "/soc", false, "javascript:alert(1)");
+        check(untrustedTheme.contains(q+"theme"+q+":"+q+"dark"+q),
+                "the theme bridge is an exact allowlist");
         var unavailable = HardwareStudioDocument.render(template,
                 DtsGraphModel.unavailable("Build first"), "", "", "", false);
         check(unavailable.contains(q+"observed"+q+":false")
