@@ -49,6 +49,18 @@ One package per scoped PR where feasible; do not merge before required tests. Ha
 
 Open from Zephyr → Configure & Build → Hardware Studio — Devicetree, or the primary Configuration Studio Hardware tab.
 
+## Implementation snapshot (source changes staged on draft PR #266)
+
+- **HS-01**: Eclipse view/command, offline webview, exact build-selection bus, fallback and bundled parser implemented; baseline Linux and Windows CI passed before later release-candidate changes.
+- **HS-02**: polished responsive three-pane light/dark UI, readable error states, keyboard help and test-only installed screenshot capture at 1366×768 / 1920×1080. Screen capture and manual DPI review remain release qualification gates.
+- **HS-03**: exact Zephyr checkout, CMake application-source cache identity, generated DTS SHA-256, stale overlay/config detection and safe partial-evidence semantics implemented.
+- **HS-04–06**: parent-child/reference graph, zoom/fit/drag and keyboard pan, read-only evidence inspector, guarded source jump, text search, keyword categories, enabled/disabled status and capped navigator. Large target-specific regression qualification pending.
+- **HS-07**: Configuration Studio integration and return to classic DTS Graph preserved. Regression smoke on installed workbench included.
+- **HS-08–09**: p2 packaging, CI, integrity/smoke tests and release documentation prepared; **candidate only until exact-head CI, real board, screenshots, upgrade/rollback and reviewer gates pass**.
+- **HS-10–12**: intentionally postponed beyond v0.1; editing overlays, pin/planner authority and RTOS Observatory links are NOT shipped or claimed.
+
+The screenshot fixture is visibly marked **CI FIXTURE — NO REAL BOARD OR PROBE** and is evidence of rendering only, not actual silicon support.
+
 ## Release gates
 
 - [ ] Linux/Windows Java core and Tycho/p2 build pass at the exact PR head.

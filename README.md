@@ -88,6 +88,7 @@ WebView2 (Windows) / WebKitGTK (Linux) are intended runtimes, with a native
 fallback if unavailable. Build, installed-UI and hardware qualification
 remain separate and may be incomplete.
 [November work packages and release gates](docs/HARDWARE_STUDIO_V01_WORKPACKAGES.md).
+[Hardware Studio release-candidate qualification and installation](docs/HARDWARE_STUDIO_RELEASE_READINESS.md).
 
 ### Devicetree Graph Studio
 
