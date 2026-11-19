@@ -30,11 +30,11 @@
 .canvas-head{padding:14px 17px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);background:var(--panel);min-width:0}
 .canvas-title{flex:1;min-width:0}.canvas-title h2{font-size:13px;margin:0 0 4px}.canvas-title p{font-size:10px;color:var(--muted);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .controls{display:flex;gap:5px}.controls button{min-width:32px;text-align:center}
-.viewport{position:relative;flex:1;overflow:auto;scrollbar-color:var(--line) transparent;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:28px 28px;background-color:var(--bg)}
-.scaled{position:relative;min-width:100%;min-height:100%}.graph{position:relative;transform-origin:top left}
+.viewport{position:relative;flex:1;overflow:auto;cursor:grab;scrollbar-color:var(--line) transparent;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:28px 28px;background-color:var(--bg)}
+.viewport.dragging{cursor:grabbing}.scaled{position:relative;min-width:100%;min-height:100%}.graph{position:relative;transform-origin:top left}
 .wires{position:absolute;inset:0;overflow:visible;pointer-events:none}.wires line{stroke:#5c94b2;stroke-width:2}.wires line.reference{stroke:var(--accent);stroke-dasharray:6 6;stroke-width:2.1}
 .node{position:absolute;width:240px;min-height:82px;border-radius:12px;border:1px solid #4a7793;background:var(--panel);box-shadow:0 7px 18px var(--shadow);color:var(--text);padding:10px 12px;text-align:left}
-.node[aria-pressed=true]{border:2px solid var(--accent);box-shadow:0 0 0 3px var(--soft),0 10px 25px var(--shadow)}.node.disabled{border-color:#926c45}.node strong{display:block;font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.node span{display:block;color:var(--muted);font-size:10px;white-space:nowrap;text-overflow:ellipsis;margin-top:5px}.node .node-meta{color:var(--good)}.node.disabled .node-meta{color:var(--warn)}
+.node[aria-pressed=true]{border:2px solid var(--accent);box-shadow:0 0 0 3px var(--soft),0 10px 25px var(--shadow)}.node.disabled{border-color:#926c45}.node.unknown{border-color:var(--muted)}.node strong{display:block;font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.node span{display:block;color:var(--muted);font-size:10px;white-space:nowrap;text-overflow:ellipsis;margin-top:5px}.node .node-meta{color:var(--good)}.node.disabled .node-meta{color:var(--warn)}.node.unknown .node-meta{color:var(--muted)}
 .empty{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:min(90%,440px);border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:25px;text-align:center;box-shadow:0 12px 38px var(--shadow)}.empty .symbol{margin:auto}.empty h2{font-size:19px;margin:15px 0 8px}.empty p{color:var(--muted);font-size:12px;line-height:1.6}
 .canvas-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 17px;border-top:1px solid var(--line);font-size:10px;color:var(--muted);background:var(--panel)}
 .legend{display:flex;align-items:center;gap:12px}.swatch{width:17px;display:inline-block;border-top:2px solid var(--accent);margin-right:5px}.swatch.solid{border-top-color:#5c94b2}.swatch.dashed{border-top-style:dashed}
@@ -43,6 +43,7 @@
 .refs{display:flex;flex-direction:column;gap:7px}.ref{padding:9px 10px;background:var(--bg);border-radius:8px;font-size:10px;overflow-wrap:anywhere}
 .note{border-left:3px solid var(--warn);background:var(--panel2);padding:12px;color:var(--muted);font-size:11px;line-height:1.6}
 .detail-actions{display:flex;flex-direction:column;gap:7px;margin:0 16px 14px}.detail-actions button{width:100%}
+ .help-overlay[hidden]{display:none}.help-overlay{position:fixed;inset:0;z-index:10;background:rgba(1,10,19,.72);display:grid;place-items:center;padding:18px}.help-panel{width:min(100%,540px);border:1px solid var(--line);border-radius:14px;padding:22px 25px;background:var(--panel);box-shadow:0 25px 70px var(--shadow)}.help-panel h2{margin:0 0 12px;font-size:19px}.help-panel p{font-size:12px;line-height:1.7;color:var(--muted)}.help-panel .action{float:right}
 @media(max-width:1040px){.main{grid-template-columns:185px minmax(220px,1fr) 236px}.top{gap:8px}.brand{min-width:152px}.brand strong{font-size:12px}.panel-head{padding:11px}}
 @media(max-width:750px){.main{grid-template-columns:165px minmax(160px,1fr)}.details{grid-column:1/-1;border-left:0;border-top:1px solid var(--line);max-height:230px}.main{grid-template-rows:minmax(180px,1fr) auto}.sidebar{grid-row:1}.workspace{grid-row:1}.context small{display:none}.top{flex-wrap:wrap}}
 </style>
@@ -53,6 +54,7 @@
   <div class="brand"><div class="symbol" aria-hidden="true">◇</div><div><strong>Hardware Studio</strong><small>DEVICETREE EXPLORER · 0.1</small></div></div>
   <div class="context"><strong id="projectTitle">Select a Zephyr project</strong><small id="buildTitle">Waiting for an exact build selection</small></div>
   <span class="pill" id="evidencePill">NO BUILD</span>
+  <button class="action" id="help" type="button" title="Help and keyboard shortcuts" aria-haspopup="dialog">Help</button>
   <button class="action" id="theme" type="button" title="Toggle the interface theme">Light theme</button>
   <button class="action primary" id="refresh" type="button">↻ Refresh</button>
 </header>
@@ -65,6 +67,7 @@
         <button type="button" class="filter" data-filter="enabled" aria-pressed="false">Enabled</button>
         <button type="button" class="filter" data-filter="disabled" aria-pressed="false">Disabled</button>
       </div>
+      <select class="search" id="category" aria-label="Filter by name or compatible type" title="Text-based categories from node names and compatible strings, not package or runtime evidence"><option value="">All peripheral keywords</option><option value="gpio">GPIO</option><option value="uart">UART</option><option value="i2c">I²C</option><option value="spi">SPI</option><option value="can">CAN</option><option value="adc">ADC</option><option value="pwm">PWM</option><option value="clock">Clock</option><option value="timer">Timer</option></select>
     </div>
     <div class="nav-count" id="navCount">No nodes loaded</div>
     <nav class="nav-scroll" id="navigation" aria-label="Devicetree nodes"></nav>
@@ -87,6 +90,7 @@
     <div class="detail-actions"><button class="action primary" id="openSource" type="button" disabled>Open generated DTS source</button><button class="action" id="openGraph" type="button" disabled>Classic Graph Studio</button></div>
   </aside>
 </div>
+<div class="help-overlay" id="helpDialog" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle"><div class="help-panel"><h2 id="helpTitle">Explore verified hardware evidence</h2><p>Search by path, compatible string or label. Choose a node to inspect its generated Devicetree record. Double-click a graph card, or select a navigator result, to centre its neighbourhood. Arrow keys pan the graph; + and − zoom, F fits, ? opens help, and Escape closes help.</p><p>Solid lines represent observed hierarchy. Dashed lines represent parser-resolved references. Enabled is a Devicetree configuration status, <strong>not</strong> electrical wiring, a running driver or live hardware state. Unknown status is never treated as enabled.</p><button type="button" class="action primary" id="closeHelp">Close</button></div></div>
 </div>
 <script>
 'use strict';
@@ -96,7 +100,7 @@ const map = new Map(DATA.nodes.map(node => [node.path,node]));
 let selected = DATA.focus && map.has(DATA.focus) ? DATA.focus : '';
 let filter = 'all';
 let zoom = 1;
-let theme = 'dark';
+let theme = DATA.theme === 'light' ? 'light' : 'dark';
 function host(action, path) {
   if (typeof window.zewHardwareAction === 'function') return window.zewHardwareAction(action, path || '');
   $('graphSub').textContent = 'Eclipse bridge unavailable; open Configuration Studio.';
@@ -108,7 +112,7 @@ function element(tag, className, text) {
   if (text !== undefined) el.textContent = text;
   return el;
 }
-function enabled(node){return !node.status.toLowerCase().includes('disabled');}
+function statusKind(node){const s=String(node.status||'').toLowerCase();return s==='okay'||s.startsWith('okay (')?'enabled':s==='disabled'?'disabled':'unknown';}
 function nodeName(node){return node.name || node.path;}
 function showInspector() {
   const node=map.get(selected), root=$('detail'), refs=$('references');
@@ -120,6 +124,7 @@ function showInspector() {
   const fields=[['DTS path',node.path],['DTS status',node.status+' (build configuration only)'],['Compatible',node.compatible||'Not declared'],['Node labels',node.labels||'None'],['Generated line',String(node.line)]];
   fields.forEach(pair=>{const f=element('div','field');f.append(element('span','field-name',pair[0]),element('span','field-value',pair[1]));root.append(f);});
   const edges=DATA.edges.filter(edge=>edge.source===selected && edge.kind!=='hierarchy');
+  const evidence=element('div','field');evidence.append(element('span','field-name','Generated DTS SHA-256'),element('span','field-value',DATA.sha256||'Not verified'));root.append(evidence);
   if(!edges.length)refs.append(element('div','hint','No resolved outgoing links in this focused view. This does not prove none exist.'));
   edges.forEach(edge=>refs.append(element('div','ref',edge.kind+' · '+edge.property+' → '+edge.target+(edge.detail?' · '+edge.detail:''))));
 }
@@ -133,9 +138,10 @@ function select(path, focusGraph) {
 }
 function renderNavigator(){
   const term=$('search').value.trim().toLowerCase(), matches=DATA.nodes.filter(node=>{
-    if(filter==='enabled'&&!enabled(node))return false;
-    if(filter==='disabled'&&enabled(node))return false;
-    return !term || (node.path+' '+node.compatible+' '+node.labels).toLowerCase().includes(term);
+    if(filter!=='all' && statusKind(node)!==filter)return false;
+    const category=$('category').value;
+    if(category && !(node.path+' '+node.name+' '+node.compatible).toLowerCase().includes(category))return false;
+    return !term || (node.path+' '+node.name+' '+node.compatible+' '+node.labels).toLowerCase().includes(term);
   });
   const nav=$('navigation');nav.replaceChildren();
   $('navCount').textContent=matches.length+' matching nodes'+(matches.length>140?' · first 140 shown':'');
@@ -144,7 +150,8 @@ function renderNavigator(){
     const b=element('button','nav-item');
     b.type='button';b.dataset.path=node.path;b.setAttribute('aria-current',String(node.path===selected));
     b.title=node.path;
-    b.append(element('span','dot '+(enabled(node)?'ok':'disabled')));
+    b.append(element('span','dot '+(statusKind(node)==='enabled'?'ok':statusKind(node)==='disabled'?'disabled':'')));
+    b.setAttribute('aria-label',nodeName(node)+' — '+node.status+' — '+node.path);
     const content=element('span','');content.append(element('span','name',nodeName(node)),element('span','sub',node.path));
     b.append(content);b.addEventListener('click',()=>select(node.path,true));nav.append(b);
   });
@@ -164,6 +171,7 @@ function renderGraph(){
   $('graph').style.width=DATA.width+'px';$('graph').style.height=DATA.height+'px';
   $('wires').setAttribute('width',String(DATA.width));$('wires').setAttribute('height',String(DATA.height));
   $('cards').replaceChildren();$('wires').replaceChildren();
+  $('viewport').querySelectorAll('.empty').forEach(el=>el.remove());
   const placements=new Map(DATA.cards.map(c=>[c.path,c]));
   DATA.edges.forEach(edge=>{
     const a=placements.get(edge.source),b=placements.get(edge.target);if(!a||!b)return;
@@ -179,7 +187,8 @@ function renderGraph(){
   });
   DATA.cards.forEach(card=>{
     const node=map.get(card.path);if(!node)return;
-    const b=element('button','node'+(enabled(node)?'':' disabled'));
+    const kind=statusKind(node);
+    const b=element('button','node'+(kind==='enabled'?'':' '+kind));
     b.type='button';b.dataset.path=node.path;b.setAttribute('aria-pressed',String(node.path===selected));
     b.title=node.path;b.style.left=card.x+'px';b.style.top=card.y+'px';
     b.append(element('strong','',nodeName(node)),element('span','',node.compatible||'No compatible string'),element('span','node-meta',node.status));
@@ -207,16 +216,47 @@ function init(){
     renderNavigator();
   }));
   $('search').addEventListener('input',renderNavigator);
+  $('search').addEventListener('keydown',event=>{if(event.key==='Escape'){$('search').value='';renderNavigator();}});
+  $('category').addEventListener('change',renderNavigator);
   $('zoomIn').addEventListener('click',()=>setZoom(zoom+.12));
   $('zoomOut').addEventListener('click',()=>setZoom(zoom-.12));
   $('fit').addEventListener('click',fitGraph);
   $('refresh').addEventListener('click',()=>host('refresh',''));
   $('openSource').addEventListener('click',()=>{if(selected)host('source',selected)});
   $('openGraph').addEventListener('click',()=>{if(selected)host('graph',selected)});
-  $('theme').addEventListener('click',()=>{
-    theme=theme==='dark'?'light':'dark';document.documentElement.classList.toggle('light',theme==='light');
-    $('theme').textContent=theme==='dark'?'Light theme':'Dark theme';
+  function applyTheme(){document.documentElement.classList.toggle('light',theme==='light');$('theme').textContent=theme==='dark'?'Light theme':'Dark theme';}
+  applyTheme();
+  $('theme').addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';applyTheme();host('theme',theme);});
+  let priorFocus=null;
+  function showHelp(){priorFocus=document.activeElement;$('helpDialog').hidden=false;$('closeHelp').focus();}
+  function hideHelp(){$('helpDialog').hidden=true;if(priorFocus&&priorFocus.focus)priorFocus.focus();}
+  $('help').addEventListener('click',showHelp);
+  $('closeHelp').addEventListener('click',hideHelp);
+  $('helpDialog').addEventListener('click',event=>{if(event.target===$('helpDialog'))hideHelp();});
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!$('helpDialog').hidden){event.preventDefault();hideHelp();return;}
+    if(event.key==='?'&&!event.ctrlKey&&!event.altKey&&event.target.tagName!=='INPUT'){event.preventDefault();showHelp();}
   });
+  const vp=$('viewport');
+  vp.addEventListener('keydown',event=>{
+    const keys={ArrowUp:[0,-80],ArrowDown:[0,80],ArrowLeft:[-80,0],ArrowRight:[80,0]};
+    if(keys[event.key]){event.preventDefault();vp.scrollBy(keys[event.key][0],keys[event.key][1]);}
+    else if(event.key==='+'||event.key==='='){event.preventDefault();setZoom(zoom+.12);}
+    else if(event.key==='-'){event.preventDefault();setZoom(zoom-.12);}
+    else if(event.key.toLowerCase()==='f'){event.preventDefault();fitGraph();}
+  });
+  let dragging=null;
+  vp.addEventListener('pointerdown',event=>{
+    if(event.button!==0||event.target.closest('button'))return;
+    dragging={id:event.pointerId,x:event.clientX,y:event.clientY,left:vp.scrollLeft,top:vp.scrollTop};
+    vp.setPointerCapture(event.pointerId);vp.classList.add('dragging');
+  });
+  vp.addEventListener('pointermove',event=>{if(!dragging||dragging.id!==event.pointerId)return;
+    vp.scrollLeft=dragging.left+(dragging.x-event.clientX);
+    vp.scrollTop=dragging.top+(dragging.y-event.clientY);
+  });
+  function endDrag(){dragging=null;vp.classList.remove('dragging');}
+  vp.addEventListener('pointerup',endDrag);vp.addEventListener('pointercancel',endDrag);
   $('viewport').addEventListener('wheel',event=>{
     if(!event.ctrlKey)return;event.preventDefault();setZoom(zoom+(event.deltaY<0?.08:-.08));
   },{passive:false});
