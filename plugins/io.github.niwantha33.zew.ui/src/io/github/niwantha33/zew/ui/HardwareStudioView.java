@@ -324,10 +324,10 @@ public final class HardwareStudioView extends ViewPart {
             Path source = snapshot.generated().toRealPath();
             if (!selectedBuild.startsWith(root)
                     || !source.equals(selectedBuild.resolve("zephyr/zephyr.dts"))
-                    || !Files.isRegularFile(source) || Files.size(source) > 2_000_000
+                    || !Files.isRegularFile(source) || Files.size(source) > 4_194_304
                     || isStale(snapshot, project, build)) return;
             byte[] content = Files.readAllBytes(source);
-            if (content.length > 2_000_000) return;
+            if (content.length > 4_194_304) return;
             String fingerprint = HexFormat.of().formatHex(
                     MessageDigest.getInstance("SHA-256").digest(content));
             if (!fingerprint.equals(snapshot.sha256())) return;
