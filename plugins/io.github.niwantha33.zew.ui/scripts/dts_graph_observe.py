@@ -61,6 +61,15 @@ def observed(zephyr: Path, application: Path, build: Path):
              re.findall(r"(?m)^ZEPHYR_BASE:[A-Z_]+=(.*)$", config)]
     if len(roots) != 1 or Path(roots[0]).resolve(strict=False) != zephyr:
         return ("mismatch", "", "Selected build and Zephyr checkout disagree.", [], [])
+    # A verified Zephyr checkout is insufficient when this build belongs to
+    # another application. Compare source-dir cache evidence when supplied.
+    for key in ("APPLICATION_SOURCE_DIR", "CMAKE_HOME_DIRECTORY"):
+        values = [value.strip() for value in re.findall(
+            rf"(?m)^{key}:[A-Z_]+=(.*)$", config)]
+        if len(values) > 1 or (values and
+                Path(values[0]).resolve(strict=False) != application):
+            return ("mismatch", "",
+                    "Selected build and application source disagree.", [], [])
     raw = checked(generated, MAX_DTS_BYTES)
     digest = hashlib.sha256(raw).hexdigest()
     if any(token in raw for token in FORBIDDEN):
