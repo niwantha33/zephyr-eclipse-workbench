@@ -133,6 +133,28 @@ class DtsObserverTests(unittest.TestCase):
         self.assertEqual(state, "mismatch")
         self.assertEqual((nodes, edges), ([], []))
 
+    def test_foreign_application_cache_does_not_show_other_project(self):
+        foreign = self.application.parent / "another-app"
+        foreign.mkdir()
+        (self.build / "CMakeCache.txt").write_text(
+            "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\\n"
+            "APPLICATION_SOURCE_DIR:PATH=" + str(foreign) + "\\n")
+        state, digest, reason, nodes, edges = graph.observed(
+            self.zephyr, self.application, self.build)
+        self.assertEqual(state, "mismatch")
+        self.assertEqual((nodes, edges), ([], []))
+
+    def test_foreign_cmake_home_directory_rejected(self):
+        foreign = self.application.parent / "other-app"
+        foreign.mkdir()
+        (self.build / "CMakeCache.txt").write_text(
+            "ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\\n"
+            "CMAKE_HOME_DIRECTORY:INTERNAL=" + str(foreign) + "\\n")
+        state, digest, reason, nodes, edges = graph.observed(
+            self.zephyr, self.application, self.build)
+        self.assertEqual(state, "mismatch")
+        self.assertEqual((nodes, edges), ([], []))
+
     def test_unbuilt_profile_does_not_invent_hardware(self):
         (self.build / "zephyr/zephyr.dts").unlink()
         state, digest, reason, nodes, edges = graph.observed(
