@@ -59,6 +59,7 @@ def main():
     assert "const DATA = __HARDWARE_STUDIO_DATA__;" in parser.inline_script
     assert "document.createElementNS" in parser.inline_script
     assert "textContent" in parser.inline_script, "DTS fields must be inserted as text"
+    assert "CI FIXTURE — NO HARDWARE" in parser.inline_script, "UI fixture screenshots require visible non-hardware warning"
     node = shutil.which("node")
     if node:
         with tempfile.TemporaryDirectory(prefix="zew-hardware-js-") as folder:
