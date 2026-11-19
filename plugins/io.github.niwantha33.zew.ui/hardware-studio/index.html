@@ -208,8 +208,13 @@ function init(){
   $('projectTitle').textContent=(DATA.project || 'Select a Zephyr project')+(DATA.board?'  ·  '+DATA.board:'')+(DATA.profile?'  ·  '+DATA.profile:'');
   $('buildTitle').textContent=DATA.build || 'Select a board/profile in Configuration Studio';
   const pill=$('evidencePill');
-  pill.textContent=DATA.stale?'BUILD MAY BE STALE':DATA.observed?(DATA.state==='hierarchy-only'?'HIERARCHY ONLY':'BUILT EVIDENCE'):'NO BUILD';
-  pill.className='pill '+(DATA.stale?'warn':DATA.observed?'good':'');
+  const fixture=String(DATA.reason||'').startsWith('CI FIXTURE');
+  if(fixture){
+    $('projectTitle').textContent='CI FIXTURE — DISPLAY TEST ONLY';
+    $('buildTitle').textContent='No real board, profile, firmware or connected target';
+  }
+  pill.textContent=fixture?'CI FIXTURE — NO HARDWARE':DATA.stale?'BUILD MAY BE STALE':DATA.observed?(DATA.state==='hierarchy-only'?'HIERARCHY ONLY':'BUILT EVIDENCE'):'NO BUILD';
+  pill.className='pill '+(fixture||DATA.stale?'warn':DATA.observed?'good':'');
   document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
     filter=button.dataset.filter;
     document.querySelectorAll('[data-filter]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
