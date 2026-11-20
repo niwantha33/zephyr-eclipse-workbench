@@ -53,7 +53,9 @@ def main():
     parser = Inspector()
     parser.feed(source)
     assert {"workspace", "detail", "detailactions", "refresh", "freshness",
-            "theme", "classic", "contextTitle", "contextSub"} <= parser.ids
+            "theme", "classic", "contextTitle", "contextSub",
+            "reviewDialog", "commitReview", "cancelReview",
+            "reviewDiff", "reviewStatus"} <= parser.ids
     assert "const DATA = __CONFIGURATION_STUDIO_DATA__;" in parser.script
     assert "textContent" in parser.script
     assert "innerHTML" not in parser.script and "document.write" not in parser.script
