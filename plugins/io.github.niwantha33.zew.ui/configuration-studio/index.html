@@ -233,7 +233,7 @@ function hardware(root) {
       const tile=btn('',()=>selected('hardware',row),'tile');tile.dataset.choice='hardware:'+row.category;
       tile.setAttribute('aria-pressed',String(choice && choice.type==='hardware' && choice.item.category===row.category));
       add(tile,'strong','',row.category);
-      const status=add(tile,'span','status');status.append(add(el('span'),'span','dot '+tone(row.state)));status.append(document.createTextNode(stateText(row.state)));
+      const status=add(tile,'span','status');status.append(el('span','dot '+tone(row.state)));status.append(document.createTextNode(stateText(row.state)));
       add(tile,'span','desc',row.controller || row.explanation);
       list.append(tile);
     });
