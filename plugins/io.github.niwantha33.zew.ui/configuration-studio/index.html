@@ -67,6 +67,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .review-panel h2{margin:7px 0 12px;font-size:17px}.review-panel p{color:var(--muted);font-size:11px;line-height:1.6}
 .diff{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:13px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;margin:15px 0}
 .review-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.kdep-map{display:grid;gap:5px;margin:12px 0 16px}
+.kdep-node{border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:9px;min-width:0;overflow-wrap:anywhere}
+.kdep-node strong{display:block;font-size:10px;color:var(--accent);margin-bottom:5px}
+.kdep-node span{display:block;font:10px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
+.kdep-node.target{border-color:var(--accent);background:var(--soft)}
+.kdep-arrow{text-align:center;color:var(--muted);font-size:10px}
 .foot{border-top:1px solid var(--line);padding:8px 14px;background:var(--panel);font-size:10px;color:var(--muted);display:flex;justify-content:space-between;gap:10px;align-items:center}
 [hidden]{display:none!important}
 @media(max-width:1020px){.main{grid-template-columns:170px minmax(250px,1fr) 232px}.workspace{padding:15px}.top{gap:8px}.context small{display:none}.flow{gap:8px}.flowbox{padding:10px}}
@@ -444,7 +450,21 @@ function renderInspector() {
       p('Selects (from this symbol)',resolved.selects || 'None reported',source);
       p('Implies (from this symbol)',resolved.implies || 'None reported',source);
       if(resolved.help)p('Upstream help',resolved.help,source);
-      add(section,'p','muted','Read-only metadata from Kconfiglib in this selected build; no electrical wiring, transitive dependency proof or runtime behaviour is implied.');
+      const graph=add(section,'div','kdep-map');
+      const dep=add(graph,'div','kdep-node');
+      add(dep,'strong','','DIRECT DEPENDENCY EXPRESSION');
+      add(dep,'span','',resolved.dependencies || '(none reported)');
+      add(graph,'div','kdep-arrow','↓ evaluated for this symbol');
+      const target=add(graph,'div','kdep-node target');
+      add(target,'strong','','OBSERVED SYMBOL');
+      add(target,'span','',item.symbol+' = '+item.value);
+      add(graph,'div','kdep-arrow','↓ declares relationships (not activation proof)');
+      const related=add(graph,'div','kdep-node');
+      add(related,'strong','','SELECTS / IMPLIES EXPRESSION');
+      add(related,'span','',resolved.selects || resolved.implies
+        ? 'selects: '+(resolved.selects || '(none)')+'\nimplies: '+(resolved.implies || '(none)')
+        : 'No direct select or imply expressions reported');
+      add(section,'p','muted','These are direct Kconfiglib declarations in the last selected build. Diagram edges describe their syntax, not runtime activation, all transitive dependencies, or a successful new request.');
     }
     const canToggle=item.toggle && !DATA.dirty && DATA.freshness==='CURRENT_SNAPSHOT';
     const assigned=resolved && resolved.available
