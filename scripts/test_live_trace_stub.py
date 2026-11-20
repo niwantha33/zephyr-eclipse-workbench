@@ -10,7 +10,6 @@ UI = ROOT / "plugins/io.github.niwantha33.zew.ui"
 JAVA = UI / "src/io/github/niwantha33/zew/ui/LiveTraceStreamingHandler.java"
 XML = UI / "plugin.xml"
 DOC = ROOT / "docs/LIVE_TRACE_STREAMING_DESIGN.md"
-LABEL = "Start Live Trace (not yet available)"
 COMMAND = "io.github.niwantha33.zew.liveTraceStreaming"
 
 source = JAVA.read_text(encoding="utf-8")
@@ -32,7 +31,9 @@ menu_entries = [n for n in root.iter("command") if n.get("commandId") == COMMAND
 assert len(commands) == 1
 assert len(handlers) == 1
 assert handlers[0].get("class") == "io.github.niwantha33.zew.ui.LiveTraceStreamingHandler"
-assert len(menu_entries) == 1 and menu_entries[0].get("label") == LABEL
+# An unsupported feature remains registered as an inert command for compatibility,
+# but must not appear as a misleading action in the task-focused menus.
+assert len(menu_entries) == 0
 assert DOC.is_file()
 design = DOC.read_text(encoding="utf-8")
 for term in ("NOT SUPPORTED", "RTT", "UART", "Network", "target RAM",
@@ -43,4 +44,4 @@ for path in (ROOT / "README.md", ROOT / "docs/DEBUG_TRACE_CONSOLE.md"):
     content = path.read_text(encoding="utf-8")
     assert "## Not supported" in content
     assert "live ctf streaming" in content.lower(), path
-print("PASS: disabled live CTF menu stub, design and unsupported documentation")
+print("PASS: live CTF remains disabled, hidden from menus, and documented as unsupported")
