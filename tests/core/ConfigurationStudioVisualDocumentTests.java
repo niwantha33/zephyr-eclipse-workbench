@@ -28,7 +28,7 @@ public final class ConfigurationStudioVisualDocumentTests {
         String html = ConfigurationStudioVisualDocument.render(template,
                 "project<>", "board", "debug", "C:\\workspace\\build",
                 overview, "CONFIG_GPIO=y\n# CONFIG_ADC is not set\n"
-                        + "CONFIG_QUOTED=\"\\\"hello\\\"\"\n",
+                        + "CONFIG_QUOTED=\"\\\"hello\\\"\"\\n",
                 hostile, true, "light", "software");
         check(html.contains("\"freshness\":\"UNVERIFIED_SNAPSHOT\""),
                 "unverified receipt is not promoted");
