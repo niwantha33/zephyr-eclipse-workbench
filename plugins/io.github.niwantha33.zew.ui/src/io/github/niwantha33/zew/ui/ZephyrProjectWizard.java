@@ -73,11 +73,12 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             buildAfterFinish = new Button(body, SWT.CHECK);
             buildAfterFinish.setText("Build firmware after Finish");
             buildAfterFinish.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            buildAfterFinish.setToolTipText("May prepare pinned SDK and West modules. "
-                    + "Leave unchecked to import or create without building.");
+            buildAfterFinish.setToolTipText("Schedules a first build and may prepare pinned SDK/West modules. "
+                    + "Eclipse's separate automatic-build preference still applies.");
             Label buildHint = new Label(body, SWT.WRAP);
-            buildHint.setText("Building can download verified dependencies. "
-                    + "You can always build later from Project > Build Project.");
+            buildHint.setText("This checkbox controls the wizard's initial build job. "
+                    + "If enabled, building may download verified dependencies. "
+                    + "Eclipse's own automatic-build setting remains independent.");
             buildHint.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
             setControl(body);
@@ -117,7 +118,7 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
     private final class Page extends WizardPage {
         Text name, location, environment, search;
         Button existing, createNew, continueButton, reloadBoards;
-        Label modeHelp, resultsHelp, selectedTarget;
+        Label modeHelp, detailsHint, resultsHelp, selectedTarget;
         String suggestedLocation = "";
         static final int RESULT_LIMIT = 120;
         Combo vendor, soc;
@@ -151,9 +152,8 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             Group projectDetails = section(body, "2   Project details", 3);
             name = field(projectDetails, "Project name", "MyZephyr", false);
             location = field(projectDetails, "Application folder", "", true);
-            Label detailsHint = new Label(projectDetails, SWT.WRAP);
-            detailsHint.setText("Importing? Select the folder containing CMakeLists.txt. "
-                    + "Your existing source files are not copied or replaced.");
+            detailsHint = new Label(projectDetails, SWT.WRAP);
+            detailsHint.setText(folderHint());
             detailsHint.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1));
 
             Group tools = section(body, "3   Zephyr environment", 3);
@@ -194,6 +194,8 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             }
             selectedTarget = new Label(hardware, SWT.WRAP);
             selectedTarget.setText("Selected target: none");
+            selectedTarget.setFont(org.eclipse.jface.resource.JFaceResources.getFontRegistry()
+                    .getBold(org.eclipse.jface.resource.JFaceResources.DIALOG_FONT));
             selectedTarget.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1));
             continueButton = new Button(hardware, SWT.PUSH);
             continueButton.setText("Review selected project  >");
@@ -286,6 +288,12 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             return combo;
         }
 
+        private String folderHint() {
+            return existing.getSelection()
+                    ? "Choose the folder containing CMakeLists.txt. Existing source stays in place."
+                    : "Use an empty folder. A basic Zephyr application will be created here.";
+        }
+
         private String modeDescription() {
             return existing.getSelection()
                     ? "Import: select a folder with CMakeLists.txt. Existing source stays in place; "
@@ -299,6 +307,7 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
                 location.setText("");
             if (createNew.getSelection()) updateSuggestedLocation();
             modeHelp.setText(modeDescription());
+            detailsHint.setText(folderHint());
             setDescription(existing.getSelection()
                     ? "Step 1 of 2: Import an existing application without copying its source."
                     : "Step 1 of 2: Create a new standalone application.");
