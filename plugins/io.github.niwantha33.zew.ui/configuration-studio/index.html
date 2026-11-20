@@ -187,7 +187,7 @@ function overview(root) {
   metric(metrics,'RAM CAPACITY',DATA.ram,'From generated DTS, not usage');
   metric(metrics,'BUILD PROFILE',DATA.profile,'Selected project configuration');
   noBuild(root);
-  add(root,'div','sectiontitle','How Zephyr configuration fits together');
+  add(root,'div','sectiontitle','How Zephyr configuration fits together (conceptual)');
   const flow=add(root,'div','flow');
   [['Project requests','prj.conf / overlays are editable source','software'],
    ['Resolved build','Kconfig and Devicetree reflect the build','hardware'],
