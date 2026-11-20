@@ -34,9 +34,9 @@ The inspector shows the selected item. The UI uses the same palette as Hardware 
 | CS-21 | Graphical interface | Offline bundled HTML/CSS/JS, light/dark, responsive cards, inspector, search | **Implemented; screenshot review outstanding** |
 | CS-22 | Evidence integration | Actual receipt state, bounded generated .config, safe JSON, truthful empty states | **Implemented; cross-board qualification outstanding** |
 | CS-23 | Guided editing UX | Visual switch requests, source-aware preview and guarded save; nonboolean/binding-aware advanced edit | **Partial implemented** — graphical on/off and remove override; exact preview/confirmation/backup in native SWT, full in-visual diff and scratch configure not yet implemented |
-| CS-24 | Dependency diagnostics | Symbol origin, select/imply/dependency explanation via upstream Kconfiglib | **Not implemented** — existing diagnostic action remains |
-| CS-25 | Hardware Studio handoff | Exact board/profile/node context, safe return, integrated source pane | **Partial** — same build opens in Hardware Studio |
-| CS-26 | Release qualification | Core, asset, installed smoke, Windows/Linux p2, high-DPI, upgrades | **Partial; release gates open** |
+| CS-24 | Dependency diagnostics | Symbol origin, select/imply/dependency explanation via upstream Kconfiglib | **Implemented** — bounded read-only graph and definitions via exact selected-build Kconfiglib; full transitive graph deliberately not inferred |
+| CS-25 | Hardware Studio handoff | Exact board/profile/node context, safe return, integrated source pane | **Implemented** — verified controller-path deep link, source browser and window-scoped return selection; physical validation deferred |
+| CS-26 | Release qualification | Core, asset, installed smoke, Windows/Linux p2, high-DPI, upgrades | **Automated gates implemented**, CI/p2 qualification and human DPI/upgrade/hardware acceptance **pending** |
 
 ## CS-23 implementation details
 
@@ -46,6 +46,13 @@ The inspector shows the selected item. The UI uses the same palette as Hardware 
 - Java rechecks project and build identity, current source Option, unsaved editor state, and for toggles the fresh configuration evidence receipt. The existing SWT editor performs the authoritative `ConfigurationStudioFiles.plan` preview, user confirmation, backed-up optimistic-lock commit, refresh, and subsequent-build warning.
 - Nonboolean values and dependency analysis are deep-linked to the original native Kconfig editor for correct type/binding review. Changing Kconfig requests is **not** proof of successful compilation or effective behavior. A new build is required.
 - Deliberately not claimed: whole-file diff within the web panel, cross-symbol dependency solver, scratch-CMake qualification of an unsaved Kconfig draft, automatic hardware pin allocation, or a saved source edit without native confirmation.
+
+## CS-24–26 final integration
+
+- CS-24: Selecting an exact generated `CONFIG_*` requests bounded upstream Kconfiglib inspection on an Eclipse background Job. Inspector shows real type, prompt, visibility, assignability, direct dependency expression/result, declarations, selects and implies, and an annotated expression map. A stale or absent selected build, missing Kconfiglib or changed board/profile produces an explicit unavailability result rather than a guessed graph. No project file is changed.
+- CS-25: Hardware cards hand off **only an existing generated-DTS controller path** and exact selected build to Hardware Studio. A second action enters existing DTS/DTSI source browsing. The window-scoped selection hub returns an explicitly selected node to the same Configuration Studio; no synthetic pins, channels or runtime states.
+- CS-26: An installed-Eclipse smoke now checks missing-project command denial and both studio navigation paths. Existing full Windows firmware, CodeQL, Python matrix, p2 payload inspection and strict evidence gate remain required. The Linux packaging step retries a transient Maven Central Tycho lookup using the already unit-tested bounded script, without suppressing genuine compilation failures. The two existing installed-workbench test passes now cover **1920×1080 and 1366×768**.
+- Release qualification report and human acceptance inventory: [CS-26 release qualification](CONFIGURATION_STUDIO_CS26_RELEASE_QUALIFICATION.md). **Do not mark UI screenshots, physical boards or installation upgrade/rollback passed until actual evidence is reviewed.**
 
 ## Verification
 
