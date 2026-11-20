@@ -66,7 +66,9 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
                     .getBold(org.eclipse.jface.resource.JFaceResources.DIALOG_FONT));
 
             summary = new Label(body, SWT.WRAP);
-            summary.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+            GridData summaryData = new GridData(SWT.FILL, SWT.TOP, true, false);
+            summaryData.widthHint = 700;
+            summary.setLayoutData(summaryData);
 
             buildAfterFinish = new Button(body, SWT.CHECK);
             buildAfterFinish.setText("Build firmware after Finish");
@@ -149,15 +151,17 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
             Group projectDetails = section(body, "2   Project details", 3);
             name = field(projectDetails, "Project name", "MyZephyr", false);
             location = field(projectDetails, "Application folder", "", true);
-            new Label(projectDetails, SWT.WRAP).setText(
-                    "For an import, browse to the folder containing CMakeLists.txt. Files are not copied.");
-            GridData detailsHint = new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1);
-            projectDetails.getChildren()[projectDetails.getChildren().length - 1].setLayoutData(detailsHint);
+            Label detailsHint = new Label(projectDetails, SWT.WRAP);
+            detailsHint.setText("Importing? Select the folder containing CMakeLists.txt. "
+                    + "Your existing source files are not copied or replaced.");
+            detailsHint.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1));
 
             Group tools = section(body, "3   Zephyr environment", 3);
             String workspace = Activator.getDefault().getPreferenceStore().getString("workspace");
+            Path workspacePath = workspace.isBlank() ? null : Path.of(workspace);
             String initial = selectedRoot != null ? selectedRoot
-                    : workspace.isBlank() ? "" : Path.of(workspace).getParent().toString();
+                    : workspacePath == null ? "" : (workspacePath.getParent() == null
+                            ? workspacePath.toString() : workspacePath.getParent().toString());
             environment = field(tools, "Ready setup folder", initial, true);
             reloadBoards = new Button(tools, SWT.PUSH);
             reloadBoards.setText("Reload available boards");
@@ -256,7 +260,17 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
                     var dialog = new DirectoryDialog(getShell());
                     if (!text.getText().isBlank()) dialog.setFilterPath(text.getText());
                     String chosen = dialog.open();
-                    if (chosen != null) text.setText(chosen);
+                    if (chosen != null) {
+                        text.setText(chosen);
+                        if ("Application folder".equals(title) && existing != null
+                                && existing.getSelection() && name != null
+                                && "MyZephyr".equals(name.getText())) {
+                            Path leaf = Path.of(chosen).getFileName();
+                            if (leaf != null && ResourcesPlugin.getWorkspace().validateName(
+                                    leaf.toString(), IResource.PROJECT).isOK())
+                                name.setText(leaf.toString());
+                        }
+                    }
                 });
             } else {
                 new Label(parent, SWT.NONE);
