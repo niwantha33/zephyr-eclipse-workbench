@@ -87,6 +87,17 @@ public final class ConfigurationStudioVisualDocumentTests {
         check(bounded.contains("\"settingsLimited\":true")
                         && !bounded.contains("\"symbol\":\"CONFIG_FIXTURE_5199\""),
                 "large generated configuration is explicitly bounded");
+        var more = new java.util.ArrayList<ConfigurationStudioFiles.Option>();
+        for (int i = 0; i < 5100; i++)
+            more.add(new ConfigurationStudioFiles.Option("GENERATED_" + i, "n", null, 0));
+        more.add(new ConfigurationStudioFiles.Option("UNRESOLVED_REPAIR", null, "y", 14));
+        var sourceOverflow = new ConfigurationStudioFiles.Snapshot(
+                more, "", "debug", Path.of("/workspace/application/prj.conf"));
+        String overflowHtml = ConfigurationStudioVisualDocument.render(template,
+                "", "", "", "", overview, "", "", false, "dark", "software", sourceOverflow);
+        check(overflowHtml.contains("\"symbol\":\"CONFIG_UNRESOLVED_REPAIR\"")
+                        && overflowHtml.contains("\"settingsLimited\":true"),
+                "project-owned unresolved requests remain visible even when generated settings exceed cap");
         System.out.println("ConfigurationStudioVisualDocumentTests PASS");
     }
 }
