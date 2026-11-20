@@ -1,8 +1,10 @@
 # Zephyr Profile Studio — named firmware configurations (v1)
 
-Zephyr Profile Studio extends the original three built-in modes
-(Application settings, Debug -Og, Release -O2) without changing their
-existing outputs. It is a project-owned, native Eclipse feature.
+Zephyr Profile Studio supports the full native Zephyr compiler-optimisation
+choice set: no optimisation (-O0), debug (-Og), size (-Os), speed (-O2) and
+aggressive size (-Oz), plus Application settings (no forced choice).
+The existing `default`, `debug`, `release` IDs and build outputs remain
+compatible. It is a project-owned, native Eclipse feature.
 **No profile is applied merely by selecting it**: build, flash and debug use
 the currently selected build path, but the firmware is current only after a
 successful configure/compile and evidence verification.
