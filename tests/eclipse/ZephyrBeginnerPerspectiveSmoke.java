@@ -46,10 +46,14 @@ public final class ZephyrBeginnerPerspectiveSmoke {
                 throw new IllegalStateException("Developer Workspace did not restore guide.");
             // A board browser without a selected project must render a safe,
             // usable empty state. The view itself never starts hardware IO.
-            var boards = page.showView("io.github.niwantha33.zew.ui.embeddedHubBoards");
-            if (boards == null || !page.isPartVisible(boards))
-                throw new IllegalStateException("Board Browser failed to open.");
-            page.hideView(boards);
+            try {
+                var boards = page.showView("io.github.niwantha33.zew.ui.embeddedHubBoards");
+                if (boards == null || !page.isPartVisible(boards))
+                    throw new IllegalStateException("Board Browser failed to open.");
+                page.hideView(boards);
+            } catch (org.eclipse.ui.PartInitException error) {
+                throw new IllegalStateException("Board Browser could not initialize.", error);
+            }
             System.out.println("PASS ZEPHYR WORKSPACES: guides and Board Browser registered");
         } finally {
             if (previous != null) page.setPerspective(previous);
