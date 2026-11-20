@@ -40,6 +40,14 @@ public final class ConfigurationStudioVisualDocument {
                                 String build, Overview overview, String effectiveConfig,
                                 String warning, boolean dirty, String theme, String section,
                                 ConfigurationStudioFiles.Snapshot source) {
+        return render(template, project, board, profile, build, overview, effectiveConfig,
+                warning, dirty, theme, section, source, "");
+    }
+
+    public static String render(String template, String project, String board, String profile,
+                                String build, Overview overview, String effectiveConfig,
+                                String warning, boolean dirty, String theme, String section,
+                                ConfigurationStudioFiles.Snapshot source, String focusedNode) {
         if (template == null || template.length() > MAX_HTML
                 || template.indexOf(SLOT) < 0
                 || template.indexOf(SLOT) != template.lastIndexOf(SLOT))
@@ -60,6 +68,10 @@ public final class ConfigurationStudioVisualDocument {
         json.append(",\"flash\":"); quote(json, overview == null ? "Unknown" : overview.flash().value());
         json.append(",\"ram\":"); quote(json, overview == null ? "Unknown" : overview.ram().value());
 
+        json.append(",\"focus\":"); quote(json, overview != null && focusedNode != null
+                && overview.peripherals().stream().anyMatch(row ->
+                        !row.controller().isBlank() && row.controller().equals(focusedNode))
+                ? focusedNode : "");
         json.append(",\"rows\":[");
         if (overview != null) {
             int limit = Math.min(MAX_ROWS, overview.peripherals().size());
