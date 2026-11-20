@@ -78,7 +78,10 @@ def main():
         with tempfile.TemporaryDirectory(prefix="zew-hardware-js-") as folder:
             path = Path(folder) / "hardware-studio.js"
             path.write_text(parser.inline_script, encoding="utf-8")
-            subprocess.run([node, "--check", str(path)], check=True, timeout=10)
+            # GitHub-hosted Windows runners can take >10s to initialise Node
+            # after an extensive Python test suite. Retain the syntax gate,
+            # but allow a bounded slow process startup (no silent skip).
+            subprocess.run([node, "--check", str(path)], check=True, timeout=45)
     print("HardwareStudioAssets PASS: offline packaged UI and JS syntax where Node is available")
 
 
