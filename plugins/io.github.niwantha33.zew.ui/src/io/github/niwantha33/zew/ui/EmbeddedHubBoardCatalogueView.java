@@ -114,6 +114,7 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
                 | SWT.V_SCROLL | SWT.H_SCROLL);
         table.setHeaderVisible(true);
         table.setLinesVisible(false);
+        table.setToolTipText("Click a row to preview. Double-click to open Project Properties for that target.");
         GridData resultsData = new GridData(SWT.FILL, SWT.FILL, true, true);
         resultsData.minimumHeight = 180;
         table.setLayoutData(resultsData);
@@ -380,6 +381,7 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
         basic.setText("");
         selectedTarget.setText("");
         technical.setText("");
+        changeBoard.setText("Use This Board...");
         changeBoard.setEnabled(false);
         resizeDetails();
     }
@@ -456,26 +458,27 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
 
     private void editProjectBoard() {
         EmbeddedHubBoardCatalogue.Entry entry = previewed();
-        if (project == null || !project.isAccessible() || entry == null
+        IProject selected = project;
+        if (selected == null || !selected.isAccessible() || entry == null
                 || entry.exactTarget().equals(activeTarget)) return;
         try {
             // Session-only suggestion for the native property page. The board
             // remains untouched until the user explicitly presses Apply.
-            project.setSessionProperty(ZephyrProjectPropertyPage.BOARD_BROWSER_TARGET,
+            selected.setSessionProperty(ZephyrProjectPropertyPage.BOARD_BROWSER_TARGET,
                     entry.exactTarget());
-            var dialog = PreferencesUtil.createPropertyDialogOn(getSite().getShell(), project,
+            var dialog = PreferencesUtil.createPropertyDialogOn(getSite().getShell(), selected,
                     "io.github.niwantha33.zew.projectProperties", null, null);
             if (dialog != null) {
                 dialog.open();
                 // Refresh even if dismissed: Apply may have committed before Cancel.
-                if (!status.isDisposed()) refreshFromCheckout(project);
+                if (!status.isDisposed() && project == selected) refreshFromCheckout(selected);
             }
         } catch (CoreException error) {
             if (!status.isDisposed())
                 status.setText("Cannot prepare the selected board: " + error.getMessage());
         } finally {
             try {
-                project.setSessionProperty(ZephyrProjectPropertyPage.BOARD_BROWSER_TARGET, null);
+                selected.setSessionProperty(ZephyrProjectPropertyPage.BOARD_BROWSER_TARGET, null);
             } catch (CoreException ignored) {
                 // Session-only value is never a persistent project setting.
             }
