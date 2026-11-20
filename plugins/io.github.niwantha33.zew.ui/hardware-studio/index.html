@@ -33,7 +33,9 @@
 .viewport{position:relative;flex:1;overflow:auto;cursor:grab;scrollbar-color:var(--line) transparent;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:28px 28px;background-color:var(--bg)}
 .viewport.dragging{cursor:grabbing}.scaled{position:relative;min-width:100%;min-height:100%}.graph{position:relative;transform-origin:top left}
 .wires{position:absolute;inset:0;overflow:visible;pointer-events:none}.wires line{stroke:#5c94b2;stroke-width:2}.wires line.reference{stroke:var(--accent);stroke-dasharray:6 6;stroke-width:2.1}
-.node{position:absolute;width:240px;min-height:82px;border-radius:12px;border:1px solid #4a7793;background:var(--panel);box-shadow:0 7px 18px var(--shadow);color:var(--text);padding:10px 12px;text-align:left}
+.node{position:absolute;width:240px;min-height:82px;border-radius:12px;border:1px solid #4a7793;background:var(--panel);box-shadow:0 7px 18px var(--shadow);color:var(--text);padding:10px 12px;text-align:left;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.node.moving{cursor:grabbing;z-index:2;box-shadow:0 0 0 2px var(--accent),0 16px 30px var(--shadow)}
+.action:disabled{opacity:.48;cursor:default}.action:disabled:hover{background:var(--panel2);border-color:var(--line)}
 .node[aria-pressed=true]{border:2px solid var(--accent);box-shadow:0 0 0 3px var(--soft),0 10px 25px var(--shadow)}.node.disabled{border-color:#926c45}.node.unknown{border-color:var(--muted)}.node strong{display:block;font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.node span{display:block;color:var(--muted);font-size:10px;white-space:nowrap;text-overflow:ellipsis;margin-top:5px}.node .node-meta{color:var(--good)}.node.disabled .node-meta{color:var(--warn)}.node.unknown .node-meta{color:var(--muted)}
 .empty{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:min(90%,440px);border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:25px;text-align:center;box-shadow:0 12px 38px var(--shadow)}.empty .symbol{margin:auto}.empty h2{font-size:19px;margin:15px 0 8px}.empty p{color:var(--muted);font-size:12px;line-height:1.6}
 .canvas-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 17px;border-top:1px solid var(--line);font-size:10px;color:var(--muted);background:var(--panel)}
@@ -74,9 +76,9 @@
   </aside>
   <section class="workspace" aria-label="Devicetree graph">
     <div class="canvas-head"><div class="canvas-title"><h2>Hardware topology</h2><p id="graphSub">Resolved parent-child and typed references</p></div>
-      <div class="controls"><button type="button" class="action" id="zoomOut" title="Zoom out">−</button><button type="button" class="action" id="fit" title="Fit graph">Fit</button><button type="button" class="action" id="zoomIn" title="Zoom in">+</button></div>
+      <div class="controls"><button type="button" class="action" id="zoomOut" title="Zoom out">−</button><button type="button" class="action" id="fit" title="Fit all visible blocks">Fit</button><button type="button" class="action" id="zoomIn" title="Zoom in">+</button><button type="button" class="action" id="resetLayout" title="Restore the original automatically generated block positions" disabled>Reset layout</button></div>
     </div>
-    <div class="viewport" id="viewport" tabindex="0" aria-label="Scrollable zoomable hardware topology">
+    <div class="viewport" id="viewport" tabindex="0" aria-label="Scrollable zoomable hardware topology. Drag blocks to rearrange this visual layout without changing Devicetree.">
       <div class="scaled" id="scaled"><div class="graph" id="graph"><svg class="wires" id="wires" aria-hidden="true"></svg><div id="cards"></div></div></div>
     </div>
     <footer class="canvas-footer"><div class="legend"><span><i class="swatch solid"></i>Parent / child</span><span><i class="swatch dashed"></i>Resolved reference</span></div><span id="graphCount">0 nodes</span></footer>
@@ -90,7 +92,7 @@
     <div class="detail-actions"><button class="action primary" id="openSource" type="button" disabled>Open generated DTS source</button><button class="action" id="openGraph" type="button" disabled>Classic Graph Studio</button></div>
   </aside>
 </div>
-<div class="help-overlay" id="helpDialog" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle"><div class="help-panel"><h2 id="helpTitle">Explore verified hardware evidence</h2><p>Search by path, compatible string or label. Choose a node to inspect its generated Devicetree record. Double-click a graph card, or select a navigator result, to centre its neighbourhood. Arrow keys pan the graph; + and − zoom, F fits, ? opens help, and Escape closes help.</p><p>Solid lines represent observed hierarchy. Dashed lines represent parser-resolved references. Enabled is a Devicetree configuration status, <strong>not</strong> electrical wiring, a running driver or live hardware state. Unknown status is never treated as enabled.</p><button type="button" class="action primary" id="closeHelp">Close</button></div></div>
+<div class="help-overlay" id="helpDialog" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle"><div class="help-panel"><h2 id="helpTitle">Explore verified hardware evidence</h2><p>Search by path, compatible string or label. Choose a node to inspect its generated Devicetree record. Double-click a graph card, or select a navigator result, to centre its neighbourhood. Drag a graph block to rearrange it; lines follow the block. Focus a block and use arrow keys to nudge it (Shift+arrow for smaller steps). Reset layout restores the original positions. Dragging is only a temporary visual arrangement: it does not change Devicetree, saved project settings or firmware, and it resets on refresh or when opening another graph. On the background, drag to pan. When the canvas has keyboard focus, arrow keys pan the graph; + and − zoom, F fits, ? opens help, and Escape closes help.</p><p>Solid lines represent observed hierarchy. Dashed lines represent parser-resolved references. Enabled is a Devicetree configuration status, <strong>not</strong> electrical wiring, a running driver or live hardware state. Unknown status is never treated as enabled.</p><button type="button" class="action primary" id="closeHelp">Close</button></div></div>
 </div>
 <script>
 'use strict';
@@ -101,6 +103,12 @@ let selected = DATA.focus && map.has(DATA.focus) ? DATA.focus : '';
 let filter = 'all';
 let zoom = 1;
 let theme = DATA.theme === 'light' ? 'light' : 'dark';
+const CARD_WIDTH = 240, CARD_MID_Y = 41, MAX_POSITION = 6000, CANVAS_MARGIN = 40;
+const originalPositions = new Map(DATA.cards.map(c => [c.path, {x:c.x, y:c.y}]));
+const positions = new Map(DATA.cards.map(c => [c.path, {x:c.x, y:c.y}]));
+const wireLines = [];
+let graphWidth = DATA.width, graphHeight = DATA.height;
+let cardDrag = null, suppressCardClick = null;
 function host(action, path) {
   if (typeof window.zewHardwareAction === 'function') return window.zewHardwareAction(action, path || '');
   $('graphSub').textContent = 'Eclipse bridge unavailable; open Configuration Studio.';
@@ -156,52 +164,180 @@ function renderNavigator(){
     b.append(content);b.addEventListener('click',()=>select(node.path,true));nav.append(b);
   });
 }
+function clamp(value, lower, upper){
+  return Math.min(upper, Math.max(lower, value));
+}
+function getPosition(path){return positions.get(path);}
+function hasCustomLayout(){
+  for(const [path, original] of originalPositions){
+    const current=getPosition(path);
+    if(current && (current.x!==original.x || current.y!==original.y))return true;
+  }
+  return false;
+}
+function updateLayoutStatus(){
+  const modified=hasCustomLayout();
+  $('resetLayout').disabled=!modified;
+  $('graphCount').textContent=DATA.cards.length+' visible / '+DATA.nodes.length+' observed'
+    +(DATA.limited?' · neighborhood bounded':'')+(modified?' · custom visual layout':'');
+}
+function updateSceneBounds(){
+  graphWidth=DATA.width;graphHeight=DATA.height;
+  for(const p of positions.values()){
+    graphWidth=Math.max(graphWidth,p.x+CARD_WIDTH+CANVAS_MARGIN);
+    graphHeight=Math.max(graphHeight,p.y+82+CANVAS_MARGIN);
+  }
+  $('graph').style.width=graphWidth+'px';
+  $('graph').style.height=graphHeight+'px';
+  $('wires').setAttribute('width',String(graphWidth));
+  $('wires').setAttribute('height',String(graphHeight));
+  $('scaled').style.width=Math.max(1,Math.round(graphWidth*zoom))+'px';
+  $('scaled').style.height=Math.max(1,Math.round(graphHeight*zoom))+'px';
+}
 function setZoom(next){
-  zoom=Math.max(.38,Math.min(1.6,next));
+  zoom=clamp(next,.38,1.6);
   $('graph').style.transform='scale('+zoom+')';
-  $('scaled').style.width=Math.max(1,Math.round(DATA.width*zoom))+'px';
-  $('scaled').style.height=Math.max(1,Math.round(DATA.height*zoom))+'px';
+  updateSceneBounds();
 }
 function fitGraph(){
   if(!DATA.cards.length)return;
-  const viewport=$('viewport'),scale=Math.min((viewport.clientWidth-24)/Math.max(1,DATA.width),(viewport.clientHeight-24)/Math.max(1,DATA.height));
-  setZoom(Math.max(.38,Math.min(1.1,scale)));viewport.scrollLeft=0;viewport.scrollTop=0;
+  const viewport=$('viewport');
+  const scale=Math.min((viewport.clientWidth-24)/Math.max(1,graphWidth),
+                       (viewport.clientHeight-24)/Math.max(1,graphHeight));
+  setZoom(clamp(scale,.38,1.1));
+  viewport.scrollLeft=0;viewport.scrollTop=0;
+}
+function redrawWires(){
+  for(const connection of wireLines){
+    const a=getPosition(connection.edge.source), b=getPosition(connection.edge.target);
+    if(!a||!b)continue;
+    const leftToRight=a.x<=b.x;
+    const startX=leftToRight?a.x+CARD_WIDTH:a.x;
+    const endX=leftToRight?b.x:b.x+CARD_WIDTH;
+    const line=connection.line;
+    line.setAttribute('x1',String(startX));
+    line.setAttribute('y1',String(a.y+CARD_MID_Y));
+    line.setAttribute('x2',String(endX));
+    line.setAttribute('y2',String(b.y+CARD_MID_Y));
+  }
+}
+function moveCard(path,x,y){
+  const point=getPosition(path), button=Array.from($('cards').children).find(b=>b.dataset.path===path);
+  if(!point || !button)return false;
+  const nextX=Math.round(clamp(x,8,MAX_POSITION));
+  const nextY=Math.round(clamp(y,8,MAX_POSITION));
+  if(point.x===nextX && point.y===nextY)return false;
+  point.x=nextX;point.y=nextY;
+  button.style.left=nextX+'px';button.style.top=nextY+'px';
+  updateSceneBounds();
+  redrawWires();
+  updateLayoutStatus();
+  return true;
+}
+function resetLayout(){
+  for(const [path, start] of originalPositions){
+    const point=getPosition(path);
+    if(point){point.x=start.x;point.y=start.y;}
+  }
+  for(const button of $('cards').children){
+    const point=getPosition(button.dataset.path);
+    if(point){button.style.left=point.x+'px';button.style.top=point.y+'px';}
+  }
+  updateSceneBounds();redrawWires();updateLayoutStatus();fitGraph();
+}
+function startNodeDrag(event,path,button){
+  if(event.button!==0 || !getPosition(path))return;
+  const original=getPosition(path);
+  cardDrag={
+    id:event.pointerId,path,button,
+    clientX:event.clientX,clientY:event.clientY,
+    x:original.x,y:original.y,moved:false
+  };
+  suppressCardClick=null;
+  // Capture on the button, not the viewport: card dragging and canvas panning
+  // must be mutually exclusive.
+  button.setPointerCapture(event.pointerId);
+  event.stopPropagation();
+}
+function continueNodeDrag(event){
+  if(!cardDrag || cardDrag.id!==event.pointerId)return;
+  const distance=Math.hypot(event.clientX-cardDrag.clientX,event.clientY-cardDrag.clientY);
+  if(!cardDrag.moved && distance<4)return;
+  if(!cardDrag.moved){
+    cardDrag.moved=true;
+    cardDrag.button.classList.add('moving');
+  }
+  moveCard(cardDrag.path,cardDrag.x+(event.clientX-cardDrag.clientX)/zoom,
+                         cardDrag.y+(event.clientY-cardDrag.clientY)/zoom);
+  event.preventDefault();event.stopPropagation();
+}
+function finishNodeDrag(event){
+  if(!cardDrag || cardDrag.id!==event.pointerId)return;
+  if(cardDrag.moved)suppressCardClick=cardDrag.path;
+  cardDrag.button.classList.remove('moving');
+  if(cardDrag.button.hasPointerCapture(event.pointerId))
+    cardDrag.button.releasePointerCapture(event.pointerId);
+  cardDrag=null;
+  event.stopPropagation();
+}
+function nudgeCard(event,path){
+  const motion={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
+  const delta=motion[event.key];
+  if(!delta || event.altKey || event.ctrlKey || event.metaKey)return;
+  const point=getPosition(path);
+  if(!point)return;
+  const step=event.shiftKey?4:20;
+  moveCard(path,point.x+delta[0]*step,point.y+delta[1]*step);
+  event.preventDefault();event.stopPropagation();
 }
 function renderGraph(){
-  $('graph').style.width=DATA.width+'px';$('graph').style.height=DATA.height+'px';
-  $('wires').setAttribute('width',String(DATA.width));$('wires').setAttribute('height',String(DATA.height));
   $('cards').replaceChildren();$('wires').replaceChildren();
+  wireLines.length=0;
   $('viewport').querySelectorAll('.empty').forEach(el=>el.remove());
-  const placements=new Map(DATA.cards.map(c=>[c.path,c]));
   DATA.edges.forEach(edge=>{
-    const a=placements.get(edge.source),b=placements.get(edge.target);if(!a||!b)return;
+    if(!getPosition(edge.source)||!getPosition(edge.target))return;
     const line=document.createElementNS('http://www.w3.org/2000/svg','line');
-    const start=a.x<=b.x?{x:a.x+240,y:a.y+41}:{x:a.x,y:a.y+41};
-    const end=a.x<=b.x?{x:b.x,y:b.y+41}:{x:b.x+240,y:b.y+41};
-    line.setAttribute('x1',String(start.x));line.setAttribute('y1',String(start.y));
-    line.setAttribute('x2',String(end.x));line.setAttribute('y2',String(end.y));
     if(edge.kind!=='hierarchy')line.setAttribute('class','reference');
     const title=document.createElementNS('http://www.w3.org/2000/svg','title');
     title.textContent=edge.kind==='hierarchy'?'Observed parent-child':edge.kind+' · '+edge.property;
     line.append(title);$('wires').append(line);
+    wireLines.push({edge,line});
   });
   DATA.cards.forEach(card=>{
     const node=map.get(card.path);if(!node)return;
     const kind=statusKind(node);
     const b=element('button','node'+(kind==='enabled'?'':' '+kind));
     b.type='button';b.dataset.path=node.path;b.setAttribute('aria-pressed',String(node.path===selected));
-    b.title=node.path;b.style.left=card.x+'px';b.style.top=card.y+'px';
+    b.title=node.path+' — drag to arrange (visual only); arrow keys nudge';
+    const p=getPosition(node.path);
+    b.style.left=p.x+'px';b.style.top=p.y+'px';
     b.append(element('strong','',nodeName(node)),element('span','',node.compatible||'No compatible string'),element('span','node-meta',node.status));
-    b.addEventListener('click',()=>select(node.path,false));
-    b.addEventListener('dblclick',()=>select(node.path,true));$('cards').append(b);
+    b.addEventListener('pointerdown',event=>startNodeDrag(event,node.path,b));
+    b.addEventListener('pointermove',continueNodeDrag);
+    b.addEventListener('pointerup',finishNodeDrag);
+    b.addEventListener('pointercancel',finishNodeDrag);
+    b.addEventListener('lostpointercapture',event=>{
+      if(cardDrag&&cardDrag.id===event.pointerId)finishNodeDrag(event);
+    });
+    b.addEventListener('keydown',event=>nudgeCard(event,node.path));
+    b.addEventListener('click',event=>{
+      if(suppressCardClick===node.path){suppressCardClick=null;event.preventDefault();return;}
+      select(node.path,false);
+    });
+    b.addEventListener('dblclick',event=>{
+      if(suppressCardClick===node.path){suppressCardClick=null;event.preventDefault();return;}
+      select(node.path,true);
+    });
+    $('cards').append(b);
   });
   if(!DATA.cards.length){
     const empty=element('div','empty');
     empty.append(element('div','symbol','◇'),element('h2','',DATA.observed?'No nearby nodes':'Open a Zephyr build'),element('p','',DATA.reason||DATA.message||'Select a project and build it, then refresh.'));
     $('viewport').append(empty);
   }
-  $('graphSub').textContent=DATA.message || 'Exact generated Devicetree evidence';
-  $('graphCount').textContent=DATA.cards.length+' visible / '+DATA.nodes.length+' observed'+(DATA.limited?' · neighborhood bounded':'');
+  updateSceneBounds();redrawWires();updateLayoutStatus();
+  $('graphSub').textContent=(DATA.message || 'Exact generated Devicetree evidence')+
+    (DATA.cards.length?' · Drag blocks to arrange (view only)':'');
   fitGraph();
 }
 function init(){
@@ -226,6 +362,7 @@ function init(){
   $('zoomIn').addEventListener('click',()=>setZoom(zoom+.12));
   $('zoomOut').addEventListener('click',()=>setZoom(zoom-.12));
   $('fit').addEventListener('click',fitGraph);
+  $('resetLayout').addEventListener('click',resetLayout);
   $('refresh').addEventListener('click',()=>host('refresh',''));
   $('openSource').addEventListener('click',()=>{if(selected)host('source',selected)});
   $('openGraph').addEventListener('click',()=>{if(selected)host('graph',selected)});
