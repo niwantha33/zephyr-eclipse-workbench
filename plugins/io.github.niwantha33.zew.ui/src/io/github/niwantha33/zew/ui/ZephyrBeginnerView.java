@@ -54,42 +54,41 @@ public final class ZephyrBeginnerView extends ViewPart {
         grid.verticalSpacing = 8;
         body.setLayout(grid);
 
-        heading(body, "GETTING STARTED");
-        line(body, "Follow five steps. Nothing is flashed automatically.");
-        heading(body, "Current project");
+        heading(body, "YOUR ZEPHYR PROJECT");
+        line(body, "Follow the workflow below. Build, flash and debug always require your action.");
         selected = line(body, "Select a Zephyr project in Project Explorer.");
         board = line(body, "Board: not selected");
         profile = line(body, "Profile: not selected");
         buildOutput = line(body, "Build output: not checked");
 
-        heading(body, "1  Select board");
-        line(body, "Create or import a project and choose its exact board and CPU.");
-        button(body, "Create or import project...", () -> command("io.github.niwantha33.zew.quickStart"));
-        button(body, "Change board...", this::properties);
+        heading(body, "1  Open a project");
+        button(body, "New / Import Project...", () -> command("io.github.niwantha33.zew.quickStart"));
 
-        heading(body, "2  Configure");
-        line(body, "Inspect configuration or hardware when needed.");
+        heading(body, "2  Choose hardware");
+        button(body, "Change Project Board...", this::properties);
+        button(body, "Browse Available Boards...", () -> command("io.github.niwantha33.zew.embeddedHubBoards"));
+
+        heading(body, "3  Configure");
         button(body, "Configuration Studio...", () -> configuration("overview"));
-        button(body, "Review hardware...", () -> configuration("hardware"));
-
-        heading(body, "3  Select profile");
-        line(body, "The default profile is a good place to start.");
-        button(body, "Manage build profiles...", this::properties);
+        button(body, "Hardware & Devicetree...", () -> configuration("hardware"));
+        button(body, "Change Build Profile...", this::properties);
 
         heading(body, "4  Build");
-        line(body, "Check the Console and Problems views for the result.");
-        button(body, "Build selected project", this::build);
+        button(body, "Build Firmware", this::build);
+        line(body, "Check Console and Problems for errors.");
 
-        heading(body, "5  Debug");
-        line(body, "Open debug tools first. Flash and Debug is a separate explicit action.");
-        button(body, "Open Hardware Debug workspace", this::debugPerspective);
+        heading(body, "5  Flash / Debug");
+        line(body, "These actions may operate physical hardware. Nothing runs automatically.");
+        button(body, "Flash Firmware...", () -> command("io.github.niwantha33.zew.flash"));
+        button(body, "Flash and Debug...", () -> command("io.github.niwantha33.zew.flashDebug"));
+        button(body, "Open Hardware Debug Workspace", this::debugPerspective);
 
-        heading(body, "More tools");
+        heading(body, "Additional tools");
         Button advanced = new Button(body, SWT.PUSH);
-        advanced.setText("Advanced views...");
+        advanced.setText("Advanced Views...");
         advanced.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         advanced.addListener(SWT.Selection, event -> advancedViews(advanced));
-        line(body, "Return here using Zephyr > Beginner Workspace.");
+        line(body, "Switch layouts using Zephyr > Developer Workspace.");
 
         scroll.setContent(body);
         scroll.setMinSize(body.computeSize(280, SWT.DEFAULT));
