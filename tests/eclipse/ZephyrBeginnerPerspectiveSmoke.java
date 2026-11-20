@@ -34,10 +34,17 @@ public final class ZephyrBeginnerPerspectiveSmoke {
                 throw new IllegalStateException("Advanced registers visible in beginner layout.");
             page.setPerspective(developer);
             if (page.findView("org.eclipse.ui.navigator.ProjectExplorer") == null
+                    || page.findView("io.github.niwantha33.zew.ui.beginnerGuide") == null
                     || page.findView("org.eclipse.ui.console.ConsoleView") == null
                     || page.findView("org.eclipse.ui.views.ProblemView") == null)
                 throw new IllegalStateException("Developer workspace views not visible.");
-            System.out.println("PASS ZEPHYR WORKSPACES: beginner and developer views registered");
+            // Restore closed/hidden guides through the same handlers as the menu.
+            page.hideView(page.findView("io.github.niwantha33.zew.ui.beginnerGuide"));
+            io.github.niwantha33.zew.ui.ZephyrDeveloperPerspectiveHandler.open(window);
+            var guide = page.findView("io.github.niwantha33.zew.ui.beginnerGuide");
+            if (guide == null || !page.isPartVisible(guide))
+                throw new IllegalStateException("Developer Workspace did not restore guide.");
+            System.out.println("PASS ZEPHYR WORKSPACES: beginner and developer guides visible");
         } finally {
             if (previous != null) page.setPerspective(previous);
         }
