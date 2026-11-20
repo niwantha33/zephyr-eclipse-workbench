@@ -5,7 +5,7 @@ import org.eclipse.ui.IFolderLayout;
 import org.eclipse.ui.IPageLayout;
 import org.eclipse.ui.IPerspectiveFactory;
 
-/** Calm daily-development layout; advanced views open only on request. */
+/** Developer workspace with visible task guidance; technical views stay on demand. */
 public final class ZephyrDeveloperPerspective implements IPerspectiveFactory {
     public static final String ID = Activator.ID + ".developerPerspective";
 
@@ -20,6 +20,13 @@ public final class ZephyrDeveloperPerspective implements IPerspectiveFactory {
         output.addView("org.eclipse.ui.console.ConsoleView");
         output.addView("org.eclipse.ui.views.ProblemView");
 
+        // Avoid an unexplained empty centre in workspaces with no source editor.
+        // The guide may be closed by the user and does not execute any command.
+        IFolderLayout guide = layout.createFolder(
+                "zew.developer.guide", IPageLayout.RIGHT, 0.53f, editor);
+        guide.addView(ZephyrBeginnerView.ID);
+
+        layout.addShowViewShortcut(ZephyrBeginnerView.ID);
         layout.addShowViewShortcut(ConfigurationHomeView.ID);
         layout.addShowViewShortcut(EmbeddedHubBoardCatalogueView.ID);
         layout.addShowViewShortcut(HardwareStudioView.ID);
