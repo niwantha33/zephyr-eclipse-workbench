@@ -455,11 +455,31 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
     }
 
     private void editProjectBoard() {
-        if (project == null || !project.isAccessible()) return;
-        var dialog = PreferencesUtil.createPropertyDialogOn(getSite().getShell(), project,
-                "io.github.niwantha33.zew.projectProperties", null, null);
-        if (dialog != null && dialog.open() == Window.OK && !status.isDisposed())
-            refreshFromCheckout(project);
+        EmbeddedHubBoardCatalogue.Entry entry = previewed();
+        if (project == null || !project.isAccessible() || entry == null
+                || entry.exactTarget().equals(activeTarget)) return;
+        try {
+            // Session-only suggestion for the native property page. The board
+            // remains untouched until the user explicitly presses Apply.
+            project.setSessionProperty(ZephyrProjectPropertyPage.BOARD_BROWSER_TARGET,
+                    entry.exactTarget());
+            var dialog = PreferencesUtil.createPropertyDialogOn(getSite().getShell(), project,
+                    "io.github.niwantha33.zew.projectProperties", null, null);
+            if (dialog != null) {
+                dialog.open();
+                // Refresh even if dismissed: Apply may have committed before Cancel.
+                if (!status.isDisposed()) refreshFromCheckout(project);
+            }
+        } catch (CoreException error) {
+            if (!status.isDisposed())
+                status.setText("Cannot prepare the selected board: " + error.getMessage());
+        } finally {
+            try {
+                project.setSessionProperty(ZephyrProjectPropertyPage.BOARD_BROWSER_TARGET, null);
+            } catch (CoreException ignored) {
+                // Session-only value is never a persistent project setting.
+            }
+        }
     }
 
     private void inspectProject() {
@@ -485,14 +505,19 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
             vendorFilter.add(ALL_VENDORS);
             vendorFilter.select(0);
         }
+        if (socFilter != null && !socFilter.isDisposed()) {
+            socFilter.removeAll();
+            socFilter.add(ALL_SOCS);
+            socFilter.select(0);
+        }
         if (status != null && !status.isDisposed()) status.setText(message);
-        if (currentBoard != null && !currentBoard.isDisposed()) currentBoard.setText("Project: none selected");
-        if (source != null && !source.isDisposed()) source.setText("Board discovery uses only the selected local Zephyr installation.");
-        if (details != null && !details.isDisposed()) details.setText("Choose a project to begin.");
-        if (selectedTarget != null && !selectedTarget.isDisposed()) selectedTarget.setText("");
-        if (technical != null && !technical.isDisposed()) technical.setText("");
+        if (currentBoard != null && !currentBoard.isDisposed())
+            currentBoard.setText("Project: none selected");
+        if (source != null && !source.isDisposed())
+            source.setText("Source: the selected project's installed Zephyr checkout (local only).");
+        clearPreview("Select a project to begin.");
         if (inspect != null && !inspect.isDisposed()) inspect.setEnabled(false);
-        if (changeBoard != null && !changeBoard.isDisposed()) changeBoard.setEnabled(false);
+        if (reload != null && !reload.isDisposed()) reload.setEnabled(false);
     }
 
     @Override public void setFocus() {
