@@ -387,15 +387,15 @@
         <command commandId="io.github.niwantha33.zew.developerPerspective" label="Developer Workspace" style="push"/>
         <separator name="start" visible="true"/>
         <command commandId="io.github.niwantha33.zew.quickStart" label="New / Import Project..." style="push"/>
-        <menu id="io.github.niwantha33.zew.menu.board" label="Board &amp; Hardware">
-          <command commandId="io.github.niwantha33.zew.projectSettings" label="Change Project Board &amp; Profile..." style="push"/>
+        <menu id="io.github.niwantha33.zew.menu.board" label="Board and Hardware">
+          <command commandId="io.github.niwantha33.zew.projectSettings" label="Change Project Board and Profile..." style="push"/>
           <command commandId="io.github.niwantha33.zew.embeddedHubBoards" label="Browse Available Boards..." style="push"/>
           <separator name="boardStudio" visible="true"/>
           <command commandId="io.github.niwantha33.zew.hardwareStudio" label="Hardware Studio..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.configure" label="Configure Project">
           <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio..." style="push"/>
-          <command commandId="io.github.niwantha33.zew.projectSettings" label="Board &amp; Build Profile Settings..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.projectSettings" label="Board and Build Profile Settings..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.build" label="Build Firmware">
           <command commandId="io.github.niwantha33.zew.build" label="Build Selected Project" style="push"/>
@@ -404,7 +404,7 @@
           <separator name="buildCancel" visible="true"/>
           <command commandId="io.github.niwantha33.zew.cancel" label="Cancel Current Operation" style="push"/>
         </menu>
-        <menu id="io.github.niwantha33.zew.menu.flash" label="Flash &amp; Run">
+        <menu id="io.github.niwantha33.zew.menu.flash" label="Flash and Run">
           <command commandId="io.github.niwantha33.zew.flash" label="Flash Selected Project..." style="push"/>
           <command commandId="io.github.niwantha33.zew.flashDebug" label="Flash and Debug..." style="push"/>
           <command commandId="io.github.niwantha33.zew.run" label="Run in Emulator..." style="push"/>
@@ -419,7 +419,7 @@
           <command commandId="io.github.niwantha33.zew.targetMemory" label="Target Memory Browser..." style="push"/>
           <command commandId="io.github.niwantha33.zew.debugExpressionProbe" label="Inspect GDB Symbol..." style="push"/>
         </menu>
-        <menu id="io.github.niwantha33.zew.menu.trace" label="Trace &amp; Analyse">
+        <menu id="io.github.niwantha33.zew.menu.trace" label="Trace and Analyse">
           <command commandId="io.github.niwantha33.zew.traceConsole" label="Debug Trace Console..." style="push"/>
           <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace..." style="push"/>
           <command commandId="io.github.niwantha33.zew.observatoryOpen" label="Open RTOS Observatory..." style="push"/>
@@ -428,7 +428,7 @@
           <command commandId="io.github.niwantha33.zew.threadTimeline" label="Thread Timeline..." style="push"/>
           <command commandId="io.github.niwantha33.zew.cpuLoad" label="Zephyr CPU Load (Saved CTF)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.taskDrift" label="Task Drift (Saved CTF)..." style="push"/>
-          <command commandId="io.github.niwantha33.zew.contentionReport" label="Mutex &amp; Contention Report..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.contentionReport" label="Mutex and Contention Report..." style="push"/>
           <command commandId="io.github.niwantha33.zew.memoryProfile" label="Memory Profile..." style="push"/>
           <command commandId="io.github.niwantha33.zew.tracepointPlot" label="Tracepoint Plot..." style="push"/>
           <command commandId="io.github.niwantha33.zew.rtosInvestigation" label="Review Saved RTOS Capture..." style="push"/>
@@ -436,9 +436,9 @@
           <command commandId="io.github.niwantha33.zew.applicationConsole" label="UART Application Console..." style="push"/>
         </menu>
         <separator name="more" visible="true"/>
-        <menu id="io.github.niwantha33.zew.menu.tools" label="Tools &amp; Setup">
+        <menu id="io.github.niwantha33.zew.menu.tools" label="Tools and Setup">
           <command commandId="io.github.niwantha33.zew.setup" label="Set Up Zephyr..." style="push"/>
-          <command commandId="io.github.niwantha33.zew.tools" label="Manage SDK &amp; Toolchains..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.tools" label="Manage SDK and Toolchains..." style="push"/>
           <command commandId="io.github.niwantha33.zew.debugTools" label="Manage OpenOCD Tools..." style="push"/>
           <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment..." style="push"/>
           <separator name="environment" visible="true"/>
@@ -454,8 +454,8 @@
           <command commandId="io.github.niwantha33.zew.coredumpInvestigation" label="Investigate Saved Core Dump..." style="push"/>
           <command commandId="io.github.niwantha33.zew.umlClasses" label="Automatic UML..." style="push"/>
         </menu>
-        <menu id="io.github.niwantha33.zew.menu.help" label="Help &amp; Updates">
-          <command commandId="io.github.niwantha33.zew.documentation" label="Documentation &amp; References..." style="push"/>
+        <menu id="io.github.niwantha33.zew.menu.help" label="Help and Updates">
+          <command commandId="io.github.niwantha33.zew.documentation" label="Documentation and References..." style="push"/>
           <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check for Updates..." style="push"/>
           <command commandId="io.github.niwantha33.zew.updateConnection" label="Configure Updates..." style="push"/>
           <command commandId="io.github.niwantha33.zew.about" label="About Zephyr Workbench..." style="push"/>
