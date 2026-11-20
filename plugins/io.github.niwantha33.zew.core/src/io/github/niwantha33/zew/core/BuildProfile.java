@@ -36,7 +36,8 @@ public record BuildProfile(String id, String label, BuildConfiguration optimizat
 
     public BuildProfile {
         if (id == null || !ID.matcher(id).matches()
-                || id.equals("default") || id.equals("debug") || id.equals("release"))
+                || java.util.Arrays.stream(BuildConfiguration.values())
+                        .anyMatch(choice -> choice.id().equals(id)))
             throw new IllegalArgumentException("Profile ID must be lowercase letters, digits or hyphens (not a built-in name).");
         if (label == null || !NAME.matcher(label).matches())
             throw new IllegalArgumentException("Profile name must be 1–80 plain characters.");
