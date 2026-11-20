@@ -318,6 +318,22 @@ public final class ConfigurationHomeView extends ViewPart {
                     result = KconfigInspector.Result.missing(
                             "Selected-build Kconfig inspection is unavailable.");
                 }
+                // The upstream probe may have run for 20 seconds. Revalidate
+                // the exact input/output receipt AFTER it returns as well;
+                // build/profile changes during inspection must fail closed.
+                if (result.available()) {
+                    try {
+                        Path app = selected.getLocation().toFile().toPath();
+                        if (hasInvalidVisualContext(selected, snapshot)
+                                || !ConfigurationEvidenceReceipt.inspect(app, snapshot.build(),
+                                        snapshot.board(), snapshot.profile()).current())
+                            result = KconfigInspector.Result.missing(
+                                    "Configuration inputs changed during Kconfig inspection; refresh and rebuild.");
+                    } catch (Exception changed) {
+                        result = KconfigInspector.Result.missing(
+                                "Selected build could not be revalidated after Kconfig inspection.");
+                    }
+                }
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 String payload = ConfigurationStudioVisualDocument.kconfigInspectorPayload(
                         symbol, result, provenance);
