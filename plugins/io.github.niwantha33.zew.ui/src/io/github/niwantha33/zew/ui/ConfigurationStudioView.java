@@ -3784,9 +3784,93 @@ public final class ConfigurationStudioView extends ViewPart {
         if (dialog.open() == Window.OK) saveSelected(current, dialog.getValue());
     }
 
+    /**
+     * Exact build-scoped handoff from the graphical Studio. It never accepts
+     * free-form browser file paths or sources. Existing native review/backup
+     * remains the only prj.conf write implementation.
+     */
+    public void reviewVisualRequest(IProject expectedProject, Path expectedBuild,
+                                    ConfigurationStudioVisualRequest.Reviewed request) {
+        if (expectedProject == null || request == null || project == null
+                || !project.equals(expectedProject) || !project.isAccessible()
+                || project.getLocation() == null) return;
+        if (hasUnsavedProjectEditor()) {
+            MessageDialog.openWarning(getSite().getShell(), "Unsaved project source",
+                    "Save or discard project editors and refresh before changing prj.conf.");
+            return;
+        }
+        try {
+            Path app = project.getLocation().toFile().toPath();
+            Path currentBuild = null;
+            try {
+                currentBuild = ProjectContext.buildDirectory(project, ProjectContext.settings(project));
+            } catch (Exception notConfigured) {
+                if (expectedBuild != null)
+                    throw new java.io.IOException("Selected project or build profile changed.", notConfigured);
+            }
+            if (!java.util.Objects.equals(
+                    expectedBuild == null ? null : expectedBuild.toAbsolutePath().normalize(),
+                    currentBuild == null ? null : currentBuild.toAbsolutePath().normalize()))
+                throw new java.io.IOException("Selected build changed. Refresh Configuration Studio.");
+            var latest = ConfigurationStudioFiles.inspect(app, currentBuild, "selected build");
+            Option actual = latest.options().stream()
+                    .filter(option -> option.symbol().equals(request.symbol()))
+                    .findFirst().orElse(null);
+            if (actual == null || !actual.equals(request.expected()))
+                throw new java.io.IOException("Configuration source/build changed since selection. Refresh first.");
+            if (request.value() != null
+                    && (!"y".equals(request.value()) && !"n".equals(request.value())
+                        || !ConfigurationStudioPresentation.isToggle(actual)))
+                throw new java.io.IOException("Only resolved on/off values can be changed graphically.");
+            if (request.value() == null && actual.requested() == null)
+                throw new java.io.IOException("No project override exists to remove.");
+            var evaluated = kconfigCache.get(actual.symbol());
+            if (request.value() != null && evaluated != null && evaluated.available()
+                    && !evaluated.details().canRequest(request.value())) {
+                MessageDialog.openWarning(getSite().getShell(), "Blocked Kconfig request",
+                        "Resolve the selected build's Kconfig dependencies before requesting this value.\n"
+                        + evaluated.details().describe());
+                return;
+            }
+            tabs.setSelection(SOFTWARE_TAB);
+            selectDomain(ConfigurationStudioDomains.OVERVIEW);
+            category.select(0);
+            search.setText("CONFIG_" + actual.symbol());
+            refreshOptions();
+            for (TableItem item : options.getItems()) {
+                if (((Option) item.getData()).symbol().equals(actual.symbol())) {
+                    options.setSelection(item);
+                    options.showSelection();
+                    describeSelected();
+                    break;
+                }
+            }
+            saveSelected(actual, request.value());
+        } catch (Exception error) {
+            MessageDialog.openError(getSite().getShell(), "Configuration review blocked",
+                    error.getMessage());
+        }
+    }
+
+    private boolean hasUnsavedProjectEditor() {
+        if (project == null || getSite().getPage() == null) return false;
+        for (var editor : getSite().getPage().getDirtyEditors()) {
+            var input = editor.getEditorInput();
+            if (input instanceof org.eclipse.ui.IFileEditorInput file
+                    && project.equals(file.getFile().getProject()))
+                return true;
+        }
+        return false;
+    }
+
     /** Every GUI action shares review, optimistic locking and backed-up atomic save. */
     private void saveSelected(Option current, String value) {
         if (project == null || current == null) return;
+        if (hasUnsavedProjectEditor()) {
+            MessageDialog.openWarning(getSite().getShell(), "Unsaved project source",
+                    "Save or discard project editors first. Nothing has been changed.");
+            return;
+        }
         try {
             Path app = project.getLocation().toFile().toPath();
             Path build = null;
