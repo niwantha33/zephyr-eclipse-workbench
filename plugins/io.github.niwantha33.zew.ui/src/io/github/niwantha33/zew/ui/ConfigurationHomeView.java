@@ -54,7 +54,8 @@ public final class ConfigurationHomeView extends ViewPart {
     private record Evidence(String board, String profile, Path build, String dts,
                             String config, Properties setup, boolean stale, String warning,
                             FocusedConfigurationModel.Overview overview,
-                            List<DevicetreeHardware.Device> nodes) {
+                            List<DevicetreeHardware.Device> nodes,
+                            ConfigurationStudioFiles.Snapshot source) {
         public Evidence { nodes = List.copyOf(nodes); }
     }
 
@@ -245,7 +246,8 @@ public final class ConfigurationHomeView extends ViewPart {
                     current == null ? null : current.overview(),
                     current == null ? "" : current.config(),
                     current == null ? "" : current.warning(),
-                    dirty, visualTheme, visualSection);
+                    dirty, visualTheme, visualSection,
+                    current == null ? null : current.source());
             visualBrowser.setText(document);
         } catch (RuntimeException invalid) {
             // A failed renderer must never strand the user without SWT controls.
@@ -722,7 +724,7 @@ public final class ConfigurationHomeView extends ViewPart {
                             + ", recorded failed attempt: " + failure.recordedFailure() + ".";
                     var nodes = DevicetreeHardware.inspect(snapshot.devicetree());
                     observed = new Evidence(board, profile, build, snapshot.devicetree(), config,
-                            settings, stale, warning, summary, nodes);
+                            settings, stale, warning, summary, nodes, snapshot);
                 } catch (Exception problem) {
                     Activator plugin = Activator.getDefault();
                     if (plugin != null) plugin.getLog().log(
@@ -731,7 +733,7 @@ public final class ConfigurationHomeView extends ViewPart {
                     observed = new Evidence("Unknown", "Unknown", null, "", "",
                             new Properties(), true, "Build inspection failed: " + problem.getMessage(),
                             FocusedConfigurationModel.inspect("Unknown", "Unknown", "", "", true),
-                            List.of());
+                            List.of(), null);
                 }
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 final Evidence result = observed;
