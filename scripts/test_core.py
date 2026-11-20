@@ -39,6 +39,7 @@ sources = sorted((root / 'plugins/io.github.niwantha33.zew.core/src').rglob('*.j
 sources += sorted((root / 'tests/core').glob('*.java'))
 # Reuse the real editor's JFace-independent index and completion engine in CI.
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/HardwareStudioDocument.java']
+sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ConfigurationStudioVisualDocument.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ObservatoryDesktopLaunch.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/MemoryProfilerJson.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ThreadTimelineReport.java']
