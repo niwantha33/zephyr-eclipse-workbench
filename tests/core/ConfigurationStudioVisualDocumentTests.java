@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
 import io.github.niwantha33.zew.ui.ConfigurationStudioVisualDocument;
 import java.util.List;
+import java.nio.file.Path;
 
 /** Pure Java safety/semantics tests; requires neither Eclipse nor a browser. */
 public final class ConfigurationStudioVisualDocumentTests {
@@ -46,6 +48,25 @@ public final class ConfigurationStudioVisualDocumentTests {
                 "hostile project and DTS text remains inert JSON");
         check(html.contains("\"state\":\"UNKNOWN\""),
                 "peripheral state preserved from evidence");
+        var source = new ConfigurationStudioFiles.Snapshot(List.of(
+                new ConfigurationStudioFiles.Option("GPIO","y","n",3),
+                new ConfigurationStudioFiles.Option("BROKEN",null,"y",6),
+                new ConfigurationStudioFiles.Option("STRING","\"hello\"",null,0)),
+                "", "debug", Path.of("/workspace/application/prj.conf"));
+        String linked = ConfigurationStudioVisualDocument.render(template,
+                "project", "board", "debug", "build", overview, "", "", false,
+                "dark", "software", source);
+        check(linked.contains("\"symbol\":\"CONFIG_GPIO\",\"value\":\"y\",\"requested\":\"n\"")
+                        && linked.contains("\"toggle\":true")
+                        && linked.contains("\"requestedLine\":3"),
+                "effective and requested state and project line remain distinguishable");
+        check(linked.contains("\"symbol\":\"CONFIG_BROKEN\",\"value\":\"Not resolved\",\"requested\":\"y\"")
+                        && linked.contains("\"unresolved\":true"),
+                "unresolved project request remains visible for repair");
+        check(linked.contains("\"symbol\":\"CONFIG_STRING\"")
+                        && linked.contains("\"requested\":null")
+                        && linked.contains("\"toggle\":false"),
+                "inherited nonboolean values never acquire a graphical toggle");
         String unavailable = ConfigurationStudioVisualDocument.render(template, "", "", "",
                 "", null, "", "", false, "bad-theme", "untrusted-section");
         check(unavailable.contains("\"hasEvidence\":false")
