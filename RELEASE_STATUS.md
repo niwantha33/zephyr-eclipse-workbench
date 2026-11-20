@@ -1,6 +1,21 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Configuration Studio PR #272 build repair (2026-11-20)
+
+- Linux and Windows run `44802984195` both stopped at the same Java
+  assertion: the dependency payload test expected raw `&&` although the
+  HTML-safe JSON renderer correctly emits `\u0026\u0026`.
+- Corrected the serialized expectation and strengthened checks for type,
+  effective value, visibility, assignability, dependency result, definition,
+  prompt and select/imply declarations. Production escaping stays intact.
+- Local Linux/JDK 21: all 850 Python tests (14 explicit skips), both visual
+  asset checks and every Java core suite passed. All 299 core/UI/Eclipse smoke
+  sources compiled against the installed Eclipse APIs. A local Maven package
+  attempt could not resolve the pinned Tycho extension; packaging, installed
+  UI execution and Windows firmware qualification require exact-head CI.
+- No release, merge, physical hardware or G0 acceptance is claimed.
+
 
 ## Trace Phase 6 — test-only semantic checkpoints (draft PR, 2026-11-16)
 

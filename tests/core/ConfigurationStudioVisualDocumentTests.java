@@ -117,9 +117,20 @@ public final class ConfigurationStudioVisualDocumentTests {
                 "CONFIG_GPIO", new KconfigInspector.Result(details, ""),
                 "CURRENT_SNAPSHOT");
         check(upstream.contains("\"available\":true")
-                && upstream.contains("\"dependencies\":\"SPI && GPIO\"")
-                && upstream.contains("\"selects\":\"ENABLE_LOG\""),
-                "real Kconfig type, visibility, dependencies and select/imply evidence retained");
+                && upstream.contains("\"type\":\"bool\"")
+                && upstream.contains("\"effective\":\"n\"")
+                && upstream.contains("\"visibility\":\"y\"")
+                && upstream.contains("\"assignable\":\"n,y\""),
+                "real Kconfig type, value, visibility and assignability retained");
+        // This payload is embedded in HTML: ampersands must remain escaped in
+        // its JSON representation. JSON.parse restores the original && text.
+        check(upstream.contains("\"dependencies\":\"SPI \\u0026\\u0026 GPIO\"")
+                && upstream.contains("\"dependencyState\":\"n\"")
+                && upstream.contains("\"prompt\":\"Use GPIO\"")
+                && upstream.contains("\"definitions\":\"drivers/gpio/Kconfig:12\"")
+                && upstream.contains("\"selects\":\"ENABLE_LOG\"")
+                && upstream.contains("\"implies\":\"ENABLE_PRINTK\""),
+                "HTML-safe Kconfig dependency, definition and select/imply evidence retained");
         check(!upstream.contains(hostile) && upstream.contains("\\u003c/script\\u003e"),
                 "upstream Kconfig help cannot inject a script");
         String staleUpstream = ConfigurationStudioVisualDocument.kconfigInspectorPayload(
