@@ -15,7 +15,7 @@ public final class ZephyrDeveloperPerspectiveHandler extends AbstractHandler {
         return null;
     }
 
-    static void open(IWorkbenchWindow window) {
+    public static void open(IWorkbenchWindow window) {
         if (window == null || window.getActivePage() == null) return;
         var perspective = window.getWorkbench().getPerspectiveRegistry()
                 .findPerspectiveWithId(ZephyrDeveloperPerspective.ID);
