@@ -59,6 +59,14 @@ for p in bundles:
                 classfile = 'io/github/niwantha33/zew/ui/' + name + '.class'
                 if classfile not in z.namelist():
                     raise SystemExit('Missing native Memory Profiler class: ' + classfile)
+            # Visual Configuration Studio must be the exact tested, offline
+            # asset with a compiled evidence bridge (not a missing web folder).
+            visual = 'configuration-studio/index.html'
+            expected_visual = root / 'plugins/io.github.niwantha33.zew.ui' / visual
+            if visual not in z.namelist() or z.read(visual) != expected_visual.read_bytes():
+                raise SystemExit('Installed visual Configuration Studio differs from tested source')
+            if 'io/github/niwantha33/zew/ui/ConfigurationStudioVisualDocument.class' not in z.namelist():
+                raise SystemExit('Missing visual Configuration Studio evidence bridge')
             if 'tools/inventory.py' not in z.namelist():
                 raise SystemExit('Tools inventory helper missing.')
             compile(z.read('tools/inventory.py'), 'tools/inventory.py', 'exec')

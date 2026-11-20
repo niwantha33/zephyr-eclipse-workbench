@@ -21,6 +21,8 @@ subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/tools
 # timeout, including slow Windows runner Python process startup overhead.
 subprocess.run([sys.executable, 'scripts/test_hardware_studio_assets.py'],
                check=True, cwd=root, timeout=90)
+subprocess.run([sys.executable, 'scripts/test_configuration_studio_visual_assets.py'],
+               check=True, cwd=root, timeout=90)
 out = root / 'build-core-tests'
 out.mkdir(exist_ok=True)
 shutil.copyfile(root / 'plugins/io.github.niwantha33.zew.core/src/svd-part-mappings.json', out / 'svd-part-mappings.json')
@@ -37,6 +39,7 @@ sources = sorted((root / 'plugins/io.github.niwantha33.zew.core/src').rglob('*.j
 sources += sorted((root / 'tests/core').glob('*.java'))
 # Reuse the real editor's JFace-independent index and completion engine in CI.
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/HardwareStudioDocument.java']
+sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ConfigurationStudioVisualDocument.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ObservatoryDesktopLaunch.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/MemoryProfilerJson.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ThreadTimelineReport.java']
@@ -68,6 +71,7 @@ sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33
 subprocess.run([tool('javac'), '--release', '21', '--add-modules', 'jdk.httpserver', '-encoding', 'UTF-8', '-d', str(out), *map(str, sources)], check=True, cwd=root)
 subprocess.run([tool('java'), '-cp', str(out), 'CoreTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'HardwareStudioDocumentTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationStudioVisualDocumentTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ObservatoryDesktopLaunchTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ZephyrSelectionIdentityTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'EmbeddedHubBoardCatalogueTests'], check=True, cwd=root, timeout=90)
