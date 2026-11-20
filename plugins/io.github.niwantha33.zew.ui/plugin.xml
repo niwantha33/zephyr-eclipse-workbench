@@ -130,6 +130,10 @@
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.UpdateStartup"/></extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.SmartCompletionStartup"/></extension>
   <extension point="org.eclipse.ui.views">
+    <view id="io.github.niwantha33.zew.ui.developerHome"
+          name="Zephyr Development Dashboard"
+          class="io.github.niwantha33.zew.ui.ZephyrDeveloperHomeView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.beginnerGuide"
           name="Zephyr Getting Started"
           class="io.github.niwantha33.zew.ui.ZephyrBeginnerView"
@@ -383,8 +387,8 @@
     </menuContribution>
     <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
       <menu id="io.github.niwantha33.zew.menu" label="Zephyr">
-        <command commandId="io.github.niwantha33.zew.beginnerPerspective" label="Getting Started Workspace" style="push"/>
-        <command commandId="io.github.niwantha33.zew.developerPerspective" label="Developer Workspace" style="push"/>
+        <command commandId="io.github.niwantha33.zew.beginnerPerspective" label="Guided Setup (step by step)" style="push"/>
+        <command commandId="io.github.niwantha33.zew.developerPerspective" label="Development Workspace (coding)" style="push"/>
         <separator name="start" visible="true"/>
         <command commandId="io.github.niwantha33.zew.quickStart" label="New / Import Project..." style="push"/>
         <menu id="io.github.niwantha33.zew.menu.board" label="Board and Hardware">

@@ -34,15 +34,11 @@ public final class ZephyrBeginnerPerspectiveSmoke {
                 throw new IllegalStateException("Advanced registers visible in beginner layout.");
             page.setPerspective(developer);
             if (page.findView("org.eclipse.ui.navigator.ProjectExplorer") == null
-                    || page.findView("io.github.niwantha33.zew.ui.beginnerGuide") == null
                     || page.findView("org.eclipse.ui.console.ConsoleView") == null
                     || page.findView("org.eclipse.ui.views.ProblemView") == null)
                 throw new IllegalStateException("Developer workspace views not visible.");
-            // Invoke the registered command through the same Eclipse service as
-            // the Zephyr menu. The installed plug-in does not export its internal
-            // Java handler package to this independent OSGi smoke-test bundle.
-            // Calling the class directly would fail even when the real menu works.
-            page.hideView(page.findView("io.github.niwantha33.zew.ui.beginnerGuide"));
+            // Invoke the registered command through the real Eclipse handler to
+            // migrate any saved layout and restore the distinct dashboard.
             var commands = window.getService(org.eclipse.ui.handlers.IHandlerService.class);
             if (commands == null)
                 throw new IllegalStateException("Eclipse handler service unavailable.");
@@ -51,9 +47,23 @@ public final class ZephyrBeginnerPerspectiveSmoke {
             } catch (Exception error) {
                 throw new IllegalStateException("Developer Workspace command failed.", error);
             }
-            var guide = page.findView("io.github.niwantha33.zew.ui.beginnerGuide");
-            if (guide == null || !page.isPartVisible(guide))
-                throw new IllegalStateException("Developer Workspace did not restore guide.");
+            var home = page.findView("io.github.niwantha33.zew.ui.developerHome");
+            if (home == null || !page.isPartVisible(home))
+                throw new IllegalStateException("Development dashboard not visible.");
+            var duplicate = page.findView("io.github.niwantha33.zew.ui.beginnerGuide");
+            if (duplicate != null && page.isPartVisible(duplicate))
+                throw new IllegalStateException("Beginner guide duplicated in developer layout.");
+            // Closing and explicitly selecting the workspace must restore its
+            // dashboard, without performing any build, flash or target IO.
+            page.hideView(home);
+            try {
+                commands.executeCommand("io.github.niwantha33.zew.developerPerspective", null);
+            } catch (Exception error) {
+                throw new IllegalStateException("Developer dashboard restore failed.", error);
+            }
+            home = page.findView("io.github.niwantha33.zew.ui.developerHome");
+            if (home == null || !page.isPartVisible(home))
+                throw new IllegalStateException("Development dashboard did not reopen.");
             // A board browser without a selected project must render a safe,
             // usable empty state. The view itself never starts hardware IO.
             try {
@@ -64,7 +74,7 @@ public final class ZephyrBeginnerPerspectiveSmoke {
             } catch (org.eclipse.ui.PartInitException error) {
                 throw new IllegalStateException("Board Browser could not initialize.", error);
             }
-            System.out.println("PASS ZEPHYR WORKSPACES: guides and Board Browser registered");
+            System.out.println("PASS ZEPHYR WORKSPACES: distinct dashboard and Board Browser registered");
         } finally {
             if (previous != null) page.setPerspective(previous);
         }

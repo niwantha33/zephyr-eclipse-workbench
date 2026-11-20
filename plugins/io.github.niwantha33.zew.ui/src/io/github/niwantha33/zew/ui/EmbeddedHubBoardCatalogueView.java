@@ -188,14 +188,15 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
         changeBoard.setEnabled(false);
         changeBoard.addListener(SWT.Selection, event -> editProjectBoard());
         Label caution = new Label(actions, SWT.WRAP);
-        caution.setText("Board changes require confirmation in Project Properties; "
-                + "no build, flash or reset is started.");
+        caution.setText("Board changes require confirmation; browsing never builds, flashes or resets hardware. "
+                + "Explore Pins and Peripherals uses the current saved board, not a preview.");
         caution.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
         inspect = new Button(actions, SWT.PUSH);
-        inspect.setText("Configure Current Project...");
-        inspect.setToolTipText("Open Configuration Studio for the saved project target, "
-                + "not the board currently previewed.");
+        inspect.setText("Explore Pins and Peripherals...");
+        inspect.setToolTipText("Open the guided hardware explorer for the saved project board. "
+                + "Previewing another board does not change your project. "
+                + "Pin and peripheral evidence requires a generated build.");
         inspect.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         inspect.setEnabled(false);
         inspect.addListener(SWT.Selection, event -> inspectProject());
@@ -490,9 +491,9 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
         try {
             var home = (ConfigurationHomeView) getSite().getPage().showView(ConfigurationHomeView.ID);
             home.displayProject(project);
-            home.openSection("overview");
+            home.openSection("hardware");
         } catch (Exception error) {
-            status.setText("Cannot open Configuration Studio: " + error.getMessage());
+            status.setText("Cannot open the hardware explorer: " + error.getMessage());
         }
     }
 

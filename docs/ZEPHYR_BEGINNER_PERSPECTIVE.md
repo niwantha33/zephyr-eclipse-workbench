@@ -11,8 +11,8 @@ The Zephyr menu now uses task names, with specialised investigations in dedicate
 
 ## Two everyday workspaces
 
-- **Getting Started Workspace**: a two-column guide with workflow navigation (left) and one selected step (right). Project Explorer, the editor, Console and Problems remain part of the Eclipse perspective. Steps are Project, Hardware, Configuration, Build, Flash & Debug, Inspect & Analyse, and More Tools. Navigation alone never runs a command.
-- **Developer Workspace**: Project Explorer, editor, Console, Problems, and a dismissible Getting Started guide on the right. It never opens to a completely empty main workspace on a new layout. Existing empty saved developer layouts receive a one-time, non-destructive guide reveal after upgrade. Configuration Studio, Hardware Studio, boards, tracing and registers remain on demand.
+- **Guided Setup (step by step)**: a two-column guide with workflow navigation (left) and one selected step (right). Project Explorer, the editor, Console and Problems remain part of the Eclipse perspective. Steps are Project, Hardware, Configuration, Build, Flash & Debug, Inspect & Analyse, and More Tools. Navigation alone never runs a command.
+- **Development Workspace (coding)**: an editor-focused layout with Project Explorer, Console and Problems, plus a compact, dismissible development dashboard. This is not the beginner guide: it offers project context, source navigation and explicit hardware, build, flash/debug and advanced settings actions. For existing developer layouts, a one-time upgrade migration replaces the former duplicate guide with the dashboard. Configuration Studio, Hardware Studio, boards, tracing and registers remain on demand.
 - **Hardware Debug Workspace** remains separate for actual debug sessions.
 
 Both workspaces are layouts only: switching them cannot flash/reset a target.
@@ -28,15 +28,15 @@ Both workspaces are layouts only: switching them cannot flash/reset a target.
 
 ## Workspace visibility and Zephyr menu wording
 
-- Choosing **Getting Started Workspace** always reopens the guide even if a saved Eclipse perspective had closed its tab.
-- Choosing **Developer Workspace** keeps the editor and Project Explorer visible and reopens the dismissible guide to provide a meaningful landing page.
-- When upgrading an existing workspace whose Developer perspective has no editor open, show the guide once, not at every startup.
+- Choosing **Guided Setup (step by step)** reopens the beginner guide even if a saved Eclipse perspective previously closed it.
+- Choosing **Development Workspace (coding)** keeps the editor and Project Explorer visible, hides the duplicate beginner guide, and opens the optional development dashboard.
+- When upgrading an existing Developer perspective without an open editor, show the development dashboard once. Users can subsequently close it without startup restoring it on every launch.
 - The Zephyr menu uses literal conjunctions ("Board and Hardware", "Flash and Run", "Trace and Analyse") because a single ampersand is interpreted as an Eclipse mnemonic and disappears.
 - The guide only displays controls and project evidence. Neither switching workspaces nor selecting guide steps runs build, flash, attach or debug commands.
 
 ## Board browser
 
-**Board & Hardware > Browse Available Boards** shows a searchable 4-column list with an SoC/vendor filter and optional technical details. **Change Project Board** uses the same validated Project Properties workflow as before. Merely browsing metadata cannot change the saved build target.
+**Board & Hardware > Browse Available Boards** shows a searchable 4-column list with an SoC/vendor filter and optional technical details. **Change Project Board** uses the same validated Project Properties workflow as before. Merely browsing metadata cannot change the saved build target. **Explore Pins and Peripherals** opens the guided **Hardware** section for the saved project board, not an uncommitted catalogue preview. Hardware Studio offers a visual, read-only graph for generated Devicetree evidence; this is not yet a fully editable SysConfig-style pin mux tool, and missing or stale builds must not fabricate pins.
 
 ## Native acceptance to execute before release
 
