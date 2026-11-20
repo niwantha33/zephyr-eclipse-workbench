@@ -297,76 +297,189 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
         }
 
         void load() {
+            reloadBoards.setEnabled(false);
+            setErrorMessage(null);
+            setMessage("Reading available boards from the selected Zephyr environment...",
+                    IMessageProvider.INFORMATION);
+            setPageComplete(false);
             try {
+                if (environment.getText().isBlank())
+                    throw new IllegalArgumentException("Choose your ready Zephyr setup folder first.");
                 Path root = Path.of(environment.getText().trim()).toAbsolutePath().normalize();
-                var settings = ProjectContext.load(root); var discovered = new ArrayList<String[]>();
+                var settings = ProjectContext.load(root);
+                var discovered = new ArrayList<String[]>();
                 getContainer().run(true, true, monitor -> {
                     try {
-                        var helper = Path.of(FileLocator.toFileURL(Activator.getDefault().getBundle().getEntry("tools/hardware_catalog.py")).toURI());
+                        var helper = Path.of(FileLocator.toFileURL(Activator.getDefault()
+                                .getBundle().getEntry("tools/hardware_catalog.py")).toURI());
                         monitor.beginTask("Discover Zephyr hardware", IProgressMonitor.UNKNOWN);
-                        new ProcessRunner().run(List.of(settings.getProperty("python"), helper.toString(), "--zephyr", Path.of(settings.getProperty("workspace"), "zephyr").toString()),
-                            Path.of(settings.getProperty("workspace")), Duration.ofMinutes(3), monitor::isCanceled, line -> {
-                                String[] cells = line.split("\t", -1); if (cells.length == 7) discovered.add(cells);
-                            }, ProjectContext.environment(settings)).requireSuccess();
-                    } catch (InterruptedException error) { throw error; }
-                    catch (Exception error) { throw new java.lang.reflect.InvocationTargetException(error); }
-                    finally { monitor.done(); }
+                        new ProcessRunner().run(
+                                List.of(settings.getProperty("python"), helper.toString(),
+                                        "--zephyr",
+                                        Path.of(settings.getProperty("workspace"), "zephyr").toString()),
+                                Path.of(settings.getProperty("workspace")), Duration.ofMinutes(3),
+                                monitor::isCanceled, line -> {
+                                    String[] cells = line.split("\t", -1);
+                                    if (cells.length == 7) discovered.add(cells);
+                                }, ProjectContext.environment(settings)).requireSuccess();
+                    } catch (InterruptedException error) {
+                        throw error;
+                    } catch (Exception error) {
+                        throw new java.lang.reflect.InvocationTargetException(error);
+                    } finally {
+                        monitor.done();
+                    }
                 });
-                if (discovered.isEmpty()) throw new java.io.IOException("No hardware found. Check this environment's Zephyr installation.");
-                rows = discovered; loadedRoot = root;
-                vendor.setItems(java.util.stream.Stream.concat(java.util.stream.Stream.of("All vendors"), rows.stream().map(r -> r[0]).distinct().sorted()).toArray(String[]::new)); vendor.select(0); fillSoc(); filter();
-                if (existing.getSelection() && !location.getText().isBlank()) {
-                    Path application = Path.of(location.getText().trim());
-                    if (Files.isRegularFile(application.resolve(".zew/project.json"))) {
-                        String board = ProjectProfile.read(application).board();
-                        search.setText(board);
-                        for (var item : targets.getItems()) if (((String[]) item.getData())[6].equals(board)) { targets.setSelection(item); break; }
-                        setMessage("Target loaded from .zew/project.json. Source files will be preserved.");
-                    } else setMessage("No saved workbench target. Select the exact hardware used by this application.");
-                }
+                if (discovered.isEmpty())
+                    throw new java.io.IOException("No boards found in this Zephyr environment.");
+                rows = discovered;
+                loadedRoot = root;
+                vendor.setItems(java.util.stream.Stream.concat(
+                        java.util.stream.Stream.of("All vendors"),
+                        rows.stream().map(row -> row[0]).distinct().sorted())
+                        .toArray(String[]::new));
+                vendor.select(0);
+                fillSoc();
+                filter();
+                restoreSavedTarget();
                 validatePage();
-            } catch (Exception error) { loadedRoot = null; setErrorMessage(error.getCause() == null ? error.getMessage() : error.getCause().getMessage()); setPageComplete(false); }
+            } catch (Exception error) {
+                loadedRoot = null;
+                rows = new ArrayList<>();
+                vendor.removeAll();
+                soc.removeAll();
+                targets.removeAll();
+                resultsHelp.setText("Board list unavailable. Check the setup folder, then reload.");
+                selectedTarget.setText("Selected target: none");
+                continueButton.setEnabled(false);
+                String cause = error.getCause() == null ? error.getMessage() : error.getCause().getMessage();
+                setErrorMessage(cause == null ? "Unable to load board list." : cause);
+                setPageComplete(false);
+            } finally {
+                reloadBoards.setEnabled(true);
+            }
         }
+
         void fillSoc() {
-            soc.setItems(java.util.stream.Stream.concat(java.util.stream.Stream.of("All SoCs"), rows.stream().filter(r -> vendor.getSelectionIndex() == 0 || r[0].equals(vendor.getText())).map(r -> r[2]).distinct().sorted()).toArray(String[]::new)); soc.select(0);
+            soc.setItems(java.util.stream.Stream.concat(
+                    java.util.stream.Stream.of("All SoCs"),
+                    rows.stream().filter(row -> vendor.getSelectionIndex() == 0
+                            || row[0].equals(vendor.getText())).map(row -> row[2]).distinct().sorted())
+                    .toArray(String[]::new));
+            soc.select(0);
         }
+
         void filter() {
-            if (targets == null) return;
-            targets.removeAll(); String query = search.getText().toLowerCase(Locale.ROOT);
+            if (targets == null || resultsHelp == null) return;
+            String priorTarget = targets.getSelectionCount() == 1
+                    ? ((String[]) targets.getSelection()[0].getData())[6] : null;
+            targets.removeAll();
+            String query = search.getText().trim().toLowerCase(Locale.ROOT);
+            int found = 0;
             for (String[] row : rows) {
                 if (vendor.getSelectionIndex() > 0 && !row[0].equals(vendor.getText())) continue;
                 if (soc.getSelectionIndex() > 0 && !row[2].equals(soc.getText())) continue;
                 if (!String.join(" ", row).toLowerCase(Locale.ROOT).contains(query)) continue;
-                var item = new TableItem(targets, SWT.NONE); item.setText(new String[] {row[1], row[3], row[4], row[6]}); item.setData(row);
+                found++;
+                if (found > RESULT_LIMIT) continue;
+                var item = new TableItem(targets, SWT.NONE);
+                item.setText(new String[] {row[1], row[3], row[4], row[6]});
+                item.setData(row);
+                if (row[6].equals(priorTarget)) targets.setSelection(item);
+            }
+            if (rows.isEmpty()) {
+                resultsHelp.setText("No boards loaded. Select a ready environment and reload.");
+            } else if (found == 0) {
+                resultsHelp.setText("No matching boards. Try a shorter search or All vendors.");
+            } else if (found > RESULT_LIMIT) {
+                resultsHelp.setText("Showing first " + RESULT_LIMIT + " of " + found
+                        + " targets. Type your board or SoC to narrow the results.");
+            } else {
+                resultsHelp.setText(found + (found == 1 ? " matching target" : " matching targets")
+                        + ". Click a row below to select.");
             }
             validatePage();
         }
+
         void validatePage() {
-            if (targets == null) return;
+            if (targets == null || selectedTarget == null) return;
             String error = null;
+            String guidance = null;
+            boolean ready = false;
             try {
-                if (!ResourcesPlugin.getWorkspace().validateName(name.getText().trim(), IResource.PROJECT).isOK()) error = "Enter a valid Eclipse project name.";
-                else if (ResourcesPlugin.getWorkspace().getRoot().getProject(name.getText().trim()).exists()) error = "An Eclipse project already uses this name.";
-                else if (location.getText().isBlank() || !Path.of(location.getText().trim()).isAbsolute()) error = "Choose an absolute application folder.";
-                else if (loadedRoot == null || !loadedRoot.equals(Path.of(environment.getText().trim()).toAbsolutePath().normalize())) error = "Load hardware from the selected ready environment.";
-                else if (targets.getSelectionCount() != 1) error = "Select one exact board target.";
+                String projectName = name.getText().trim();
+                String pathText = location.getText().trim();
+                if (!ResourcesPlugin.getWorkspace().validateName(projectName, IResource.PROJECT).isOK())
+                    error = "Enter a valid Eclipse project name.";
+                else if (ResourcesPlugin.getWorkspace().getRoot().getProject(projectName).exists())
+                    error = "That project name already exists in Eclipse.";
+                else if (pathText.isBlank())
+                    guidance = existing.getSelection()
+                            ? "Browse to your existing Zephyr application (folder with CMakeLists.txt)."
+                            : "Choose a folder for your new application.";
+                else if (!Path.of(pathText).isAbsolute())
+                    error = "Choose an absolute application folder.";
+                else if (environment.getText().isBlank())
+                    guidance = "Choose a ready Zephyr environment, then load the board list.";
+                else if (loadedRoot == null || !loadedRoot.equals(
+                        Path.of(environment.getText().trim()).toAbsolutePath().normalize()))
+                    guidance = "Reload boards from the selected Zephyr environment.";
+                else if (targets.getSelectionCount() != 1)
+                    guidance = "Search for your board and select one exact target in the list.";
                 else {
-                    Path source = Path.of(location.getText().trim()).toAbsolutePath().normalize();
-                    Path zephyr = Path.of(ProjectContext.load(loadedRoot).getProperty("workspace"), "zephyr").toRealPath();
-                    Path ancestor = source; while (ancestor != null && !Files.exists(ancestor)) ancestor = ancestor.getParent();
-                    if (ancestor != null && ancestor.toRealPath().startsWith(zephyr)) error = "Choose a standalone application outside the upstream Zephyr tree.";
-                    else if (existing.getSelection() && !Files.isRegularFile(source.resolve("CMakeLists.txt"))) error = "Existing application must contain CMakeLists.txt.";
-                    else if (!existing.getSelection() && Files.exists(source)) { try (var files = Files.list(source)) { if (files.findAny().isPresent()) error = "Folder is not empty. Select Import existing application."; } }
-                    else if (existing.getSelection() && Files.exists(source.resolve(".project"))) error = "This folder already contains Eclipse metadata. Use Eclipse's Existing Projects import to preserve it.";
-                    if (existing.getSelection() && Files.isRegularFile(source.resolve(".zew/project.properties"))
-                            && !ZephyrProjectFiles.readBoard(source).equals(((String[]) targets.getSelection()[0].getData())[6])) error = "Selected hardware conflicts with the saved project target.";
-                    if (existing.getSelection() && Files.isRegularFile(source.resolve(".zew/project.json")) && !ProjectProfile.read(source).board().equals(((String[]) targets.getSelection()[0].getData())[6])) error = "Selected hardware conflicts with the saved project target.";
+                    Path source = Path.of(pathText).toAbsolutePath().normalize();
+                    Path zephyr = Path.of(ProjectContext.load(loadedRoot)
+                            .getProperty("workspace"), "zephyr").toRealPath();
+                    Path ancestor = source;
+                    while (ancestor != null && !Files.exists(ancestor)) ancestor = ancestor.getParent();
+                    if (ancestor != null && ancestor.toRealPath().startsWith(zephyr)) {
+                        error = "Choose an application folder outside the Zephyr source tree.";
+                    } else if (existing.getSelection()
+                            && !Files.isRegularFile(source.resolve("CMakeLists.txt"))) {
+                        error = "This folder is not a Zephyr application (CMakeLists.txt is missing).";
+                    } else if (!existing.getSelection() && Files.exists(source)) {
+                        try (var files = Files.list(source)) {
+                            if (files.findAny().isPresent())
+                                error = "Folder contains files. Choose an empty folder or Import.";
+                        }
+                    }
+                    if (error == null && existing.getSelection()
+                            && Files.exists(source.resolve(".project"))) {
+                        error = "This folder has Eclipse metadata. Use File > Import > Existing Projects.";
+                    }
+                    String selectedBoard = ((String[]) targets.getSelection()[0].getData())[6];
+                    if (error == null && existing.getSelection()
+                            && Files.isRegularFile(source.resolve(".zew/project.properties"))
+                            && !ZephyrProjectFiles.readBoard(source).equals(selectedBoard)) {
+                        error = "Selected target conflicts with the application's saved board.";
+                    }
+                    if (error == null && existing.getSelection()
+                            && Files.isRegularFile(source.resolve(".zew/project.json"))
+                            && !ProjectProfile.read(source).board().equals(selectedBoard)) {
+                        error = "Selected target conflicts with the application's saved board.";
+                    }
+                    ready = error == null;
                 }
-            } catch (Exception e) { error = e.getMessage(); }
-            if (targets.getSelectionCount() == 1 && ((String[]) targets.getSelection()[0].getData())[6].contains("/esp32s3/appcpu"))
-                setMessage("APPCPU is the secondary core and requires primary-core firmware. For standalone Hello World choose esp32s3/procpu.", org.eclipse.jface.dialogs.IMessageProvider.WARNING);
-            else setMessage("Eclipse Build Project will check the selected SoC and CPU, then prepare matching pinned SDK and West modules.");
-            setErrorMessage(error); setPageComplete(error == null);
+            } catch (Exception errorCause) {
+                error = errorCause.getMessage() == null
+                        ? "Check the application path and environment." : errorCause.getMessage();
+            }
+            String exact = targets.getSelectionCount() == 1
+                    ? ((String[]) targets.getSelection()[0].getData())[6] : null;
+            selectedTarget.setText("Selected target: " + (exact == null ? "none" : exact));
+            if (error == null && guidance == null && exact != null
+                    && exact.contains("/esp32s3/appcpu")) {
+                setMessage("APPCPU is the secondary core; for standalone Hello World choose "
+                        + "esp32s3/procpu.", IMessageProvider.WARNING);
+            } else {
+                setMessage(guidance == null
+                        ? "Select Next or Review selected project to verify the destination and hardware."
+                        : guidance, IMessageProvider.INFORMATION);
+            }
+            setErrorMessage(error);
+            setPageComplete(ready);
+            if (continueButton != null && !continueButton.isDisposed())
+                continueButton.setEnabled(ready);
         }
     }
     @Override public boolean performFinish() {
