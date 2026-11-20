@@ -12,14 +12,15 @@ import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.ScrolledComposite;
+import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.List;
 import org.eclipse.swt.widgets.Label;
-import org.eclipse.swt.widgets.Menu;
-import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.ui.ISelectionListener;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.dialogs.PreferencesUtil;
@@ -30,68 +31,68 @@ import io.github.niwantha33.zew.core.ProjectProfile;
 import io.github.niwantha33.zew.core.ZephyrProjectFiles;
 
 /**
- * Five small steps with true selected-project metadata. Displaying the guide
- * never launches a build, attaches OpenOCD or infers target hardware state.
+ * Two-pane, task-first guide using true selected-project metadata. Selecting a
+ * step only updates the detail pane; it never launches commands or target IO.
  */
 public final class ZephyrBeginnerView extends ViewPart {
     public static final String ID = Activator.ID + ".beginnerGuide";
+    private static final String[] STEPS = {
+        "1   Project", "2   Hardware", "3   Configuration",
+        "4   Build", "5   Flash & Debug", "6   Inspect & Analyse",
+        "7   More Tools"
+    };
     private ScrolledComposite scroll;
     private Composite content;
+    private List navigation;
     private Label selected, board, profile, buildOutput;
     private ISelectionListener selectionListener;
     private IResourceChangeListener resourceListener;
 
     @Override public void createPartControl(Composite parent) {
         parent.setLayout(new FillLayout());
-        scroll = new ScrolledComposite(parent, SWT.V_SCROLL | SWT.H_SCROLL);
+        SashForm panes = new SashForm(parent, SWT.HORIZONTAL);
+
+        // The left column is navigation and project context, never a list of
+        // commands. Selection cannot build, flash or attach to physical hardware.
+        Composite left = new Composite(panes, SWT.NONE);
+        GridLayout leftLayout = new GridLayout(1, false);
+        leftLayout.marginWidth = 12;
+        leftLayout.marginHeight = 14;
+        leftLayout.verticalSpacing = 9;
+        left.setLayout(leftLayout);
+        heading(left, "GETTING STARTED");
+        line(left, "Choose a step. Its instructions appear on the right.");
+
+        navigation = new List(left, SWT.BORDER | SWT.SINGLE | SWT.V_SCROLL);
+        navigation.setItems(STEPS);
+        navigation.setToolTipText("Select a step to view instructions and actions on the right.");
+        GridData navigationData = new GridData(SWT.FILL, SWT.FILL, true, true);
+        navigationData.minimumWidth = 170;
+        navigationData.minimumHeight = 170;
+        navigation.setLayoutData(navigationData);
+
+        heading(left, "CURRENT PROJECT");
+        selected = line(left, "Select a Zephyr project in Project Explorer.");
+        board = line(left, "Board: not selected");
+        profile = line(left, "Profile: not selected");
+        buildOutput = line(left, "Build output: not checked");
+
+        // Only one step's tools and short usage guidance are shown at a time.
+        scroll = new ScrolledComposite(panes, SWT.V_SCROLL | SWT.H_SCROLL);
         scroll.setExpandHorizontal(true);
         scroll.setExpandVertical(true);
-        Composite body = new Composite(scroll, SWT.NONE);
-        content = body;
-        GridLayout grid = new GridLayout(1, false);
-        grid.marginWidth = 14;
-        grid.marginHeight = 14;
-        grid.verticalSpacing = 8;
-        body.setLayout(grid);
+        content = new Composite(scroll, SWT.NONE);
+        GridLayout detailLayout = new GridLayout(1, false);
+        detailLayout.marginWidth = 20;
+        detailLayout.marginHeight = 18;
+        detailLayout.verticalSpacing = 10;
+        content.setLayout(detailLayout);
+        scroll.setContent(content);
+        panes.setWeights(new int[] { 30, 70 });
 
-        heading(body, "YOUR ZEPHYR PROJECT");
-        line(body, "Follow the workflow below. Build, flash and debug always require your action.");
-        selected = line(body, "Select a Zephyr project in Project Explorer.");
-        board = line(body, "Board: not selected");
-        profile = line(body, "Profile: not selected");
-        buildOutput = line(body, "Build output: not checked");
-
-        heading(body, "1  Open a project");
-        button(body, "New / Import Project...", () -> command("io.github.niwantha33.zew.quickStart"));
-
-        heading(body, "2  Choose hardware");
-        button(body, "Change Project Board...", this::properties);
-        button(body, "Browse Available Boards...", () -> command("io.github.niwantha33.zew.embeddedHubBoards"));
-
-        heading(body, "3  Configure");
-        button(body, "Configuration Studio...", () -> configuration("overview"));
-        button(body, "Hardware & Devicetree...", () -> configuration("hardware"));
-        button(body, "Change Build Profile...", this::properties);
-
-        heading(body, "4  Build");
-        button(body, "Build Firmware", this::build);
-        line(body, "Check Console and Problems for errors.");
-
-        heading(body, "5  Flash / Debug");
-        line(body, "These actions may operate physical hardware. Nothing runs automatically.");
-        button(body, "Flash Firmware...", () -> command("io.github.niwantha33.zew.flash"));
-        button(body, "Flash and Debug...", () -> command("io.github.niwantha33.zew.flashDebug"));
-        button(body, "Open Hardware Debug Workspace", this::debugPerspective);
-
-        heading(body, "Additional tools");
-        Button advanced = new Button(body, SWT.PUSH);
-        advanced.setText("Advanced Views...");
-        advanced.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        advanced.addListener(SWT.Selection, event -> advancedViews(advanced));
-        line(body, "Switch layouts using Zephyr > Developer Workspace.");
-
-        scroll.setContent(body);
-        scroll.setMinSize(body.computeSize(280, SWT.DEFAULT));
+        navigation.addListener(SWT.Selection, event -> showStep(navigation.getSelectionIndex()));
+        navigation.select(0);
+        showStep(0);
 
         selectionListener = (part, selection) -> refresh();
         getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(selectionListener);
@@ -105,6 +106,78 @@ public final class ZephyrBeginnerView extends ViewPart {
         ResourcesPlugin.getWorkspace().addResourceChangeListener(
                 resourceListener, IResourceChangeEvent.POST_CHANGE);
         refresh();
+    }
+
+    /** Show the selected task in the second column without running anything. */
+    private void showStep(int step) {
+        if (content == null || content.isDisposed()) return;
+        for (Control child : content.getChildren()) child.dispose();
+        switch (step) {
+            case 0:
+                heading(content, "1   Open or create a project");
+                line(content, "• What: Create a Zephyr application or import an existing one.");
+                line(content, "• How: Open the wizard, then select the project in Project Explorer.");
+                button(content, "New / Import Project...", () -> command("io.github.niwantha33.zew.quickStart"));
+                break;
+            case 1:
+                heading(content, "2   Choose your hardware");
+                line(content, "• What: Select the exact board and processor target for this project.");
+                line(content, "• How: Browse supported boards before changing the saved target.");
+                line(content, "• Changing a board requires Project Properties; browsing does not.");
+                button(content, "Browse Available Boards...", () -> command("io.github.niwantha33.zew.embeddedHubBoards"));
+                button(content, "Change Project Board...", this::properties);
+                break;
+            case 2:
+                heading(content, "3   Configure the firmware");
+                line(content, "• What: Configure peripherals, Devicetree and build options.");
+                line(content, "• How: Start in Configuration Studio; inspect generated evidence before editing.");
+                line(content, "• Select a named build profile if you need different configurations.");
+                button(content, "Open Configuration Studio...", () -> configuration("overview"));
+                button(content, "Open Hardware & Devicetree...", () -> configuration("hardware"));
+                button(content, "Change Build Profile...", this::properties);
+                break;
+            case 3:
+                heading(content, "4   Build firmware");
+                line(content, "• What: Compile the selected board and build profile.");
+                line(content, "• How: Build, then inspect Console and Problems for diagnostics.");
+                line(content, "• A successful local build does not prove the firmware ran on hardware.");
+                button(content, "Build Firmware", this::build);
+                break;
+            case 4:
+                heading(content, "5   Flash and debug");
+                line(content, "• What: Program a connected board or start a debugging session.");
+                line(content, "• How: Connect the correct probe and verify your target first.");
+                line(content, "• These actions can change physical hardware. Nothing runs on selection.");
+                button(content, "Flash Firmware...", () -> command("io.github.niwantha33.zew.flash"));
+                button(content, "Flash and Debug...", () -> command("io.github.niwantha33.zew.flashDebug"));
+                button(content, "Open Hardware Debug Workspace", this::debugPerspective);
+                break;
+            case 5:
+                heading(content, "6   Inspect and analyse");
+                line(content, "• What: Inspect trace, task scheduling and CPU activity where evidence exists.");
+                line(content, "• How: Start with Debug Trace Console, then inspect timelines and CPU load.");
+                line(content, "• Empty or offline data must not be presented as live target activity.");
+                button(content, "Debug Trace Console...", () -> openView("Debug Trace Console", ZephyrTraceConsoleView.ID));
+                button(content, "Thread Timeline...", () -> openView("Thread Timeline", ThreadTimelineView.ID));
+                button(content, "CPU Load...", () -> openView("CPU Load", ZephyrCpuLoadView.ID));
+                break;
+            case 6:
+                heading(content, "7   Additional tools");
+                line(content, "• What: Explore generated hardware configuration and target registers.");
+                line(content, "• How: Open a tool when the project or debug session needs it.");
+                line(content, "• Register values require valid target evidence; unavailable data stays unavailable.");
+                button(content, "Devicetree Graph Studio...", () -> openView("Devicetree Graph Studio", Activator.ID + ".dtsGraph"));
+                button(content, "YAML Connected Blocks...", () -> openView("YAML Connected Blocks", Activator.ID + ".yamlStructure"));
+                button(content, "Hardware Register Explorer...", () -> openView("Hardware Register Explorer", SocRegistersHandler.VIEW_ID));
+                button(content, "Developer Workspace", () -> command("io.github.niwantha33.zew.developerWorkspace"));
+                break;
+            default:
+                heading(content, "Choose a step on the left");
+                line(content, "Select a workflow stage to view its actions and instructions.");
+                break;
+        }
+        updateScrollSize();
+        scroll.setOrigin(0, 0);
     }
 
     private static void heading(Composite parent, String title) {
@@ -180,7 +253,7 @@ public final class ZephyrBeginnerView extends ViewPart {
     private void updateScrollSize() {
         if (content == null || content.isDisposed() || scroll.isDisposed()) return;
         content.layout(true, true);
-        scroll.setMinSize(content.computeSize(280, SWT.DEFAULT));
+        scroll.setMinSize(content.computeSize(300, SWT.DEFAULT));
     }
 
     private IProject requireProject() {
@@ -248,38 +321,16 @@ public final class ZephyrBeginnerView extends ViewPart {
         if (descriptor != null) getSite().getPage().setPerspective(descriptor);
     }
 
-    private void advancedViews(Button anchor) {
-        Menu menu = new Menu(anchor);
-        advancedItem(menu, "Devicetree Graph Studio", Activator.ID + ".dtsGraph");
-        advancedItem(menu, "YAML Connected Blocks", Activator.ID + ".yamlStructure");
-        advancedItem(menu, "Hardware Register Explorer", SocRegistersHandler.VIEW_ID);
-        advancedItem(menu, "Debug Trace Console", ZephyrTraceConsoleView.ID);
-        advancedItem(menu, "Thread Timeline", ThreadTimelineView.ID);
-        advancedItem(menu, "CPU Load", ZephyrCpuLoadView.ID);
-        new MenuItem(menu, SWT.SEPARATOR);
-        MenuItem debug = new MenuItem(menu, SWT.PUSH);
-        debug.setText("Hardware Debug perspective");
-        debug.addListener(SWT.Selection, event -> debugPerspective());
-        menu.addListener(SWT.Hide, event -> anchor.getDisplay().asyncExec(() -> {
-            if (!menu.isDisposed()) menu.dispose();
-        }));
-        menu.setLocation(anchor.toDisplay(0, anchor.getSize().y));
-        menu.setVisible(true);
-    }
-
-    private void advancedItem(Menu menu, String title, String viewId) {
-        MenuItem item = new MenuItem(menu, SWT.PUSH);
-        item.setText(title);
-        item.addListener(SWT.Selection, event -> {
-            try { getSite().getPage().showView(viewId); }
-            catch (PartInitException error) {
-                MessageDialog.openError(getSite().getShell(), title, error.getMessage());
-            }
-        });
+    private void openView(String title, String viewId) {
+        try {
+            getSite().getPage().showView(viewId);
+        } catch (PartInitException error) {
+            MessageDialog.openError(getSite().getShell(), title, error.getMessage());
+        }
     }
 
     @Override public void setFocus() {
-        if (scroll != null && !scroll.isDisposed()) scroll.setFocus();
+        if (navigation != null && !navigation.isDisposed()) navigation.setFocus();
     }
 
     @Override public void dispose() {
