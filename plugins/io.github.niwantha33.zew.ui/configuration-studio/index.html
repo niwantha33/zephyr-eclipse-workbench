@@ -126,6 +126,28 @@ const SECTIONS = ['overview','hardware','software','system'];
 let section = SECTIONS.includes(DATA.section) ? DATA.section : 'overview';
 let choice = null, search = '', kfilter = 'all';
 let pendingEdit = null;
+const kconfigEvidence = Object.create(null);
+const kconfigPending = new Set();
+function requestKconfigEvidence(item) {
+  if (!item || !/^CONFIG_[A-Z0-9_]{1,160}$/.test(item.symbol)
+      || Object.prototype.hasOwnProperty.call(kconfigEvidence,item.symbol)
+      || kconfigPending.has(item.symbol)) return;
+  kconfigPending.add(item.symbol);
+  const outcome=host('inspect-kconfig',item.symbol);
+  if (outcome === 'DENIED' || outcome === 'UNAVAILABLE') {
+    kconfigPending.delete(item.symbol);
+    kconfigEvidence[item.symbol]={available:false,message:
+      'The selected build cannot inspect this setting. Refresh or use native Kconfig tools.'};
+    renderInspector();
+  }
+}
+window.zewConfigurationInspector = function(report) {
+  if (!report || !/^CONFIG_[A-Z0-9_]{1,160}$/.test(report.symbol)) return;
+  kconfigPending.delete(report.symbol);
+  kconfigEvidence[report.symbol] = report;
+  if (choice && choice.type==='setting' && choice.item.symbol===report.symbol)
+    renderInspector();
+};
 let theme = DATA.theme === 'light' ? 'light' : 'dark';
 const MAX_DISPLAY = 350;
 function host(action, value) {
@@ -180,6 +202,7 @@ function go(sectionName) {
 function selected(type, item) {
   choice = {type, item};
   renderInspector();
+  if (type==='setting') requestKconfigEvidence(item);
   document.querySelectorAll('[data-choice]').forEach(b => b.setAttribute('aria-pressed',
     String(b.dataset.choice === type + ':' + (item.category || item.title || item.symbol))));
 }
@@ -381,7 +404,12 @@ function renderInspector() {
     p('Observed controller',item.controller || 'No verified controller',dl);
     p('Explanation',item.explanation,dl);p('Next step',item.nextAction,dl);
     actions.append(btn('Guided '+item.category+' setup',()=>host('guide',item.category),'action primary'));
-    actions.append(btn('Visual Devicetree',()=>host('hardware-studio',''),'action'));
+    if(item.controller) {
+      actions.append(btn('Open exact controller in Hardware Studio',
+        ()=>host('hardware-focus',item.controller),'action'));
+      actions.append(btn('Inspect DTS / DTSI sources',
+        ()=>host('source-hardware',item.controller),'action'));
+    }else actions.append(btn('Open Hardware Studio',()=>host('hardware-studio',''),'action'));
   }else if(type==='issue') {
     add(detail,'h3','',item.title);
     const dl=add(detail,'dl');p('Evidence',item.detail,dl);p('Next step',item.nextAction,dl);
@@ -396,15 +424,39 @@ function renderInspector() {
     p('Project request',item.requested===null?'Inherited / no explicit request':item.requested,dl);
     p('prj.conf source line',item.requestedLine>0?String(item.requestedLine):'No explicit request',dl);
     p('Evidence','Effective value comes from the last generated .config; prj.conf changes are not effective until Zephyr configures and builds.',dl);
+    const resolved=kconfigEvidence[item.symbol];
+    const section=add(detail,'div','panel');add(section,'h3','','Dependencies & origin · selected build');
+    if(!resolved) {
+      add(section,'p','muted',kconfigPending.has(item.symbol)
+        ? 'Reading Zephyr Kconfiglib in the selected board/profile (no source changes)…'
+        : 'Select this setting to inspect its upstream Kconfig definition, visibility and dependencies.');
+    }else if(!resolved.available) {
+      add(section,'p','muted',resolved.message || 'Verified dependency information is not available. Rebuild this target.');
+    }else {
+      const source=add(section,'dl');
+      p('Kconfig type',resolved.type || 'Unknown',source);
+      p('Prompt',resolved.prompt || '(no visible prompt)',source);
+      p('Visibility',resolved.visibility || 'Unknown',source);
+      p('User-assignable values',resolved.assignable || '(none)',source);
+      p('Direct depends on',resolved.dependencies || '(no direct expression reported)',source);
+      p('Dependency result',resolved.dependencyState || 'Unknown',source);
+      p('Kconfig definitions',resolved.definitions || 'No exact definition returned',source);
+      p('Selects (from this symbol)',resolved.selects || 'None reported',source);
+      p('Implies (from this symbol)',resolved.implies || 'None reported',source);
+      if(resolved.help)p('Upstream help',resolved.help,source);
+      add(section,'p','muted','Read-only metadata from Kconfiglib in this selected build; no electrical wiring, transitive dependency proof or runtime behaviour is implied.');
+    }
     const canToggle=item.toggle && !DATA.dirty && DATA.freshness==='CURRENT_SNAPSHOT';
+    const assigned=resolved && resolved.available
+      ? String(resolved.assignable || '').split(',').map(s=>s.trim()) : null;
     if(item.toggle) {
       const group=add(detail,'div','panel');
       add(group,'h3','','Request in prj.conf');
       const buttons=add(group,'div','toolbar');
       const on=btn('Enable',()=>requestPreview(item,'y'),'chip');
       const off=btn('Disable',()=>requestPreview(item,'n'),'chip');
-      on.disabled=!canToggle||item.requested==='y';
-      off.disabled=!canToggle||item.requested==='n';
+      on.disabled=!canToggle||item.requested==='y'||assigned!==null&&!assigned.includes('y');
+      off.disabled=!canToggle||item.requested==='n'||assigned!==null&&!assigned.includes('n');
       on.setAttribute('aria-pressed',String(item.requested==='y'));
       off.setAttribute('aria-pressed',String(item.requested==='n'));
       buttons.append(on,off);
@@ -429,6 +481,13 @@ function render() {
   document.querySelectorAll('[data-section]').forEach(b=>b.setAttribute('aria-current',b.dataset.section===section?'page':'false'));
 }
 function initialise(){
+  if (DATA.focus && typeof DATA.focus==='string') {
+    const pointed=DATA.rows.find(row=>row.controller===DATA.focus);
+    if(pointed) {
+      section='hardware';
+      choice={type:'hardware',item:pointed};
+    }
+  }
   document.documentElement.classList.toggle('light',theme==='light');
   $('theme').textContent=theme==='light'?'Dark theme':'Light theme';
   $('contextTitle').textContent=DATA.project||'No project selected';
