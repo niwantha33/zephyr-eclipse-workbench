@@ -194,6 +194,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 case "navigate" -> visualSection = value;
                 case "classic" -> showNative();
                 case "guide" -> {
+                    visualSection = "hardware";
                     selectCategory(value);
                     showNative(); // Reuse existing four-step, guarded workflow.
                 }
