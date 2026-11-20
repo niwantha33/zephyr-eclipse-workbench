@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.ui;
 
+import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
+import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel.Overview;
 import java.util.List;
@@ -15,7 +17,7 @@ import java.util.regex.Pattern;
 public final class ConfigurationStudioVisualDocument {
     private static final String SLOT = "__CONFIGURATION_STUDIO_DATA__";
     private static final Pattern ASSIGNMENT =
-            Pattern.compile("^(CONFIG_[A-Z0-9_]{1,160})=(.{1,512})$");
+            Pattern.compile("^(CONFIG_[A-Z0-9_]{1,160})=(.{1,4096})$");
     private static final Pattern NOT_SET =
             Pattern.compile("^# (CONFIG_[A-Z0-9_]{1,160}) is not set$");
     private static final int MAX_SETTINGS = 5000;
@@ -29,6 +31,14 @@ public final class ConfigurationStudioVisualDocument {
     public static String render(String template, String project, String board, String profile,
                                 String build, Overview overview, String effectiveConfig,
                                 String warning, boolean dirty, String theme, String section) {
+        return render(template, project, board, profile, build, overview, effectiveConfig,
+                warning, dirty, theme, section, null);
+    }
+
+    public static String render(String template, String project, String board, String profile,
+                                String build, Overview overview, String effectiveConfig,
+                                String warning, boolean dirty, String theme, String section,
+                                ConfigurationStudioFiles.Snapshot source) {
         if (template == null || template.length() > MAX_HTML
                 || template.indexOf(SLOT) < 0
                 || template.indexOf(SLOT) != template.lastIndexOf(SLOT))
@@ -77,37 +87,51 @@ public final class ConfigurationStudioVisualDocument {
             }
         }
         json.append("],\"settings\":[");
+        List<ConfigurationStudioFiles.Option> options = source == null
+                ? observedValues(effectiveConfig) : source.options();
         int added = 0;
         boolean limited = false;
-        // Only observed generated .config lines are displayed. No absent CONFIG_
-        // symbol is synthesised as 'n', and values are not parsed as scripts.
-        if (effectiveConfig != null && effectiveConfig.length() <= 2_000_000) {
-            for (String line : effectiveConfig.split("\\R")) {
-                Matcher assigned = ASSIGNMENT.matcher(line);
-                Matcher unset = NOT_SET.matcher(line);
-                String symbol, value;
-                if (assigned.matches()) {
-                    symbol = assigned.group(1);
-                    value = assigned.group(2);
-                } else if (unset.matches()) {
-                    symbol = unset.group(1);
-                    value = "n";
-                } else continue;
-                if (added == MAX_SETTINGS) {
-                    limited = true;
-                    break;
-                }
-                if (added++ != 0) json.append(',');
-                json.append("{\"symbol\":"); quote(json, symbol);
-                json.append(",\"value\":"); quote(json, value);
-                json.append('}');
-            }
+        for (var opt : options) {
+            if (added >= MAX_SETTINGS) { limited = true; break; }
+            if (!opt.symbol().matches("[A-Z0-9_]{1,160}")) continue;
+            if (added++ > 0) json.append(',');
+            json.append("{\"symbol\":"); quote(json, "CONFIG_" + opt.symbol());
+            json.append(",\"value\":"); quote(json, displayValue(opt.effective()));
+            json.append(",\"requested\":");
+            if (opt.requested() == null) json.append("null");
+            else quote(json, displayValue(opt.requested()));
+            json.append(",\"unresolved\":").append(opt.unresolved());
+            json.append(",\"toggle\":").append(ConfigurationStudioPresentation.isToggle(opt));
+            json.append(",\"requestedLine\":").append(Math.max(0, opt.requestedLine()));
+            json.append('}');
         }
         json.append("],\"settingsLimited\":").append(limited);
         json.append('}');
         if (json.length() > MAX_JSON)
             throw new IllegalArgumentException("Configuration Studio document exceeds size bound");
         return template.replace(SLOT, json.toString());
+    }
+
+    private static String displayValue(String value) {
+        if (value == null) return "Not resolved";
+        return value.length() > 512 ? "(value longer than display limit; open native editor)" : value;
+    }
+
+    private static List<ConfigurationStudioFiles.Option> observedValues(String effective) {
+        if (effective == null || effective.length() > 2_000_000) return List.of();
+        var options = new java.util.ArrayList<ConfigurationStudioFiles.Option>();
+        for (String line : effective.split("\\R")) {
+            Matcher assigned = ASSIGNMENT.matcher(line);
+            Matcher unset = NOT_SET.matcher(line);
+            if (assigned.matches())
+                options.add(new ConfigurationStudioFiles.Option(
+                        assigned.group(1).substring(7), assigned.group(2), null, 0));
+            else if (unset.matches())
+                options.add(new ConfigurationStudioFiles.Option(
+                        unset.group(1).substring(7), "n", null, 0));
+            if (options.size() > MAX_SETTINGS) break;
+        }
+        return List.copyOf(options);
     }
 
     /**
