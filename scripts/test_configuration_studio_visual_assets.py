@@ -60,6 +60,10 @@ def main():
     assert "textContent" in parser.script
     assert "innerHTML" not in parser.script and "document.write" not in parser.script
     assert "zewConfigurationAction" in parser.script
+    assert "function requestPreview(" in parser.script
+    assert "function confirmReview(" in parser.script
+    assert "host('request',payload)" in parser.script
+    assert "host('focus-symbol',item.symbol)" in parser.script
     assert 'data-section="overview"' in source
     assert 'data-section="hardware"' in source
     assert 'data-section="software"' in source
