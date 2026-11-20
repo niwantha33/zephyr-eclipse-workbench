@@ -199,6 +199,10 @@
           name="Zephyr YAML Structure (Read-only)"
           class="io.github.niwantha33.zew.ui.YamlStructureView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.hardwareStudio"
+          name="Hardware Studio — Devicetree"
+          class="io.github.niwantha33.zew.ui.HardwareStudioView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.dtsGraph"
           name="Zephyr Devicetree Graph Studio"
           class="io.github.niwantha33.zew.ui.DtsGraphView"
@@ -254,6 +258,7 @@
     <command id="io.github.niwantha33.zew.verifyProject" name="Verify Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.embeddedHubBoards" name="Open EmbeddedHub Board Discovery" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.hardwareStudio" name="Open Hardware Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.umlClasses" name="Open Automatic UML C/C++ Class Diagram" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.traceCompassIntegration" name="Open Trace Compass Integration" categoryId="io.github.niwantha33.zew.commands"/>
@@ -308,6 +313,7 @@
     <handler commandId="io.github.niwantha33.zew.verifyProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.planProjectUpgrade" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.embeddedHubBoards" class="io.github.niwantha33.zew.ui.EmbeddedHubBoardCatalogueHandler"/>
+    <handler commandId="io.github.niwantha33.zew.hardwareStudio" class="io.github.niwantha33.zew.ui.HardwareStudioHandler"/>
     <handler commandId="io.github.niwantha33.zew.configurationStudio" class="io.github.niwantha33.zew.ui.ConfigurationStudioHandler"/>
     <handler commandId="io.github.niwantha33.zew.umlClasses" class="io.github.niwantha33.zew.ui.UmlClassHandler"/>
     <handler commandId="org.eclipse.ui.project.buildProject" class="io.github.niwantha33.zew.ui.ZephyrBuildHandler">
@@ -374,6 +380,7 @@
           <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment" style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.build" label="Configure &amp; Build">
+          <command commandId="io.github.niwantha33.zew.hardwareStudio" label="Hardware Studio — Devicetree..." style="push"/>
           <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio..." style="push"/>
           <command commandId="io.github.niwantha33.zew.build" label="Build Selected Project" style="push"/>
           <command commandId="io.github.niwantha33.zew.rebuild" label="Pristine Rebuild" style="push"/>

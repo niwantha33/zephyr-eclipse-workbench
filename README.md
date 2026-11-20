@@ -76,6 +76,20 @@ The Chip Pin Canvas and peripheral views connect controllers, properties and
 logical pin routes with their underlying Devicetree declarations.
 [Hardware Studio guide](docs/VISUAL_HARDWARE_STUDIO.md).
 
+### Hardware Studio — embedded Devicetree preview
+
+Experimental **Hardware Studio** embeds a polished, locally bundled, offline
+browser UI **inside Eclipse**. It offers a searchable device navigator, a
+read-only selected-build topology, an evidence inspector and direct links to
+the existing generated-source editor and classic DTS Graph Studio.
+Workbench retains the project, build, flash and debug ownership; there is no
+second repository, independent installer or target/probe connection.
+WebView2 (Windows) / WebKitGTK (Linux) are intended runtimes, with a native
+fallback if unavailable. Build, installed-UI and hardware qualification
+remain separate and may be incomplete.
+[November work packages and release gates](docs/HARDWARE_STUDIO_V01_WORKPACKAGES.md).
+[Hardware Studio release-candidate qualification and installation](docs/HARDWARE_STUDIO_RELEASE_READINESS.md).
+
 ### Devicetree Graph Studio
 
 Open **Configuration Studio → Hardware → DTS Graph Studio — connected blocks**

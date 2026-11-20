@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hardware Studio · Devicetree Explorer</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,"Segoe UI",system-ui,sans-serif;--bg:#0c1422;--panel:#121f32;--panel2:#19293f;--line:#283b55;--muted:#a9bad1;--text:#ebf3fd;--accent:#67d3ed;--soft:#1e4059;--good:#62d8a0;--warn:#f5be7b;--shadow:rgba(0,0,0,.24)}
+:root.light{color-scheme:light;--bg:#f2f6fb;--panel:#fff;--panel2:#eaf0f7;--line:#cbd7e4;--muted:#51677e;--text:#17283a;--accent:#087c9f;--soft:#dceef5;--good:#087e53;--warn:#9b5600;--shadow:rgba(40,62,90,.12)}
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:var(--bg);color:var(--text)}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.studio{height:100vh;min-height:350px;display:flex;flex-direction:column;overflow:hidden}
+.top{display:flex;align-items:center;gap:16px;padding:12px 17px;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;align-items:center;gap:10px;min-width:188px}.symbol{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--accent);border-radius:11px;background:var(--soft);color:var(--accent);font-size:20px}
+.brand strong{display:block;font-size:14px;letter-spacing:.02em}.brand small{display:block;margin-top:2px;color:var(--muted);font-size:10px}
+.context{min-width:0;flex:1}.context strong,.context small{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.context strong{font-size:12px}.context small{font-size:10px;color:var(--muted);margin-top:3px}
+.pill{border:1px solid var(--line);background:var(--panel2);border-radius:18px;padding:6px 10px;font-size:11px;white-space:nowrap;color:var(--text)}
+.pill.good{border-color:var(--good);color:var(--good)}.pill.warn{border-color:var(--warn);color:var(--warn)}
+.action{border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--text);padding:8px 11px;font-size:12px;white-space:nowrap}.action:hover,.nav-item:hover{border-color:var(--accent);background:var(--soft)}.action.primary{background:var(--soft);border-color:var(--accent);color:var(--accent)}
+.main{display:grid;grid-template-columns:minmax(188px,236px) minmax(280px,1fr) minmax(238px,308px);flex:1;min-height:0}
+.sidebar,.details{background:var(--panel);min-height:0;display:flex;flex-direction:column}.sidebar{border-right:1px solid var(--line)}.details{border-left:1px solid var(--line)}
+.panel-head{padding:16px 15px 11px;border-bottom:1px solid var(--line)}.kicker{font-weight:700;letter-spacing:.1em;color:var(--muted);font-size:10px}.panel-head h2{font-size:15px;margin:9px 0 5px}.hint{font-size:11px;color:var(--muted);line-height:1.5}
+.search{width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);color:var(--text);background:var(--bg);margin:12px 0 9px;font-size:12px}
+.filters{display:flex;gap:5px;flex-wrap:wrap}.filter{background:var(--panel2);color:var(--muted);border:1px solid var(--line);font-size:10px;border-radius:7px;padding:6px 9px}.filter[aria-pressed=true]{background:var(--soft);color:var(--accent);border-color:var(--accent)}
+.nav-count{padding:11px 15px;color:var(--muted);font-size:10px;border-bottom:1px solid var(--line)}.nav-scroll{flex:1;overflow:auto;padding:8px}
+.nav-item{width:100%;display:flex;align-items:flex-start;text-align:left;gap:8px;padding:9px 8px;margin-bottom:3px;background:transparent;color:var(--text);border:1px solid transparent;border-radius:9px}
+.nav-item[aria-current=true]{border-color:var(--accent);background:var(--soft)}.nav-item .name{font-size:12px;display:block;overflow-wrap:anywhere;font-weight:550}.nav-item .sub{color:var(--muted);font-size:10px;display:block;margin-top:3px;overflow-wrap:anywhere}
+.dot{width:7px;height:7px;margin-top:5px;border-radius:50%;flex-shrink:0;background:var(--muted)}.dot.ok{background:var(--good)}.dot.disabled{background:var(--warn)}
+.workspace{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--bg)}
+.canvas-head{padding:14px 17px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);background:var(--panel);min-width:0}
+.canvas-title{flex:1;min-width:0}.canvas-title h2{font-size:13px;margin:0 0 4px}.canvas-title p{font-size:10px;color:var(--muted);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.controls{display:flex;gap:5px}.controls button{min-width:32px;text-align:center}
+.viewport{position:relative;flex:1;overflow:auto;cursor:grab;scrollbar-color:var(--line) transparent;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:28px 28px;background-color:var(--bg)}
+.viewport.dragging{cursor:grabbing}.scaled{position:relative;min-width:100%;min-height:100%}.graph{position:relative;transform-origin:top left}
+.wires{position:absolute;inset:0;overflow:visible;pointer-events:none}.wires line{stroke:#5c94b2;stroke-width:2}.wires line.reference{stroke:var(--accent);stroke-dasharray:6 6;stroke-width:2.1}
+.node{position:absolute;width:240px;min-height:82px;border-radius:12px;border:1px solid #4a7793;background:var(--panel);box-shadow:0 7px 18px var(--shadow);color:var(--text);padding:10px 12px;text-align:left}
+.node[aria-pressed=true]{border:2px solid var(--accent);box-shadow:0 0 0 3px var(--soft),0 10px 25px var(--shadow)}.node.disabled{border-color:#926c45}.node.unknown{border-color:var(--muted)}.node strong{display:block;font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.node span{display:block;color:var(--muted);font-size:10px;white-space:nowrap;text-overflow:ellipsis;margin-top:5px}.node .node-meta{color:var(--good)}.node.disabled .node-meta{color:var(--warn)}.node.unknown .node-meta{color:var(--muted)}
+.empty{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:min(90%,440px);border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:25px;text-align:center;box-shadow:0 12px 38px var(--shadow)}.empty .symbol{margin:auto}.empty h2{font-size:19px;margin:15px 0 8px}.empty p{color:var(--muted);font-size:12px;line-height:1.6}
+.canvas-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 17px;border-top:1px solid var(--line);font-size:10px;color:var(--muted);background:var(--panel)}
+.legend{display:flex;align-items:center;gap:12px}.swatch{width:17px;display:inline-block;border-top:2px solid var(--accent);margin-right:5px}.swatch.solid{border-top-color:#5c94b2}.swatch.dashed{border-top-style:dashed}
+.detail-scroll{padding:16px;overflow:auto;flex:1}.detail-card{background:var(--panel2);border:1px solid var(--line);padding:14px;border-radius:11px;margin-bottom:14px}
+.detail-card h3{font-size:12px;margin:0 0 12px}.field{margin-bottom:12px}.field .field-name{display:block;font-size:10px;color:var(--muted);margin-bottom:5px}.field .field-value{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.refs{display:flex;flex-direction:column;gap:7px}.ref{padding:9px 10px;background:var(--bg);border-radius:8px;font-size:10px;overflow-wrap:anywhere}
+.note{border-left:3px solid var(--warn);background:var(--panel2);padding:12px;color:var(--muted);font-size:11px;line-height:1.6}
+.detail-actions{display:flex;flex-direction:column;gap:7px;margin:0 16px 14px}.detail-actions button{width:100%}
+ .help-overlay[hidden]{display:none}.help-overlay{position:fixed;inset:0;z-index:10;background:rgba(1,10,19,.72);display:grid;place-items:center;padding:18px}.help-panel{width:min(100%,540px);border:1px solid var(--line);border-radius:14px;padding:22px 25px;background:var(--panel);box-shadow:0 25px 70px var(--shadow)}.help-panel h2{margin:0 0 12px;font-size:19px}.help-panel p{font-size:12px;line-height:1.7;color:var(--muted)}.help-panel .action{float:right}
+@media(max-width:1040px){.main{grid-template-columns:185px minmax(220px,1fr) 236px}.top{gap:8px}.brand{min-width:152px}.brand strong{font-size:12px}.panel-head{padding:11px}}
+@media(max-width:750px){.main{grid-template-columns:165px minmax(160px,1fr)}.details{grid-column:1/-1;border-left:0;border-top:1px solid var(--line);max-height:230px}.main{grid-template-rows:minmax(180px,1fr) auto}.sidebar{grid-row:1}.workspace{grid-row:1}.context small{display:none}.top{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div class="studio">
+<header class="top">
+  <div class="brand"><div class="symbol" aria-hidden="true">◇</div><div><strong>Hardware Studio</strong><small>DEVICETREE EXPLORER · 0.1</small></div></div>
+  <div class="context"><strong id="projectTitle">Select a Zephyr project</strong><small id="buildTitle">Waiting for an exact build selection</small></div>
+  <span class="pill" id="evidencePill">NO BUILD</span>
+  <button class="action" id="help" type="button" title="Help and keyboard shortcuts" aria-haspopup="dialog">Help</button>
+  <button class="action" id="theme" type="button" title="Toggle the interface theme">Light theme</button>
+  <button class="action primary" id="refresh" type="button">↻ Refresh</button>
+</header>
+<div class="main">
+  <aside class="sidebar" aria-label="Device explorer">
+    <div class="panel-head"><span class="kicker">WORKSPACE</span><h2>Device explorer</h2><div class="hint">Generated Devicetree • read-only</div>
+      <input class="search" id="search" type="search" placeholder="Search devices or paths…" aria-label="Search devices">
+      <div class="filters" role="group" aria-label="Device status">
+        <button type="button" class="filter" data-filter="all" aria-pressed="true">All</button>
+        <button type="button" class="filter" data-filter="enabled" aria-pressed="false">Enabled</button>
+        <button type="button" class="filter" data-filter="disabled" aria-pressed="false">Disabled</button>
+      </div>
+      <select class="search" id="category" aria-label="Filter by name or compatible type" title="Text-based categories from node names and compatible strings, not package or runtime evidence"><option value="">All peripheral keywords</option><option value="gpio">GPIO</option><option value="uart">UART</option><option value="i2c">I²C</option><option value="spi">SPI</option><option value="can">CAN</option><option value="adc">ADC</option><option value="pwm">PWM</option><option value="clock">Clock</option><option value="timer">Timer</option></select>
+    </div>
+    <div class="nav-count" id="navCount">No nodes loaded</div>
+    <nav class="nav-scroll" id="navigation" aria-label="Devicetree nodes"></nav>
+  </aside>
+  <section class="workspace" aria-label="Devicetree graph">
+    <div class="canvas-head"><div class="canvas-title"><h2>Hardware topology</h2><p id="graphSub">Resolved parent-child and typed references</p></div>
+      <div class="controls"><button type="button" class="action" id="zoomOut" title="Zoom out">−</button><button type="button" class="action" id="fit" title="Fit graph">Fit</button><button type="button" class="action" id="zoomIn" title="Zoom in">+</button></div>
+    </div>
+    <div class="viewport" id="viewport" tabindex="0" aria-label="Scrollable zoomable hardware topology">
+      <div class="scaled" id="scaled"><div class="graph" id="graph"><svg class="wires" id="wires" aria-hidden="true"></svg><div id="cards"></div></div></div>
+    </div>
+    <footer class="canvas-footer"><div class="legend"><span><i class="swatch solid"></i>Parent / child</span><span><i class="swatch dashed"></i>Resolved reference</span></div><span id="graphCount">0 nodes</span></footer>
+  </section>
+  <aside class="details" aria-label="Selected node evidence">
+    <div class="panel-head"><span class="kicker">EVIDENCE</span><h2>Property inspector</h2><div class="hint">Configuration is not runtime state</div></div>
+    <div class="detail-scroll"><div class="detail-card" id="detail"><h3>No node selected</h3><p class="hint">Select a real Devicetree node to inspect its evidence.</p></div>
+      <div class="detail-card"><h3>Resolved outgoing references</h3><div class="refs" id="references"><div class="hint">None selected</div></div></div>
+      <div class="note">Only generated Devicetree and resolved binding information is displayed. Pin wiring, enabled drivers and MCU runtime state are not measured here.</div>
+    </div>
+    <div class="detail-actions"><button class="action primary" id="openSource" type="button" disabled>Open generated DTS source</button><button class="action" id="openGraph" type="button" disabled>Classic Graph Studio</button></div>
+  </aside>
+</div>
+<div class="help-overlay" id="helpDialog" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle"><div class="help-panel"><h2 id="helpTitle">Explore verified hardware evidence</h2><p>Search by path, compatible string or label. Choose a node to inspect its generated Devicetree record. Double-click a graph card, or select a navigator result, to centre its neighbourhood. Arrow keys pan the graph; + and − zoom, F fits, ? opens help, and Escape closes help.</p><p>Solid lines represent observed hierarchy. Dashed lines represent parser-resolved references. Enabled is a Devicetree configuration status, <strong>not</strong> electrical wiring, a running driver or live hardware state. Unknown status is never treated as enabled.</p><button type="button" class="action primary" id="closeHelp">Close</button></div></div>
+</div>
+<script>
+'use strict';
+const DATA = __HARDWARE_STUDIO_DATA__;
+const $ = id => document.getElementById(id);
+const map = new Map(DATA.nodes.map(node => [node.path,node]));
+let selected = DATA.focus && map.has(DATA.focus) ? DATA.focus : '';
+let filter = 'all';
+let zoom = 1;
+let theme = DATA.theme === 'light' ? 'light' : 'dark';
+function host(action, path) {
+  if (typeof window.zewHardwareAction === 'function') return window.zewHardwareAction(action, path || '');
+  $('graphSub').textContent = 'Eclipse bridge unavailable; open Configuration Studio.';
+  return null;
+}
+function element(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+function statusKind(node){const s=String(node.status||'').toLowerCase();return s==='okay'||s.startsWith('okay (')?'enabled':s==='disabled'?'disabled':'unknown';}
+function nodeName(node){return node.name || node.path;}
+function showInspector() {
+  const node=map.get(selected), root=$('detail'), refs=$('references');
+  root.replaceChildren();refs.replaceChildren();
+  $('openSource').disabled=!node || !DATA.observed || DATA.stale;
+  $('openGraph').disabled=!node || !DATA.observed;
+  if(!node){root.append(element('h3','',DATA.observed?'Select a node':'No verified build evidence'));root.append(element('p','hint',DATA.reason || 'Choose a configured project to begin.'));return;}
+  root.append(element('h3','',nodeName(node)));
+  const fields=[['DTS path',node.path],['DTS status',node.status+' (build configuration only)'],['Compatible',node.compatible||'Not declared'],['Node labels',node.labels||'None'],['Generated line',String(node.line)]];
+  fields.forEach(pair=>{const f=element('div','field');f.append(element('span','field-name',pair[0]),element('span','field-value',pair[1]));root.append(f);});
+  const edges=DATA.edges.filter(edge=>edge.source===selected && edge.kind!=='hierarchy');
+  const evidence=element('div','field');evidence.append(element('span','field-name','Generated DTS SHA-256'),element('span','field-value',DATA.sha256||'Not verified'));root.append(evidence);
+  if(!edges.length)refs.append(element('div','hint','No resolved outgoing links in this focused view. This does not prove none exist.'));
+  edges.forEach(edge=>refs.append(element('div','ref',edge.kind+' · '+edge.property+' → '+edge.target+(edge.detail?' · '+edge.detail:''))));
+}
+function select(path, focusGraph) {
+  if(!map.has(path))return;
+  selected=path;
+  document.querySelectorAll('.node').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.path===path)));
+  document.querySelectorAll('.nav-item').forEach(button=>button.setAttribute('aria-current',String(button.dataset.path===path)));
+  showInspector();
+  if(focusGraph && path!==DATA.focus)host('focus',path);
+}
+function renderNavigator(){
+  const term=$('search').value.trim().toLowerCase(), matches=DATA.nodes.filter(node=>{
+    if(filter!=='all' && statusKind(node)!==filter)return false;
+    const category=$('category').value;
+    if(category && !(node.path+' '+node.name+' '+node.compatible).toLowerCase().includes(category))return false;
+    return !term || (node.path+' '+node.name+' '+node.compatible+' '+node.labels).toLowerCase().includes(term);
+  });
+  const nav=$('navigation');nav.replaceChildren();
+  $('navCount').textContent=matches.length+' matching nodes'+(matches.length>140?' · first 140 shown':'');
+  if(!matches.length)nav.append(element('p','hint','No matching observed nodes.'));
+  matches.slice(0,140).forEach(node=>{
+    const b=element('button','nav-item');
+    b.type='button';b.dataset.path=node.path;b.setAttribute('aria-current',String(node.path===selected));
+    b.title=node.path;
+    b.append(element('span','dot '+(statusKind(node)==='enabled'?'ok':statusKind(node)==='disabled'?'disabled':'')));
+    b.setAttribute('aria-label',nodeName(node)+' — '+node.status+' — '+node.path);
+    const content=element('span','');content.append(element('span','name',nodeName(node)),element('span','sub',node.path));
+    b.append(content);b.addEventListener('click',()=>select(node.path,true));nav.append(b);
+  });
+}
+function setZoom(next){
+  zoom=Math.max(.38,Math.min(1.6,next));
+  $('graph').style.transform='scale('+zoom+')';
+  $('scaled').style.width=Math.max(1,Math.round(DATA.width*zoom))+'px';
+  $('scaled').style.height=Math.max(1,Math.round(DATA.height*zoom))+'px';
+}
+function fitGraph(){
+  if(!DATA.cards.length)return;
+  const viewport=$('viewport'),scale=Math.min((viewport.clientWidth-24)/Math.max(1,DATA.width),(viewport.clientHeight-24)/Math.max(1,DATA.height));
+  setZoom(Math.max(.38,Math.min(1.1,scale)));viewport.scrollLeft=0;viewport.scrollTop=0;
+}
+function renderGraph(){
+  $('graph').style.width=DATA.width+'px';$('graph').style.height=DATA.height+'px';
+  $('wires').setAttribute('width',String(DATA.width));$('wires').setAttribute('height',String(DATA.height));
+  $('cards').replaceChildren();$('wires').replaceChildren();
+  $('viewport').querySelectorAll('.empty').forEach(el=>el.remove());
+  const placements=new Map(DATA.cards.map(c=>[c.path,c]));
+  DATA.edges.forEach(edge=>{
+    const a=placements.get(edge.source),b=placements.get(edge.target);if(!a||!b)return;
+    const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+    const start=a.x<=b.x?{x:a.x+240,y:a.y+41}:{x:a.x,y:a.y+41};
+    const end=a.x<=b.x?{x:b.x,y:b.y+41}:{x:b.x+240,y:b.y+41};
+    line.setAttribute('x1',String(start.x));line.setAttribute('y1',String(start.y));
+    line.setAttribute('x2',String(end.x));line.setAttribute('y2',String(end.y));
+    if(edge.kind!=='hierarchy')line.setAttribute('class','reference');
+    const title=document.createElementNS('http://www.w3.org/2000/svg','title');
+    title.textContent=edge.kind==='hierarchy'?'Observed parent-child':edge.kind+' · '+edge.property;
+    line.append(title);$('wires').append(line);
+  });
+  DATA.cards.forEach(card=>{
+    const node=map.get(card.path);if(!node)return;
+    const kind=statusKind(node);
+    const b=element('button','node'+(kind==='enabled'?'':' '+kind));
+    b.type='button';b.dataset.path=node.path;b.setAttribute('aria-pressed',String(node.path===selected));
+    b.title=node.path;b.style.left=card.x+'px';b.style.top=card.y+'px';
+    b.append(element('strong','',nodeName(node)),element('span','',node.compatible||'No compatible string'),element('span','node-meta',node.status));
+    b.addEventListener('click',()=>select(node.path,false));
+    b.addEventListener('dblclick',()=>select(node.path,true));$('cards').append(b);
+  });
+  if(!DATA.cards.length){
+    const empty=element('div','empty');
+    empty.append(element('div','symbol','◇'),element('h2','',DATA.observed?'No nearby nodes':'Open a Zephyr build'),element('p','',DATA.reason||DATA.message||'Select a project and build it, then refresh.'));
+    $('viewport').append(empty);
+  }
+  $('graphSub').textContent=DATA.message || 'Exact generated Devicetree evidence';
+  $('graphCount').textContent=DATA.cards.length+' visible / '+DATA.nodes.length+' observed'+(DATA.limited?' · neighborhood bounded':'');
+  fitGraph();
+}
+function init(){
+  $('projectTitle').textContent=(DATA.project || 'Select a Zephyr project')+(DATA.board?'  ·  '+DATA.board:'')+(DATA.profile?'  ·  '+DATA.profile:'');
+  $('buildTitle').textContent=DATA.build || 'Select a board/profile in Configuration Studio';
+  const pill=$('evidencePill');
+  const fixture=String(DATA.reason||'').startsWith('CI FIXTURE');
+  if(fixture){
+    $('projectTitle').textContent='CI FIXTURE — DISPLAY TEST ONLY';
+    $('buildTitle').textContent='No real board, profile, firmware or connected target';
+  }
+  pill.textContent=fixture?'CI FIXTURE — NO HARDWARE':DATA.stale?'BUILD MAY BE STALE':DATA.observed?(DATA.state==='hierarchy-only'?'HIERARCHY ONLY':'BUILT EVIDENCE'):'NO BUILD';
+  pill.className='pill '+(fixture||DATA.stale?'warn':DATA.observed?'good':'');
+  document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
+    filter=button.dataset.filter;
+    document.querySelectorAll('[data-filter]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+    renderNavigator();
+  }));
+  $('search').addEventListener('input',renderNavigator);
+  $('search').addEventListener('keydown',event=>{if(event.key==='Escape'){$('search').value='';renderNavigator();}});
+  $('category').addEventListener('change',renderNavigator);
+  $('zoomIn').addEventListener('click',()=>setZoom(zoom+.12));
+  $('zoomOut').addEventListener('click',()=>setZoom(zoom-.12));
+  $('fit').addEventListener('click',fitGraph);
+  $('refresh').addEventListener('click',()=>host('refresh',''));
+  $('openSource').addEventListener('click',()=>{if(selected)host('source',selected)});
+  $('openGraph').addEventListener('click',()=>{if(selected)host('graph',selected)});
+  function applyTheme(){document.documentElement.classList.toggle('light',theme==='light');$('theme').textContent=theme==='dark'?'Light theme':'Dark theme';}
+  applyTheme();
+  $('theme').addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';applyTheme();host('theme',theme);});
+  let priorFocus=null;
+  function showHelp(){priorFocus=document.activeElement;$('helpDialog').hidden=false;$('closeHelp').focus();}
+  function hideHelp(){$('helpDialog').hidden=true;if(priorFocus&&priorFocus.focus)priorFocus.focus();}
+  $('help').addEventListener('click',showHelp);
+  $('closeHelp').addEventListener('click',hideHelp);
+  $('helpDialog').addEventListener('click',event=>{if(event.target===$('helpDialog'))hideHelp();});
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!$('helpDialog').hidden){event.preventDefault();hideHelp();return;}
+    if(event.key==='?'&&!event.ctrlKey&&!event.altKey&&event.target.tagName!=='INPUT'){event.preventDefault();showHelp();}
+  });
+  const vp=$('viewport');
+  vp.addEventListener('keydown',event=>{
+    const keys={ArrowUp:[0,-80],ArrowDown:[0,80],ArrowLeft:[-80,0],ArrowRight:[80,0]};
+    if(keys[event.key]){event.preventDefault();vp.scrollBy(keys[event.key][0],keys[event.key][1]);}
+    else if(event.key==='+'||event.key==='='){event.preventDefault();setZoom(zoom+.12);}
+    else if(event.key==='-'){event.preventDefault();setZoom(zoom-.12);}
+    else if(event.key.toLowerCase()==='f'){event.preventDefault();fitGraph();}
+  });
+  let dragging=null;
+  vp.addEventListener('pointerdown',event=>{
+    if(event.button!==0||event.target.closest('button'))return;
+    dragging={id:event.pointerId,x:event.clientX,y:event.clientY,left:vp.scrollLeft,top:vp.scrollTop};
+    vp.setPointerCapture(event.pointerId);vp.classList.add('dragging');
+  });
+  vp.addEventListener('pointermove',event=>{if(!dragging||dragging.id!==event.pointerId)return;
+    vp.scrollLeft=dragging.left+(dragging.x-event.clientX);
+    vp.scrollTop=dragging.top+(dragging.y-event.clientY);
+  });
+  function endDrag(){dragging=null;vp.classList.remove('dragging');}
+  vp.addEventListener('pointerup',endDrag);vp.addEventListener('pointercancel',endDrag);
+  $('viewport').addEventListener('wheel',event=>{
+    if(!event.ctrlKey)return;event.preventDefault();setZoom(zoom+(event.deltaY<0?.08:-.08));
+  },{passive:false});
+  renderNavigator();renderGraph();showInspector();
+}
+init();
+</script>
+</body>
+</html>

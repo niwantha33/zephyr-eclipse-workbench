@@ -136,6 +136,7 @@ for p in bundles:
                         'YamlPythonLaunch',
                         'YamlTreeProjection', 'YamlFlowGraph', 'YamlFlowCanvas',
                         'DtsGraphView', 'DtsGraphCanvas', 'DtsGraphModel', 'DtsGraphLoader',
+                         'HardwareStudioDocument', 'HardwareStudioView', 'HardwareStudioHandler',
                         'UmlClassView', 'UmlClassCanvas', 'UmlClassModel', 'UmlCdtSource', 'UmlClassHandler',
                         'YamlBindingIntelligence', 'YamlHardwareModel',
                         'YamlTwisterModel', 'YamlDiagnosticModel', 'YamlDiagnosticMarkers',
@@ -143,7 +144,24 @@ for p in bundles:
                 entry = 'io/github/niwantha33/zew/ui/' + cls + '.class'
                 if entry not in z.namelist():
                     raise SystemExit('Missing installed YAML component: ' + cls)
+            bundled_hardware = z.read('hardware-studio/index.html')
+            original_hardware = (root / 'plugins/io.github.niwantha33.zew.ui/hardware-studio/index.html').read_bytes()
+            if bundled_hardware != original_hardware or b'__HARDWARE_STUDIO_DATA__' not in bundled_hardware:
+                raise SystemExit('Hardware Studio offline UI missing or differs from tested source')
+            if b'https://cdn' in bundled_hardware or b'<script src=' in bundled_hardware:
+                raise SystemExit('Hardware Studio must not use network assets')
             plugin = ET.fromstring(z.read('plugin.xml'))
+            if not any(view.attrib.get('id') == 'io.github.niwantha33.zew.ui.hardwareStudio'
+                           and view.attrib.get('class') == 'io.github.niwantha33.zew.ui.HardwareStudioView'
+                           for view in plugin.findall("./extension[@point='org.eclipse.ui.views']/view")):
+                raise SystemExit('Hardware Studio Eclipse view is missing')
+            if not any(command.attrib.get('id') == 'io.github.niwantha33.zew.hardwareStudio'
+                           for command in plugin.findall("./extension[@point='org.eclipse.ui.commands']/command")):
+                raise SystemExit('Hardware Studio command is missing')
+            if not any(handler.attrib.get('commandId') == 'io.github.niwantha33.zew.hardwareStudio'
+                           and handler.attrib.get('class', '').endswith('.HardwareStudioHandler')
+                           for handler in plugin.findall("./extension[@point='org.eclipse.ui.handlers']/handler")):
+                raise SystemExit('Hardware Studio handler is missing')
             yaml_views = plugin.findall("./extension[@point='org.eclipse.ui.views']/view")
             if not any(view.attrib.get('id') == 'io.github.niwantha33.zew.ui.yamlStructure'
                        and view.attrib.get('class') == 'io.github.niwantha33.zew.ui.YamlStructureView'
