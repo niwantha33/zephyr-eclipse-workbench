@@ -60,12 +60,28 @@ def main():
     assert "document.createElementNS" in parser.inline_script
     assert "textContent" in parser.inline_script, "DTS fields must be inserted as text"
     assert "CI FIXTURE — NO HARDWARE" in parser.inline_script, "UI fixture screenshots require visible non-hardware warning"
+    assert "resetLayout" in parser.ids, "Missing visual layout reset button"
+    assert 'id="resetLayout"' in source and "disabled>Reset layout" in source
+    assert "function moveCard(" in parser.inline_script
+    assert "function redrawWires(" in parser.inline_script
+    assert "function resetLayout(" in parser.inline_script
+    assert "function nudgeCard(" in parser.inline_script
+    assert "setPointerCapture" in parser.inline_script
+    assert "releasePointerCapture" in parser.inline_script
+    assert "event.pointerId" in parser.inline_script
+    assert "const positions = new Map(DATA.cards" in parser.inline_script
+    assert "Drag blocks to arrange (view only)" in parser.inline_script
+    assert "host('layout'" not in parser.inline_script, "Visual layout cannot mutate project data"
+    assert "localStorage" not in parser.inline_script and "sessionStorage" not in parser.inline_script
     node = shutil.which("node")
     if node:
         with tempfile.TemporaryDirectory(prefix="zew-hardware-js-") as folder:
             path = Path(folder) / "hardware-studio.js"
             path.write_text(parser.inline_script, encoding="utf-8")
-            subprocess.run([node, "--check", str(path)], check=True, timeout=10)
+            # GitHub-hosted Windows runners can take >10s to initialise Node
+            # after an extensive Python test suite. Retain the syntax gate,
+            # but allow a bounded slow process startup (no silent skip).
+            subprocess.run([node, "--check", str(path)], check=True, timeout=45)
     print("HardwareStudioAssets PASS: offline packaged UI and JS syntax where Node is available")
 
 

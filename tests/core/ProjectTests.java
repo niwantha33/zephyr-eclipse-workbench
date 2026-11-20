@@ -52,12 +52,41 @@ public final class ProjectTests {
             check(BuildConfiguration.fromId(null) == BuildConfiguration.DEFAULT);
             rejects(() -> BuildConfiguration.fromId("../debug"));
             check(BuildConfiguration.DEBUG.cmakeArguments().contains("-DCONFIG_DEBUG_OPTIMIZATIONS=y"));
+            check(BuildConfiguration.values().length == 6);
+            check(BuildConfiguration.fromId("default") == BuildConfiguration.DEFAULT);
+            check(BuildConfiguration.fromId("debug") == BuildConfiguration.DEBUG);
+            check(BuildConfiguration.fromId("release") == BuildConfiguration.RELEASE);
+            check(BuildConfiguration.NO_OPTIMIZATION.cmakeArguments().equals(
+                    java.util.List.of("-DCONFIG_NO_OPTIMIZATIONS=y")));
+            check(BuildConfiguration.SIZE.cmakeArguments().equals(
+                    java.util.List.of("-DCONFIG_SIZE_OPTIMIZATIONS=y")));
+            check(BuildConfiguration.AGGRESSIVE_SIZE.cmakeArguments().equals(
+                    java.util.List.of("-DCONFIG_SIZE_OPTIMIZATIONS_AGGRESSIVE=y")));
+            check(BuildConfiguration.DEFAULT.cmakeArguments().isEmpty());
+            java.util.Set<Path> distinctPaths = new java.util.HashSet<>();
+            for (BuildConfiguration mode : BuildConfiguration.values()) {
+                check(distinctPaths.add(WestCommands.buildDirectory(config, mode)));
+                check(BuildConfiguration.fromId(mode.id()) == mode);
+            }
+            check(BuildConfiguration.NO_OPTIMIZATION.id().equals("debug-o0"));
+            check(BuildConfiguration.SIZE.id().equals("size-os"));
+            check(BuildConfiguration.AGGRESSIVE_SIZE.id().equals("size-oz"));
             Path build = root.resolve("verify-config"); Files.createDirectories(build.resolve("zephyr"));
             Files.writeString(build.resolve("zephyr/.config"), "CONFIG_DEBUG_OPTIMIZATIONS=y\n");
             BuildConfiguration.DEBUG.verify(build);
             rejects(() -> BuildConfiguration.RELEASE.verify(build));
             Files.writeString(build.resolve("zephyr/.config"), "CONFIG_SPEED_OPTIMIZATIONS=y\n");
             BuildConfiguration.RELEASE.verify(build);
+            Files.writeString(build.resolve("zephyr/.config"), "CONFIG_NO_OPTIMIZATIONS=y\n");
+            BuildConfiguration.NO_OPTIMIZATION.verify(build);
+            rejects(() -> BuildConfiguration.SIZE.verify(build));
+            Files.writeString(build.resolve("zephyr/.config"), "CONFIG_SIZE_OPTIMIZATIONS=y\n");
+            BuildConfiguration.SIZE.verify(build);
+            rejects(() -> BuildConfiguration.AGGRESSIVE_SIZE.verify(build));
+            Files.writeString(build.resolve("zephyr/.config"),
+                    "CONFIG_SIZE_OPTIMIZATIONS_AGGRESSIVE=y\n");
+            BuildConfiguration.AGGRESSIVE_SIZE.verify(build);
+            rejects(() -> BuildConfiguration.DEBUG.verify(build));
             // Profile alone is not evidence of optimization; inspect effective .config.
             String fast = DebugVariableAdvice.describe("default", java.util.Map.of("CONFIG_SPEED_OPTIMIZATIONS", "y"));
             check(fast.contains("normally -O2") && fast.contains("selected build profile: default")

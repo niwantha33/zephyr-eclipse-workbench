@@ -2,6 +2,39 @@
 
 Use **Zephyr > Check for Workbench Updates**, install the offered release, and restart Eclipse. The existing private channel and secure-storage credentials are reused. End users do not run Python or publication scripts.
 
+## Project wizard UI (November 2026)
+
+The same native wizard now separates **Create a new application** from
+**Import an existing application** using clearly explained radio choices.
+"Import in place" means working from the selected folder containing
+`CMakeLists.txt`, not copying source files into the Eclipse workspace.
+An import may add `.zew` project metadata when the application has no saved
+Workbench target. An existing `.project` is handled through Eclipse's
+Existing Projects import instead.
+
+Use the four labelled sections:
+1. Select **Create** or **Import**.
+2. Enter the project name and choose the application folder.
+3. Confirm the ready Zephyr environment; reload its board catalogue if changed.
+4. Search the exact board, choose a row, then press **Review selected project**
+   or the standard **Next** button.
+
+The table limits initial display to the first 120 matches for readability,
+reports the total result count, and asks users to search more narrowly when
+necessary. Missing target selection is informational, not a failure alarm.
+An imported application's saved exact board is preselected when available.
+The review page states the final file and build action. The initial build is
+**checked for new projects** and **unchecked for imports**, and can be changed
+before Finish. No build or flash action occurs on board selection.
+Existing source is preserved by the import path, subject to the existing
+validation gates.
+
+**Verification required:** installed Eclipse wizard smoke at 1366×768 and
+1920×1080, high-DPI, keyboard access, new/import folder preservation, board
+search across vendors/SoCs, exact-target evidence, Next/Review/Finish transitions,
+cancelled discovery, selected setup change and optional build behaviour.
+This documentation does not claim those checks have passed.
+
 ## Implemented
 
 - File > New > Other > Zephyr > Zephyr Project, and File > Import > Zephyr > Existing Zephyr Application. Import defaults to existing mode.

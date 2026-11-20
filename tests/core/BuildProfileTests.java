@@ -50,6 +50,29 @@ public final class BuildProfileTests {
         check(!other.buildDirectory(defaultBuild).equals(p.buildDirectory(defaultBuild)),
                 "named profiles independently isolated");
         check(BuildProfile.list(app).size() == 2, "both profile definitions survive");
+        // New Zephyr-native policies roundtrip through named profile metadata
+        // without changing legacy debug/release identities.
+        var noOpt = new BuildProfile("development-no-opt", "Development O0",
+                BuildConfiguration.NO_OPTIMIZATION, "", "");
+        noOpt.save(app);
+        check(BuildProfile.read(app, "development-no-opt").optimization()
+                == BuildConfiguration.NO_OPTIMIZATION, "no-optimisation profile roundtrip");
+        check(noOpt.cmakeArguments(app).stream()
+                .anyMatch(arg -> arg.equals("-DCONFIG_NO_OPTIMIZATIONS=y")),
+                "named no-optimisation delegates to Zephyr Kconfig");
+        var sizeOpt = new BuildProfile("small-firmware", "Small firmware",
+                BuildConfiguration.SIZE, "", "");
+        sizeOpt.save(app);
+        check(BuildProfile.read(app, "small-firmware").optimization() == BuildConfiguration.SIZE,
+                "size-optimisation profile roundtrip");
+        var aggressiveSize = new BuildProfile("aggressive-size", "Aggressive size",
+                BuildConfiguration.AGGRESSIVE_SIZE, "", "");
+        aggressiveSize.save(app);
+        check(aggressiveSize.cmakeArguments(app).stream()
+                .anyMatch(arg -> arg.equals("-DCONFIG_SIZE_OPTIMIZATIONS_AGGRESSIVE=y")),
+                "aggressive size profile delegates to Zephyr Kconfig");
+        check(BuildProfile.read(app, "aggressive-size").optimization()
+                == BuildConfiguration.AGGRESSIVE_SIZE, "aggressive size roundtrip");
 
         Path build = p.buildDirectory(defaultBuild);
         Files.createDirectories(build.resolve("zephyr"));
@@ -92,7 +115,8 @@ public final class BuildProfileTests {
                 "unselected symbols use n rather than fabricated y");
 
         BuildProfile.delete(app, "release-pre");
-        check(BuildProfile.list(app).size() == 1, "delete only selected profile");
+        check(BuildProfile.list(app).size() == 4,
+                "deleting legacy release profile preserves named native modes");
         try { BuildProfile.read(app, "release-pre"); throw new AssertionError("deleted profile read"); }
         catch (IOException expected) { /* fail closed when selected profile is deleted */ }
         System.out.println("PASS BuildProfileTests");

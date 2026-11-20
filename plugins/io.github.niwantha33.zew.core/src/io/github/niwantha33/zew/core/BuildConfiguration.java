@@ -5,11 +5,14 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
-/** Explicit Zephyr optimization profiles; application default retains existing builds. */
+/** Native Zephyr Kconfig optimization modes. Legacy IDs and output caches are stable. */
 public enum BuildConfiguration {
     DEFAULT("default", "Application settings", ""),
+    NO_OPTIMIZATION("debug-o0", "No optimisation (-O0)", "CONFIG_NO_OPTIMIZATIONS"),
     DEBUG("debug", "Debug (-Og)", "CONFIG_DEBUG_OPTIMIZATIONS"),
-    RELEASE("release", "Release (-O2)", "CONFIG_SPEED_OPTIMIZATIONS");
+    SIZE("size-os", "Optimise for size (-Os)", "CONFIG_SIZE_OPTIMIZATIONS"),
+    RELEASE("release", "Optimise for speed (-O2)", "CONFIG_SPEED_OPTIMIZATIONS"),
+    AGGRESSIVE_SIZE("size-oz", "Aggressive size (-Oz)", "CONFIG_SIZE_OPTIMIZATIONS_AGGRESSIVE");
 
     private final String id;
     private final String label;

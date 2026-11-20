@@ -15,6 +15,19 @@
 
 **Browser prerequisites:** SWT Browser uses the host's native WebView2 on Windows or WebKitGTK on Linux. No browser runtime downloads, network/CDN scripts, secondary Node runtime, or HTTP server are performed on view startup. If absent, Eclipse remains usable with a link to classic Graph Studio.
 
+## Drag-to-arrange graph blocks (UI-only)
+
+- Left-click and drag a visible graph card to reposition that block inside the canvas.
+- Parent-child and resolved-reference lines follow every card as its position changes; no DTS relationships are created or deleted.
+- Click selects a node; double-click still focuses its neighbourhood.
+- Focus a graph card and use **arrow keys** to move it by 20 canvas units, or **Shift+arrow** for 4 units. On the canvas background, drag to pan; Fit and zoom remain available.
+- **Reset layout** returns to the original generated positions. The reset control is disabled until a card has moved.
+- This changes **only the visual arrangement in the open embedded browser document**. Positions are deliberately not persisted to Devicetree, project properties, source files or repository. They reset on graph refresh, focus/navigation that reloads the document, or closing Hardware Studio.
+- The existing browser bridge only permits the same read-only navigation/refresh/theme actions. Dragging adds **no new Eclipse host commands**, file writes, target reads, probe or network access.
+- Coordinate changes are clamped to a bounded canvas, and movements are adjusted for zoom.
+
+**Release verification:** CI static HTML/CSP checks and JavaScript parse are required, plus manual installed WebView2/WebKitGTK checks: dragging at 38%, 100% and 160% zoom; connection redraw; pointer capture/release; graph background panning; click/double-click separation; keyboard arrow/Shift+arrow; Reset Layout; focus and refresh reset; small-window scroll and high-DPI scaling. A static fixture or Node parse alone does not prove native pointer input works.
+
 ## Meaning of evidence
 
 - `okay` means configured/enabled in Devicetree, **never** physical wiring, driver initialisation or live device activity. `disabled` and unknown/malformed statuses remain distinct.

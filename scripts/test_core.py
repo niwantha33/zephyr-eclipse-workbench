@@ -17,8 +17,10 @@ os.environ['ZEW_TEST_PYTHON'] = sys.executable
 PYTHON_TOOLS_SUITE_TIMEOUT = 240
 subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/tools', '-v'],
                check=True, cwd=root, timeout=PYTHON_TOOLS_SUITE_TIMEOUT)
+# Keep this outer timeout above the asset test's bounded Node.js parser
+# timeout, including slow Windows runner Python process startup overhead.
 subprocess.run([sys.executable, 'scripts/test_hardware_studio_assets.py'],
-               check=True, cwd=root, timeout=30)
+               check=True, cwd=root, timeout=90)
 out = root / 'build-core-tests'
 out.mkdir(exist_ok=True)
 shutil.copyfile(root / 'plugins/io.github.niwantha33.zew.core/src/svd-part-mappings.json', out / 'svd-part-mappings.json')

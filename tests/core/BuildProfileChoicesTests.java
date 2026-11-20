@@ -21,7 +21,7 @@ public final class BuildProfileChoicesTests {
 
         var all = BuildProfileChoices.available(app);
         check(all.size() == BuildConfiguration.values().length + 2,
-                "three built-ins and two explicit named profiles");
+                "six built-ins and two explicit named profiles");
         check(BuildProfileChoices.selected(all, null, null).identity().equals("default"),
                 "legacy project without a property defaults to Application settings");
         var named = BuildProfileChoices.selected(all, "debug", "release-pre");
