@@ -3784,6 +3784,26 @@ public final class ConfigurationStudioView extends ViewPart {
         if (dialog.open() == Window.OK) saveSelected(current, dialog.getValue());
     }
 
+    /** Focus an observed generated/requested symbol in the existing editor. */
+    public void focusKconfigSymbol(String name) {
+        if (snapshot == null || name == null || !name.matches("[A-Z0-9_]{1,160}")
+                || snapshot.options().stream().noneMatch(option -> option.symbol().equals(name)))
+            return;
+        tabs.setSelection(SOFTWARE_TAB);
+        selectDomain(ConfigurationStudioDomains.OVERVIEW);
+        category.select(0);
+        search.setText("CONFIG_" + name);
+        refreshOptions();
+        for (TableItem item : options.getItems()) {
+            if (((Option) item.getData()).symbol().equals(name)) {
+                options.setSelection(item);
+                options.showSelection();
+                describeSelected();
+                break;
+            }
+        }
+    }
+
     /**
      * Exact build-scoped handoff from the graphical Studio. It never accepts
      * free-form browser file paths or sources. Existing native review/backup
