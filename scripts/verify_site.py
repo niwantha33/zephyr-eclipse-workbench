@@ -65,8 +65,11 @@ for p in bundles:
             expected_visual = root / 'plugins/io.github.niwantha33.zew.ui' / visual
             if visual not in z.namelist() or z.read(visual) != expected_visual.read_bytes():
                 raise SystemExit('Installed visual Configuration Studio differs from tested source')
-            if 'io/github/niwantha33/zew/ui/ConfigurationStudioVisualDocument.class' not in z.namelist():
-                raise SystemExit('Missing visual Configuration Studio evidence bridge')
+            for classfile in ('ConfigurationStudioVisualDocument.class',
+                              'ConfigurationStudioVisualRequest.class',
+                              'ConfigurationStudioVisualRequest$Reviewed.class'):
+                if 'io/github/niwantha33/zew/ui/' + classfile not in z.namelist():
+                    raise SystemExit('Missing visual Configuration Studio bridge: ' + classfile)
             if 'tools/inventory.py' not in z.namelist():
                 raise SystemExit('Tools inventory helper missing.')
             compile(z.read('tools/inventory.py'), 'tools/inventory.py', 'exec')
