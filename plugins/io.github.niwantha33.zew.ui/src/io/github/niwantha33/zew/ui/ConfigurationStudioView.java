@@ -3886,12 +3886,18 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private boolean hasUnsavedProjectEditor() {
-        if (project == null || getSite().getPage() == null) return false;
-        for (var editor : getSite().getPage().getDirtyEditors()) {
-            var input = editor.getEditorInput();
-            if (input instanceof org.eclipse.ui.IFileEditorInput file
-                    && project.equals(file.getFile().getProject()))
-                return true;
+        if (project == null || !org.eclipse.ui.PlatformUI.isWorkbenchRunning()) return false;
+        // An editor for the same project may be dirty in another Eclipse window.
+        // Never overwrite on-disk prj.conf while an unsaved buffer exists.
+        for (var window : org.eclipse.ui.PlatformUI.getWorkbench().getWorkbenchWindows()) {
+            for (var page : window.getPages()) {
+                for (var editor : page.getDirtyEditors()) {
+                    var input = editor.getEditorInput();
+                    if (input instanceof org.eclipse.ui.IFileEditorInput file
+                            && project.equals(file.getFile().getProject()))
+                        return true;
+                }
+            }
         }
         return false;
     }
