@@ -87,8 +87,16 @@ public final class ConfigurationStudioVisualDocument {
             }
         }
         json.append("],\"settings\":[");
-        List<ConfigurationStudioFiles.Option> options = source == null
-                ? observedValues(effectiveConfig) : source.options();
+        List<ConfigurationStudioFiles.Option> options;
+        if (source == null) options = observedValues(effectiveConfig);
+        else {
+            // Keep explicit and unresolved project requests visible even if
+            // the generated Kconfig snapshot exceeds the display limit.
+            var ordered = new java.util.ArrayList<>(source.options());
+            ordered.sort(java.util.Comparator.comparing(
+                    (ConfigurationStudioFiles.Option value) -> !value.overridden()));
+            options = ordered;
+        }
         int added = 0;
         boolean limited = false;
         for (var opt : options) {
