@@ -18,11 +18,11 @@ public final class ConfigurationStudioVisualDocument {
             Pattern.compile("^(CONFIG_[A-Z0-9_]{1,160})=(.{1,512})$");
     private static final Pattern NOT_SET =
             Pattern.compile("^# (CONFIG_[A-Z0-9_]{1,160}) is not set$");
-    private static final int MAX_SETTINGS = 1800;
+    private static final int MAX_SETTINGS = 5000;
     private static final int MAX_ROWS = 80;
     private static final int MAX_ISSUES = 32;
     private static final int MAX_HTML = 180_000;
-    private static final int MAX_JSON = 1_200_000;
+    private static final int MAX_JSON = 3_500_000;
 
     private ConfigurationStudioVisualDocument() {}
 
