@@ -64,6 +64,15 @@ def main():
     assert "function confirmReview(" in parser.script
     assert "host('request',payload)" in parser.script
     assert "host('focus-symbol',item.symbol)" in parser.script
+    assert "host('inspect-kconfig',item.symbol)" in parser.script
+    assert "window.zewConfigurationInspector" in parser.script
+    assert "host('hardware-focus',item.controller)" in parser.script
+    assert "host('source-hardware',item.controller)" in parser.script
+    assert "kconfigEvidence" in parser.script
+    assert "Selects (from this symbol)" in parser.script
+    assert "Implies (from this symbol)" in parser.script
+    assert "DATA.focus" in parser.script
+    assert "[hidden]{display:none!important}" in source
     assert 'data-section="overview"' in source
     assert 'data-section="hardware"' in source
     assert 'data-section="software"' in source
