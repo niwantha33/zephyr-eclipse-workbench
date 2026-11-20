@@ -248,9 +248,12 @@ public final class ConfigurationHomeView extends ViewPart {
                     dirty, visualTheme, visualSection);
             visualBrowser.setText(document);
         } catch (RuntimeException invalid) {
-            // Do not expose build data or arbitrary exception messages as HTML.
-            visualBrowser.setText("<html><body><h2>Configuration Studio unavailable</h2>"
-                    + "<p>Use the native configuration view via the Visual Studio fallback.</p></body></html>");
+            // A failed renderer must never strand the user without SWT controls.
+            studioLayout.topControl = nativePage;
+            studioRoot.layout(true, true);
+            var plugin = Activator.getDefault();
+            if (plugin != null) plugin.getLog().log(new Status(IStatus.WARNING, Activator.ID,
+                    "Configuration Studio visual renderer failed; using native view", invalid));
         }
     }
 
