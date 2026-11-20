@@ -26,12 +26,14 @@ public final class ZephyrBeginnerPerspective implements IPerspectiveFactory {
         output.addView("org.eclipse.ui.console.ConsoleView");
         output.addView("org.eclipse.ui.views.ProblemView");
 
+        layout.addShowViewShortcut(EmbeddedHubBoardCatalogueView.ID);
         layout.addShowViewShortcut(ConfigurationHomeView.ID);
         layout.addShowViewShortcut(Activator.ID + ".dtsGraph");
         layout.addShowViewShortcut(Activator.ID + ".yamlStructure");
         layout.addShowViewShortcut(SocRegistersHandler.VIEW_ID);
         layout.addShowViewShortcut(ZephyrTraceConsoleView.ID);
         layout.addNewWizardShortcut("io.github.niwantha33.zew.newProject");
+        layout.addPerspectiveShortcut(ZephyrDeveloperPerspective.ID);
         layout.addPerspectiveShortcut(ZephyrHardwareDebugPerspective.ID);
         layout.addPerspectiveShortcut("org.eclipse.debug.ui.DebugPerspective");
     }

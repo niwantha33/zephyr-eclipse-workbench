@@ -16,7 +16,9 @@ public final class ZephyrBeginnerPerspectiveSmoke {
                 "io.github.niwantha33.zew.ui.beginnerPerspective");
         var advanced = registry.findPerspectiveWithId(
                 "io.github.niwantha33.zew.ui.hardwareDebugPerspective");
-        if (beginner == null || advanced == null)
+        var developer = registry.findPerspectiveWithId(
+                "io.github.niwantha33.zew.ui.developerPerspective");
+        if (beginner == null || developer == null || advanced == null)
             throw new IllegalStateException("Zephyr beginner or debug perspective missing.");
         var page = window.getActivePage();
         var previous = page.getPerspective();
@@ -30,7 +32,12 @@ public final class ZephyrBeginnerPerspectiveSmoke {
             var registers = page.findView("io.github.niwantha33.zew.ui.socRegisters");
             if (registers != null && page.isPartVisible(registers))
                 throw new IllegalStateException("Advanced registers visible in beginner layout.");
-            System.out.println("PASS BEGINNER PERSPECTIVE: essential views only; advanced registered");
+            page.setPerspective(developer);
+            if (page.findView("org.eclipse.ui.navigator.ProjectExplorer") == null
+                    || page.findView("io.github.niwantha33.zew.ui.configurationHome") == null
+                    || page.findView("org.eclipse.ui.console.ConsoleView") == null)
+                throw new IllegalStateException("Developer workspace views not visible.");
+            System.out.println("PASS ZEPHYR WORKSPACES: beginner and developer views registered");
         } finally {
             if (previous != null) page.setPerspective(previous);
         }
