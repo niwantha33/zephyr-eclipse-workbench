@@ -38,9 +38,19 @@ public final class ZephyrBeginnerPerspectiveSmoke {
                     || page.findView("org.eclipse.ui.console.ConsoleView") == null
                     || page.findView("org.eclipse.ui.views.ProblemView") == null)
                 throw new IllegalStateException("Developer workspace views not visible.");
-            // Restore closed/hidden guides through the same handlers as the menu.
+            // Invoke the registered command through the same Eclipse service as
+            // the Zephyr menu. The installed plug-in does not export its internal
+            // Java handler package to this independent OSGi smoke-test bundle.
+            // Calling the class directly would fail even when the real menu works.
             page.hideView(page.findView("io.github.niwantha33.zew.ui.beginnerGuide"));
-            io.github.niwantha33.zew.ui.ZephyrDeveloperPerspectiveHandler.open(window);
+            var commands = window.getService(org.eclipse.ui.handlers.IHandlerService.class);
+            if (commands == null)
+                throw new IllegalStateException("Eclipse handler service unavailable.");
+            try {
+                commands.executeCommand("io.github.niwantha33.zew.developerPerspective", null);
+            } catch (Exception error) {
+                throw new IllegalStateException("Developer Workspace command failed.", error);
+            }
             var guide = page.findView("io.github.niwantha33.zew.ui.beginnerGuide");
             if (guide == null || !page.isPartVisible(guide))
                 throw new IllegalStateException("Developer Workspace did not restore guide.");
