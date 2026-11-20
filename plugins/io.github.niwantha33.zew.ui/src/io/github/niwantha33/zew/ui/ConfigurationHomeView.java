@@ -175,13 +175,18 @@ public final class ConfigurationHomeView extends ViewPart {
     private Object visualAction(Object[] args) {
         if (args == null || args.length != 2
                 || !(args[0] instanceof String action)
-                || !(args[1] instanceof String value) || value.length() > 80)
+                || !(args[1] instanceof String value) || value.length() > 180)
             return "DENIED";
         boolean allowed = switch (action) {
             case "refresh", "classic", "memory", "hardware-studio", "diagnose" -> value.isEmpty();
             case "theme" -> "dark".equals(value) || "light".equals(value);
             case "navigate" -> List.of("overview", "hardware", "software", "system").contains(value);
             case "guide" -> PeripheralWorkflow.categories().contains(value);
+            case "focus-symbol" -> value.matches("CONFIG_[A-Z0-9_]{1,160}")
+                    && evidence != null && evidence.source() != null
+                    && evidence.source().options().stream().anyMatch(
+                            option -> ("CONFIG_" + option.symbol()).equals(value));
+            case "request" -> visualRequestAllowed(value);
             case "advanced" -> List.of("build", "settings", "software", "sources", "rtos", "evidence")
                     .contains(value);
             default -> false;
@@ -206,10 +211,69 @@ public final class ConfigurationHomeView extends ViewPart {
                     diagnoseSourceRequests();
                 }
                 case "advanced" -> advanced(value);
+                case "focus-symbol" -> openNativeKconfigSymbol(value);
+                case "request" -> applyVisualRequest(value);
                 default -> { /* rejected above */ }
             }
         });
         return "QUEUED";
+    }
+
+    private boolean visualRequestAllowed(String encoded) {
+        var current = evidence;
+        if (project == null || !project.isAccessible() || current == null
+                || current.overview() == null || current.source() == null) return false;
+        try {
+            ConfigurationStudioVisualRequest.parse(encoded, current.source(),
+                    current.overview().freshness(), hasDirtyProjectEditor());
+            return true;
+        } catch (IllegalArgumentException denied) { return false; }
+    }
+
+    private void applyVisualRequest(String encoded) {
+        Evidence current = evidence;
+        if (current == null || project == null || !project.isAccessible()
+                || current.overview() == null) return;
+        ConfigurationStudioVisualRequest.Reviewed requested;
+        try {
+            requested = ConfigurationStudioVisualRequest.parse(encoded, current.source(),
+                    current.overview().freshness(), hasDirtyProjectEditor());
+        } catch (IllegalArgumentException stale) {
+            MessageDialog.openWarning(getSite().getShell(), "Configuration changed",
+                    "The selected source or build is no longer eligible for this request. "
+                    + "Save pending editors, refresh, and review again.");
+            return;
+        }
+        try {
+            var part = getSite().getPage().showView(ConfigurationStudioView.ID);
+            if (part instanceof ConfigurationStudioView editor) {
+                editor.displayProject(project, false, null);
+                editor.openFocusedTool("software", null, null);
+                editor.reviewVisualRequest(project, current.build(), requested);
+                refresh(); // Reload source request status, including declined/no-op changes.
+            }
+        } catch (PartInitException unavailable) {
+            MessageDialog.openError(getSite().getShell(), "Kconfig editor unavailable",
+                    unavailable.getMessage());
+        }
+    }
+
+    private void openNativeKconfigSymbol(String symbol) {
+        if (project == null || evidence == null || evidence.source() == null
+                || !symbol.matches("CONFIG_[A-Z0-9_]{1,160}")) return;
+        if (evidence.source().options().stream().noneMatch(
+                option -> ("CONFIG_" + option.symbol()).equals(symbol))) return;
+        try {
+            var part = getSite().getPage().showView(ConfigurationStudioView.ID);
+            if (part instanceof ConfigurationStudioView editor) {
+                editor.displayProject(project, false, null);
+                editor.openFocusedTool("software", null, null);
+                editor.focusKconfigSymbol(symbol.substring(7));
+            }
+        } catch (PartInitException unavailable) {
+            MessageDialog.openError(getSite().getShell(), "Kconfig editor unavailable",
+                    unavailable.getMessage());
+        }
     }
 
     private void showVisual() {
