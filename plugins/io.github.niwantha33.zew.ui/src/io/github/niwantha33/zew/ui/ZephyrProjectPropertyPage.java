@@ -147,7 +147,7 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
         return panel;
     }
 
-    /** Preserve the legacy three selections and append project-owned profiles. */
+    /** Preserve the legacy three IDs, expose native Zephyr modes and named profiles. */
     private void refreshBuildProfiles(String preferred) throws Exception {
         var builtin = io.github.niwantha33.zew.core.BuildConfiguration.values();
         namedProfiles = io.github.niwantha33.zew.core.BuildProfile.list(
