@@ -21,6 +21,8 @@ subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/tools
 # timeout, including slow Windows runner Python process startup overhead.
 subprocess.run([sys.executable, 'scripts/test_hardware_studio_assets.py'],
                check=True, cwd=root, timeout=90)
+subprocess.run([sys.executable, 'scripts/test_configuration_studio_visual_assets.py'],
+               check=True, cwd=root, timeout=90)
 out = root / 'build-core-tests'
 out.mkdir(exist_ok=True)
 shutil.copyfile(root / 'plugins/io.github.niwantha33.zew.core/src/svd-part-mappings.json', out / 'svd-part-mappings.json')
