@@ -3822,8 +3822,10 @@ public final class ConfigurationStudioView extends ViewPart {
         try {
             Path app = project.getLocation().toFile().toPath();
             Path currentBuild = null;
+            java.util.Properties selectedSettings = null;
             try {
-                currentBuild = ProjectContext.buildDirectory(project, ProjectContext.settings(project));
+                selectedSettings = ProjectContext.settings(project);
+                currentBuild = ProjectContext.buildDirectory(project, selectedSettings);
             } catch (Exception notConfigured) {
                 if (expectedBuild != null)
                     throw new java.io.IOException("Selected project or build profile changed.", notConfigured);
@@ -3838,6 +3840,17 @@ public final class ConfigurationStudioView extends ViewPart {
                     .findFirst().orElse(null);
             if (actual == null || !actual.equals(request.expected()))
                 throw new java.io.IOException("Configuration source/build changed since selection. Refresh first.");
+            if (request.value() != null && selectedSettings != null) {
+                String board = selectedSettings.getProperty("board", "Not selected");
+                String profile = selectedSettings.getProperty("zew.profileId", "").isBlank()
+                        ? selectedSettings.getProperty("zew.buildConfiguration", "default")
+                        : "profile-" + selectedSettings.getProperty("zew.profileId");
+                var receipt = io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt.inspect(
+                        app, currentBuild, board, profile);
+                if (receipt.state() != io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt.State.CURRENT)
+                    throw new java.io.IOException("Build inputs have changed or provenance is unverified. "
+                            + "Rebuild the exact selected board/profile first.");
+            }
             if (request.value() != null
                     && (!"y".equals(request.value()) && !"n".equals(request.value())
                         || !ConfigurationStudioPresentation.isToggle(actual)))
