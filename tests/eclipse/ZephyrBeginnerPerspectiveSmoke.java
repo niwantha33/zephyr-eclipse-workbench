@@ -44,7 +44,13 @@ public final class ZephyrBeginnerPerspectiveSmoke {
             var guide = page.findView("io.github.niwantha33.zew.ui.beginnerGuide");
             if (guide == null || !page.isPartVisible(guide))
                 throw new IllegalStateException("Developer Workspace did not restore guide.");
-            System.out.println("PASS ZEPHYR WORKSPACES: beginner and developer guides visible");
+            // A board browser without a selected project must render a safe,
+            // usable empty state. The view itself never starts hardware IO.
+            var boards = page.showView("io.github.niwantha33.zew.ui.embeddedHubBoards");
+            if (boards == null || !page.isPartVisible(boards))
+                throw new IllegalStateException("Board Browser failed to open.");
+            page.hideView(boards);
+            System.out.println("PASS ZEPHYR WORKSPACES: guides and Board Browser registered");
         } finally {
             if (previous != null) page.setPerspective(previous);
         }
