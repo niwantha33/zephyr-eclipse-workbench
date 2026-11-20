@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuration Studio · Zephyr Eclipse Workbench</title>
+<style>
+:root{color-scheme:dark;font-family:"Segoe UI",system-ui,sans-serif;--bg:#0c1422;--panel:#121f32;--panel2:#19293f;--line:#293d56;--muted:#a9bad1;--text:#ebf3fd;--accent:#67d3ed;--soft:#1b3b53;--good:#62d8a0;--warn:#f5be7b;--bad:#ef939b;--shadow:rgba(0,0,0,.23)}
+:root.light{color-scheme:light;--bg:#f2f6fb;--panel:#fff;--panel2:#eaf0f7;--line:#cad7e5;--muted:#50647c;--text:#17283a;--accent:#087c9f;--soft:#dceef5;--good:#087e53;--warn:#995400;--bad:#ac3441;--shadow:rgba(40,62,90,.10)}
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:var(--bg);color:var(--text)}
+button,input{font:inherit;color:inherit}button{cursor:pointer}button:disabled{opacity:.55;cursor:default}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.studio{height:100vh;min-height:320px;display:flex;flex-direction:column;overflow:hidden}
+.top{display:flex;align-items:center;gap:12px;background:var(--panel);border-bottom:1px solid var(--line);padding:11px 15px;min-width:0}
+.brand{display:flex;align-items:center;gap:9px;flex:0 0 auto}.symbol{width:35px;height:35px;display:grid;place-items:center;border-radius:10px;border:1px solid var(--accent);background:var(--soft);font-size:19px;color:var(--accent)}
+.brand strong{display:block;font-size:13px}.brand small{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+.context{flex:1;min-width:0;line-height:1.4}.context strong,.context small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.context strong{font-size:12px}.context small{font-size:10px;color:var(--muted)}
+.pill{border:1px solid var(--line);border-radius:18px;padding:6px 9px;background:var(--panel2);font-size:10px;white-space:nowrap}
+.pill.good{color:var(--good);border-color:var(--good)}.pill.warn{color:var(--warn);border-color:var(--warn)}.pill.bad{color:var(--bad);border-color:var(--bad)}
+.action{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:11px;line-height:1.25;white-space:nowrap}
+.action:hover:not(:disabled),.sidebtn:hover,.tile:hover{border-color:var(--accent);background:var(--soft)}
+.action.primary{border-color:var(--accent);background:var(--soft);color:var(--accent)}.action:disabled{pointer-events:none}
+.main{display:grid;grid-template-columns:194px minmax(320px,1fr) 280px;flex:1;min-height:0}
+.sidebar,.inspector{background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.sidebar{border-right:1px solid var(--line)}.inspector{border-left:1px solid var(--line)}
+.sidehead{padding:19px 14px 12px}.eyebrow{font-size:10px;letter-spacing:.11em;font-weight:700;color:var(--muted)}.sidehead h2{font-size:15px;margin:7px 0 4px}.muted{font-size:11px;color:var(--muted);line-height:1.5}
+.navigation{padding:3px 8px;display:grid;gap:5px}
+.sidebtn{width:100%;text-align:left;border:1px solid transparent;border-radius:9px;background:transparent;padding:11px 12px;display:flex;align-items:center;gap:10px;font-size:12px}
+.sidebtn[aria-current=page]{background:var(--soft);border-color:var(--accent);color:var(--accent)}
+.sidebtn span:first-child{font-size:16px;width:21px;text-align:center}
+.sidefoot{margin-top:auto;padding:13px;border-top:1px solid var(--line);font-size:10px;line-height:1.55;color:var(--muted)}
+.sidefoot strong{color:var(--text)}
+.workspace{min-width:0;min-height:0;overflow:auto;padding:20px;background:var(--bg)}
+.pagehead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.pagehead h1{font-size:21px;font-weight:650;letter-spacing:-.02em;margin:5px 0}
+.pagehead p{font-size:11px;line-height:1.6;color:var(--muted);margin:4px 0;max-width:630px}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.metric,.panel,.tile{border:1px solid var(--line);background:var(--panel);border-radius:13px;box-shadow:0 4px 14px var(--shadow)}
+.metric{padding:14px;min-width:0}.metric .key{font-size:10px;letter-spacing:.04em;color:var(--muted)}.metric .val{font-size:17px;font-weight:650;overflow-wrap:anywhere;margin-top:9px}.metric .explain{font-size:10px;color:var(--muted);margin-top:7px;line-height:1.5}
+.sectiontitle{font-size:13px;font-weight:650;margin:19px 0 11px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;position:relative}
+.flowbox{background:var(--panel);border:1px solid var(--line);padding:14px;border-radius:12px;min-width:0;position:relative}
+.flowbox:not(:last-child):after{content:"›";position:absolute;right:-13px;top:37%;z-index:2;color:var(--accent);font-size:20px}
+.flowbox strong{font-size:12px;display:block}.flowbox p{font-size:10px;color:var(--muted);margin:8px 0 0;line-height:1.45}
+.dot{height:8px;width:8px;border-radius:50%;background:var(--muted);display:inline-block;margin-right:6px}
+.dot.good{background:var(--good)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:11px}
+.tile{color:var(--text);text-align:left;padding:15px;display:flex;flex-direction:column;gap:8px;min-height:124px;width:100%}
+.tile[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 2px var(--soft)}
+.tile strong{font-size:13px}.tile .status{font-size:10px}.tile .desc{font-size:10px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+.panel{padding:15px;margin-bottom:14px}.panel h3{font-size:13px;margin:0 0 12px}
+.rowlist{display:grid;gap:8px}.item{display:flex;align-items:flex-start;gap:8px;justify-content:space-between;text-align:left;width:100%;border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:12px}
+.item[aria-pressed=true]{border-color:var(--accent);background:var(--soft)}.item strong{display:block;font-size:12px}.item small{display:block;font-size:10px;line-height:1.5;color:var(--muted);margin-top:4px}
+.item .trailing{font-size:10px;white-space:nowrap;color:var(--muted)}
+.search{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:10px 12px;width:100%;font-size:12px}
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:13px;flex-wrap:wrap}
+.chip{border-radius:16px;border:1px solid var(--line);background:var(--panel2);padding:7px 10px;font-size:10px}
+.chip[aria-pressed=true]{border-color:var(--accent);color:var(--accent);background:var(--soft)}
+.empty{padding:25px;border:1px dashed var(--line);border-radius:12px;background:var(--panel);text-align:center;color:var(--muted);font-size:12px;line-height:1.7}
+.notice{border-left:3px solid var(--warn);background:var(--panel2);color:var(--muted);border-radius:7px;padding:11px 13px;font-size:11px;line-height:1.6;margin:12px 0}
+.inspector .sidehead{border-bottom:1px solid var(--line)}.detail{padding:15px;overflow:auto;flex:1}.detail h3{font-size:15px;margin:0 0 12px;overflow-wrap:anywhere}
+.field{padding:0 0 12px;margin-bottom:12px;border-bottom:1px solid var(--line)}.field dt{font-size:10px;color:var(--muted);margin-bottom:5px}.field dd{font-size:11px;line-height:1.55;margin:0;overflow-wrap:anywhere}
+.detailactions{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding:14px}.detailactions .action{width:100%;white-space:normal}
+.foot{border-top:1px solid var(--line);padding:8px 14px;background:var(--panel);font-size:10px;color:var(--muted);display:flex;justify-content:space-between;gap:10px;align-items:center}
+[hidden]{display:none!important}
+@media(max-width:1020px){.main{grid-template-columns:170px minmax(250px,1fr) 232px}.workspace{padding:15px}.top{gap:8px}.context small{display:none}.flow{gap:8px}.flowbox{padding:10px}}
+@media(max-width:780px){.main{grid-template-columns:152px minmax(190px,1fr);grid-template-rows:minmax(190px,1fr) minmax(150px,auto)}.inspector{grid-column:1/-1;grid-row:2;border-left:0;border-top:1px solid var(--line);max-height:250px}.workspace{padding:13px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.flow{grid-template-columns:1fr}.flowbox:after{display:none}.top{flex-wrap:wrap}.brand{min-width:150px}}
+@media(max-width:490px){.main{grid-template-columns:1fr;grid-template-rows:auto minmax(150px,1fr) auto}.sidebar{border-right:0;border-bottom:1px solid var(--line)}.sidehead,.sidefoot{display:none}.navigation{display:flex;flex-wrap:wrap;padding:6px}.sidebtn{width:auto;padding:8px;gap:4px}.sidebtn span:first-child{font-size:12px;width:auto}.workspace{padding:10px}.metrics{grid-template-columns:1fr}.inspector{grid-column:1;grid-row:3}.context{flex-basis:100%;order:4}.foot{font-size:9px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="studio">
+<header class="top">
+  <div class="brand"><span class="symbol" aria-hidden="true">◇</span><div><strong>Configuration Studio</strong><small>ZEPHYR WORKBENCH</small></div></div>
+  <div class="context"><strong id="contextTitle">Select a project</strong><small id="contextSub">Select an exact board and profile</small></div>
+  <span id="freshness" class="pill">NO BUILD</span>
+  <button class="action" id="theme" type="button">Light theme</button>
+  <button class="action primary" id="refresh" type="button">↻ Refresh</button>
+</header>
+<div class="main">
+<aside class="sidebar" aria-label="Configuration sections">
+  <div class="sidehead"><span class="eyebrow">WORKSPACE</span><h2>Explore & configure</h2><p class="muted">Start with a task, not raw settings.</p></div>
+  <nav class="navigation" aria-label="Configuration navigation">
+    <button class="sidebtn" type="button" data-section="overview"><span aria-hidden="true">◫</span> Overview</button>
+    <button class="sidebtn" type="button" data-section="hardware"><span aria-hidden="true">◇</span> Hardware</button>
+    <button class="sidebtn" type="button" data-section="software"><span aria-hidden="true">⚙</span> Kconfig</button>
+    <button class="sidebtn" type="button" data-section="system"><span aria-hidden="true">▣</span> Build &amp; System</button>
+  </nav>
+  <div class="sidefoot"><strong>Safe by design</strong><div>Generated configuration is read-only. Changes go through the existing review and build workflow.</div></div>
+</aside>
+<main class="workspace" id="workspace" tabindex="-1" aria-live="polite"></main>
+<aside class="inspector" aria-label="Selected configuration details">
+  <div class="sidehead"><span class="eyebrow">INSPECTOR</span><h2>Evidence & actions</h2><p class="muted">Actual selected build only</p></div>
+  <div class="detail" id="detail"></div>
+  <div class="detailactions" id="detailactions"></div>
+</aside>
+</div>
+<footer class="foot"><span id="footStatus">Configuration data is not proof of a running driver or physical wiring.</span><button type="button" class="action" id="classic">Advanced / classic tools</button></footer>
+</div>
+<script>
+'use strict';
+const DATA = __CONFIGURATION_STUDIO_DATA__;
+const $ = id => document.getElementById(id);
+const SECTIONS = ['overview','hardware','software','system'];
+let section = SECTIONS.includes(DATA.section) ? DATA.section : 'overview';
+let choice = null, search = '', kfilter = 'all';
+let theme = DATA.theme === 'light' ? 'light' : 'dark';
+const MAX_DISPLAY = 350;
+function host(action, value) {
+  if (typeof window.zewConfigurationAction === 'function')
+    return window.zewConfigurationAction(action, value || '');
+  $('footStatus').textContent = 'Eclipse bridge unavailable. Use the native Configuration Studio.';
+  return 'UNAVAILABLE';
+}
+function el(tag, className, content) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (content !== undefined) node.textContent = content;
+  return node;
+}
+function add(parent, tag, klass, content) {
+  const node = el(tag, klass, content);
+  parent.appendChild(node);
+  return node;
+}
+function btn(text, callback, klass) {
+  const node = el('button', klass || 'action', text);
+  node.type = 'button';
+  node.addEventListener('click', callback);
+  return node;
+}
+function p(label, value, parent) {
+  const row = add(parent, 'div', 'field'), dt = add(row, 'dt', '', label);
+  add(row, 'dd', '', String(value || 'Unknown'));
+  return dt;
+}
+function head(parent, eyebrow, title, description) {
+  const h = add(parent, 'div', 'pagehead'), text = add(h, 'div');
+  add(text, 'div', 'eyebrow', eyebrow);
+  add(text, 'h1', '', title);
+  add(text, 'p', '', description);
+  return h;
+}
+function stateText(value) {
+  return ({CONFIGURED:'Configured (build)',DISABLED:'Disabled',SETUP_INCOMPLETE:'Setup incomplete',
+    UNKNOWN:'Unknown',UNSUPPORTED:'Unsupported'})[value] || 'Unknown';
+}
+function tone(value) {
+  return value === 'CONFIGURED' ? 'good' : value === 'DISABLED' || value === 'SETUP_INCOMPLETE' ? 'warn' : '';
+}
+function go(sectionName) {
+  if (!SECTIONS.includes(sectionName)) return;
+  section = sectionName; choice = null; search = ''; kfilter = 'all';
+  document.querySelectorAll('[data-section]').forEach(b => b.setAttribute('aria-current', b.dataset.section === section ? 'page' : 'false'));
+  render();
+  host('navigate',sectionName);
+}
+function selected(type, item) {
+  choice = {type, item};
+  renderInspector();
+  document.querySelectorAll('[data-choice]').forEach(b => b.setAttribute('aria-pressed',
+    String(b.dataset.choice === type + ':' + (item.category || item.title || item.symbol))));
+}
+function metric(parent, label, value, note) {
+  const m=add(parent,'div','metric');
+  add(m,'div','key',label);add(m,'div','val',String(value||'Unknown'));add(m,'div','explain',note);
+}
+function noBuild(parent) {
+  if (!DATA.hasEvidence || DATA.freshness === 'NO_BUILD') {
+    add(parent,'div','notice', DATA.hasEvidence
+      ? 'No generated build for this selected project. Build it before relying on Devicetree or effective Kconfig.'
+      : 'Choose a Zephyr project in Project Explorer and select Refresh. Nothing is inferred from a missing build.');
+  } else if (DATA.dirty) {
+    add(parent,'div','notice','Unsaved project edits are pending. Review or save them before applying configuration changes.');
+  } else if (DATA.freshness !== 'CURRENT_SNAPSHOT') {
+    add(parent,'div','notice','Generated outputs are historical or unverified. Rebuild the exact board/profile to establish freshness.');
+  }
+}
+function overview(root) {
+  const h = head(root,'PROJECT OVERVIEW','Your configuration at a glance',
+    'A source-backed starting point for hardware, software and build settings.');
+  h.append(btn('Build & validate',()=>host('advanced','build'),'action primary'));
+  const metrics=add(root,'div','metrics');
+  metric(metrics,'FLASH CAPACITY',DATA.flash,'From generated DTS, not usage');
+  metric(metrics,'RAM CAPACITY',DATA.ram,'From generated DTS, not usage');
+  metric(metrics,'BUILD PROFILE',DATA.profile,'Selected project configuration');
+  noBuild(root);
+  add(root,'div','sectiontitle','How Zephyr configuration fits together');
+  const flow=add(root,'div','flow');
+  [['Project requests','prj.conf / overlays are editable source','software'],
+   ['Resolved build','Kconfig and Devicetree reflect the build','hardware'],
+   ['Firmware outputs','Reconfigure and build to apply changes','system']].forEach(s=>{
+     const card=add(flow,'div','flowbox');
+     add(card,'strong','',s[0]);
+     add(card,'p','',s[1]);
+     card.append(btn('Explore',()=>go(s[2]),'action'));
+   });
+  const title=add(root,'div','sectiontitle','Hardware configuration');
+  title.append(btn('View all hardware',()=>go('hardware'),'action'));
+  const cards=add(root,'div','cards');
+  DATA.rows.slice(0,12).forEach(row=>{
+    const tile=btn('',()=>{go('hardware');selected('hardware',row)},'tile');
+    tile.append(add(el('span'),'strong','',row.category));
+    add(tile,'span','status',stateText(row.state));add(tile,'span','desc',row.explanation);
+    cards.append(tile);
+  });
+  if (!DATA.rows.length) add(root,'div','empty','No hardware categories are available.');
+  add(root,'div','sectiontitle','Needs attention');
+  const issues=add(root,'div','rowlist');
+  DATA.issues.slice(0,6).forEach(issue=>{
+    const item=btn('',()=>selected('issue',issue),'item');
+    const desc=add(item,'div');
+    add(desc,'strong','',issue.title);add(desc,'small','',issue.nextAction);
+    issues.append(item);
+  });
+  if(!DATA.issues.length) add(issues,'div','empty','No deterministic issue in the available evidence. Hardware remains unverified until tested.');
+}
+function hardware(root) {
+  const h=head(root,'HARDWARE','Peripheral setup',
+    'Choose an observed peripheral category; states describe a generated configuration, not silicon capability or runtime activity.');
+  h.append(btn('Open Hardware Studio',()=>host('hardware-studio',''),'action primary'));
+  noBuild(root);
+  const bar=add(root,'div','toolbar');
+  const input=el('input','search');input.type='search';input.placeholder='Search GPIO, ADC, UART, status or description…';
+  input.value=search;input.setAttribute('aria-label','Search peripheral categories');bar.append(input);
+  const list=add(root,'div','cards');
+  function redraw(){
+    search=input.value.trim().toLowerCase();list.replaceChildren();
+    const matched=DATA.rows.filter(row=>(row.category+' '+stateText(row.state)+' '+row.explanation+' '+row.controller).toLowerCase().includes(search));
+    matched.slice(0,MAX_DISPLAY).forEach(row=>{
+      const tile=btn('',()=>selected('hardware',row),'tile');tile.dataset.choice='hardware:'+row.category;
+      tile.setAttribute('aria-pressed',String(choice && choice.type==='hardware' && choice.item.category===row.category));
+      add(tile,'strong','',row.category);
+      const status=add(tile,'span','status');status.append(add(el('span'),'span','dot '+tone(row.state)));status.append(document.createTextNode(stateText(row.state)));
+      add(tile,'span','desc',row.controller || row.explanation);
+      list.append(tile);
+    });
+    if(!matched.length)add(list,'div','empty','No match in the selected generated configuration. This does not prove the MCU lacks the peripheral.');
+  }
+  input.addEventListener('input',redraw);redraw();
+  add(root,'div','notice','Guided setup opens the existing validated workflow. No pins, drivers, channels or electrical connections are guessed or silently saved.');
+}
+function kconfig(root) {
+  const h=head(root,'SOFTWARE','Effective Kconfig',
+    'Search values emitted by the selected generated .config. Editing remains in the reviewed prj.conf workflow.');
+  h.append(btn('Edit / review prj.conf',()=>host('advanced','software'),'action primary'));
+  noBuild(root);
+  const metrics=add(root,'div','metrics');
+  metric(metrics,'SHOWN SYMBOLS',String(DATA.settings.length),'Effective values from generated .config');
+  metric(metrics,'ENABLED',String(DATA.settings.filter(v=>v.value==='y').length),'In this loaded subset only');
+  metric(metrics,'NOT SET',String(DATA.settings.filter(v=>v.value==='n').length),'In this loaded subset only');
+  if(DATA.settingsLimited)add(root,'div','notice','Only a bounded subset of effective symbols is shown. Use the advanced Kconfig tool for the complete configuration.');
+  const controls=add(root,'div','toolbar');
+  const input=el('input','search');input.type='search';input.value=search;
+  input.placeholder='Find CONFIG_GPIO, CONFIG_LOG, CONFIG_ASSERT…';
+  input.setAttribute('aria-label','Search generated Kconfig settings');controls.append(input);
+  ['all','y','n','other'].forEach(filter=>{
+    const chip=btn(filter==='all'?'All':filter==='y'?'Enabled':filter==='n'?'Disabled':'Values',()=>{kfilter=filter;redraw()},'chip');
+    chip.dataset.filter=filter;controls.append(chip);
+  });
+  const list=add(root,'div','rowlist');
+  function redraw() {
+    search=input.value.trim().toLowerCase();
+    controls.querySelectorAll('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===kfilter)));
+    list.replaceChildren();
+    const matching=DATA.settings.filter(s=>s.symbol.toLowerCase().includes(search)
+      && (kfilter==='all'||(kfilter==='other'?s.value!=='n'&&s.value!=='y':s.value===kfilter)));
+    matching.slice(0,MAX_DISPLAY).forEach(s=>{
+      const item=btn('',()=>selected('setting',s),'item');item.dataset.choice='setting:'+s.symbol;
+      item.setAttribute('aria-pressed',String(choice && choice.type==='setting'&&choice.item.symbol===s.symbol));
+      const desc=add(item,'div');add(desc,'strong','',s.symbol);
+      add(desc,'small','',s.value==='n'?'Not set':s.value==='y'?'Enabled':'Generated value');
+      add(item,'span','trailing',s.value.length>32?s.value.substring(0,32)+'…':s.value);
+      list.append(item);
+    });
+    if(matching.length>MAX_DISPLAY)add(list,'div','notice','Showing first '+MAX_DISPLAY+' matching symbols. Narrow the search.');
+    if(!matching.length)add(list,'div','empty','No matching effective Kconfig value in this snapshot. Build first or inspect the full native Kconfig tool.');
+  }
+  input.addEventListener('input',redraw);redraw();
+}
+function system(root) {
+  const h=head(root,'BUILD & SYSTEM','Exact build context',
+    'Check your selected board, profile, outputs and provenance before editing or flashing.');
+  h.append(btn('Open project profiles',()=>host('advanced','settings'),'action primary'));
+  const metrics=add(root,'div','metrics');
+  metric(metrics,'BOARD',DATA.board,'Exact selected board / qualifier');
+  metric(metrics,'PROFILE',DATA.profile,'Selected build configuration');
+  metric(metrics,'EVIDENCE',DATA.freshness.replaceAll('_',' '),'Source/output receipt state');
+  noBuild(root);
+  const details=add(root,'div','panel');add(details,'h3','','Selected paths');
+  const def=add(details,'dl');p('Project',DATA.project,def);p('Build directory',DATA.build,def);
+  const tasks=add(root,'div','cards');
+  [['Build & validate','Configure, compile and verify the target','build'],
+   ['Inspect Kconfig','Review effective and requested symbols','software'],
+   ['Inspect Devicetree','Open binding and source explorer','sources'],
+   ['Evidence & diagnosis','Inspect tracked build and configuration evidence','evidence']].forEach(s=>{
+    const tile=btn('',()=>host('advanced',s[2]),'tile');
+    add(tile,'strong','',s[0]);add(tile,'span','desc',s[1]);tasks.append(tile);
+  });
+  const actions=add(root,'div','toolbar');
+  actions.append(btn('Diagnose source requests',()=>host('diagnose',''),'action'));
+  actions.append(btn('Memory map',()=>host('memory',''),'action'));
+  if(DATA.warning)add(root,'div','notice',DATA.warning);
+}
+function renderInspector() {
+  const detail=$('detail'), actions=$('detailactions');
+  detail.replaceChildren();actions.replaceChildren();
+  if(!choice) {
+    add(detail,'h3','','Select a card');
+    add(detail,'p','muted','Choose a peripheral, generated CONFIG_ symbol or issue for evidence and next actions.');
+    actions.append(btn('Open native tools',()=>host('classic',''),'action'));
+    return;
+  }
+  const {type,item}=choice;
+  if(type==='hardware') {
+    add(detail,'h3','',item.category);
+    const dl=add(detail,'dl');p('Build state',stateText(item.state),dl);
+    p('Observed controller',item.controller || 'No verified controller',dl);
+    p('Explanation',item.explanation,dl);p('Next step',item.nextAction,dl);
+    actions.append(btn('Guided '+item.category+' setup',()=>host('guide',item.category),'action primary'));
+    actions.append(btn('Visual Devicetree',()=>host('hardware-studio',''),'action'));
+  }else if(type==='issue') {
+    add(detail,'h3','',item.title);
+    const dl=add(detail,'dl');p('Evidence',item.detail,dl);p('Next step',item.nextAction,dl);
+    if(item.category && DATA.rows.some(row=>row.category===item.category))
+      actions.append(btn('Review '+item.category,()=>host('guide',item.category),'action primary'));
+    else actions.append(btn('Inspect build evidence',()=>host('advanced','evidence'),'action primary'));
+    actions.append(btn('Diagnose requests',()=>host('diagnose',''),'action'));
+  }else if(type==='setting') {
+    add(detail,'h3','',item.symbol);
+    const dl=add(detail,'dl');p('Effective build value',item.value,dl);
+    p('Source', 'Selected generated zephyr/.config (read-only)',dl);
+    p('Interpretation','Only Kconfig in the selected build can establish dependencies and origin.',dl);
+    actions.append(btn('Edit / inspect in Kconfig',()=>host('advanced','software'),'action primary'));
+  }
+}
+function render() {
+  $('workspace').replaceChildren();
+  if(section==='hardware')hardware($('workspace'));
+  else if(section==='software')kconfig($('workspace'));
+  else if(section==='system')system($('workspace'));
+  else overview($('workspace'));
+  renderInspector();
+  document.querySelectorAll('[data-section]').forEach(b=>b.setAttribute('aria-current',b.dataset.section===section?'page':'false'));
+}
+function initialise(){
+  document.documentElement.classList.toggle('light',theme==='light');
+  $('theme').textContent=theme==='light'?'Dark theme':'Light theme';
+  $('contextTitle').textContent=DATA.project||'No project selected';
+  $('contextSub').textContent=(DATA.board||'Board unknown')+'  ·  '+(DATA.profile||'Profile unknown')+'  ·  '+(DATA.build||'No build directory');
+  const pill=$('freshness');
+  const labels={CURRENT_SNAPSHOT:'TRACKED INPUTS MATCH',STALE_SNAPSHOT:'REBUILD REQUIRED',UNVERIFIED_SNAPSHOT:'UNVERIFIED BUILD',NO_BUILD:'NO BUILD'};
+  pill.textContent=DATA.dirty?'UNSAVED EDITS':labels[DATA.freshness]||'NO BUILD';
+  pill.className='pill '+(DATA.dirty?'warn':DATA.freshness==='CURRENT_SNAPSHOT'?'good':DATA.freshness==='STALE_SNAPSHOT'?'warn':'bad');
+  $('refresh').addEventListener('click',()=>host('refresh',''));
+  $('theme').addEventListener('click',()=>{
+    theme=theme==='dark'?'light':'dark';
+    document.documentElement.classList.toggle('light',theme==='light');
+    $('theme').textContent=theme==='light'?'Dark theme':'Light theme';
+    host('theme',theme);
+  });
+  $('classic').addEventListener('click',()=>host('classic',''));
+  document.querySelectorAll('[data-section]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.section)));
+  render();
+}
+initialise();
+</script>
+</body>
+</html>
