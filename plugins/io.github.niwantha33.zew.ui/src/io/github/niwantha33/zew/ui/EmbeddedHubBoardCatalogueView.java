@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Properties;
 import java.util.TreeSet;
+import org.eclipse.core.runtime.CoreException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.FileLocator;
@@ -21,6 +22,8 @@ import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.SashForm;
+import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
@@ -44,85 +47,124 @@ import io.github.niwantha33.zew.core.ProcessRunner;
 public final class EmbeddedHubBoardCatalogueView extends ViewPart {
     public static final String ID = Activator.ID + ".embeddedHubBoards";
     private static final String ALL_VENDORS = "All chip vendors";
+    private static final String ALL_SOCS = "All SoCs";
+    private static final int VISIBLE_LIMIT = 200;
     private final AtomicInteger generation = new AtomicInteger();
     private IProject project;
     private volatile Job discoveryJob;
     private List<EmbeddedHubBoardCatalogue.Entry> entries = List.of();
     private String activeTarget = "";
     private Text search, selectedTarget;
-    private Combo vendorFilter;
+    private Combo vendorFilter, socFilter;
     private Table table;
-    private Label status, details, source, currentBoard, technical;
-    private Button inspect, changeBoard;
+    private Label status, details, basic, boardState, source, currentBoard, technical;
+    private Button inspect, changeBoard, reload;
+    private ScrolledComposite detailScroll;
+    private Composite detailBody;
 
     @Override public void createPartControl(Composite parent) {
-        GridLayout layout = new GridLayout(1, false);
-        layout.marginWidth = 14;
-        layout.marginHeight = 12;
-        layout.verticalSpacing = 9;
-        parent.setLayout(layout);
+        GridLayout frame = new GridLayout(1, false);
+        frame.marginWidth = 10;
+        frame.marginHeight = 10;
+        frame.verticalSpacing = 7;
+        parent.setLayout(frame);
 
         Label title = new Label(parent, SWT.NONE);
         title.setFont(JFaceResources.getFontRegistry().getBold(JFaceResources.DIALOG_FONT));
-        title.setText("Browse Zephyr boards");
+        title.setText("Board Browser");
         Label introduction = new Label(parent, SWT.WRAP);
-        introduction.setText("Find a board supported by the selected Zephyr catalogue. Browsing does not change your project.");
-        introduction.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        introduction.setText("Find an exact Zephyr target. Selecting a row only previews the board.");
+        introduction.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
         currentBoard = new Label(parent, SWT.WRAP);
-        currentBoard.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        currentBoard.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
-        Composite controls = new Composite(parent, SWT.NONE);
-        controls.setLayout(new GridLayout(3, false));
-        controls.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        search = new Text(controls, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH | SWT.ICON_CANCEL);
-        search.setMessage("Search board, SoC or target");
+        SashForm panes = new SashForm(parent, SWT.HORIZONTAL | SWT.SMOOTH);
+        panes.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+
+        Composite browser = new Composite(panes, SWT.NONE);
+        GridLayout browserLayout = new GridLayout(1, false);
+        browserLayout.marginWidth = 7;
+        browserLayout.marginHeight = 6;
+        browserLayout.verticalSpacing = 8;
+        browser.setLayout(browserLayout);
+        heading(browser, "FIND BOARDS");
+        search = new Text(browser, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH | SWT.ICON_CANCEL);
+        search.setMessage("Search board, processor or exact target");
+        search.setToolTipText("Filter by board name, SoC, revision or exact target.");
         search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        search.addModifyListener(event -> filterRows());
-        vendorFilter = new Combo(controls, SWT.DROP_DOWN | SWT.READ_ONLY);
+
+        Composite filters = new Composite(browser, SWT.NONE);
+        filters.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        filters.setLayout(new GridLayout(2, true));
+        vendorFilter = new Combo(filters, SWT.DROP_DOWN | SWT.READ_ONLY);
+        vendorFilter.setToolTipText("Chip vendor");
         vendorFilter.add(ALL_VENDORS);
         vendorFilter.select(0);
-        GridData vendorData = new GridData(SWT.FILL, SWT.CENTER, false, false);
-        vendorData.widthHint = 170;
-        vendorFilter.setLayoutData(vendorData);
-        vendorFilter.addListener(SWT.Selection, event -> filterRows());
-        Button refresh = new Button(controls, SWT.PUSH);
-        refresh.setText("Refresh");
-        refresh.setToolTipText("Reload boards from the selected project's installed Zephyr checkout");
-        refresh.addListener(SWT.Selection, event -> {
-            IProject candidate = selectedProject();
-            if (candidate == null) showEmpty("Select an imported Zephyr project in Project Explorer.");
-            else displayProject(candidate);
-        });
+        vendorFilter.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        socFilter = new Combo(filters, SWT.DROP_DOWN | SWT.READ_ONLY);
+        socFilter.setToolTipText("System-on-chip filter");
+        socFilter.add(ALL_SOCS);
+        socFilter.select(0);
+        socFilter.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
-        status = new Label(parent, SWT.WRAP);
-        status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        status = new Label(browser, SWT.WRAP);
+        status.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
-        table = new Table(parent, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION | SWT.V_SCROLL);
+        table = new Table(browser, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
+                | SWT.V_SCROLL | SWT.H_SCROLL);
         table.setHeaderVisible(true);
         table.setLinesVisible(false);
-        table.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        String[] headers = {"Board", "Chip vendor", "SoC", "Project"};
-        int[] widths = {240, 125, 175, 95};
+        GridData resultsData = new GridData(SWT.FILL, SWT.FILL, true, true);
+        resultsData.minimumHeight = 180;
+        table.setLayoutData(resultsData);
+        String[] headers = {"Board", "SoC", "Chip vendor", "Project"};
+        int[] widths = {190, 140, 105, 75};
         for (int i = 0; i < headers.length; i++) {
             TableColumn column = new TableColumn(table, SWT.LEFT);
             column.setText(headers[i]);
             column.setWidth(widths[i]);
         }
+        search.addModifyListener(event -> filterRows());
+        vendorFilter.addListener(SWT.Selection, event -> {
+            populateSocs();
+            filterRows();
+        });
+        socFilter.addListener(SWT.Selection, event -> filterRows());
         table.addListener(SWT.Selection, event -> showSelectedRow());
+        table.addListener(SWT.DefaultSelection, event -> editProjectBoard());
 
-        Group selected = new Group(parent, SWT.NONE);
+        detailScroll = new ScrolledComposite(panes, SWT.V_SCROLL | SWT.H_SCROLL);
+        detailScroll.setExpandVertical(true);
+        detailScroll.setExpandHorizontal(true);
+        detailBody = new Composite(detailScroll, SWT.NONE);
+        GridLayout detailLayout = new GridLayout(1, false);
+        detailLayout.marginWidth = 10;
+        detailLayout.marginHeight = 6;
+        detailLayout.verticalSpacing = 10;
+        detailBody.setLayout(detailLayout);
+        heading(detailBody, "BOARD DETAILS");
+
+        Group selected = new Group(detailBody, SWT.NONE);
         selected.setText("Selected board");
         selected.setLayout(new GridLayout(1, false));
-        selected.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        selected.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
         details = new Label(selected, SWT.WRAP);
-        details.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        details.setFont(JFaceResources.getFontRegistry().getBold(JFaceResources.DIALOG_FONT));
+        details.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+        boardState = new Label(selected, SWT.WRAP);
+        boardState.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+        Label targetLabel = new Label(selected, SWT.NONE);
+        targetLabel.setText("Exact Zephyr build target");
         selectedTarget = new Text(selected, SWT.BORDER | SWT.READ_ONLY);
-        selectedTarget.setToolTipText("Exact Zephyr build target (copyable; browsing does not apply it)");
+        selectedTarget.setToolTipText("Copyable target. Previewing does not apply it to the project.");
         selectedTarget.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        basic = new Label(selected, SWT.WRAP);
+        basic.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+
         Button advanced = new Button(selected, SWT.CHECK);
         advanced.setText("Show technical details");
         technical = new Label(selected, SWT.WRAP);
-        GridData technicalData = new GridData(SWT.FILL, SWT.CENTER, true, false);
+        GridData technicalData = new GridData(SWT.FILL, SWT.TOP, true, false);
         technicalData.exclude = true;
         technical.setLayoutData(technicalData);
         technical.setVisible(false);
@@ -130,27 +172,63 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
             boolean visible = advanced.getSelection();
             ((GridData) technical.getLayoutData()).exclude = !visible;
             technical.setVisible(visible);
-            selected.layout(true, true);
-            parent.layout(true, true);
+            resizeDetails();
         });
 
-        Composite actions = new Composite(parent, SWT.NONE);
-        actions.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        actions.setLayout(new GridLayout(2, false));
+        Group actions = new Group(detailBody, SWT.NONE);
+        actions.setText("Board actions");
+        actions.setLayout(new GridLayout(1, false));
+        actions.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
         changeBoard = new Button(actions, SWT.PUSH);
-        changeBoard.setText("Change Project Board...");
-        changeBoard.setToolTipText("Opens project settings; no board is changed until you confirm there");
+        changeBoard.setText("Use This Board...");
+        changeBoard.setToolTipText("Opens Project Properties with this exact target selected. "
+                + "Only Apply or Apply and Close can change the project.");
+        changeBoard.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         changeBoard.setEnabled(false);
         changeBoard.addListener(SWT.Selection, event -> editProjectBoard());
+        Label caution = new Label(actions, SWT.WRAP);
+        caution.setText("Board changes require confirmation in Project Properties; "
+                + "no build, flash or reset is started.");
+        caution.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+
         inspect = new Button(actions, SWT.PUSH);
-        inspect.setText("Configure Project...");
-        inspect.setToolTipText("Open Configuration Studio for the current project");
+        inspect.setText("Configure Current Project...");
+        inspect.setToolTipText("Open Configuration Studio for the saved project target, "
+                + "not the board currently previewed.");
+        inspect.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         inspect.setEnabled(false);
         inspect.addListener(SWT.Selection, event -> inspectProject());
 
-        source = new Label(parent, SWT.WRAP);
-        source.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        showEmpty("Select an imported Zephyr project to browse available boards.");
+        reload = new Button(actions, SWT.PUSH);
+        reload.setText("Refresh Board Catalogue");
+        reload.setToolTipText("Reload the board list from the selected project's local Zephyr checkout.");
+        reload.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        reload.setEnabled(false);
+        reload.addListener(SWT.Selection, event -> {
+            IProject candidate = selectedProject();
+            if (candidate == null) showEmpty("Select a Zephyr project in Project Explorer.");
+            else displayProject(candidate);
+        });
+
+        source = new Label(detailBody, SWT.WRAP);
+        source.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+        detailScroll.setContent(detailBody);
+        resizeDetails();
+        panes.setWeights(new int[] {58, 42});
+        showEmpty("Select an imported Zephyr application to browse its board catalogue.");
+    }
+
+    private static void heading(Composite parent, String label) {
+        Label title = new Label(parent, SWT.NONE);
+        title.setText(label);
+        title.setFont(JFaceResources.getFontRegistry().getBold(JFaceResources.DIALOG_FONT));
+        title.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+    }
+
+    private void resizeDetails() {
+        if (detailScroll == null || detailScroll.isDisposed() || detailBody.isDisposed()) return;
+        detailBody.layout(true, true);
+        detailScroll.setMinSize(detailBody.computeSize(320, SWT.DEFAULT));
     }
 
     /** Handler supplies the explicit project; never infer one from the filesystem. */
