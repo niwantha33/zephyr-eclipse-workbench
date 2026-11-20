@@ -261,14 +261,15 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
         vendorFilter.removeAll();
         vendorFilter.add(ALL_VENDORS);
         vendorFilter.select(0);
-        status.setText("Loading boards from this project's Zephyr checkout...");
-        currentBoard.setText("Project: " + selected.getName() + "  |  Target: loading...");
-        details.setText("Choose a board to inspect its exact target.");
-        selectedTarget.setText("");
-        technical.setText("");
-        source.setText("");
+        socFilter.removeAll();
+        socFilter.add(ALL_SOCS);
+        socFilter.select(0);
+        status.setText("Loading the local board catalogue...");
+        currentBoard.setText("Project: " + selected.getName() + "  |  Current target: loading...");
+        clearPreview("Select a result to inspect its exact target.");
+        source.setText("Source: selected project's installed Zephyr checkout (read-only).");
         inspect.setEnabled(true);
-        changeBoard.setEnabled(true);
+        reload.setEnabled(false);
 
         var display = status.getDisplay();
         Job job = new Job("Discover Zephyr boards") {
@@ -309,7 +310,9 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
                                     + (listed ? "  |  Current target available"
                                             : "  |  Current target not found"));
                             populateVendors();
+                            populateSocs();
                             filterRows();
+                            reload.setEnabled(true);
                         }
                     });
                     return Status.OK_STATUS;
@@ -321,9 +324,8 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
                             table.removeAll();
                             currentBoard.setText("Project: " + selected.getName());
                             status.setText("Board list unavailable: " + error.getMessage());
-                            details.setText("Check the project's Zephyr environment in Project Properties.");
-                            selectedTarget.setText("");
-                            technical.setText("");
+                            clearPreview("Check the project's Zephyr environment in Project Properties.");
+                            reload.setEnabled(true);
                         }
                     });
                     return new Status(IStatus.ERROR, Activator.ID, "Zephyr board discovery failed", error);
@@ -343,46 +345,89 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
         for (var entry : entries) vendors.add(entry.chipVendor());
         vendorFilter.removeAll();
         vendorFilter.add(ALL_VENDORS);
-        for (String vendor : vendors) {
+        for (String vendor : vendors)
             if (!vendor.isBlank()) vendorFilter.add(vendor);
-        }
         int index = vendorFilter.indexOf(previous);
         vendorFilter.select(index >= 0 ? index : 0);
     }
 
+    private void populateSocs() {
+        String previous = socFilter.getText();
+        String vendor = vendorFilter.getText();
+        TreeSet<String> socs = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (var entry : entries) {
+            if (ALL_VENDORS.equals(vendor) || entry.chipVendor().equalsIgnoreCase(vendor))
+                if (!entry.soc().isBlank()) socs.add(entry.soc());
+        }
+        socFilter.removeAll();
+        socFilter.add(ALL_SOCS);
+        for (String soc : socs) socFilter.add(soc);
+        int index = socFilter.indexOf(previous);
+        socFilter.select(index >= 0 ? index : 0);
+    }
+
+    private EmbeddedHubBoardCatalogue.Entry previewed() {
+        if (table == null || table.isDisposed() || table.getSelectionCount() != 1)
+            return null;
+        Object row = table.getSelection()[0].getData();
+        return row instanceof EmbeddedHubBoardCatalogue.Entry entry ? entry : null;
+    }
+
+    private void clearPreview(String instruction) {
+        if (details == null || details.isDisposed()) return;
+        details.setText(instruction);
+        boardState.setText("No board selected");
+        basic.setText("");
+        selectedTarget.setText("");
+        technical.setText("");
+        changeBoard.setEnabled(false);
+        resizeDetails();
+    }
+
     private void filterRows() {
-        if (table == null || table.isDisposed() || vendorFilter == null || vendorFilter.isDisposed()) return;
+        if (table == null || table.isDisposed() || vendorFilter == null || vendorFilter.isDisposed()
+                || socFilter == null || socFilter.isDisposed()) return;
+        EmbeddedHubBoardCatalogue.Entry previous = previewed();
+        String retain = previous == null ? "" : previous.exactTarget();
         table.setRedraw(false);
         try {
             table.removeAll();
-            selectedTarget.setText("");
-            technical.setText("");
             String chipVendor = vendorFilter.getText();
+            String soc = socFilter.getText();
             var filtered = new ArrayList<>(EmbeddedHubBoardCatalogue.filter(entries, search.getText()));
             if (!chipVendor.isBlank() && !ALL_VENDORS.equals(chipVendor))
                 filtered.removeIf(entry -> !entry.chipVendor().equalsIgnoreCase(chipVendor));
+            if (!soc.isBlank() && !ALL_SOCS.equals(soc))
+                filtered.removeIf(entry -> !entry.soc().equalsIgnoreCase(soc));
             filtered.sort(Comparator.comparingInt(
                     (EmbeddedHubBoardCatalogue.Entry entry) -> entry.exactTarget().equals(activeTarget) ? 0 : 1)
                     .thenComparing(EmbeddedHubBoardCatalogue.Entry::board, String.CASE_INSENSITIVE_ORDER)
                     .thenComparing(EmbeddedHubBoardCatalogue.Entry::exactTarget));
-            int visible = Math.min(400, filtered.size());
-            int activeRow = -1;
+            int visible = Math.min(VISIBLE_LIMIT, filtered.size());
+            int selectedRow = -1;
+            int currentRow = -1;
             for (int i = 0; i < visible; i++) {
                 var entry = filtered.get(i);
                 TableItem item = new TableItem(table, SWT.NONE);
-                item.setText(new String[] {entry.board(), entry.chipVendor(), entry.soc(),
+                item.setText(new String[] {entry.board(), entry.soc(), entry.chipVendor(),
                         entry.exactTarget().equals(activeTarget) ? "Current" : ""});
                 item.setData(entry);
-                if (entry.exactTarget().equals(activeTarget)) activeRow = i;
+                if (entry.exactTarget().equals(retain)) selectedRow = i;
+                if (entry.exactTarget().equals(activeTarget)) currentRow = i;
             }
-            details.setText(filtered.isEmpty() ? "No matching boards. Try another search or vendor."
-                    : "Select a board to see its exact Zephyr target. This does not change the project.");
-            status.setText(filtered.size() + " matching targets"
-                    + (filtered.size() > visible ? " (showing first " + visible + "; refine your search)" : "")
-                    + "  |  Catalogue entries only, not tested hardware.");
-            if (activeRow >= 0) {
-                table.setSelection(activeRow);
+            status.setText(filtered.size() + " matching exact targets"
+                    + (filtered.size() > visible
+                            ? "  |  First " + visible + " displayed; narrow your search"
+                            : "")
+                    + "  |  Local catalogue, not verified hardware");
+            int choice = selectedRow >= 0 ? selectedRow : currentRow;
+            if (choice >= 0) {
+                table.setSelection(choice);
                 showSelectedRow();
+            } else {
+                clearPreview(filtered.isEmpty()
+                        ? "No boards match. Change filters or search again."
+                        : "Select a board on the left to inspect it.");
             }
         } finally {
             table.setRedraw(true);
@@ -390,20 +435,23 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
     }
 
     private void showSelectedRow() {
-        if (table.getSelectionCount() != 1) return;
-        Object data = table.getSelection()[0].getData();
-        if (data instanceof EmbeddedHubBoardCatalogue.Entry entry) {
-            boolean current = entry.exactTarget().equals(activeTarget);
-            details.setText(entry.board() + (current ? "  |  Current project board"
-                    : "  |  Browse only — not selected for build"));
-            selectedTarget.setText(entry.exactTarget());
-            technical.setText("Board manufacturer: " + entry.boardManufacturer()
-                    + "    Chip vendor: " + entry.chipVendor()
-                    + "    SoC: " + entry.soc()
-                    + "    Revision: " + entry.revision()
-                    + "    Qualifier: " + entry.qualifier()
-                    + "\nDiscovery alone does not prove build, flash, debug, peripheral or physical compatibility.");
+        EmbeddedHubBoardCatalogue.Entry entry = previewed();
+        if (entry == null) {
+            clearPreview("Select a board on the left to inspect it.");
+            return;
         }
+        boolean current = entry.exactTarget().equals(activeTarget);
+        details.setText(entry.board());
+        boardState.setText(current ? "Current project target" : "Catalogue preview — not applied");
+        selectedTarget.setText(entry.exactTarget());
+        basic.setText("Chip vendor: " + entry.chipVendor() + "\nSoC: " + entry.soc());
+        technical.setText("Board manufacturer: " + entry.boardManufacturer()
+                + "\nRevision: " + entry.revision()
+                + "\nCPU / qualifier: " + entry.qualifier()
+                + "\nDiscovery alone does not prove build, flash, debug or physical compatibility.");
+        changeBoard.setEnabled(project != null && project.isAccessible() && !current);
+        changeBoard.setText(current ? "Already Current Project Board" : "Use This Board...");
+        resizeDetails();
     }
 
     private void editProjectBoard() {
