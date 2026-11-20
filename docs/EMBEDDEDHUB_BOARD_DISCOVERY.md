@@ -22,10 +22,10 @@ The browser now uses a resizable **two-column SWT layout**.
 1. The selected board's name, exact build target, SoC and chip vendor are visible; the exact target is copyable.
 2. **Show technical details** is collapsed by default. It reveals manufacturer, revision and qualifier plus the evidence limitation.
 3. **Use This Board...** is the main action when previewing a different target. It opens native **Project Properties > Zephyr**, preselecting the exact catalogue target. Nothing is applied until the user presses **Apply** or **Apply and Close** in that dialog.
-4. **Configure Current Project...** deliberately operates on the current saved target, *not* on the previewed board.
+4. **Explore Pins and Peripherals...** opens Configuration Studio directly in the guided **Hardware** section for the *saved* project target, not a previewed board. It offers peripheral discovery and a launch to graphical Hardware Studio when supported build evidence exists; it does not pretend to offer vendor pinmux assignments without that evidence.
 5. **Refresh Board Catalogue** reloads from the selected project's installed local Zephyr source.
 
-The action is disabled when the preview already matches the current project target.
+**Use This Board...** is disabled when the preview already matches the current project target. **Explore Pins and Peripherals...** stays enabled for an accessible saved project, including when the selected row is only a preview of another board.
 The candidate exact target is passed through a **session-only project property** and cleared when the dialog closes, even on cancellation. An unsuccessful or stale catalogue lookup must not silently substitute a different board. Closing the native Properties dialog without Apply does not commit a target change. If the user pressed Apply before subsequently cancelling the dialog, the browser refreshes the real saved board.
 
 No independent board database, network lookup, flash, build or probe access is introduced. Catalogue presence is **not** proof of compatibility, tested hardware or peripheral support.
