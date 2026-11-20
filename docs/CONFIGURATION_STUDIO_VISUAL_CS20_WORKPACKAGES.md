@@ -33,10 +33,19 @@ The inspector shows the selected item. The UI uses the same palette as Hardware 
 | CS-20 | Architecture and navigation | One view, clear task-oriented four-page information architecture | **Implemented on branch** |
 | CS-21 | Graphical interface | Offline bundled HTML/CSS/JS, light/dark, responsive cards, inspector, search | **Implemented; screenshot review outstanding** |
 | CS-22 | Evidence integration | Actual receipt state, bounded generated .config, safe JSON, truthful empty states | **Implemented; cross-board qualification outstanding** |
-| CS-23 | Guided editing UX | Visual Kconfig/peripheral diff/validation/backup/apply flow | **Not implemented** — existing guarded SWT editor remains |
+| CS-23 | Guided editing UX | Visual switch requests, source-aware preview and guarded save; nonboolean/binding-aware advanced edit | **Partial implemented** — graphical on/off and remove override; exact preview/confirmation/backup in native SWT, full in-visual diff and scratch configure not yet implemented |
 | CS-24 | Dependency diagnostics | Symbol origin, select/imply/dependency explanation via upstream Kconfiglib | **Not implemented** — existing diagnostic action remains |
 | CS-25 | Hardware Studio handoff | Exact board/profile/node context, safe return, integrated source pane | **Partial** — same build opens in Hardware Studio |
 | CS-26 | Release qualification | Core, asset, installed smoke, Windows/Linux p2, high-DPI, upgrades | **Partial; release gates open** |
+
+## CS-23 implementation details
+
+- Kconfig now displays **effective generated values** separately from **explicit project requests** and source line numbers, including unresolved requests after a failed configure.
+- With a current tracked build and no unsaved editors, supported on/off settings expose **Enable** and **Disable** buttons. Existing prj.conf assignments offer **Remove override**, including source-only repair for unresolved symbols.
+- The browser first shows a non-writing request preview. The **Continue to native review** button sends only an exact allowlisted `CONFIG_SYMBOL=y/n/remove` request, never a file path, CMake option, or arbitrary text.
+- Java rechecks project and build identity, current source Option, unsaved editor state, and for toggles the fresh configuration evidence receipt. The existing SWT editor performs the authoritative `ConfigurationStudioFiles.plan` preview, user confirmation, backed-up optimistic-lock commit, refresh, and subsequent-build warning.
+- Nonboolean values and dependency analysis are deep-linked to the original native Kconfig editor for correct type/binding review. Changing Kconfig requests is **not** proof of successful compilation or effective behavior. A new build is required.
+- Deliberately not claimed: whole-file diff within the web panel, cross-symbol dependency solver, scratch-CMake qualification of an unsaved Kconfig draft, automatic hardware pin allocation, or a saved source edit without native confirmation.
 
 ## Verification
 
