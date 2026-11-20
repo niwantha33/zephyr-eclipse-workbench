@@ -65,6 +65,17 @@ public final class ConfigurationStudioVisualSmoke {
         check("DENIED".equals(browser.evaluate(
                 "return window.zewConfigurationAction('theme','javascript:bad');")),
                 "invalid theme rejected");
+        check("DENIED".equals(browser.evaluate(
+                "return window.zewConfigurationAction('request','CONFIG_GPIO=y');")),
+                "no-project source mutation always denied");
+        check("DENIED".equals(browser.evaluate(
+                "return window.zewConfigurationAction('focus-symbol','CONFIG_GPIO');")),
+                "unknown project symbol deep-link always denied");
+        check(Boolean.TRUE.equals(browser.evaluate(
+                "return document.getElementById('reviewDialog').hidden"
+                    + " && !!document.getElementById('commitReview')"
+                    + " && !!document.getElementById('cancelReview');")),
+                "review dialog is present but no pending change may be applied");
         check(Boolean.TRUE.equals(browser.evaluate(
                 "return document.getElementById('freshness').textContent === 'NO BUILD';")),
                 "empty-state build evidence is never invented");
