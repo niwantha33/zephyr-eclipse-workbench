@@ -125,16 +125,16 @@ public final class ZephyrBeginnerView extends ViewPart {
                 line(content, "• How: Browse supported boards before changing the saved target.");
                 line(content, "• Changing a board requires Project Properties; browsing does not.");
                 button(content, "Browse Available Boards...", () -> command("io.github.niwantha33.zew.embeddedHubBoards"));
-                button(content, "Change Project Board...", this::properties);
+                button(content, "Explore Current Board Hardware...", () -> configuration("hardware"));
+                button(content, "Advanced Board Settings...", this::properties);
                 break;
             case 2:
                 heading(content, "3   Configure the firmware");
-                line(content, "• What: Configure peripherals, Devicetree and build options.");
-                line(content, "• How: Start in Configuration Studio; inspect generated evidence before editing.");
+                line(content, "• What: Explore GPIO, ADC, UART, I2C, SPI and other detected hardware.");
+                line(content, "• How: Start with guided hardware, then use advanced settings only if needed.");
                 line(content, "• Select a named build profile if you need different configurations.");
-                button(content, "Open Configuration Studio...", () -> configuration("overview"));
-                button(content, "Open Hardware & Devicetree...", () -> configuration("hardware"));
-                button(content, "Change Build Profile...", this::properties);
+                button(content, "Explore Pins and Peripherals...", () -> configuration("hardware"));
+                button(content, "Advanced Build and RTOS Settings...", () -> configuration("system"));
                 break;
             case 3:
                 heading(content, "4   Build firmware");
