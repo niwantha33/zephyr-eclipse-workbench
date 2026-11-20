@@ -28,16 +28,15 @@ public final class SetupStartup implements IStartup {
                 store.setValue(LAYOUT_DECIDED, true);
                 if (newWorkspace) ZephyrBeginnerPerspectiveHandler.open(window);
             }
-            // Upgrade only: old saved Developer layouts can have an entirely
-            // blank editor area. Reveal the non-invasive guide once on upgrade.
-            // Do not reopen it on every launch if a user chooses to close it.
-            if (!store.getBoolean("developer.guideMigration20261120")) {
-                store.setValue("developer.guideMigration20261120", true);
+            // Upgrade only: replace the former duplicate guide with the
+            // developer dashboard once, without permanently forcing it open.
+            if (!store.getBoolean("developer.homeMigration20261120")) {
+                store.setValue("developer.homeMigration20261120", true);
                 var page = window.getActivePage();
                 if (!newWorkspace && page != null && page.getPerspective() != null
                         && ZephyrDeveloperPerspective.ID.equals(page.getPerspective().getId())
                         && page.getActiveEditor() == null) {
-                    ZephyrDeveloperPerspectiveHandler.showGuide(window);
+                    ZephyrDeveloperPerspectiveHandler.showHome(window);
                 }
             }
             if (!newWorkspace) return;
