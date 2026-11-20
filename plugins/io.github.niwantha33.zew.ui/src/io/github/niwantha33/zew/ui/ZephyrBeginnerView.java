@@ -169,7 +169,7 @@ public final class ZephyrBeginnerView extends ViewPart {
                 button(content, "Devicetree Graph Studio...", () -> openView("Devicetree Graph Studio", Activator.ID + ".dtsGraph"));
                 button(content, "YAML Connected Blocks...", () -> openView("YAML Connected Blocks", Activator.ID + ".yamlStructure"));
                 button(content, "Hardware Register Explorer...", () -> openView("Hardware Register Explorer", SocRegistersHandler.VIEW_ID));
-                button(content, "Developer Workspace", () -> command("io.github.niwantha33.zew.developerWorkspace"));
+                button(content, "Developer Workspace", () -> command("io.github.niwantha33.zew.developerPerspective"));
                 break;
             default:
                 heading(content, "Choose a step on the left");
