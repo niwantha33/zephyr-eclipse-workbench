@@ -62,6 +62,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .inspector .sidehead{border-bottom:1px solid var(--line)}.detail{padding:15px;overflow:auto;flex:1}.detail h3{font-size:15px;margin:0 0 12px;overflow-wrap:anywhere}
 .field{padding:0 0 12px;margin-bottom:12px;border-bottom:1px solid var(--line)}.field dt{font-size:10px;color:var(--muted);margin-bottom:5px}.field dd{font-size:11px;line-height:1.55;margin:0;overflow-wrap:anywhere}
 .detailactions{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding:14px}.detailactions .action{width:100%;white-space:normal}
+.review-overlay{position:fixed;inset:0;z-index:20;background:rgba(0,7,17,.76);display:grid;place-items:center;padding:16px}
+.review-panel{width:min(100%,560px);max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 20px 60px var(--shadow)}
+.review-panel h2{margin:7px 0 12px;font-size:17px}.review-panel p{color:var(--muted);font-size:11px;line-height:1.6}
+.diff{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:13px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;margin:15px 0}
+.review-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .foot{border-top:1px solid var(--line);padding:8px 14px;background:var(--panel);font-size:10px;color:var(--muted);display:flex;justify-content:space-between;gap:10px;align-items:center}
 [hidden]{display:none!important}
 @media(max-width:1020px){.main{grid-template-columns:170px minmax(250px,1fr) 232px}.workspace{padding:15px}.top{gap:8px}.context small{display:none}.flow{gap:8px}.flowbox{padding:10px}}
@@ -99,6 +104,20 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 </div>
 <footer class="foot"><span id="footStatus">Configuration data is not proof of a running driver or physical wiring.</span><button type="button" class="action" id="classic">Advanced / classic tools</button></footer>
 </div>
+<div class="review-overlay" id="reviewDialog" role="dialog" aria-modal="true" aria-labelledby="reviewTitle" hidden>
+  <div class="review-panel">
+    <div class="eyebrow">STEP 1 · PROJECT REQUEST PREVIEW</div>
+    <h2 id="reviewTitle">Review Kconfig request</h2>
+    <p id="reviewExplain">No file will be written until reviewed in Eclipse.</p>
+    <div class="diff" id="reviewDiff" aria-label="Proposed project configuration request"></div>
+    <div class="notice">This preview shows the selected CONFIG_ request, not a validated Kconfig dependency graph or full file diff. Eclipse will show the exact source preview and ask for separate confirmation. A new build is still required before an effective setting can be claimed.</div>
+    <p id="reviewStatus" role="status"></p>
+    <div class="review-actions">
+      <button class="action" id="cancelReview" type="button">Cancel</button>
+      <button class="action primary" id="commitReview" type="button">Continue to native review…</button>
+    </div>
+  </div>
+</div>
 <script>
 'use strict';
 const DATA = __CONFIGURATION_STUDIO_DATA__;
@@ -106,6 +125,7 @@ const $ = id => document.getElementById(id);
 const SECTIONS = ['overview','hardware','software','system'];
 let section = SECTIONS.includes(DATA.section) ? DATA.section : 'overview';
 let choice = null, search = '', kfilter = 'all';
+let pendingEdit = null;
 let theme = DATA.theme === 'light' ? 'light' : 'dark';
 const MAX_DISPLAY = 350;
 function host(action, value) {
@@ -166,6 +186,44 @@ function selected(type, item) {
 function metric(parent, label, value, note) {
   const m=add(parent,'div','metric');
   add(m,'div','key',label);add(m,'div','val',String(value||'Unknown'));add(m,'div','explain',note);
+}
+function requestPreview(item, next) {
+  if (!item || !/^CONFIG_[A-Z0-9_]{1,160}$/.test(item.symbol)
+      || !['y','n','remove'].includes(next)) return;
+  if (DATA.dirty) {
+    $('footStatus').textContent='Save or discard unsaved project source edits before changing configuration.';
+    return;
+  }
+  const remove = next==='remove';
+  if ((!remove && (DATA.freshness!=='CURRENT_SNAPSHOT'||!item.toggle))
+      || (remove && item.requested===null)) return;
+  pendingEdit={symbol:item.symbol,next};
+  $('reviewTitle').textContent=item.symbol;
+  $('reviewExplain').textContent=remove
+    ? 'Remove the existing explicit prj.conf assignment. The next build determines the effective value.'
+    : 'Request '+(next==='y'?'enabled':'disabled')+' for this observed setting in prj.conf.';
+  const original=item.requested===null?'(no project override)':item.symbol+'='+item.requested;
+  const updated=remove?'(remove project override)':item.symbol+'='+next;
+  $('reviewDiff').textContent='Project request before:\n− '+original+'\n\nProposed request:\n+ '+updated
+    +'\n\nEffective build value (unchanged): '+item.value;
+  $('reviewStatus').textContent='';
+  $('reviewDialog').hidden=false;
+  $('cancelReview').focus();
+}
+function closeReview() {
+  pendingEdit=null;
+  $('reviewDialog').hidden=true;
+}
+function confirmReview() {
+  if (!pendingEdit) return;
+  const payload=pendingEdit.symbol+'='+pendingEdit.next;
+  const result=host('request',payload);
+  if (result==='DENIED' || result==='UNAVAILABLE') {
+    $('reviewStatus').textContent='Request not accepted. Refresh and check build evidence, source edits and selected project.';
+    return;
+  }
+  closeReview();
+  $('footStatus').textContent='Opening the native source diff, confirmation and backup workflow. No file has been saved yet.';
 }
 function noBuild(parent) {
   if (!DATA.hasEvidence || DATA.freshness === 'NO_BUILD') {
@@ -243,21 +301,22 @@ function hardware(root) {
   add(root,'div','notice','Guided setup opens the existing validated workflow. No pins, drivers, channels or electrical connections are guessed or silently saved.');
 }
 function kconfig(root) {
-  const h=head(root,'SOFTWARE','Effective Kconfig',
-    'Search values emitted by the selected generated .config. Editing remains in the reviewed prj.conf workflow.');
+  const h=head(root,'SOFTWARE','Kconfig configuration',
+    'Explore effective generated values alongside explicit prj.conf requests. Change only observed switches, then review and build.');
   h.append(btn('Edit / review prj.conf',()=>host('advanced','software'),'action primary'));
   noBuild(root);
   const metrics=add(root,'div','metrics');
-  metric(metrics,'SHOWN SYMBOLS',String(DATA.settings.length),'Effective values from generated .config');
+  metric(metrics,'SHOWN SYMBOLS',String(DATA.settings.length),'Generated values and source requests');
   metric(metrics,'ENABLED',String(DATA.settings.filter(v=>v.value==='y').length),'In this loaded subset only');
-  metric(metrics,'NOT SET',String(DATA.settings.filter(v=>v.value==='n').length),'In this loaded subset only');
+  metric(metrics,'PROJECT REQUESTS',String(DATA.settings.filter(v=>v.requested!==null).length),'Explicit prj.conf assignments shown');
   if(DATA.settingsLimited)add(root,'div','notice','Only a bounded subset of effective symbols is shown. Use the advanced Kconfig tool for the complete configuration.');
   const controls=add(root,'div','toolbar');
   const input=el('input','search');input.type='search';input.value=search;
   input.placeholder='Find CONFIG_GPIO, CONFIG_LOG, CONFIG_ASSERT…';
   input.setAttribute('aria-label','Search generated Kconfig settings');controls.append(input);
-  ['all','y','n','other'].forEach(filter=>{
-    const chip=btn(filter==='all'?'All':filter==='y'?'Enabled':filter==='n'?'Disabled':'Values',()=>{kfilter=filter;redraw()},'chip');
+  ['all','y','n','other','changed'].forEach(filter=>{
+    const label={all:'All',y:'Enabled',n:'Disabled',other:'Other values',changed:'My requests'}[filter];
+    const chip=btn(label,()=>{kfilter=filter;redraw()},'chip');
     chip.dataset.filter=filter;controls.append(chip);
   });
   const list=add(root,'div','rowlist');
@@ -266,17 +325,19 @@ function kconfig(root) {
     controls.querySelectorAll('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===kfilter)));
     list.replaceChildren();
     const matching=DATA.settings.filter(s=>s.symbol.toLowerCase().includes(search)
-      && (kfilter==='all'||(kfilter==='other'?s.value!=='n'&&s.value!=='y':s.value===kfilter)));
+      && (kfilter==='all'||(kfilter==='changed'?s.requested!==null:
+          kfilter==='other'?s.value!=='n'&&s.value!=='y':s.value===kfilter)));
     matching.slice(0,MAX_DISPLAY).forEach(s=>{
       const item=btn('',()=>selected('setting',s),'item');item.dataset.choice='setting:'+s.symbol;
       item.setAttribute('aria-pressed',String(choice && choice.type==='setting'&&choice.item.symbol===s.symbol));
       const desc=add(item,'div');add(desc,'strong','',s.symbol);
-      add(desc,'small','',s.value==='n'?'Not set':s.value==='y'?'Enabled':'Generated value');
+      add(desc,'small','',s.unresolved?'Requested only — not resolved':
+        (s.requested===null?'Inherited from build':'Project request: '+s.requested));
       add(item,'span','trailing',s.value.length>32?s.value.substring(0,32)+'…':s.value);
       list.append(item);
     });
     if(matching.length>MAX_DISPLAY)add(list,'div','notice','Showing first '+MAX_DISPLAY+' matching symbols. Narrow the search.');
-    if(!matching.length)add(list,'div','empty','No matching effective Kconfig value in this snapshot. Build first or inspect the full native Kconfig tool.');
+    if(!matching.length)add(list,'div','empty','No matching generated or project-requested symbol in this snapshot. Build first or inspect the full native Kconfig tool.');
   }
   input.addEventListener('input',redraw);redraw();
 }
@@ -330,10 +391,32 @@ function renderInspector() {
     actions.append(btn('Diagnose requests',()=>host('diagnose',''),'action'));
   }else if(type==='setting') {
     add(detail,'h3','',item.symbol);
-    const dl=add(detail,'dl');p('Effective build value',item.value,dl);
-    p('Source', 'Selected generated zephyr/.config (read-only)',dl);
-    p('Interpretation','Only Kconfig in the selected build can establish dependencies and origin.',dl);
-    actions.append(btn('Edit / inspect in Kconfig',()=>host('advanced','software'),'action primary'));
+    const dl=add(detail,'dl');
+    p('Effective build value',item.unresolved?'Not resolved':item.value,dl);
+    p('Project request',item.requested===null?'Inherited / no explicit request':item.requested,dl);
+    p('prj.conf source line',item.requestedLine>0?String(item.requestedLine):'No explicit request',dl);
+    p('Evidence','Effective value comes from the last generated .config; prj.conf changes are not effective until Zephyr configures and builds.',dl);
+    const canToggle=item.toggle && !DATA.dirty && DATA.freshness==='CURRENT_SNAPSHOT';
+    if(item.toggle) {
+      const group=add(detail,'div','panel');
+      add(group,'h3','','Request in prj.conf');
+      const buttons=add(group,'div','toolbar');
+      const on=btn('Enable',()=>requestPreview(item,'y'),'chip');
+      const off=btn('Disable',()=>requestPreview(item,'n'),'chip');
+      on.disabled=!canToggle||item.requested==='y';
+      off.disabled=!canToggle||item.requested==='n';
+      on.setAttribute('aria-pressed',String(item.requested==='y'));
+      off.setAttribute('aria-pressed',String(item.requested==='n'));
+      buttons.append(on,off);
+      add(group,'p','muted',canToggle?'Choose a requested value; the next step previews it.':
+        'Toggle requests require a current tracked build and saved source editors.');
+    }
+    if(item.requested!==null) {
+      const remove=btn('Remove project override…',()=>requestPreview(item,'remove'),'action');
+      remove.disabled=DATA.dirty;
+      actions.append(remove);
+    }
+    actions.append(btn('Inspect / edit in native Kconfig',()=>host('focus-symbol',item.symbol),'action primary'));
   }
 }
 function render() {
@@ -362,6 +445,14 @@ function initialise(){
     host('theme',theme);
   });
   $('classic').addEventListener('click',()=>host('classic',''));
+  $('cancelReview').addEventListener('click',closeReview);
+  $('commitReview').addEventListener('click',confirmReview);
+  $('reviewDialog').addEventListener('click',event=>{
+    if(event.target===$('reviewDialog'))closeReview();
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!$('reviewDialog').hidden){event.preventDefault();closeReview();}
+  });
   document.querySelectorAll('[data-section]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.section)));
   render();
 }
