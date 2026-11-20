@@ -13,6 +13,7 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.QualifiedName;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.dialogs.ProgressMonitorDialog;
@@ -35,6 +36,9 @@ import io.github.niwantha33.zew.core.ZephyrProjectFiles;
 
 /** Project Properties > Zephyr: real SoC/CPU board qualifiers from the active checkout. */
 public final class ZephyrProjectPropertyPage extends PropertyPage {
+    // Ephemeral choice passed by Board Browser. Never saved as a project target.
+    static final QualifiedName BOARD_BROWSER_TARGET =
+            new QualifiedName(Activator.ID, "boardBrowserPreviewTarget");
     private IProject project;
     private Combo vendor, soc, buildConfiguration;
     private Text search, environment;
@@ -201,12 +205,35 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
                     hardware.stream().map(row -> row[0]).distinct().sorted()).toArray(String[]::new));
             vendor.select(0);
             fillSocs();
-            // A verified ROM chip mismatch can suggest a SoC filter only.
-            // Exact board maker, revision and CPU still require user selection.
-            String suggested = (String) project.getSessionProperty(ZephyrChipMismatchRecovery.SUGGESTED_SOC);
-            search.setText(suggested == null ? originalBoard : suggested);
+            // Browser preview can preselect a row, but cannot alter project
+            // metadata without the native Property Page Apply action.
+            String previewTarget = (String) project.getSessionProperty(BOARD_BROWSER_TARGET);
+            String chipMismatch = (String) project.getSessionProperty(
+                    ZephyrChipMismatchRecovery.SUGGESTED_SOC);
+            String preferred = previewTarget != null && !previewTarget.isBlank()
+                    ? previewTarget : (chipMismatch == null ? originalBoard : chipMismatch);
+            search.setText(preferred);
             filterTargets();
-            if (suggested == null) {
+
+            if (previewTarget != null && !previewTarget.isBlank()) {
+                boolean available = false;
+                for (TableItem item : targets.getItems()) {
+                    if (previewTarget.equals(((String[]) item.getData())[6])) {
+                        targets.setSelection(item);
+                        available = true;
+                        break;
+                    }
+                }
+                if (!available) {
+                    setMessage("The board selected in the catalogue is no longer in "
+                            + "this environment. Choose an available exact target.",
+                            org.eclipse.jface.dialogs.IMessageProvider.WARNING);
+                } else {
+                    setMessage("Catalogue selection preselected. Review the exact target "
+                            + "and press Apply to change this project.",
+                            org.eclipse.jface.dialogs.IMessageProvider.INFORMATION);
+                }
+            } else if (chipMismatch == null) {
                 for (TableItem item : targets.getItems()) {
                     if (((String[]) item.getData())[6].equals(originalBoard)) {
                         targets.setSelection(item);
@@ -214,9 +241,10 @@ public final class ZephyrProjectPropertyPage extends PropertyPage {
                     }
                 }
             } else {
-                setMessage("Detected " + suggested.toUpperCase(Locale.ROOT)
-                    + ": choose your actual board/CPU from the filtered hardware catalogue."
-                    + " The chip alone cannot identify the exact PCB.", org.eclipse.jface.dialogs.IMessageProvider.INFORMATION);
+                setMessage("Detected " + chipMismatch.toUpperCase(Locale.ROOT)
+                        + ": choose your actual board/CPU from the filtered catalogue. "
+                        + "The chip alone cannot identify the exact PCB.",
+                        org.eclipse.jface.dialogs.IMessageProvider.INFORMATION);
             }
             validateSelection();
         } catch (Exception error) {
