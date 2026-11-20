@@ -1274,12 +1274,16 @@ public final class ConfigurationHomeView extends ViewPart {
 
     /** Dirty in-memory source editors must never be overwritten by an apply flow. */
     private boolean hasDirtyProjectEditor() {
-        if (project == null || getSite().getPage() == null) return false;
-        for (var editor : getSite().getPage().getDirtyEditors()) {
-            var input = editor.getEditorInput();
-            if (input instanceof org.eclipse.ui.IFileEditorInput file
-                    && project.equals(file.getFile().getProject()))
-                return true;
+        if (project == null || !org.eclipse.ui.PlatformUI.isWorkbenchRunning()) return false;
+        for (var window : org.eclipse.ui.PlatformUI.getWorkbench().getWorkbenchWindows()) {
+            for (var page : window.getPages()) {
+                for (var editor : page.getDirtyEditors()) {
+                    var input = editor.getEditorInput();
+                    if (input instanceof org.eclipse.ui.IFileEditorInput file
+                            && project.equals(file.getFile().getProject()))
+                        return true;
+                }
+            }
         }
         return false;
     }
