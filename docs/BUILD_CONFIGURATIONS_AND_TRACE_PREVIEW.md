@@ -1,10 +1,34 @@
 # Build configurations and RTOS trace preview
 
-Project Properties > Zephyr now offers Application settings, Debug (-Og) and
-Release (-O2). These are Workbench selections, not CDT native managed-build
-configurations. The default retains the old build path and application Kconfig.
-Debug and Release have separate target-specific build folders and pass Zephyr's
-`CONFIG_DEBUG_OPTIMIZATIONS` and `CONFIG_SPEED_OPTIMIZATIONS` respectively.
+Project Properties > Zephyr offers **Application settings** plus all five native
+Zephyr compiler-optimisation Kconfig choices. These are Workbench selections,
+not CDT native managed-build configurations. Existing `default`, `debug` and
+`release` IDs retain their meaning and independent build paths.
+
+| Workbench label | ID | Zephyr Kconfig | Typical flag |
+| --- | --- | --- | --- |
+| Application settings | `default` | Application/board choice | Not forced |
+| No optimisation (-O0) | `debug-o0` | `CONFIG_NO_OPTIMIZATIONS` | `-O0` |
+| Debug (-Og) | `debug` | `CONFIG_DEBUG_OPTIMIZATIONS` | `-Og` |
+| Optimise for size (-Os) | `size-os` | `CONFIG_SIZE_OPTIMIZATIONS` | `-Os` |
+| Optimise for speed (-O2) | `release` | `CONFIG_SPEED_OPTIMIZATIONS` | `-O2` |
+| Aggressive size (-Oz) | `size-oz` | `CONFIG_SIZE_OPTIMIZATIONS_AGGRESSIVE` | `-Oz` |
+
+These are **optimisation policies, not logging/debug verbosity levels**.
+Each non-default selection writes to a separate board-specific build folder,
+passes the matching Zephyr `CONFIG_*` choice at CMake configuration and
+verifies the effective generated `zephyr/.config`. On rejected/unsupported
+Kconfig the build fails closed rather than reporting a false active mode.
+
+Aggressive size (`-Oz`) can depend on the selected compiler/toolchain.
+No optimisation (`-O0`) can increase code size and stack use. Select the
+appropriate Zephyr checkout and toolchain; compiled output, runtime resource
+usage and hardware behaviour still need separate verification.
+There is no `-O3` entry: it is **not** a native choice in Zephyr's
+`COMPILER_OPTIMIZATIONS` Kconfig menu.
+
+Source: Zephyr upstream `Kconfig.zephyr` compiler-optimisation choice
+and `CMakeLists.txt` optimisation dispatch.
 The build verifies the effective generated `.config`. Zephyr choices and target
 dependencies can override these options; in that case the build stops with a
 message rather than labeling the output incorrectly. Project source files are
