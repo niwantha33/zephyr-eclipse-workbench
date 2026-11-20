@@ -4,6 +4,7 @@ package io.github.niwantha33.zew.ui;
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.ConfigurationStudioPresentation;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
+import io.github.niwantha33.zew.core.KconfigInspector;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel.Overview;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -118,6 +119,56 @@ public final class ConfigurationStudioVisualDocument {
         if (json.length() > MAX_JSON)
             throw new IllegalArgumentException("Configuration Studio document exceeds size bound");
         return template.replace(SLOT, json.toString());
+    }
+
+    /**
+     * A read-only, bounded message from the *selected build's* upstream
+     * Kconfiglib result. Never interpret text fields as scripts or dependencies
+     * for another board/profile. Unknown evidence remains explicitly unknown.
+     */
+    public static String kconfigInspectorPayload(String symbol, KconfigInspector.Result inspection,
+                                                 String provenance) {
+        if (symbol == null || !symbol.matches("CONFIG_[A-Z0-9_]{1,160}"))
+            throw new IllegalArgumentException("Exact Kconfig symbol required");
+        StringBuilder json = new StringBuilder(1024);
+        json.append("{\"symbol\":"); quote(json, symbol);
+        json.append(",\"provenance\":"); quote(json,
+                "CURRENT_SNAPSHOT".equals(provenance) ? provenance : "UNVERIFIED_SNAPSHOT");
+        boolean available = inspection != null && inspection.available()
+                && symbol.equals("CONFIG_" + inspection.details().symbol())
+                && "CURRENT_SNAPSHOT".equals(provenance);
+        json.append(",\"available\":").append(available);
+        if (available) {
+            var d = inspection.details();
+            json.append(",\"type\":"); quote(json, boundedInspectorText(d.type()));
+            json.append(",\"effective\":"); quote(json, boundedInspectorText(d.effective()));
+            json.append(",\"visibility\":"); quote(json, boundedInspectorText(d.visibility()));
+            json.append(",\"assignable\":"); quote(json, boundedInspectorText(d.assignable()));
+            json.append(",\"dependencies\":"); quote(json, boundedInspectorText(d.dependencies()));
+            json.append(",\"dependencyState\":"); quote(json, boundedInspectorText(d.dependencyState()));
+            json.append(",\"prompt\":"); quote(json, boundedInspectorText(d.prompt()));
+            json.append(",\"definitions\":"); quote(json, boundedInspectorText(d.definitions()));
+            json.append(",\"selects\":"); quote(json, boundedInspectorText(d.selects()));
+            json.append(",\"implies\":"); quote(json, boundedInspectorText(d.implies()));
+            json.append(",\"help\":"); quote(json, boundedInspectorText(d.help()));
+        } else {
+            json.append(",\"message\":");
+            quote(json, boundedInspectorText(inspection == null
+                    ? "No selected-build Kconfiglib result."
+                    : inspection.available() && !"CURRENT_SNAPSHOT".equals(provenance)
+                            ? "Selected build provenance is not current; rebuild before inspecting dependencies."
+                            : inspection.available()
+                                    ? "Kconfiglib returned metadata for a different symbol."
+                                    : inspection.unavailable()));
+        }
+        json.append('}');
+        return json.toString();
+    }
+
+    private static String boundedInspectorText(String source) {
+        if (source == null) return "";
+        // A single upstream field must never exhaust SWT Browser memory.
+        return source.length() <= 5000 ? source : source.substring(0, 5000) + "\n[truncated]";
     }
 
     private static String displayValue(String value) {
