@@ -25,18 +25,21 @@ public final class ZephyrDeveloperPerspectiveHandler extends AbstractHandler {
             return;
         }
         window.getActivePage().setPerspective(perspective);
-        // A saved Eclipse perspective may have hidden or closed the guide.
-        // Explicitly reopening the workspace restores its actionable landing page.
-        showGuide(window);
+        // A saved Eclipse perspective can still contain the old beginner guide.
+        // Replace it with developer-specific actions, preserving user editors.
+        showHome(window);
     }
 
-    static void showGuide(IWorkbenchWindow window) {
+    static void showHome(IWorkbenchWindow window) {
         if (window == null || window.getActivePage() == null) return;
         try {
-            window.getActivePage().showView(ZephyrBeginnerView.ID);
+            var page = window.getActivePage();
+            var beginnerGuide = page.findView(ZephyrBeginnerView.ID);
+            if (beginnerGuide != null) page.hideView(beginnerGuide);
+            page.showView(ZephyrDeveloperHomeView.ID);
         } catch (PartInitException error) {
             MessageDialog.openError(window.getShell(), "Zephyr Developer Workspace",
-                    "Cannot open Getting Started guide: " + error.getMessage());
+                    "Cannot open the development dashboard: " + error.getMessage());
         }
     }
 }
