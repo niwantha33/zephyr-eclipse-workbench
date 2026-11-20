@@ -12,7 +12,7 @@ The Zephyr menu now uses task names, with specialised investigations in dedicate
 ## Two everyday workspaces
 
 - **Getting Started Workspace**: Project Explorer (left), editor (centre), Zephyr project guide (right), Console and Problems (bottom). Five actions: project, board, configuration, build, and explicit flash/debug.
-- **Developer Workspace**: Project Explorer, editor, Configuration Studio, Console and Problems. Hardware Studio, boards, tracing and registers are available on demand, not forcibly opened.
+- **Developer Workspace**: Project Explorer, editor, Console and Problems. Configuration Studio, Hardware Studio, boards, tracing and registers are available on demand, not forcibly opened.
 - **Hardware Debug Workspace** remains separate for actual debug sessions.
 
 Both workspaces are layouts only: switching them cannot flash/reset a target.

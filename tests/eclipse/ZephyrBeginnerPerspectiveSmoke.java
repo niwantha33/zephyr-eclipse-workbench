@@ -34,8 +34,8 @@ public final class ZephyrBeginnerPerspectiveSmoke {
                 throw new IllegalStateException("Advanced registers visible in beginner layout.");
             page.setPerspective(developer);
             if (page.findView("org.eclipse.ui.navigator.ProjectExplorer") == null
-                    || page.findView("io.github.niwantha33.zew.ui.configurationHome") == null
-                    || page.findView("org.eclipse.ui.console.ConsoleView") == null)
+                    || page.findView("org.eclipse.ui.console.ConsoleView") == null
+                    || page.findView("org.eclipse.ui.views.ProblemView") == null)
                 throw new IllegalStateException("Developer workspace views not visible.");
             System.out.println("PASS ZEPHYR WORKSPACES: beginner and developer views registered");
         } finally {
