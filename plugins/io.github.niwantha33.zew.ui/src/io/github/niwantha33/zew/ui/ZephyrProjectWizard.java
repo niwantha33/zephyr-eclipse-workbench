@@ -12,6 +12,8 @@ import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.wizard.*;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.ScrolledComposite;
+import org.eclipse.jface.dialogs.IMessageProvider;
 import org.eclipse.swt.layout.*;
 import org.eclipse.swt.widgets.*;
 import org.eclipse.ui.*;
@@ -72,50 +74,228 @@ public class ZephyrProjectWizard extends Wizard implements INewWizard, IImportWi
     }
     private final class Page extends WizardPage {
         Text name, location, environment, search;
-        Button existing;
+        Button existing, createNew, continueButton, reloadBoards;
+        Label modeHelp, resultsHelp, selectedTarget;
+        String suggestedLocation = "";
+        static final int RESULT_LIMIT = 120;
         Combo vendor, soc;
         Table targets;
         List<String[]> rows = new ArrayList<>();
         Path loadedRoot;
-        Page() { super("project"); setTitle("New or existing Zephyr application"); setDescription("Reuse a managed environment and select the exact board, SoC and CPU for this project."); }
+        Page() { super("project"); setTitle("Create or import a Zephyr application"); setDescription("Step 1 of 2: Choose the application, environment and target board."); }
         @Override public void createControl(Composite parent) {
-            var body = new Composite(parent, SWT.NONE); body.setLayout(new GridLayout(3, false));
-            name = field(body, "Project name", "MyZephyr", false);
-            location = field(body, "Application folder", "", true);
+            var scroll = new ScrolledComposite(parent, SWT.V_SCROLL | SWT.H_SCROLL);
+            scroll.setExpandHorizontal(true);
+            scroll.setExpandVertical(true);
+            var body = new Composite(scroll, SWT.NONE);
+            GridLayout pageLayout = new GridLayout(1, false);
+            pageLayout.marginWidth = 10;
+            pageLayout.marginHeight = 10;
+            pageLayout.verticalSpacing = 10;
+            body.setLayout(pageLayout);
+
+            Group task = section(body, "1   What do you want to do?", 2);
+            createNew = new Button(task, SWT.RADIO);
+            createNew.setText("Create a new application");
+            createNew.setToolTipText("Create a standalone Zephyr application in a new or empty folder.");
+            createNew.setSelection(!importing);
+            existing = new Button(task, SWT.RADIO);
+            existing.setText("Import an existing application");
+            existing.setToolTipText("Use the existing CMakeLists.txt and source in its original folder.");
+            existing.setSelection(importing);
+            modeHelp = new Label(task, SWT.WRAP);
+            modeHelp.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 2, 1));
+
+            Group projectDetails = section(body, "2   Project details", 3);
+            name = field(projectDetails, "Project name", "MyZephyr", false);
+            location = field(projectDetails, "Application folder", "", true);
+            new Label(projectDetails, SWT.WRAP).setText(
+                    "For an import, browse to the folder containing CMakeLists.txt. Files are not copied.");
+            GridData detailsHint = new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1);
+            projectDetails.getChildren()[projectDetails.getChildren().length - 1].setLayoutData(detailsHint);
+
+            Group tools = section(body, "3   Zephyr environment", 3);
             String workspace = Activator.getDefault().getPreferenceStore().getString("workspace");
-            String initial = selectedRoot != null ? selectedRoot : workspace.isBlank() ? "" : Path.of(workspace).getParent().toString();
-            environment = field(body, "Ready setup folder", initial, true);
-            if (!initial.isBlank() && !importing) location.setText(Path.of(initial, "projects", name.getText()).toString());
-            existing = new Button(body, SWT.CHECK); existing.setText("Import existing application in place"); existing.setSelection(importing);
-            existing.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1));
-            var load = new Button(body, SWT.PUSH); load.setText("Load hardware from environment");
-            load.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1)); load.addListener(SWT.Selection, e -> load());
-            vendor = combo(body, "Chip vendor"); soc = combo(body, "SoC");
-            search = field(body, "Search board / core / revision", "", false);
-            targets = new Table(body, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION | SWT.V_SCROLL); targets.setHeaderVisible(true);
-            var data = new GridData(SWT.FILL, SWT.FILL, true, true, 3, 1); data.heightHint = 240; targets.setLayoutData(data);
-            for (String title : List.of("Board maker", "Board", "Revision", "Exact target")) { var column = new TableColumn(targets, SWT.NONE); column.setText(title); column.setWidth(title.equals("Exact target") ? 340 : 120); }
-            vendor.addListener(SWT.Selection, e -> { fillSoc(); filter(); }); soc.addListener(SWT.Selection, e -> filter());
-            search.addModifyListener(e -> filter()); targets.addListener(SWT.Selection, e -> validatePage());
-            for (Text text : List.of(name, location, environment)) text.addModifyListener(e -> validatePage());
-            existing.addListener(SWT.Selection, e -> validatePage());
-            setControl(body); setPageComplete(false);
-            // Reuse the detected managed environment without making beginners
-            // discover and press a separate hardware-loading step.
+            String initial = selectedRoot != null ? selectedRoot
+                    : workspace.isBlank() ? "" : Path.of(workspace).getParent().toString();
+            environment = field(tools, "Ready setup folder", initial, true);
+            reloadBoards = new Button(tools, SWT.PUSH);
+            reloadBoards.setText("Reload available boards");
+            reloadBoards.setToolTipText("Read boards from the selected ready Zephyr installation.");
+            reloadBoards.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false, 3, 1));
+            reloadBoards.addListener(SWT.Selection, event -> load());
+
+            Group hardware = section(body, "4   Select an exact target board", 3);
+            vendor = combo(hardware, "Chip vendor");
+            soc = combo(hardware, "SoC");
+            search = field(hardware, "Search board or processor", "", false);
+            search.setMessage("e.g. mspm0g3507, nrf5340, esp32s3");
+            Label hint = new Label(hardware, SWT.WRAP);
+            hint.setText("Search by board, chip or CPU. Click a row to select the exact build target.");
+            hint.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1));
+            resultsHelp = new Label(hardware, SWT.WRAP);
+            resultsHelp.setText("Board list not loaded.");
+            resultsHelp.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1));
+            targets = new Table(hardware, SWT.BORDER | SWT.SINGLE | SWT.FULL_SELECTION
+                    | SWT.V_SCROLL | SWT.H_SCROLL);
+            targets.setHeaderVisible(true);
+            var targetData = new GridData(SWT.FILL, SWT.FILL, true, true, 3, 1);
+            targetData.heightHint = 192;
+            targetData.minimumHeight = 150;
+            targets.setLayoutData(targetData);
+            for (String title : List.of("Board maker", "Board", "Revision", "Exact target")) {
+                var column = new TableColumn(targets, SWT.NONE);
+                column.setText(title);
+                column.setWidth(title.equals("Exact target") ? 330 : 130);
+            }
+            selectedTarget = new Label(hardware, SWT.WRAP);
+            selectedTarget.setText("Selected target: none");
+            selectedTarget.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 3, 1));
+            continueButton = new Button(hardware, SWT.PUSH);
+            continueButton.setText("Review selected project  >");
+            continueButton.setToolTipText("Review the destination and exact target before Finish.");
+            continueButton.setLayoutData(new GridData(SWT.END, SWT.CENTER, true, false, 3, 1));
+            continueButton.setEnabled(false);
+            continueButton.addListener(SWT.Selection, event -> continueToReview());
+
+            scroll.setContent(body);
+            scroll.setMinSize(body.computeSize(720, SWT.DEFAULT));
+            setControl(scroll);
+            setPageComplete(false);
+
+            vendor.addListener(SWT.Selection, event -> { fillSoc(); filter(); });
+            soc.addListener(SWT.Selection, event -> filter());
+            search.addModifyListener(event -> filter());
+            targets.addListener(SWT.Selection, event -> validatePage());
+            targets.addListener(SWT.DefaultSelection, event -> continueToReview());
+            name.addModifyListener(event -> {
+                updateSuggestedLocation();
+                validatePage();
+            });
+            location.addModifyListener(event -> {
+                restoreSavedTarget();
+                validatePage();
+            });
+            environment.addModifyListener(event -> {
+                updateSuggestedLocation();
+                validatePage();
+            });
+            createNew.addListener(SWT.Selection, event -> { if (createNew.getSelection()) changeMode(); });
+            existing.addListener(SWT.Selection, event -> { if (existing.getSelection()) changeMode(); });
+            modeHelp.setText(modeDescription());
+            updateSuggestedLocation();
+            validatePage();
+
+            // Local board discovery from the already selected environment.
             body.getDisplay().asyncExec(() -> {
                 if (!body.isDisposed() && !environment.getText().isBlank()) load();
             });
         }
-        Text field(Composite parent, String title, String value, boolean browse) {
+
+        private Group section(Composite parent, String title, int columns) {
+            var group = new Group(parent, SWT.NONE);
+            group.setText(title);
+            GridLayout layout = new GridLayout(columns, false);
+            layout.marginWidth = 12;
+            layout.marginHeight = 10;
+            layout.verticalSpacing = 8;
+            group.setLayout(layout);
+            group.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+            return group;
+        }
+
+        private Text field(Composite parent, String title, String value, boolean browse) {
             new Label(parent, SWT.NONE).setText(title);
-            var text = new Text(parent, SWT.BORDER); text.setText(value); text.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            if (browse) { var button = new Button(parent, SWT.PUSH); button.setText("Browse..."); button.addListener(SWT.Selection, e -> { var dialog = new DirectoryDialog(getShell()); dialog.setFilterPath(text.getText()); String selected = dialog.open(); if (selected != null) text.setText(selected); }); }
-            else new Label(parent, SWT.NONE);
+            var text = new Text(parent, SWT.BORDER);
+            text.setText(value);
+            text.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+            if (browse) {
+                var browseButton = new Button(parent, SWT.PUSH);
+                browseButton.setText("Browse...");
+                browseButton.addListener(SWT.Selection, event -> {
+                    var dialog = new DirectoryDialog(getShell());
+                    if (!text.getText().isBlank()) dialog.setFilterPath(text.getText());
+                    String chosen = dialog.open();
+                    if (chosen != null) text.setText(chosen);
+                });
+            } else {
+                new Label(parent, SWT.NONE);
+            }
             return text;
         }
-        Combo combo(Composite parent, String title) {
-            new Label(parent, SWT.NONE).setText(title); var combo = new Combo(parent, SWT.READ_ONLY); combo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false)); new Label(parent, SWT.NONE); return combo;
+
+        private Combo combo(Composite parent, String title) {
+            new Label(parent, SWT.NONE).setText(title);
+            var combo = new Combo(parent, SWT.READ_ONLY);
+            combo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+            new Label(parent, SWT.NONE);
+            return combo;
         }
+
+        private String modeDescription() {
+            return existing.getSelection()
+                    ? "Import: select a folder with CMakeLists.txt. Existing source stays in place; "
+                            + "the Workbench adds project metadata when needed."
+                    : "Create: make a basic standalone Zephyr application in a new or empty folder. "
+                            + "Existing files will not be overwritten.";
+        }
+
+        private void changeMode() {
+            if (existing.getSelection() && location.getText().equals(suggestedLocation))
+                location.setText("");
+            if (createNew.getSelection()) updateSuggestedLocation();
+            modeHelp.setText(modeDescription());
+            setDescription(existing.getSelection()
+                    ? "Step 1 of 2: Import an existing application without copying its source."
+                    : "Step 1 of 2: Create a new standalone application.");
+            restoreSavedTarget();
+            modeHelp.getParent().layout(true, true);
+            validatePage();
+        }
+
+        private void updateSuggestedLocation() {
+            if (existing == null || existing.getSelection() || name == null || environment == null)
+                return;
+            String root = environment.getText().trim();
+            String next = root.isBlank() ? "" : Path.of(root, "projects", name.getText().trim()).toString();
+            if (location.getText().isBlank() || location.getText().equals(suggestedLocation)) {
+                suggestedLocation = next;
+                if (!next.isBlank()) location.setText(next);
+            }
+        }
+
+        private void restoreSavedTarget() {
+            if (existing == null || !existing.getSelection() || loadedRoot == null
+                    || location == null || location.getText().isBlank() || search == null
+                    || targets == null || rows.isEmpty()) return;
+            try {
+                Path application = Path.of(location.getText().trim());
+                String saved = null;
+                if (Files.isRegularFile(application.resolve(".zew/project.json")))
+                    saved = ProjectProfile.read(application).board();
+                else if (Files.isRegularFile(application.resolve(".zew/project.properties")))
+                    saved = ZephyrProjectFiles.readBoard(application);
+                if (saved == null || saved.isBlank()) return;
+                for (String[] row : rows) {
+                    if (!saved.equals(row[6])) continue;
+                    // Search covers the exact target, avoiding a huge unrelated board list.
+                    if (!search.getText().equals(saved)) search.setText(saved);
+                    for (TableItem item : targets.getItems()) {
+                        if (saved.equals(((String[]) item.getData())[6])) {
+                            targets.setSelection(item);
+                            validatePage();
+                            return;
+                        }
+                    }
+                }
+            } catch (Exception ignored) { /* Preserve validation; do not guess. */ }
+        }
+
+        private void continueToReview() {
+            validatePage();
+            if (isPageComplete()) getContainer().showPage(review);
+        }
+
         void load() {
             try {
                 Path root = Path.of(environment.getText().trim()).toAbsolutePath().normalize();
