@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.ui;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -14,6 +16,9 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.SWTError;
+import org.eclipse.swt.browser.Browser;
+import org.eclipse.swt.browser.BrowserFunction;
 import org.eclipse.swt.custom.StackLayout;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.layout.GridData;
@@ -85,14 +90,27 @@ public final class ConfigurationHomeView extends ViewPart {
     private Job originJob;
     private Job diagnosisJob;
     private final AtomicInteger diagnosisGeneration = new AtomicInteger();
+    // CS-20: one view, one evidence model, two presentations. SWT remains the
+    // qualified fallback and the only owner of reviewed source editing.
+    private Composite nativePage, visualPage, studioRoot;
+    private StackLayout studioLayout;
+    private Browser visualBrowser;
+    private String visualTemplate;
+    private String visualTheme = "dark", visualSection = "overview";
+    private boolean lastRenderedDirty;
 
     @Override public void createPartControl(Composite parent) {
         var shellLayout = new GridLayout(1, false);
         shellLayout.marginWidth = 14;
         shellLayout.marginHeight = 12;
         shellLayout.verticalSpacing = 10;
-        parent.setLayout(shellLayout);
-        var heading = bar(parent, 3);
+        studioRoot = parent;
+        studioLayout = new StackLayout();
+        parent.setLayout(studioLayout);
+        createVisualLayer(parent);
+        nativePage = new Composite(parent, SWT.NONE);
+        nativePage.setLayout(shellLayout);
+        var heading = bar(nativePage, 4);
         var title = new Composite(heading, SWT.NONE);
         title.setLayoutData(fillWidth());
         title.setLayout(new GridLayout(1, false));
@@ -103,14 +121,136 @@ public final class ConfigurationHomeView extends ViewPart {
         freshness = new Label(heading, SWT.WRAP);
         freshness.setText("Build evidence: unknown");
         button(heading, "Refresh", this::refresh);
+        var returnToVisual = button(heading, "Visual Studio", this::showVisual);
+        returnToVisual.setEnabled(visualBrowser != null);
 
-        primary = new TabFolder(parent, SWT.NONE);
+        primary = new TabFolder(nativePage, SWT.NONE);
         primary.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         overview(tab("Overview"));
         hardware(tab("Hardware"));
         build(tab("Build & System"));
         primary.setSelection(OVERVIEW);
+        studioLayout.topControl = visualBrowser == null ? nativePage : visualPage;
+        parent.layout(true, true);
         clear("Select a Zephyr project from Project Explorer.");
+    }
+
+    private void createVisualLayer(Composite parent) {
+        visualPage = new Composite(parent, SWT.NONE);
+        visualPage.setLayout(new GridLayout(1, false));
+        try {
+            var entry = Activator.getDefault().getBundle().getEntry("configuration-studio/index.html");
+            if (entry == null) throw new IOException("Packaged Configuration Studio shell missing");
+            try (var stream = entry.openStream()) {
+                byte[] bytes = stream.readNBytes(180_001);
+                if (bytes.length > 180_000) throw new IOException("Configuration Studio shell too large");
+                visualTemplate = new String(bytes, StandardCharsets.UTF_8);
+            }
+            visualBrowser = new Browser(visualPage, SWT.NONE);
+            visualBrowser.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+            visualBrowser.addLocationListener(new org.eclipse.swt.browser.LocationAdapter() {
+                @Override public void changing(org.eclipse.swt.browser.LocationEvent event) {
+                    if (event.location != null && !event.location.isBlank()
+                            && !"about:blank".equalsIgnoreCase(event.location))
+                        event.doit = false;
+                }
+            });
+            new BrowserFunction(visualBrowser, "zewConfigurationAction") {
+                @Override public Object function(Object[] args) {
+                    return visualAction(args);
+                }
+            };
+        } catch (SWTError | IOException | RuntimeException unavailable) {
+            if (visualBrowser != null && !visualBrowser.isDisposed()) visualBrowser.dispose();
+            visualBrowser = null;
+            visualTemplate = null; // Native SWT view remains fully functional.
+            var plugin = Activator.getDefault();
+            if (plugin != null) plugin.getLog().log(new Status(IStatus.WARNING, Activator.ID,
+                    "Embedded Configuration Studio unavailable; native fallback selected", unavailable));
+        }
+    }
+
+    /** Browser bridge: exact actions only. Never accept a path, command, URL or source diff. */
+    private Object visualAction(Object[] args) {
+        if (args == null || args.length != 2
+                || !(args[0] instanceof String action)
+                || !(args[1] instanceof String value) || value.length() > 80)
+            return "DENIED";
+        boolean allowed = switch (action) {
+            case "refresh", "classic", "memory", "hardware-studio", "diagnose" -> value.isEmpty();
+            case "theme" -> "dark".equals(value) || "light".equals(value);
+            case "navigate" -> List.of("overview", "hardware", "software", "system").contains(value);
+            case "guide" -> PeripheralWorkflow.categories().contains(value);
+            case "advanced" -> List.of("build", "settings", "software", "sources", "rtos", "evidence")
+                    .contains(value);
+            default -> false;
+        };
+        if (!allowed || visualBrowser == null || visualBrowser.isDisposed()) return "DENIED";
+        visualBrowser.getDisplay().asyncExec(() -> {
+            if (visualBrowser == null || visualBrowser.isDisposed()) return;
+            switch (action) {
+                case "refresh" -> refresh();
+                case "theme" -> visualTheme = value;
+                case "navigate" -> visualSection = value;
+                case "classic" -> showNative();
+                case "guide" -> {
+                    selectCategory(value);
+                    showNative(); // Reuse existing four-step, guarded workflow.
+                }
+                case "memory" -> memoryMap();
+                case "hardware-studio" -> openHardwareStudio();
+                case "diagnose" -> {
+                    showNative();
+                    diagnoseSourceRequests();
+                }
+                case "advanced" -> advanced(value);
+                default -> { /* rejected above */ }
+            }
+        });
+        return "QUEUED";
+    }
+
+    private void showVisual() {
+        if (visualBrowser == null || visualBrowser.isDisposed()) return;
+        studioLayout.topControl = visualPage;
+        studioRoot.layout(true, true);
+        renderVisual();
+        visualBrowser.setFocus();
+    }
+
+    private void showNative() {
+        if (nativePage == null || nativePage.isDisposed()) return;
+        primary.setSelection(switch (visualSection) {
+            case "hardware" -> HARDWARE;
+            case "system", "software" -> BUILD;
+            default -> OVERVIEW;
+        });
+        studioLayout.topControl = nativePage;
+        studioRoot.layout(true, true);
+        primary.setFocus();
+    }
+
+    private void renderVisual() {
+        if (visualBrowser == null || visualBrowser.isDisposed() || visualTemplate == null) return;
+        Evidence current = evidence;
+        boolean dirty = project != null && hasDirtyProjectEditor();
+        lastRenderedDirty = dirty;
+        try {
+            String document = ConfigurationStudioVisualDocument.render(visualTemplate,
+                    project == null ? "" : project.getName(),
+                    current == null ? "" : current.board(),
+                    current == null ? "" : current.profile(),
+                    current == null || current.build() == null ? "" : current.build().toString(),
+                    current == null ? null : current.overview(),
+                    current == null ? "" : current.config(),
+                    current == null ? "" : current.warning(),
+                    dirty, visualTheme, visualSection);
+            visualBrowser.setText(document);
+        } catch (RuntimeException invalid) {
+            // Do not expose build data or arbitrary exception messages as HTML.
+            visualBrowser.setText("<html><body><h2>Configuration Studio unavailable</h2>"
+                    + "<p>Use the native configuration view via the Visual Studio fallback.</p></body></html>");
+        }
     }
 
     private Composite tab(String text) {
@@ -430,6 +570,7 @@ public final class ConfigurationHomeView extends ViewPart {
         clear("No Zephyr project selected. Select a project in Project Explorer, "
                 + "then choose Refresh here. No hardware data is available until "
                 + "the selected board/profile has generated a build.");
+        showVisual();
     }
 
     public void displayProject(IProject selected) {
@@ -440,13 +581,18 @@ public final class ConfigurationHomeView extends ViewPart {
         project = selected;
         setPartName("Configuration — " + selected.getName());
         primary.setSelection(OVERVIEW);
+        visualSection = "overview";
+        showVisual();
         refresh();
     }
 
     public void openSection(String section) {
         if (primary == null || primary.isDisposed()) return;
+        visualSection = List.of("hardware", "software", "system").contains(section)
+                ? section : "overview";
         primary.setSelection("hardware".equals(section) ? HARDWARE
                 : "system".equals(section) ? BUILD : OVERVIEW);
+        showVisual(); // Menu and project-resource entry always use the visual surface.
     }
 
     /** Called on the UI thread after this project's managed firmware build. */
@@ -731,6 +877,7 @@ public final class ConfigurationHomeView extends ViewPart {
         if (previous != null && !previous.isDisposed()) previous.setEnabled(false);
         if (next != null && !next.isDisposed()) next.setEnabled(false);
         if (validateApply != null && !validateApply.isDisposed()) validateApply.setEnabled(false);
+        renderVisual();
     }
 
     private void render() {
@@ -794,6 +941,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 + "\n\nBuild profiles and source revisions are selected independently."
                 + "\nAdvanced Kconfig and RTOS options remain accessible below.");
         primary.getParent().layout(true, true);
+        renderVisual();
     }
 
     private static String qualifier(String board) {
@@ -1223,6 +1371,13 @@ public final class ConfigurationHomeView extends ViewPart {
 
     @Override public void setFocus() {
         if (primary == null || primary.isDisposed()) return;
+        if (visualBrowser != null && !visualBrowser.isDisposed()
+                && studioLayout.topControl == visualPage) {
+            if (evidence != null && lastRenderedDirty != hasDirtyProjectEditor())
+                renderVisual();
+            visualBrowser.setFocus();
+            return;
+        }
         primary.setFocus();
         // A user may have edited source while working in another Eclipse
         // editor. Expose pending unsaved changes upon returning.
