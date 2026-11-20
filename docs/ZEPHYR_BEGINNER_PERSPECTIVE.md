@@ -11,11 +11,20 @@ The Zephyr menu now uses task names, with specialised investigations in dedicate
 
 ## Two everyday workspaces
 
-- **Getting Started Workspace**: Project Explorer (left), editor (centre), Zephyr project guide (right), Console and Problems (bottom). Five actions: project, board, configuration, build, and explicit flash/debug.
+- **Getting Started Workspace**: a two-column guide with workflow navigation (left) and one selected step (right). Project Explorer, the editor, Console and Problems remain part of the Eclipse perspective. Steps are Project, Hardware, Configuration, Build, Flash & Debug, Inspect & Analyse, and More Tools. Navigation alone never runs a command.
 - **Developer Workspace**: Project Explorer, editor, Console and Problems. Configuration Studio, Hardware Studio, boards, tracing and registers are available on demand, not forcibly opened.
 - **Hardware Debug Workspace** remains separate for actual debug sessions.
 
 Both workspaces are layouts only: switching them cannot flash/reset a target.
+
+## Two-column Getting Started guide
+
+- The left navigation keeps seven concise, keyboard-selectable workflow steps and live selected-project, board, profile and ELF-presence context.
+- The right pane shows **only the selected step**: its purpose, three or fewer short usage notes, and explicit actions.
+- Drag the central divider to resize navigation and instructions. Either column can scroll independently.
+- Choosing a step changes only the right-pane content. Pressing a tool/action button opens the corresponding existing Eclipse view, wizard or command; it is not embedded in the guide.
+- Build, flash and debug remain explicit user actions. ELF presence does not verify target execution; trace and CPU tools must not imply live capture without evidence.
+- Advanced tools remain discoverable by name, without showing every option on initial load.
 
 ## Board browser
 
