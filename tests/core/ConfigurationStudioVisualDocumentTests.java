@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import io.github.niwantha33.zew.core.ConfigurationStudioFiles;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
+import io.github.niwantha33.zew.core.KconfigInspector;
 import io.github.niwantha33.zew.ui.ConfigurationStudioVisualDocument;
 import java.util.List;
 import java.nio.file.Path;
@@ -98,6 +99,42 @@ public final class ConfigurationStudioVisualDocumentTests {
         check(overflowHtml.contains("\"symbol\":\"CONFIG_UNRESOLVED_REPAIR\"")
                         && overflowHtml.contains("\"settingsLimited\":true"),
                 "project-owned unresolved requests remain visible even when generated settings exceed cap");
+        String focused = ConfigurationStudioVisualDocument.render(template,
+                "project", "board", "debug", "build", overview, "", "", false,
+                "dark", "hardware", source, "/soc/adc@4000");
+        check(focused.contains("\"focus\":\"/soc/adc@4000\""),
+                "exact observed controller focus restored");
+        String notObserved = ConfigurationStudioVisualDocument.render(template,
+                "project", "board", "debug", "build", overview, "", "", false,
+                "dark", "hardware", source, "/soc/unobserved@bad");
+        check(notObserved.contains("\"focus\":\"\""),
+                "arbitrary hardware focus must never be serialised");
+
+        var details = new KconfigInspector.Details("GPIO", "bool", "n", "y",
+                "n,y", "SPI && GPIO", "n", "Use GPIO",
+                "drivers/gpio/Kconfig:12", "ENABLE_LOG", "ENABLE_PRINTK", hostile);
+        String upstream = ConfigurationStudioVisualDocument.kconfigInspectorPayload(
+                "CONFIG_GPIO", new KconfigInspector.Result(details, ""),
+                "CURRENT_SNAPSHOT");
+        check(upstream.contains("\"available\":true")
+                && upstream.contains("\"dependencies\":\"SPI && GPIO\"")
+                && upstream.contains("\"selects\":\"ENABLE_LOG\""),
+                "real Kconfig type, visibility, dependencies and select/imply evidence retained");
+        check(!upstream.contains(hostile) && upstream.contains("\\u003c/script\\u003e"),
+                "upstream Kconfig help cannot inject a script");
+        String staleUpstream = ConfigurationStudioVisualDocument.kconfigInspectorPayload(
+                "CONFIG_GPIO", new KconfigInspector.Result(details, ""),
+                "STALE_SNAPSHOT");
+        check(staleUpstream.contains("\"available\":false")
+                && !staleUpstream.contains("\"selects\""),
+                "stale dependency data is never represented as validated");
+        String differentSymbol = ConfigurationStudioVisualDocument.kconfigInspectorPayload(
+                "CONFIG_ADC", new KconfigInspector.Result(details, ""),
+                "CURRENT_SNAPSHOT");
+        check(differentSymbol.contains("\"available\":false"),
+                "another symbol's Kconfig evidence cannot be reused");
+        rejects(() -> ConfigurationStudioVisualDocument.kconfigInspectorPayload(
+                "CONFIG_BAD;exit", new KconfigInspector.Result(details, ""), "CURRENT_SNAPSHOT"));
         System.out.println("ConfigurationStudioVisualDocumentTests PASS");
     }
 }
