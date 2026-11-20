@@ -271,6 +271,8 @@
     <command id="io.github.niwantha33.zew.memoryProfile" name="Open Zephyr Memory Profile" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tracepointPlot" name="Open Zephyr Tracepoint Plot" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.trace" name="Capture RTOS Trace" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.observatoryOpen" name="Open RTOS Observatory" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.observatoryDsf" name="Toggle Passive Observatory Bridge" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.rtosInvestigation" name="Review Saved RTOS Capture" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.applicationConsole" name="Capture UART Application Console" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.coredumpInvestigation" name="Investigate Saved Binary Core Dump" categoryId="io.github.niwantha33.zew.commands"/>
@@ -334,6 +336,8 @@
     <handler commandId="io.github.niwantha33.zew.memoryProfile" class="io.github.niwantha33.zew.ui.ZephyrMemoryProfileHandler"/>
     <handler commandId="io.github.niwantha33.zew.tracepointPlot" class="io.github.niwantha33.zew.ui.TracepointPlotHandler"/>
     <handler commandId="io.github.niwantha33.zew.trace" class="io.github.niwantha33.zew.ui.ZephyrTraceHandler"/>
+    <handler commandId="io.github.niwantha33.zew.observatoryOpen" class="io.github.niwantha33.zew.ui.OpenRtosObservatoryHandler"/>
+    <handler commandId="io.github.niwantha33.zew.observatoryDsf" class="io.github.niwantha33.zew.ui.DsfLifecycleBridgeHandler"/>
     <handler commandId="io.github.niwantha33.zew.rtosInvestigation" class="io.github.niwantha33.zew.ui.RtosInvestigationHandler"/>
     <handler commandId="io.github.niwantha33.zew.applicationConsole" class="io.github.niwantha33.zew.ui.ApplicationConsoleHandler"/>
     <handler commandId="io.github.niwantha33.zew.coredumpInvestigation" class="io.github.niwantha33.zew.ui.CoredumpInvestigationHandler"/>
@@ -411,6 +415,9 @@
             <command commandId="io.github.niwantha33.zew.memoryProfile" label="Memory Profile..." style="push"/>
             <command commandId="io.github.niwantha33.zew.tracepointPlot" label="Tracepoint Plot..." style="push"/>
             <command commandId="io.github.niwantha33.zew.trace" label="Capture RTOS Trace..." style="push"/>
+            <separator name="observatoryBridge" visible="true"/>
+            <command commandId="io.github.niwantha33.zew.observatoryOpen" label="Open RTOS Observatory..." style="push"/>
+            <command commandId="io.github.niwantha33.zew.observatoryDsf" label="Toggle Passive Observatory Bridge..." style="push"/>
             <command commandId="io.github.niwantha33.zew.rtosInvestigation" label="Review Saved RTOS Capture..." style="push"/>
             <command commandId="io.github.niwantha33.zew.applicationConsole" label="UART Application Console..." style="push"/>
           </menu>

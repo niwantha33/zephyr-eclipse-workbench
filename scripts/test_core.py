@@ -35,6 +35,7 @@ sources = sorted((root / 'plugins/io.github.niwantha33.zew.core/src').rglob('*.j
 sources += sorted((root / 'tests/core').glob('*.java'))
 # Reuse the real editor's JFace-independent index and completion engine in CI.
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/HardwareStudioDocument.java']
+sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ObservatoryDesktopLaunch.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/MemoryProfilerJson.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ThreadTimelineReport.java']
 sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/ThreadCpuLoad.java']
@@ -65,6 +66,7 @@ sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33
 subprocess.run([tool('javac'), '--release', '21', '--add-modules', 'jdk.httpserver', '-encoding', 'UTF-8', '-d', str(out), *map(str, sources)], check=True, cwd=root)
 subprocess.run([tool('java'), '-cp', str(out), 'CoreTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'HardwareStudioDocumentTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'ObservatoryDesktopLaunchTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ZephyrSelectionIdentityTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'EmbeddedHubBoardCatalogueTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ZephyrReferenceCatalogTests'], check=True, cwd=root, timeout=90)

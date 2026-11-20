@@ -173,6 +173,14 @@ digests separately from the offline Evidence CLI.
 
 The opt-in [Task Drift analyzer](docs/RTOS_CAUSAL_DRIFT.md) uses explicit Zephyr CTF cycle markers to report **observed periodic phase drift, dispatch delay, scheduler interruptions and paired mutex blocking** from saved captures. Unlike switch-in-based heuristics, it does not mistake repeated preemption for new task activations. Open **Zephyr → Advanced Tools → Tracing & RTOS → Task Drift (Saved CTF)** for the new native offline table, or use the JSON CLI. No live drift streaming, injected firmware hooks, gate attribution or physical-hardware validation is claimed.
 
+### RTOS Observatory handoff (experimental)
+
+An opt-in Eclipse integration can launch the independent RTOS Observatory desktop
+and publish **metadata-only** lifecycle events from an existing owning CDT/DSF-GDB
+session. This is not live trace or target-memory transport. The current Workbench
+RTOS capture and offline views remain available during staged migration.
+[Bridge configuration and offload roadmap](docs/RTOS_OBSERVATORY_BRIDGE.md).
+
 ### Debug Trace Console and RTOS investigation
 
 The **Zephyr Debug Trace Console** inspects effective build configuration
