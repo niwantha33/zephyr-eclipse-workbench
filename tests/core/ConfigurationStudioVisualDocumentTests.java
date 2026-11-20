@@ -60,11 +60,11 @@ public final class ConfigurationStudioVisualDocumentTests {
                 "__CONFIGURATION_STUDIO_DATA__ __CONFIGURATION_STUDIO_DATA__",
                 "", "", "", "", null, "", "", false, "dark", "overview"));
         StringBuilder longConfig = new StringBuilder();
-        for (int i = 0; i < 2000; i++) longConfig.append("CONFIG_FIXTURE_").append(i).append("=y\n");
+        for (int i = 0; i < 5200; i++) longConfig.append("CONFIG_FIXTURE_").append(i).append("=y\n");
         String bounded = ConfigurationStudioVisualDocument.render(template,
                 "", "", "", "", overview, longConfig.toString(), "", false, "dark", "overview");
         check(bounded.contains("\"settingsLimited\":true")
-                        && !bounded.contains("\"symbol\":\"CONFIG_FIXTURE_1999\""),
+                        && !bounded.contains("\"symbol\":\"CONFIG_FIXTURE_5199\""),
                 "large generated configuration is explicitly bounded");
         System.out.println("ConfigurationStudioVisualDocumentTests PASS");
     }
