@@ -792,7 +792,7 @@ public final class ConfigurationHomeView extends ViewPart {
             return;
         }
         project = selected;
-        setPartName("Configuration — " + selected.getName());
+        setPartName("Configuration Studio — " + selected.getName());
         primary.setSelection(OVERVIEW);
         visualSection = "overview";
         showVisual();
