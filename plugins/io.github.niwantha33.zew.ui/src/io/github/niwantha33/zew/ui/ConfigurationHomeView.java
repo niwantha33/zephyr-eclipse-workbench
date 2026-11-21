@@ -41,6 +41,7 @@ import io.github.niwantha33.zew.core.StudioEvidenceInspector;
 import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 import io.github.niwantha33.zew.core.ConfigurationFailureEvidence;
 import io.github.niwantha33.zew.core.KconfigTraceEvidence;
+import io.github.niwantha33.zew.core.KconfigInspector;
 import io.github.niwantha33.zew.core.DevicetreeHardware;
 import io.github.niwantha33.zew.core.DevicetreeParameters;
 import io.github.niwantha33.zew.core.FocusedConfigurationModel;
@@ -54,7 +55,8 @@ public final class ConfigurationHomeView extends ViewPart {
     private record Evidence(String board, String profile, Path build, String dts,
                             String config, Properties setup, boolean stale, String warning,
                             FocusedConfigurationModel.Overview overview,
-                            List<DevicetreeHardware.Device> nodes) {
+                            List<DevicetreeHardware.Device> nodes,
+                            ConfigurationStudioFiles.Snapshot source) {
         public Evidence { nodes = List.copyOf(nodes); }
     }
 
@@ -98,6 +100,9 @@ public final class ConfigurationHomeView extends ViewPart {
     private String visualTemplate;
     private String visualTheme = "dark", visualSection = "overview";
     private boolean lastRenderedDirty;
+    private final AtomicInteger visualKconfigGeneration = new AtomicInteger();
+    private Job visualKconfigJob;
+    private AutoCloseable hardwareSelectionSubscription;
 
     @Override public void createPartControl(Composite parent) {
         var shellLayout = new GridLayout(1, false);
@@ -133,6 +138,8 @@ public final class ConfigurationHomeView extends ViewPart {
         studioLayout.topControl = visualBrowser == null ? nativePage : visualPage;
         parent.layout(true, true);
         clear("Select a Zephyr project from Project Explorer.");
+        hardwareSelectionSubscription = ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
+                .subscribe(this::onHardwareStudioSelection);
     }
 
     private void createVisualLayer(Composite parent) {
@@ -174,13 +181,19 @@ public final class ConfigurationHomeView extends ViewPart {
     private Object visualAction(Object[] args) {
         if (args == null || args.length != 2
                 || !(args[0] instanceof String action)
-                || !(args[1] instanceof String value) || value.length() > 80)
+                || !(args[1] instanceof String value) || value.length() > 2048)
             return "DENIED";
         boolean allowed = switch (action) {
             case "refresh", "classic", "memory", "hardware-studio", "diagnose" -> value.isEmpty();
             case "theme" -> "dark".equals(value) || "light".equals(value);
             case "navigate" -> List.of("overview", "hardware", "software", "system").contains(value);
             case "guide" -> PeripheralWorkflow.categories().contains(value);
+            case "inspect-kconfig", "focus-symbol" -> value.matches("CONFIG_[A-Z0-9_]{1,160}")
+                    && evidence != null && evidence.source() != null
+                    && evidence.source().options().stream().anyMatch(
+                            option -> ("CONFIG_" + option.symbol()).equals(value));
+            case "request" -> value.length() <= 180 && visualRequestAllowed(value);
+            case "hardware-focus", "source-hardware" -> verifiedVisualController(value);
             case "advanced" -> List.of("build", "settings", "software", "sources", "rtos", "evidence")
                     .contains(value);
             default -> false;
@@ -205,10 +218,204 @@ public final class ConfigurationHomeView extends ViewPart {
                     diagnoseSourceRequests();
                 }
                 case "advanced" -> advanced(value);
+                case "focus-symbol" -> openNativeKconfigSymbol(value);
+                case "request" -> applyVisualRequest(value);
+                case "inspect-kconfig" -> inspectVisualKconfig(value);
+                case "hardware-focus" -> openFocusedHardwareStudio(value);
+                case "source-hardware" -> openFocusedHardwareSource(value);
                 default -> { /* rejected above */ }
             }
         });
         return "QUEUED";
+    }
+
+    private boolean verifiedVisualController(String path) {
+        var snapshot = evidence;
+        if (path == null || path.isBlank() || snapshot == null || snapshot.build() == null
+                || snapshot.overview() == null) return false;
+        return snapshot.nodes().stream().anyMatch(node -> node.path().equals(path))
+                && snapshot.overview().peripherals().stream()
+                        .anyMatch(row -> row.controller().equals(path));
+    }
+
+    private void openFocusedHardwareStudio(String path) {
+        if (!verifiedVisualController(path)) return;
+        controllerPath = path;
+        openHardwareStudio();
+    }
+
+    private void openFocusedHardwareSource(String path) {
+        if (!verifiedVisualController(path)) return;
+        controllerPath = path;
+        var row = evidence.overview().peripherals().stream()
+                .filter(value -> value.controller().equals(path)).findFirst().orElse(null);
+        if (row == null) return;
+        category = row.category();
+        advanced("sources");
+    }
+
+    private void onHardwareStudioSelection(ZephyrViewContextHub.Selection selection) {
+        if (selection == null || !"hardware-studio".equals(selection.origin())
+                || project == null || evidence == null || evidence.build() == null
+                || !project.equals(selection.project())
+                || !evidence.build().toAbsolutePath().normalize()
+                        .equals(selection.identity().buildDirectory())) return;
+        String selectedPath = selection.identity().nodePath();
+        if (!verifiedVisualController(selectedPath)) return;
+        controllerPath = selectedPath;
+        evidence.overview().peripherals().stream()
+                .filter(row -> row.controller().equals(selectedPath))
+                .findFirst().ifPresent(row -> category = row.category());
+        visualSection = "hardware";
+        if (visualBrowser != null && !visualBrowser.isDisposed()
+                && studioLayout.topControl == visualPage) renderVisual();
+    }
+
+    /**
+     * CS-24: call only the existing upstream Kconfiglib inspector for the
+     * exact selected build. Lookup is off the SWT thread; unknown never
+     * becomes inferred "false". No external URL or source mutation.
+     */
+    private void inspectVisualKconfig(String symbol) {
+        Evidence snapshot = evidence;
+        IProject selected = project;
+        if (snapshot == null || selected == null || !selected.isAccessible()
+                || snapshot.source() == null || snapshot.overview() == null
+                || !symbol.matches("CONFIG_[A-Z0-9_]{1,160}")
+                || snapshot.source().options().stream().noneMatch(
+                        option -> symbol.equals("CONFIG_" + option.symbol()))) return;
+        int token = visualKconfigGeneration.incrementAndGet();
+        if (visualKconfigJob != null) visualKconfigJob.cancel();
+        var display = getSite().getShell().getDisplay();
+        visualKconfigJob = new Job("Visual Kconfig: inspect " + symbol) {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                KconfigInspector.Result result;
+                String provenance = snapshot.overview().freshness().name();
+                try {
+                    Path app = selected.getLocation().toFile().toPath();
+                    if (!"CURRENT_SNAPSHOT".equals(provenance) || snapshot.build() == null
+                            || hasInvalidVisualContext(selected, snapshot))
+                        result = KconfigInspector.Result.missing(
+                                "The selected build is stale, unverified or its board/profile changed. Rebuild first.");
+                    else {
+                        var receipt = ConfigurationEvidenceReceipt.inspect(
+                                app, snapshot.build(), snapshot.board(), snapshot.profile());
+                        if (!receipt.current())
+                            result = KconfigInspector.Result.missing(
+                                    "Current project inputs differ from the recorded build receipt.");
+                        else {
+                            String python = snapshot.setup().getProperty("python");
+                            String ninja = snapshot.setup().getProperty("tools.ninja");
+                            result = KconfigInspector.inspect(
+                                    python == null ? null : Path.of(python),
+                                    ninja == null ? null : Path.of(ninja),
+                                    snapshot.build(), symbol.substring(7),
+                                    ConfigurationHomeView.class.getResourceAsStream(
+                                            "/scripts/kconfig_inspect.py"));
+                        }
+                    }
+                } catch (Exception unavailable) {
+                    result = KconfigInspector.Result.missing(
+                            "Selected-build Kconfig inspection is unavailable.");
+                }
+                // The upstream probe may have run for 20 seconds. Revalidate
+                // the exact input/output receipt AFTER it returns as well;
+                // build/profile changes during inspection must fail closed.
+                if (result.available()) {
+                    try {
+                        Path app = selected.getLocation().toFile().toPath();
+                        if (hasInvalidVisualContext(selected, snapshot)
+                                || !ConfigurationEvidenceReceipt.inspect(app, snapshot.build(),
+                                        snapshot.board(), snapshot.profile()).current())
+                            result = KconfigInspector.Result.missing(
+                                    "Configuration inputs changed during Kconfig inspection; refresh and rebuild.");
+                    } catch (Exception changed) {
+                        result = KconfigInspector.Result.missing(
+                                "Selected build could not be revalidated after Kconfig inspection.");
+                    }
+                }
+                if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                String payload = ConfigurationStudioVisualDocument.kconfigInspectorPayload(
+                        symbol, result, provenance);
+                post(display, () -> {
+                    if (token != visualKconfigGeneration.get() || evidence != snapshot
+                            || project != selected || visualBrowser == null || visualBrowser.isDisposed())
+                        return;
+                    visualBrowser.execute("window.zewConfigurationInspector && "
+                            + "window.zewConfigurationInspector(" + payload + ");");
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        visualKconfigJob.setSystem(true);
+        visualKconfigJob.schedule();
+    }
+
+    private boolean hasInvalidVisualContext(IProject selected, Evidence snapshot) {
+        try {
+            Properties active = ProjectContext.settings(selected);
+            return !ProjectContext.buildDirectory(selected, active).toAbsolutePath().normalize()
+                    .equals(snapshot.build().toAbsolutePath().normalize())
+                    || !snapshot.board().equals(active.getProperty("board", "Not selected"))
+                    || !snapshot.profile().equals(ProjectContext.profileIdentity(active));
+        } catch (Exception invalid) { return true; }
+    }
+
+    private boolean visualRequestAllowed(String encoded) {
+        var current = evidence;
+        if (project == null || !project.isAccessible() || current == null
+                || current.overview() == null || current.source() == null) return false;
+        try {
+            ConfigurationStudioVisualRequest.parse(encoded, current.source(),
+                    current.overview().freshness(), hasDirtyProjectEditor());
+            return true;
+        } catch (IllegalArgumentException denied) { return false; }
+    }
+
+    private void applyVisualRequest(String encoded) {
+        Evidence current = evidence;
+        if (current == null || project == null || !project.isAccessible()
+                || current.overview() == null) return;
+        ConfigurationStudioVisualRequest.Reviewed requested;
+        try {
+            requested = ConfigurationStudioVisualRequest.parse(encoded, current.source(),
+                    current.overview().freshness(), hasDirtyProjectEditor());
+        } catch (IllegalArgumentException stale) {
+            MessageDialog.openWarning(getSite().getShell(), "Configuration changed",
+                    "The selected source or build is no longer eligible for this request. "
+                    + "Save pending editors, refresh, and review again.");
+            return;
+        }
+        try {
+            var part = getSite().getPage().showView(ConfigurationStudioView.ID);
+            if (part instanceof ConfigurationStudioView editor) {
+                editor.displayProject(project, false, null);
+                editor.openFocusedTool("software", null, null);
+                editor.reviewVisualRequest(project, current.build(), requested);
+                refresh(); // Reload source request status, including declined/no-op changes.
+            }
+        } catch (PartInitException unavailable) {
+            MessageDialog.openError(getSite().getShell(), "Kconfig editor unavailable",
+                    unavailable.getMessage());
+        }
+    }
+
+    private void openNativeKconfigSymbol(String symbol) {
+        if (project == null || evidence == null || evidence.source() == null
+                || !symbol.matches("CONFIG_[A-Z0-9_]{1,160}")) return;
+        if (evidence.source().options().stream().noneMatch(
+                option -> ("CONFIG_" + option.symbol()).equals(symbol))) return;
+        try {
+            var part = getSite().getPage().showView(ConfigurationStudioView.ID);
+            if (part instanceof ConfigurationStudioView editor) {
+                editor.displayProject(project, false, null);
+                editor.openFocusedTool("software", null, null);
+                editor.focusKconfigSymbol(symbol.substring(7));
+            }
+        } catch (PartInitException unavailable) {
+            MessageDialog.openError(getSite().getShell(), "Kconfig editor unavailable",
+                    unavailable.getMessage());
+        }
     }
 
     private void showVisual() {
@@ -245,7 +452,9 @@ public final class ConfigurationHomeView extends ViewPart {
                     current == null ? null : current.overview(),
                     current == null ? "" : current.config(),
                     current == null ? "" : current.warning(),
-                    dirty, visualTheme, visualSection);
+                    dirty, visualTheme, visualSection,
+                    current == null ? null : current.source(),
+                    current == null || !verifiedVisualController(controllerPath) ? "" : controllerPath);
             visualBrowser.setText(document);
         } catch (RuntimeException invalid) {
             // A failed renderer must never strand the user without SWT controls.
@@ -722,7 +931,7 @@ public final class ConfigurationHomeView extends ViewPart {
                             + ", recorded failed attempt: " + failure.recordedFailure() + ".";
                     var nodes = DevicetreeHardware.inspect(snapshot.devicetree());
                     observed = new Evidence(board, profile, build, snapshot.devicetree(), config,
-                            settings, stale, warning, summary, nodes);
+                            settings, stale, warning, summary, nodes, snapshot);
                 } catch (Exception problem) {
                     Activator plugin = Activator.getDefault();
                     if (plugin != null) plugin.getLog().log(
@@ -731,7 +940,7 @@ public final class ConfigurationHomeView extends ViewPart {
                     observed = new Evidence("Unknown", "Unknown", null, "", "",
                             new Properties(), true, "Build inspection failed: " + problem.getMessage(),
                             FocusedConfigurationModel.inspect("Unknown", "Unknown", "", "", true),
-                            List.of());
+                            List.of(), null);
                 }
                 if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                 final Evidence result = observed;
@@ -1208,12 +1417,16 @@ public final class ConfigurationHomeView extends ViewPart {
 
     /** Dirty in-memory source editors must never be overwritten by an apply flow. */
     private boolean hasDirtyProjectEditor() {
-        if (project == null || getSite().getPage() == null) return false;
-        for (var editor : getSite().getPage().getDirtyEditors()) {
-            var input = editor.getEditorInput();
-            if (input instanceof org.eclipse.ui.IFileEditorInput file
-                    && project.equals(file.getFile().getProject()))
-                return true;
+        if (project == null || !org.eclipse.ui.PlatformUI.isWorkbenchRunning()) return false;
+        for (var window : org.eclipse.ui.PlatformUI.getWorkbench().getWorkbenchWindows()) {
+            for (var page : window.getPages()) {
+                for (var editor : page.getDirtyEditors()) {
+                    var input = editor.getEditorInput();
+                    if (input instanceof org.eclipse.ui.IFileEditorInput file
+                            && project.equals(file.getFile().getProject()))
+                        return true;
+                }
+            }
         }
         return false;
     }
@@ -1391,6 +1604,13 @@ public final class ConfigurationHomeView extends ViewPart {
         }
     }
     @Override public void dispose() {
+        visualKconfigGeneration.incrementAndGet();
+        if (visualKconfigJob != null) visualKconfigJob.cancel();
+        if (hardwareSelectionSubscription != null) {
+            try { hardwareSelectionSubscription.close(); }
+            catch (Exception ignored) { /* UI-thread listener cleanup */ }
+            hardwareSelectionSubscription = null;
+        }
         generation.incrementAndGet();
         if (refreshJob != null) refreshJob.cancel();
         detailGeneration.incrementAndGet();

@@ -65,13 +65,38 @@ public final class ConfigurationStudioVisualSmoke {
         check("DENIED".equals(browser.evaluate(
                 "return window.zewConfigurationAction('theme','javascript:bad');")),
                 "invalid theme rejected");
+        check("DENIED".equals(browser.evaluate(
+                "return window.zewConfigurationAction('request','CONFIG_GPIO=y');")),
+                "no-project source mutation always denied");
+        check("DENIED".equals(browser.evaluate(
+                "return window.zewConfigurationAction('focus-symbol','CONFIG_GPIO');")),
+                "unknown project symbol deep-link always denied");
+        check("DENIED".equals(browser.evaluate(
+                "return window.zewConfigurationAction('inspect-kconfig','CONFIG_GPIO');")),
+                "no-project dependency analysis cannot be invented");
+        check("DENIED".equals(browser.evaluate(
+                "return window.zewConfigurationAction('hardware-focus','/soc/adc@1234');")),
+                "unknown Devicetree path cannot be selected");
+        check("DENIED".equals(browser.evaluate(
+                "return window.zewConfigurationAction('source-hardware','/soc/adc@1234');")),
+                "unverified hardware source navigation denied");
+        check(Boolean.TRUE.equals(browser.evaluate(
+                "return document.getElementById('reviewDialog').hidden"
+                    + " && !!document.getElementById('commitReview')"
+                    + " && !!document.getElementById('cancelReview');")),
+                "review dialog is present but no pending change may be applied");
+        check(Boolean.TRUE.equals(browser.evaluate(
+                "return typeof window.zewConfigurationInspector === 'function'"
+                + " && document.getElementById('reviewDialog').hidden"
+                + " && getComputedStyle(document.getElementById('reviewDialog')).display === 'none';")),
+                "upstream evidence callback is wired and review dialog is hidden until requested");
         check(Boolean.TRUE.equals(browser.evaluate(
                 "return document.getElementById('freshness').textContent === 'NO BUILD';")),
                 "empty-state build evidence is never invented");
         check(browser.execute("document.querySelector('[data-section=\"software\"]').click();"),
                 "software navigation dispatch");
         check(Boolean.TRUE.equals(browser.evaluate(
-                "return document.getElementById('workspace').textContent.includes('Effective Kconfig');")),
+                "return document.getElementById('workspace').textContent.includes('Kconfig configuration');")),
                 "graphical Kconfig section rendered");
         check(browser.execute("document.querySelector('[data-section=\"hardware\"]').click();"),
                 "hardware navigation dispatch");

@@ -102,12 +102,15 @@ jobs:
           path: build-cli/
           if-no-files-found: error
           retention-days: 7
-      - name: Build plug-ins and p2 repository
-        # Use a current UTC qualifier so a reviewed PR artifact can update an
-        # existing preview installation. This does not publish the update channel.
+      - name: Build plug-ins and p2 repository (bounded Tycho Central recovery)
+        # The pinned Tycho 5.0.4 is published to Maven Central, but Linux
+        # runner caches/CDNs can return an intermittent false 404.
+        # Reuse our tested fail-closed retry: exactly three attempts, -U,
+        # no repository or version replacement; ordinary compilation/test/p2
+        # failures exit immediately. Qualifier never changes across attempts.
         run: |
           zew_test_qualifier="$(date -u +%Y%m%d%H%M%S)"
-          mvn --batch-mode --no-transfer-progress "-DforceContextQualifier=${zew_test_qualifier}" verify
+          python3 scripts/retry_maven_tycho.py --qualifier "$zew_test_qualifier"
       - name: Verify packaged site
         run: python3 scripts/verify_site.py
       - name: Compile and exercise installed native Eclipse UI before merge
@@ -135,7 +138,10 @@ jobs:
             --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
           # Repeat with the exact same screenshot-free environment as the main
           # publishing workflow. This caught a real UI failure invisible in PR CI.
-          ZEW_SCREENSHOT_DIR= xvfb-run -a -s '-screen 0 1920x1080x24' python3 scripts/editor_smoke.py --native-workbench \
+          # The existing second installed-Workbench pass now also tests
+          # narrow laptop geometry; preserve the real screenshots separately.
+          ZEW_SCREENSHOT_DIR="$GITHUB_WORKSPACE/release-smoke-screenshots/laptop-1366" \
+            xvfb-run -a -s '-screen 0 1366x768x24' python3 scripts/editor_smoke.py --native-workbench \
             --eclipse "$ECLIPSE" --java-home "$JAVA_HOME" --site releng/repository/target/repository
       - name: Retain native Eclipse screenshots from the actual installed UI
         if: always()
