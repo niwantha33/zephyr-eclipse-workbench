@@ -728,6 +728,8 @@ public final class EditorSmoke implements IApplication {
                 .findFirst().orElseThrow();
         var constructor = type.getDeclaredConstructors()[0];
         constructor.setAccessible(true);
+        check(constructor.getParameterCount() == 11,
+                "Configuration Studio fixture matches the installed Evidence record shape");
         var field = cls.getDeclaredField("evidence"); field.setAccessible(true);
         var render = cls.getDeclaredMethod("render"); render.setAccessible(true);
         Object sample = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
@@ -864,7 +866,8 @@ public final class EditorSmoke implements IApplication {
                 "CI all-category fixture", null, extendedDts, config,
                 new java.util.Properties(), false,
                 "CI FIXTURE: synthetic test nodes, not actual peripheral hardware.", allOverview,
-                io.github.niwantha33.zew.core.DevicetreeHardware.inspect(extendedDts));
+                io.github.niwantha33.zew.core.DevicetreeHardware.inspect(extendedDts),
+                null /* synthetic fixture has no build-backed source snapshot */);
         field.set(view, allEvidence);
         render.invoke(view);
         tabs.setSelection(0);
@@ -970,7 +973,8 @@ public final class EditorSmoke implements IApplication {
         Object missing = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
                 "CI missing-data fixture", null, "", "", new java.util.Properties(),
                 true, "CI FIXTURE: missing build data; no hardware validated.", unknown,
-                java.util.List.of());
+                java.util.List.of(),
+                null /* missing build cannot claim a source snapshot */);
         field.set(view, missing); render.invoke(view);
         tabs.setSelection(0);
         settleNativeStudioLayout();
