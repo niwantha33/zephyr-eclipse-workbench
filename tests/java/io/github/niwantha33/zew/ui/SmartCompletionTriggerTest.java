@@ -9,6 +9,16 @@ public final class SmartCompletionTriggerTest {
     }
 
     public static void main(String[] args) {
+        check(SmartCompletionTrigger.safeForAutomaticInvocation(false, false),
+                "automatic suggestions are safe when CDT inserts nothing without acceptance");
+        check(!SmartCompletionTrigger.safeForAutomaticInvocation(true, false),
+                "single CDT proposal cannot silently turn void into volatile");
+        check(!SmartCompletionTrigger.safeForAutomaticInvocation(false, true),
+                "common-prefix insertion cannot rewrite a partially typed keyword");
+        check(!SmartCompletionTrigger.safeForAutomaticInvocation(true, true),
+                "both unsafe CDT insertion options suppress first-letter popup");
+        check(SmartCompletionTrigger.shouldOpen('v', 'v', ' '),
+                "keyword starts remain eligible after safe CDT preferences");
         check(SmartCompletionTrigger.shouldOpen('g', 'g', ' '), "first GPIO letter");
         check(SmartCompletionTrigger.shouldOpen('D', 'D', '#'), "macro after preprocessor marker");
         check(SmartCompletionTrigger.shouldOpen('_', '_', '\0'), "underscore at file start");
