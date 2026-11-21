@@ -23,7 +23,9 @@ public final class WorkbenchPreferences extends FieldEditorPreferencePage implem
         super(GRID);
         setPreferenceStore(Activator.getDefault().getPreferenceStore());
         setDescription("Select your existing tools. Paths stay local to this Eclipse workspace.\n"
-                + "Use the Python executable in the West workspace's .venv; no shell activation is needed.");
+                + "Use the Python executable in the West workspace's .venv; no shell activation is needed.\n"
+                + "For safe C/C++ first-letter suggestions, disable single-proposal and common-prefix "
+                + "auto-insertion in C/C++ > Editor > Content Assist.");
     }
     @Override public void init(IWorkbench workbench) {}
     @Override protected void createFieldEditors() {

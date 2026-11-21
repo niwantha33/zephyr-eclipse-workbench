@@ -15,6 +15,14 @@ final class SmartCompletionTrigger {
                 && previous != '.' && previous != '>' && previous != ':';
     }
 
+    /**
+     * These CDT options can change source simply by showing a proposal popup.
+     * Never automatically invoke the editor assistant while either is enabled.
+     */
+    static boolean safeForAutomaticInvocation(boolean insertSingle, boolean insertCommonPrefix) {
+        return !insertSingle && !insertCommonPrefix;
+    }
+
     static boolean isCurrentIdentifier(String fragment) {
         if (fragment == null || fragment.isEmpty()) return false;
         if (!isIdentifierStart(fragment.charAt(0))) return false;
