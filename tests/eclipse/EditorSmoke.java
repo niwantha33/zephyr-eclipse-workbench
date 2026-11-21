@@ -1486,8 +1486,51 @@ public final class EditorSmoke implements IApplication {
                             .filter(b -> b.getText().equals("1. Find my hardware"))
                             .findFirst().orElseThrow();
                     findHardware.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
-                    check(studioTabs.getSelectionIndex() == 2 && expertMetrics.getVisible(),
-                            "beginner hardware step opens real hardware navigator and restores advanced chrome");
+                    var advancedChrome = (org.eclipse.swt.widgets.Button)
+                            studioField(view, cls, "advancedChromeButton");
+                    var evidenceToggle = (org.eclipse.swt.widgets.Button)
+                            studioField(view, cls, "evidenceToggle");
+                    var hardwareToolsToggle = (org.eclipse.swt.widgets.Button)
+                            studioField(view, cls, "hardwareToolsToggle");
+                    var hardwareCanvas = (org.eclipse.swt.custom.SashForm)
+                            studioField(view, cls, "hardwareCanvas");
+                    var hardwareDetails = (org.eclipse.swt.widgets.TabFolder)
+                            studioField(view, cls, "hardwareDetails");
+                    var vertical = (org.eclipse.swt.custom.SashForm)
+                            hardwareDetails.getParent();
+                    var actionsScroll = (org.eclipse.swt.custom.ScrolledComposite)
+                            studioField(view, cls, "hardwareActionsScroll");
+                    check(studioTabs.getSelectionIndex() == 2 && !expertMetrics.getVisible()
+                            && vertical.getMaximizedControl() == hardwareCanvas
+                            && !actionsScroll.getVisible(),
+                            "beginner hardware step opens the real focused hardware navigator without advanced clutter");
+                    evidenceToggle.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    check(vertical.getMaximizedControl() == null
+                            && evidenceToggle.getText().equals("Hide evidence"),
+                            "Show evidence reveals the dock without changing source");
+                    evidenceToggle.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    check(vertical.getMaximizedControl() == hardwareCanvas,
+                            "Hide evidence restores full-height hardware planner");
+                    hardwareToolsToggle.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    check(actionsScroll.getVisible() && hardwareToolsToggle.getText().equals("Fewer tools"),
+                            "More tools reveals the existing expert action strip");
+                    hardwareToolsToggle.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    check(!actionsScroll.getVisible(),
+                            "Fewer tools restores compact layout");
+                    advancedChrome.setSelection(true);
+                    advancedChrome.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    check(expertMetrics.getVisible(),
+                            "Show details reveals secondary metrics on request");
+                    advancedChrome.setSelection(false);
+                    advancedChrome.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    check(!expertMetrics.getVisible(),
+                            "Show details can hide secondary metrics again");
                     studioTabs.setSelection(0);
                     studioTabs.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
                     var hardwareField = cls.getDeclaredField("hardwareDevices");
@@ -1541,29 +1584,46 @@ public final class EditorSmoke implements IApplication {
                     // context used to switch to Kconfig with the overview still
                     // hidden. A deliberate context link must restore chrome.
                     cls.getMethod("focusProjectChanges").invoke(view);
-                    check(studioTabs.getSelectionIndex() == 1 && expertMetrics.getVisible(),
-                            "explicit prj.conf context shows Kconfig WITH its summary and edit toolbar");
+                    check(studioTabs.getSelectionIndex() == 1 && !expertMetrics.getVisible(),
+                            "explicit prj.conf context opens Kconfig without forcing advanced chrome");
+                    advancedChrome.setSelection(true);
+                    advancedChrome.notifyListeners(org.eclipse.swt.SWT.Selection,
+                            new org.eclipse.swt.widgets.Event());
+                    check(expertMetrics.getVisible()
+                            && ((org.eclipse.swt.widgets.Composite)
+                                    studioField(view, cls, "expertToolbar")).getVisible(),
+                            "Kconfig summary and edit toolbar are available through Show details");
                     view.getClass().getMethod("setFocus").invoke(view);
                     check(studioTabs.getSelectionIndex() == 1,
                             "setFocus preserves deliberately selected Software view");
                     var visualGuide = (org.eclipse.swt.widgets.Button)
                             studioField(view, cls, "visualGuideButton");
-                    check(visualGuide.getVisible() && visualGuide.getEnabled(),
-                            "visual guide is always available above advanced Kconfig");
+                    check(visualGuide.getVisible() && visualGuide.getEnabled()
+                            && visualGuide.getText().equals("Visual Studio"),
+                            "advanced Kconfig always has a clear Visual Studio return action");
                     visualGuide.notifyListeners(org.eclipse.swt.SWT.Selection,
                             new org.eclipse.swt.widgets.Event());
                     settleNativeStudioLayout();
-                    check(studioTabs.getSelectionIndex() == 0
-                            && !expertMetrics.getVisible()
-                            && !((org.eclipse.swt.widgets.Composite)
-                                    studioField(view, cls, "expertToolbar")).getVisible()
-                            && ((org.eclipse.swt.widgets.Canvas)
-                                    studioField(view, cls, "beginnerFlow")).isVisible(),
-                            "Visual guide button restores colourful flow and hides advanced controls");
-                    view.getClass().getMethod("setFocus").invoke(view);
-                    check(studioTabs.getSelectionIndex() == 0,
-                            "native reactivation keeps visual flow after Kconfig deep link");
-                    captureNativeStudioScreenshot("visual-guide-after-kconfig-context.png");
+                    var visualHome = windows[0].getActivePage().findView(
+                            "io.github.niwantha33.zew.ui.configurationHome");
+                    check(visualHome != null
+                            && windows[0].getActivePage().isPartVisible(visualHome)
+                            && "software".equals(studioField(visualHome,
+                                    visualHome.getClass(), "visualSection")),
+                            "Visual Studio returns to the same project's graphical Kconfig section");
+                    var visualRoot = (org.eclipse.swt.widgets.Composite)
+                            studioField(visualHome, visualHome.getClass(), "studioRoot");
+                    var visualLayout = (org.eclipse.swt.custom.StackLayout)
+                            studioField(visualHome, visualHome.getClass(), "studioLayout");
+                    var visualPage = (org.eclipse.swt.widgets.Composite)
+                            studioField(visualHome, visualHome.getClass(), "visualPage");
+                    var fallbackPage = (org.eclipse.swt.widgets.Composite)
+                            studioField(visualHome, visualHome.getClass(), "nativePage");
+                    check(!visualRoot.isDisposed()
+                            && (visualLayout.topControl == visualPage
+                                || visualLayout.topControl == fallbackPage),
+                            "graphical navigation renders or safely falls back to native SWT");
+                    captureNativeStudioScreenshot("visual-studio-after-kconfig-context.png");
                     // The map is a real registered Eclipse ViewPart, not a
                     // screenshot of a mock. Verify its decoded address rows
                     // and canvas on the installed packaged feature.

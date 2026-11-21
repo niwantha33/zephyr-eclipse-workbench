@@ -157,7 +157,10 @@ public final class ConfigurationStudioView extends ViewPart {
     private Combo category;
     private TabFolder tabs;
     private GeneratedConfigDiffPanel configDiffPanel;
-    private Button visualGuideButton;
+    private Button visualGuideButton, advancedChromeButton, evidenceToggle, hardwareToolsToggle;
+    private ScrolledComposite hardwareActionsScroll;
+    private SashForm hardwareCanvas;
+    private boolean evidenceExpanded, hardwareToolsExpanded;
     private Label context, status, overview, detailTitle, detailMeta, detailNotice;
     private Label totalMetric, changesMetric, issuesMetric, targetMetric;
     private Font headingFont, metricFont;
@@ -216,13 +219,17 @@ public final class ConfigurationStudioView extends ViewPart {
         context.setText("Select a Zephyr application to explore its configuration.");
 
         var primary = new Composite(heading, SWT.NONE);
-        primary.setLayout(new GridLayout(3, false));
-        visualGuideButton = action(primary, "Visual guide", this::showVisualGuide);
-        visualGuideButton.setToolTipText("Open the colourful SoC → board → overlay → build flow from any workspace.");
+        primary.setLayout(new GridLayout(4, false));
+        visualGuideButton = action(primary, "Visual Studio", this::openModernConfiguration);
+        visualGuideButton.setToolTipText("Return to the modern graphical Configuration Studio with task-based navigation.");
         action(primary, "Project settings", this::openProjectSettings)
                 .setToolTipText("Environment, exact target and build configuration");
         Button buildButton = action(primary, "Build & validate", this::build);
         buildButton.setToolTipText("Rebuild selected target to verify requested configuration values");
+        advancedChromeButton = new Button(primary, SWT.CHECK);
+        advancedChromeButton.setText("Show details");
+        advancedChromeButton.setToolTipText("Reveal project overrides, metrics and secondary actions only when needed.");
+        advancedChromeButton.addListener(SWT.Selection, event -> updateBeginnerChrome());
 
         var secondary = new Composite(outer, SWT.NONE);
         expertToolbar = secondary;
@@ -459,9 +466,31 @@ public final class ConfigurationStudioView extends ViewPart {
                 + "Logical routes are not physical package pins; verified package mapping is unavailable.");
         warning.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
+        // Keep a focused canvas by default, like the graphical Hardware Studio.
+        // The large evidence dock and the long expert command strip are still
+        // available on request, never deleted or silently executed.
+        var focusBar = new Composite(hardware, SWT.NONE);
+        focusBar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        focusBar.setLayout(new GridLayout(3, false));
+        action(focusBar, "Open graphical Hardware Studio", this::openModernHardwareStudio)
+                .setToolTipText("Show this exact board, build and selected controller graphically.");
+        evidenceToggle = action(focusBar, "Show evidence", () -> {
+            evidenceExpanded = !evidenceExpanded;
+            evidenceToggle.setText(evidenceExpanded ? "Hide evidence" : "Show evidence");
+            updateHardwareDetailsLayout();
+        });
+        evidenceToggle.setToolTipText("Expand the detailed DTS, GPIO usage, source, and overlay evidence dock.");
+        hardwareToolsToggle = action(focusBar, "More tools", () -> {
+            hardwareToolsExpanded = !hardwareToolsExpanded;
+            hardwareToolsToggle.setText(hardwareToolsExpanded ? "Fewer tools" : "More tools");
+            updateHardwareToolsVisibility();
+        });
+        hardwareToolsToggle.setToolTipText("Show the legacy expert actions without taking permanent screen space.");
+
         var studioVertical = new SashForm(hardware, SWT.VERTICAL);
         studioVertical.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         var studioColumns = new SashForm(studioVertical, SWT.HORIZONTAL);
+        hardwareCanvas = studioColumns;
 
         // Left pane: peripheral-first navigation and lossless raw Devicetree.
         var devicePanel = new Composite(studioColumns, SWT.NONE);
@@ -953,7 +982,8 @@ public final class ConfigurationStudioView extends ViewPart {
         sourceTraceComparison.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         sourceTraceComparison.setText("No proposed change. Built values are not changed until an actual Zephyr configure.");
 
-        studioVertical.setWeights(new int[] {58, 42});
+        studioVertical.setWeights(new int[] {72, 28});
+        studioVertical.setMaximizedControl(studioColumns);
         // Browsing original DTS/DTSI requires usable space for the file tree and
         // its read-only source. Maximise the evidence pane while this tab is open;
         // returning to another dock tab restores the interactive chip planner.
@@ -966,7 +996,10 @@ public final class ConfigurationStudioView extends ViewPart {
                 hardware, SWT.H_SCROLL | SWT.BORDER);
         GridData actionsSize = new GridData(SWT.FILL, SWT.CENTER, true, false);
         actionsSize.heightHint = 56;
+        actionsSize.exclude = true;
         actionsScroll.setLayoutData(actionsSize);
+        actionsScroll.setVisible(false);
+        hardwareActionsScroll = actionsScroll;
         var hardwareActions = new Composite(actionsScroll, SWT.NONE);
         GridLayout actionsRow = new GridLayout(15, false);
         actionsRow.marginWidth = 2;
@@ -1266,7 +1299,7 @@ public final class ConfigurationStudioView extends ViewPart {
             if (search != null && !search.isDisposed()) search.setText("");
             filter = "";
         }
-        setPartName("Configuration — " + selected.getName());
+        setPartName("Advanced Configuration — " + selected.getName());
         if (options != null && !options.isDisposed()) {
             reload();
             if (hardware) {
@@ -2360,9 +2393,60 @@ public final class ConfigurationStudioView extends ViewPart {
         refreshBeginnerScrollSize();
     }
 
+    /** Show legacy commands on demand; all existing handlers stay wired. */
+    private void updateHardwareToolsVisibility() {
+        if (hardwareActionsScroll == null || hardwareActionsScroll.isDisposed()) return;
+        setExpertVisibility(hardwareActionsScroll, hardwareToolsExpanded);
+        hardwareActionsScroll.getParent().layout(true, true);
+    }
+
+    /** Return from a native expert editor to the primary four-page workspace. */
+    private void openModernConfiguration() {
+        try {
+            var part = getSite().getPage().showView(ConfigurationHomeView.ID);
+            if (part instanceof ConfigurationHomeView home) {
+                if (project != null && project.isAccessible()) home.displayProject(project);
+                else home.displayMissingProject();
+                String page = tabs == null || tabs.isDisposed() ? "overview"
+                        : switch (tabs.getSelectionIndex()) {
+                            case HARDWARE_TAB -> "hardware";
+                            case SOFTWARE_TAB -> "software";
+                            case EVIDENCE_TAB -> "system";
+                            default -> "overview";
+                        };
+                home.openSection(page);
+            }
+        } catch (org.eclipse.ui.PartInitException error) {
+            MessageDialog.openError(getSite().getShell(), "Configuration Studio unavailable",
+                    error.getMessage());
+        }
+    }
+
+    /** Pass through the selected generated DTS node, never a guessed pin. */
+    private void openModernHardwareStudio() {
+        if (project == null || !project.isAccessible() || inspectionBuild == null) {
+            MessageDialog.openInformation(getSite().getShell(), "Hardware Studio",
+                    "Select a Zephyr project and an exact board/profile build first.");
+            return;
+        }
+        String focus = null;
+        if (hardwareDevices != null && hardwareDevices.getSelectionCount() > 0
+                && hardwareDevices.getSelection()[0].getData() instanceof DevicetreeHardware.Device node)
+            focus = node.path();
+        try {
+            var part = getSite().getPage().showView(HardwareStudioView.ID);
+            if (part instanceof HardwareStudioView studio)
+                studio.displayProject(project, inspectionBuild, focus);
+        } catch (org.eclipse.ui.PartInitException error) {
+            MessageDialog.openError(getSite().getShell(), "Hardware Studio unavailable",
+                    error.getMessage());
+        }
+    }
+
     private void updateBeginnerChrome() {
         if (tabs == null || tabs.isDisposed()) return;
-        boolean advanced = tabs.getSelectionIndex() != START_TAB;
+        boolean advanced = tabs.getSelectionIndex() != START_TAB
+                && advancedChromeButton != null && advancedChromeButton.getSelection();
         setExpertVisibility(expertToolbar, advanced);
         setExpertVisibility(expertMetrics, advanced);
         tabs.getParent().layout(true, true);
@@ -2644,7 +2728,10 @@ public final class ConfigurationStudioView extends ViewPart {
             }
             final List<GpioSourceEvidence.Call> appCalls = sourceCalls;
             populateGpioUsageOverview(properties, appCalls, sourceScanNote);
-            selectHardwareDetails(3);
+            // Selecting GPIO is navigation, not a request to open a 40% high
+            // diagnostic log. Preserve the evidence tab for an explicit reveal.
+            hardwareDetails.setSelection(3);
+            updateHardwareDetailsLayout();
             var resolvedForBank = appCalls.stream()
                     .filter(call -> device.path().equals(call.controllerPath())).toList();
             var unresolvedCalls = appCalls.stream().filter(call -> !call.resolved()).toList();
@@ -3093,6 +3180,9 @@ public final class ConfigurationStudioView extends ViewPart {
      */
     private void selectHardwareDetails(int index) {
         if (hardwareDetails == null || hardwareDetails.isDisposed()) return;
+        evidenceExpanded = true;
+        if (evidenceToggle != null && !evidenceToggle.isDisposed())
+            evidenceToggle.setText("Hide evidence");
         hardwareDetails.setSelection(index);
         updateHardwareDetailsLayout();
     }
@@ -3102,7 +3192,8 @@ public final class ConfigurationStudioView extends ViewPart {
                 || !(hardwareDetails.getParent() instanceof SashForm vertical)) return;
         boolean sourceTab = hardwareDetails.getSelectionIndex() == 6
                 || hardwareDetails.getSelectionIndex() == 7;
-        vertical.setMaximizedControl(sourceTab ? hardwareDetails : null);
+        vertical.setMaximizedControl(evidenceExpanded
+                ? (sourceTab ? hardwareDetails : null) : hardwareCanvas);
         // The selected TabItem can still have ZERO height when the enclosing
         // Eclipse workbench has not yet painted it. Laying out only the inner
         // SashForm preserves that zero-sized ancestor. Relayout from the real
