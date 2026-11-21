@@ -733,7 +733,8 @@ public final class EditorSmoke implements IApplication {
         Object sample = constructor.newInstance("lp_mspm0g3507/mspm0g3507",
                 "CI synthetic fixture", null, dts, config, new java.util.Properties(),
                 false, "CI FIXTURE: synthetic DTS; no physical hardware verified.", overview,
-                io.github.niwantha33.zew.core.DevicetreeHardware.inspect(dts));
+                io.github.niwantha33.zew.core.DevicetreeHardware.inspect(dts),
+                null /* synthetic fixture has no build-backed source snapshot */);
         field.set(view, sample); render.invoke(view);
         settleNativeStudioLayout();
         var table = (org.eclipse.swt.widgets.Table) studioField(view, cls, "peripheralRows");
