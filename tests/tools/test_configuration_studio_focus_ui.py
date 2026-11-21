@@ -52,6 +52,10 @@ class ConfigurationStudioFocusTests(unittest.TestCase):
         self.assertIn("focus = node.path();", self.legacy)
         self.assertIn("if (project == null || !project.isAccessible() || inspectionBuild == null)", self.legacy)
 
+    def test_visual_and_advanced_tabs_are_distinguishable(self):
+        self.assertIn('setPartName("Configuration Studio — " + selected.getName());', self.home)
+        self.assertIn('setPartName("Advanced Configuration — " + selected.getName());', self.legacy)
+
 
 if __name__ == "__main__":
     unittest.main()
