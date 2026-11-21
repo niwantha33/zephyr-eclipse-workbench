@@ -1299,7 +1299,7 @@ public final class ConfigurationStudioView extends ViewPart {
             if (search != null && !search.isDisposed()) search.setText("");
             filter = "";
         }
-        setPartName("Configuration — " + selected.getName());
+        setPartName("Advanced Configuration — " + selected.getName());
         if (options != null && !options.isDisposed()) {
             reload();
             if (hardware) {
