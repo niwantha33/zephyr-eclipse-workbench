@@ -40,6 +40,15 @@ public final class SmartCompletionStartup implements IStartup {
         Display display = PlatformUI.getWorkbench().getDisplay();
         display.asyncExec(() -> {
             if (display.isDisposed() || keyFilter != null) return;
+            // Workbench defaults are suggestion-only for new CDT profiles.
+            // Respect explicit CDT user preferences; unsafe existing settings
+            // are handled by the guard below rather than silently overwritten.
+            var cdt = CUIPlugin.getDefault();
+            if (cdt != null) {
+                var preferences = cdt.getPreferenceStore();
+                preferences.setDefault(CDT_AUTO_INSERT, false);
+                preferences.setDefault(CDT_COMMON_PREFIX_INSERT, false);
+            }
             keyFilter = event -> onKeyUp(display, event);
             hookedDisplay = display;
             display.addFilter(SWT.KeyUp, keyFilter);
