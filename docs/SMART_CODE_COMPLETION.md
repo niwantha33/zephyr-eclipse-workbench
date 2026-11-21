@@ -33,11 +33,15 @@ The Workbench's first-letter request must not change source code. CDT's own
 - **Insert single proposals automatically**
 - **Insert common prefixes automatically**
 
-Untick **both** to enable the first-letter Workbench popup. Otherwise the
-Workbench **does not automatically invoke** CDT Content Assist, because doing
-so could replace a partially typed keyword (for example, `void` may become
-`volatile`). This guard is checked both on the keystroke and just before the
-delayed request. The options are not silently changed for other CDT projects.
+Workbench sets these **defaults** to off for new CDT preference profiles
+so that suggestions remain available without rewriting source. Existing
+explicit CDT preferences are preserved. If either option is already enabled,
+untick **both** to restore the first-letter popup. Otherwise the Workbench
+**does not automatically invoke** CDT Content Assist, because doing so could
+replace a partially typed keyword (for example, `void` may become
+`volatile`). The guard checks both when typing and immediately before the
+delayed request. The default applies to CDT inside this Workbench, while
+explicit preferences in other CDT projects are never silently changed.
 
 Existing manual **Ctrl+Space** remains available, with the semantics set by
 your CDT preferences. If you want suggestion-only manual completion too,
