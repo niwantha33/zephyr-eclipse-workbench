@@ -2,6 +2,7 @@
 package io.github.niwantha33.zew.ui;
 
 import java.util.Locale;
+import org.eclipse.cdt.ui.CUIPlugin;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.jface.text.ITextOperationTarget;
 import org.eclipse.jface.text.source.ISourceViewer;
@@ -29,6 +30,9 @@ public final class SmartCompletionStartup implements IStartup {
     private static final int DELAY_MS = 120;
     private static final int MAX_IDENTIFIER_LENGTH = 96;
     private static final String CDT_EDITOR_ID = "org.eclipse.cdt.ui.editor.CEditor";
+    // CDT's ContentAssistPreference keys. They are not public CDT API constants.
+    private static final String CDT_AUTO_INSERT = "content_assist_autoinsert";
+    private static final String CDT_COMMON_PREFIX_INSERT = "content_assist_prefix_completion";
     private static Listener keyFilter;
     private static Display hookedDisplay;
 
@@ -61,7 +65,7 @@ public final class SmartCompletionStartup implements IStartup {
     private static void onKeyUp(Display display, Event event) {
         if (!(event.widget instanceof StyledText text) || text.isDisposed()) return;
         if ((event.stateMask & (SWT.CTRL | SWT.ALT | SWT.COMMAND)) != 0) return;
-        if (!enabled()) return;
+        if (!enabled() || !safeToShowSuggestions()) return;
 
         ITextEditor editor = activeZephyrEditor();
         if (editor == null) return;
@@ -76,7 +80,7 @@ public final class SmartCompletionStartup implements IStartup {
         // rapidly entered characters into one CDT completion request.
         display.timerExec(DELAY_MS, () -> {
             if (display.isDisposed() || text.isDisposed() || keyFilter == null
-                    || display.getFocusControl() != text || !enabled()
+                    || display.getFocusControl() != text || !enabled() || !safeToShowSuggestions()
                     || activeZephyrEditor() != editor || !editor.isEditable()
                     || text.getSelectionCount() != 0) return;
             int end = text.getCaretOffset();
@@ -86,6 +90,23 @@ public final class SmartCompletionStartup implements IStartup {
             if (target != null && target.canDoOperation(ISourceViewer.CONTENTASSIST_PROPOSALS))
                 target.doOperation(ISourceViewer.CONTENTASSIST_PROPOSALS);
         });
+    }
+
+    /**
+     * A first-letter request is not an explicit acceptance. CDT can otherwise
+     * insert the only proposal (e.g. "volatile" after 'v') or a common prefix
+     * into source without Enter/Tab/click. Preserve the user's global CDT
+     * preferences: skip our automatic request until both insertion options are
+     * disabled in C/C++ > Editor > Content Assist.
+     * Manual Ctrl+Space remains owned by CDT.
+     */
+    private static boolean safeToShowSuggestions() {
+        var cdt = CUIPlugin.getDefault();
+        if (cdt == null) return false;
+        var preferences = cdt.getPreferenceStore();
+        return SmartCompletionTrigger.safeForAutomaticInvocation(
+                preferences.getBoolean(CDT_AUTO_INSERT),
+                preferences.getBoolean(CDT_COMMON_PREFIX_INSERT));
     }
 
     private static boolean enabled() {
