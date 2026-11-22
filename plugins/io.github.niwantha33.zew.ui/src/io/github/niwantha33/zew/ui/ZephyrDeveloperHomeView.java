@@ -31,7 +31,7 @@ public final class ZephyrDeveloperHomeView extends ViewPart {
     private Composite body, columns;
     private GridLayout columnsLayout;
     private Label projectName, target, readiness;
-    private Button source, hardware, build, debug, settings;
+    private Button source, hardware, build, workflow, debug, settings;
 
     @Override public void createPartControl(Composite parent) {
         parent.setLayout(new FillLayout());
@@ -79,6 +79,14 @@ public final class ZephyrDeveloperHomeView extends ViewPart {
                 + "Actual pin/peripheral evidence needs a generated Zephyr build.");
         build = action(actions, "Build Firmware", this::build);
         build.setToolTipText("Compile the selected project. Does not flash the board.");
+        workflow = action(actions, "Automate Build and Flash...", () -> {
+            try {
+                getSite().getPage().showView(WorkflowStudioView.ID);
+            } catch (PartInitException error) {
+                failure("Workflow Studio", error);
+            }
+        });
+        workflow.setToolTipText("Open Workflow Studio to arrange and save Clean, Build, Flash and Debug blocks.");
         debug = action(actions, "Flash and Debug...", this::debug);
         debug.setToolTipText("Explicit hardware operation: may program and reset the target.");
         settings = action(actions, "Advanced Board and Build Settings...", this::settings);
