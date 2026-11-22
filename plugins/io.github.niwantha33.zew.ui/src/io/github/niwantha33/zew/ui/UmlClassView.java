@@ -38,6 +38,8 @@ public final class UmlClassView extends ViewPart {
     private final AtomicInteger generation = new AtomicInteger();
     private IFile source;
     private UmlClassModel.Snapshot snapshot = UmlClassModel.unavailable("", "No source selected.");
+    private UmlProjectGraph.Snapshot graph = UmlProjectGraph.unavailable("", "");
+    private boolean projectMode;
     private UmlClassCanvas canvas;
     private Label status;
     private Button exportButton;
@@ -65,19 +67,24 @@ public final class UmlClassView extends ViewPart {
     @Override public void createPartControl(Composite parent) {
         parent.setLayout(new GridLayout(1, false));
         var title = new Label(parent, SWT.WRAP);
-        title.setText("AUTOMATIC UML  /  C & C++ CLASS AND STRUCTURE VIEW  /  CDT SOURCE OUTLINE");
+        title.setText("AUTOMATIC UML  /  SOURCE OUTLINE + VERIFIED PROJECT CALL RELATIONSHIPS");
         title.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         var tools = new Composite(parent, SWT.NONE);
         tools.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        tools.setLayout(new GridLayout(3, false));
+        tools.setLayout(new GridLayout(4, false));
         Button generate = new Button(tools, SWT.PUSH);
         generate.setText("Generate from active file");
         generate.addListener(SWT.Selection, e -> inspectFromSelection());
+        Button project = new Button(tools, SWT.PUSH);
+        project.setText("Project links");
+        project.setToolTipText("Scan local CDT project source definitions and resolved direct calls; no build or external service.");
+        project.addListener(SWT.Selection, e -> inspectProject());
         Button refresh = new Button(tools, SWT.PUSH);
         refresh.setText("Refresh diagram");
         refresh.addListener(SWT.Selection, e -> {
-            if (source != null) inspect(source);
+            if (projectMode) inspectProject();
+            else if (source != null) inspect(source);
             else inspectFromSelection();
         });
         exportButton = new Button(tools, SWT.PUSH);
@@ -97,6 +104,7 @@ public final class UmlClassView extends ViewPart {
         scroll.setExpandVertical(false);
         canvas = new UmlClassCanvas(scroll, SWT.NONE);
         canvas.onOpen(this::openType);
+        canvas.onOpenFunction(this::openFunction);
         scroll.setContent(canvas);
 
         getSite().getPage().addSelectionListener(listener);
@@ -131,6 +139,7 @@ public final class UmlClassView extends ViewPart {
     }
 
     private void inspect(IFile file) {
+        projectMode = false;
         source = file;
         final int token = generation.incrementAndGet();
         if (reader != null) reader.cancel();
@@ -151,12 +160,62 @@ public final class UmlClassView extends ViewPart {
         reader.schedule();
     }
 
+    /** Bounded background generation; this never invokes a compiler or changes sources. */
+    private void inspectProject() {
+        IFile file = source;
+        if (!isCode(file)) {
+            status.setText("Open a saved C/C++ file in the project, then choose Project links.");
+            return;
+        }
+        projectMode = true;
+        final int token = generation.incrementAndGet();
+        if (reader != null) reader.cancel();
+        var project = file.getProject();
+        var display = canvas.getDisplay();
+        status.setText("Resolving CDT project call graph: " + project.getName()
+                + " (up to " + UmlProjectGraph.MAX_FILES + " source files)...");
+        reader = new Job("Resolve source-backed UML project links") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                UmlProjectGraph.Snapshot observation = UmlProjectCdtIndex.inspect(project, monitor);
+                if (monitor.isCanceled() || generation.get() != token)
+                    return Status.CANCEL_STATUS;
+                display.asyncExec(() -> {
+                    if (canvas.isDisposed() || generation.get() != token || !projectMode)
+                        return;
+                    showProject(observation);
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        reader.setSystem(true);
+        reader.schedule();
+    }
+
+    /** Supplies a project projection for installed SWT regression checks. */
+    public void displayProjectObservation(UmlProjectGraph.Snapshot observation) {
+        showProject(observation);
+    }
+
+    private void showProject(UmlProjectGraph.Snapshot observation) {
+        projectMode = true;
+        graph = observation;
+        canvas.showProject(observation);
+        exportButton.setEnabled(observation.available());
+        status.setText(observation.project() + " | " + observation.nodes().size()
+                + " observed functions in " + observation.scannedFiles() + " source files | "
+                + observation.edges().size() + " resolved direct-call links"
+                + (observation.incomplete() ? " | INCOMPLETE" : "")
+                + " | " + observation.explanation()
+                + " Double-click a function to open its source.");
+    }
+
     /** Supplies a source-outline projection for installed-UI and integration tests. */
     public void displayObservation(UmlClassModel.Snapshot observation) {
         show(observation);
     }
 
     private void show(UmlClassModel.Snapshot model) {
+        projectMode = false;
         snapshot = model;
         canvas.show(model);
         exportButton.setEnabled(model.available());
@@ -182,14 +241,31 @@ public final class UmlClassView extends ViewPart {
         }
     }
 
+    private void openFunction(UmlProjectGraph.Node fn) {
+        if (source == null || !source.getProject().isAccessible()) return;
+        try {
+            IFile target = source.getProject().getFile(new org.eclipse.core.runtime.Path(fn.file()));
+            if (!target.isAccessible()) {
+                status.setText("Definition is no longer available: " + fn.file());
+                return;
+            }
+            IEditorPart editor = IDE.openEditor(getSite().getPage(), target, true);
+            if (editor instanceof ITextEditor text) text.selectAndReveal(fn.offset(), 0);
+        } catch (Exception failure) {
+            status.setText("Cannot open project definition: " + failure.getClass().getSimpleName());
+        }
+    }
+
     private void copyExport() {
-        if (!snapshot.available()) return;
+        if (projectMode ? !graph.available() : !snapshot.available()) return;
         Clipboard clipboard = new Clipboard(getSite().getShell().getDisplay());
         try {
-            clipboard.setContents(new Object[] {UmlClassModel.plantUml(snapshot)},
+            String content = projectMode ? UmlProjectGraph.plantUml(graph)
+                    : UmlClassModel.plantUml(snapshot);
+            clipboard.setContents(new Object[] {content},
                     new org.eclipse.swt.dnd.Transfer[] {TextTransfer.getInstance()});
-            status.setText("PlantUML text copied from the displayed CDT outline; "
-                    + "save it as .puml to render elsewhere.");
+            status.setText("Source-backed PlantUML copied; save as .puml to render elsewhere."
+                    + (projectMode ? " Edges are static direct calls, not observed execution." : ""));
         } catch (RuntimeException failure) {
             status.setText("Could not copy PlantUML: " + failure.getClass().getSimpleName());
         } finally {
