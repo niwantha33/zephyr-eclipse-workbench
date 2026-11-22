@@ -6,14 +6,15 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * A bounded, immutable projection of CDT's source outline. This is source
- * structure, NOT a whole-program dependency graph or a runtime observation.
+ * A bounded, immutable projection of CDT's source outline, including
+ * free functions grouped as a file module. This is source structure,
+ * NOT a whole-program dependency graph or a runtime observation.
  * Contains no SWT or Eclipse dependencies so the projection is testable in CI.
  */
 public final class UmlClassModel {
     public static final int MAX_TYPES = 32;
     public static final int MAX_MEMBERS = 18;
-    private static final Set<String> KINDS = Set.of("class", "struct", "union");
+    private static final Set<String> KINDS = Set.of("class", "struct", "union", "module");
 
     private UmlClassModel() {}
 
