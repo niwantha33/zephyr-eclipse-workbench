@@ -107,16 +107,16 @@ public final class UmlCdtSource {
             throws CModelException {
         for (ICElement child : unit.getChildren()) {
             if (!(child instanceof IFunctionDeclaration function)) continue;
-            // Leave space for an honest omission marker if there are >18.
+            String rendered = signature(function);
+            // CDT can expose both prototype and definition; avoid duplicate
+            // function entries before applying the 18-item limit.
+            if (functions.contains(rendered)) continue;
             if (functions.size() == UmlClassModel.MAX_MEMBERS) {
                 functions.set(UmlClassModel.MAX_MEMBERS - 1,
                         "... additional free functions omitted");
                 break;
             }
-            String rendered = signature(function);
-            // CDT can expose a prototype and definition with the same signature.
-            // Show one item in the bounded source-outline preview.
-            if (!functions.contains(rendered)) functions.add(rendered);
+            functions.add(rendered);
         }
     }
 
