@@ -8,7 +8,7 @@ complete UML reverse-engineering engine or a verified release capability.
 
 1. Open a saved `.h`, `.c`, `.hpp` or `.cpp` file in a CDT-enabled Zephyr
    project, or select that file in Project Explorer.
-2. Choose **Zephyr → Configure & Build → Automatic UML (C/C++ Class Diagram)**.
+2. Choose **Zephyr → Advanced Diagnostics → Automatic UML...**.
    Alternatively: **Window → Show View → Other → Zephyr Automatic UML (C/C++)**.
 3. The view reads the selected file's **Eclipse CDT source outline** in an
    Eclipse background Job. It draws class/struct/union boxes with fields and
@@ -18,6 +18,12 @@ complete UML reverse-engineering engine or a verified release capability.
    source. Use **Refresh diagram** after saving source changes.
 5. **Copy PlantUML** copies the exact displayed model as editable `.puml`
    text. This does not invoke a PlantUML server or install any dependency.
+
+If you see **No CDT translation unit** or **CDT cannot parse the saved-source
+outline**, first build the application once (to create `compile_commands.json`),
+then choose **Zephyr → Tools and Setup → Refresh C/C++ Editor Settings**.
+Reopen the C/C++ file and press **Refresh diagram**. This is a CDT model
+prerequisite, not a signal that the Zephyr firmware or build failed.
 
 ## Deliberate boundaries
 
