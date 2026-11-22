@@ -45,6 +45,15 @@ public final class UmlClassSmoke {
                 "native SWT renders one observed class box");
         Button copy = (Button) field(view, "exportButton");
         check(copy.getEnabled(), "PlantUML export is enabled for a real projection");
+        Object module = typeClass.getConstructor(String.class, String.class, int.class,
+                List.class, List.class).newInstance("module", "main.c", 0,
+                        List.of(), List.of("main(): int", "worker(): void"));
+        Object cProjection = modelClass.getMethod("of", String.class, List.class, String.class)
+                .invoke(null, "src/main.c", List.of(module), "CDT free-function outline");
+        view.getClass().getMethod("displayObservation", snapshotClass).invoke(view, cProjection);
+        check(canvas.getClass().getMethod("cardCount").invoke(canvas)
+                        .equals(Integer.valueOf(1)),
+                "native SWT also renders source-backed C module boxes");
         page.hideView(view);
         check(canvas.isDisposed(), "native UML controls dispose correctly");
     }
