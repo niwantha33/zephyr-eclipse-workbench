@@ -75,6 +75,7 @@ public final class UmlProjectCdtIndex {
             index.acquireReadLock();
             int scanned = 0;
             try {
+                if (!index.isFullyInitialized()) incomplete[0] = true;
                 for (IFile file : files) {
                     if (scanned == UmlProjectGraph.MAX_FILES || monitor.isCanceled()) break;
                     var element = CoreModel.getDefault().create(file);
