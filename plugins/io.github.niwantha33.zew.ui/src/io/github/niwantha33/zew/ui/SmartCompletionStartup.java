@@ -30,9 +30,6 @@ public final class SmartCompletionStartup implements IStartup {
     private static final int DELAY_MS = 120;
     private static final int MAX_IDENTIFIER_LENGTH = 96;
     private static final String CDT_EDITOR_ID = "org.eclipse.cdt.ui.editor.CEditor";
-    // CDT's ContentAssistPreference keys. They are not public CDT API constants.
-    private static final String CDT_AUTO_INSERT = "content_assist_autoinsert";
-    private static final String CDT_COMMON_PREFIX_INSERT = "content_assist_prefix_completion";
     private static Listener keyFilter;
     private static Display hookedDisplay;
 
@@ -40,14 +37,18 @@ public final class SmartCompletionStartup implements IStartup {
         Display display = PlatformUI.getWorkbench().getDisplay();
         display.asyncExec(() -> {
             if (display.isDisposed() || keyFilter != null) return;
-            // Workbench defaults are suggestion-only for new CDT profiles.
-            // Respect explicit CDT user preferences; unsafe existing settings
-            // are handled by the guard below rather than silently overwritten.
+            // Defaults alone do not repair existing workspaces with saved
+            // auto-insertion settings. A popup must never silently replace
+            // partially typed keywords (e.g. "void" with "volatile").
+            // CDT's preference store is shared by C/C++ editors in this
+            // Workbench; apply suggestion-only settings to saved profiles too.
             var cdt = CUIPlugin.getDefault();
             if (cdt != null) {
                 var preferences = cdt.getPreferenceStore();
-                preferences.setDefault(CDT_AUTO_INSERT, false);
-                preferences.setDefault(CDT_COMMON_PREFIX_INSERT, false);
+                preferences.setDefault(SmartCompletionTrigger.CDT_AUTO_INSERT, false);
+                preferences.setDefault(SmartCompletionTrigger.CDT_COMMON_PREFIX_INSERT, false);
+                SmartCompletionTrigger.enforceSuggestionOnly(
+                        preferences::getBoolean, key -> preferences.setValue(key, false));
             }
             keyFilter = event -> onKeyUp(display, event);
             hookedDisplay = display;
@@ -104,9 +105,8 @@ public final class SmartCompletionStartup implements IStartup {
     /**
      * A first-letter request is not an explicit acceptance. CDT can otherwise
      * insert the only proposal (e.g. "volatile" after 'v') or a common prefix
-     * into source without Enter/Tab/click. Preserve the user's global CDT
-     * preferences: skip our automatic request until both insertion options are
-     * disabled in C/C++ > Editor > Content Assist.
+     * into source without Enter/Tab/click. Startup repairs saved preferences;
+     * this guard fails closed if either option is re-enabled during the session.
      * Manual Ctrl+Space remains owned by CDT.
      */
     private static boolean safeToShowSuggestions() {
@@ -114,8 +114,8 @@ public final class SmartCompletionStartup implements IStartup {
         if (cdt == null) return false;
         var preferences = cdt.getPreferenceStore();
         return SmartCompletionTrigger.safeForAutomaticInvocation(
-                preferences.getBoolean(CDT_AUTO_INSERT),
-                preferences.getBoolean(CDT_COMMON_PREFIX_INSERT));
+                preferences.getBoolean(SmartCompletionTrigger.CDT_AUTO_INSERT),
+                preferences.getBoolean(SmartCompletionTrigger.CDT_COMMON_PREFIX_INSERT));
     }
 
     private static boolean enabled() {
