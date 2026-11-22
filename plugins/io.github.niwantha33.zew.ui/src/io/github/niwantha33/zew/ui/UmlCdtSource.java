@@ -33,10 +33,10 @@ public final class UmlCdtSource {
             ICElement element = CoreModel.getDefault().create(file);
             if (!(element instanceof ITranslationUnit unit))
                 return UmlClassModel.unavailable(source,
-                        "The selected file has no CDT translation unit. Check project C/C++ indexing.");
+                        "No CDT translation unit. Build once, then use Zephyr > Tools and Setup > Refresh C/C++ Editor Settings.");
             if (!unit.isStructureKnown())
                 return UmlClassModel.unavailable(source,
-                        "CDT cannot parse this file's outline. Check C/C++ project setup, then refresh indexing.");
+                        "CDT cannot parse the saved-source outline. Build once, refresh C/C++ Editor Settings, then reopen the file.");
             var types = new ArrayList<UmlClassModel.Type>();
             int[] visited = {0};
             collect(unit, "", types, 0, visited);
