@@ -48,14 +48,14 @@ public final class UmlClassView extends ViewPart {
         if (part == this || !(selection instanceof IStructuredSelection items)
                 || items.size() != 1) return;
         IFile file = asFile(items.getFirstElement());
-        if (isCode(file) && !file.equals(source)) inspect(file);
+        if (!projectMode && isCode(file) && !file.equals(source)) inspect(file);
     };
     private final IPartListener editorListener = new IPartListener() {
         @Override public void partActivated(IWorkbenchPart part) {
             if (part instanceof IEditorPart editor
                     && editor.getEditorInput() instanceof IFileEditorInput input) {
                 IFile file = input.getFile();
-                if (isCode(file) && !file.equals(source)) inspect(file);
+                if (!projectMode && isCode(file) && !file.equals(source)) inspect(file);
             }
         }
         @Override public void partBroughtToTop(IWorkbenchPart part) {}
@@ -75,7 +75,10 @@ public final class UmlClassView extends ViewPart {
         tools.setLayout(new GridLayout(4, false));
         Button generate = new Button(tools, SWT.PUSH);
         generate.setText("Generate from active file");
-        generate.addListener(SWT.Selection, e -> inspectFromSelection());
+        generate.addListener(SWT.Selection, e -> {
+            projectMode = false;
+            inspectFromSelection();
+        });
         Button project = new Button(tools, SWT.PUSH);
         project.setText("Project links");
         project.setToolTipText("Scan local CDT project source definitions and resolved direct calls; no build or external service.");
