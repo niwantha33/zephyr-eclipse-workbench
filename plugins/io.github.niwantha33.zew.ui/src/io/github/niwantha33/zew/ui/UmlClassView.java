@@ -22,7 +22,9 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IFileEditorInput;
+import org.eclipse.ui.IPartListener;
 import org.eclipse.ui.ISelectionListener;
+import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.part.ViewPart;
 import org.eclipse.ui.texteditor.ITextEditor;
@@ -44,7 +46,20 @@ public final class UmlClassView extends ViewPart {
         if (part == this || !(selection instanceof IStructuredSelection items)
                 || items.size() != 1) return;
         IFile file = asFile(items.getFirstElement());
-        if (isCode(file) && file != source) inspect(file);
+        if (isCode(file) && !file.equals(source)) inspect(file);
+    };
+    private final IPartListener editorListener = new IPartListener() {
+        @Override public void partActivated(IWorkbenchPart part) {
+            if (part instanceof IEditorPart editor
+                    && editor.getEditorInput() instanceof IFileEditorInput input) {
+                IFile file = input.getFile();
+                if (isCode(file) && !file.equals(source)) inspect(file);
+            }
+        }
+        @Override public void partBroughtToTop(IWorkbenchPart part) {}
+        @Override public void partClosed(IWorkbenchPart part) {}
+        @Override public void partDeactivated(IWorkbenchPart part) {}
+        @Override public void partOpened(IWorkbenchPart part) {}
     };
 
     @Override public void createPartControl(Composite parent) {
@@ -85,7 +100,15 @@ public final class UmlClassView extends ViewPart {
         scroll.setContent(canvas);
 
         getSite().getPage().addSelectionListener(listener);
+        getSite().getPage().addPartListener(editorListener);
         inspectFromSelection();
+    }
+
+    /** A command can preserve the explicit source before opening this view. */
+    public boolean inspectFile(IFile file) {
+        if (!isCode(file)) return false;
+        inspect(file);
+        return true;
     }
 
     public void inspectFromSelection() {
@@ -142,7 +165,7 @@ public final class UmlClassView extends ViewPart {
             return;
         }
         status.setText(model.source() + " | " + model.types().size()
-                + " CDT class/struct/union definitions shown"
+                + " CDT source-outline boxes shown"
                 + (model.truncated() ? " (more types omitted; first 32 shown)" : "")
                 + " | Read-only source outline, not a call graph or runtime measurement. "
                 + model.explanation() + " Double-click a box to open its definition.");
@@ -195,6 +218,7 @@ public final class UmlClassView extends ViewPart {
         generation.incrementAndGet();
         if (reader != null) reader.cancel();
         getSite().getPage().removeSelectionListener(listener);
+        getSite().getPage().removePartListener(editorListener);
         super.dispose();
     }
 }

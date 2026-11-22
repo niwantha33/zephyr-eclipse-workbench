@@ -33,18 +33,27 @@ public final class UmlCdtSource {
             ICElement element = CoreModel.getDefault().create(file);
             if (!(element instanceof ITranslationUnit unit))
                 return UmlClassModel.unavailable(source,
-                        "The selected file has no CDT translation unit. Check project C/C++ indexing.");
+                        "No CDT translation unit. Build once, then use Zephyr > Tools and Setup > Refresh C/C++ Editor Settings.");
             if (!unit.isStructureKnown())
-                return UmlClassModel.unavailable(source, "CDT cannot currently resolve this file's outline.");
+                return UmlClassModel.unavailable(source,
+                        "CDT cannot parse the saved-source outline. Build once, refresh C/C++ Editor Settings, then reopen the file.");
             var types = new ArrayList<UmlClassModel.Type>();
             int[] visited = {0};
             collect(unit, "", types, 0, visited);
+            // Ordinary Zephyr C files frequently have free functions but no
+            // class/struct declarations. Represent only CDT-observed functions;
+            // no call edges, execution order or RTOS dependencies are inferred.
+            var functions = new ArrayList<String>();
+            collectFreeFunctions(unit, functions);
+            if (!functions.isEmpty())
+                types.add(0, new UmlClassModel.Type("module", file.getName(),
+                        0, List.of(), functions));
             String note = visited[0] >= MAX_VISITED
                     ? "CDT outline traversal limit reached; this is an incomplete diagram."
                     : "CDT source outline only (not runtime state, complete inheritance or call graph).";
             if (types.isEmpty())
                 return UmlClassModel.unavailable(source,
-                        "No class/struct/union definitions were found in the selected CDT source outline.");
+                        "No free functions or class/struct/union definitions were found in CDT's saved-source outline.");
             return UmlClassModel.of(source, types, note);
         } catch (CModelException | RuntimeException failed) {
             return UmlClassModel.unavailable(source, "CDT source outline unavailable: "
@@ -91,6 +100,31 @@ public final class UmlCdtSource {
                 collect(nested, scope, result, depth + 1, visited);
             }
             if (result.size() > UmlClassModel.MAX_TYPES || visited[0] >= MAX_VISITED) break;
+        }
+    }
+
+    private static void collectFreeFunctions(ITranslationUnit unit, List<String> functions)
+            throws CModelException {
+        int examined = 0;
+        for (ICElement child : unit.getChildren()) {
+            if (++examined > MAX_VISITED) {
+                if (functions.size() == UmlClassModel.MAX_MEMBERS)
+                    functions.set(UmlClassModel.MAX_MEMBERS - 1,
+                            "... outline scan limit reached");
+                else if (!functions.isEmpty()) functions.add("... outline scan limit reached");
+                break;
+            }
+            if (!(child instanceof IFunctionDeclaration function)) continue;
+            String rendered = signature(function);
+            // CDT can expose both prototype and definition; avoid duplicate
+            // function entries before applying the 18-item limit.
+            if (functions.contains(rendered)) continue;
+            if (functions.size() == UmlClassModel.MAX_MEMBERS) {
+                functions.set(UmlClassModel.MAX_MEMBERS - 1,
+                        "... additional free functions omitted");
+                break;
+            }
+            functions.add(rendered);
         }
     }
 

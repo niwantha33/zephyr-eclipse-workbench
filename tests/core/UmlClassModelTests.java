@@ -21,6 +21,14 @@ public final class UmlClassModelTests {
                 && uml.contains("class \"Motor\" as ZEW_0 <<struct>>")
                 && uml.contains("speed: int") && uml.endsWith("@enduml\n"),
                 "stable, exportable PlantUML source from actual projection");
+        UmlClassModel.Type sourceModule = new UmlClassModel.Type("module", "main.c", 0,
+                List.of(), List.of("main(): int", "worker(void): void"));
+        UmlClassModel.Snapshot cFile = UmlClassModel.of("src/main.c",
+                List.of(sourceModule), "CDT free-function outline");
+        check(cFile.available() && cFile.types().get(0).kind().equals("module")
+                && UmlClassModel.plantUml(cFile).contains("class \"main.c\" as ZEW_0 <<module>>")
+                && UmlClassModel.plantUml(cFile).contains("worker(void): void"),
+                "ordinary C files produce portable, explicitly scoped module UML");
         try {
             snap.types().clear();
             throw new AssertionError("mutable UML snapshot");
