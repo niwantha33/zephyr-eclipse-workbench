@@ -110,7 +110,7 @@ public final class WorkflowStudioView extends ViewPart {
         Group centre = new Group(main, SWT.NONE);
         centre.setText("WORKFLOW  /  EXECUTION ORDER");
         centre.setLayout(layout(1, 7));
-        canvas = new Table(centre, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL);
+        canvas = new Table(centre, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL | SWT.H_SCROLL);
         canvas.setHeaderVisible(true);
         canvas.setLinesVisible(true);
         canvas.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -251,7 +251,13 @@ public final class WorkflowStudioView extends ViewPart {
         DropTarget target = new DropTarget(canvas, DND.DROP_COPY | DND.DROP_MOVE);
         target.setTransfer(text);
         target.addDropListener(new DropTargetAdapter() {
+            @Override public void dragEnter(DropTargetEvent event) {
+                event.detail = (event.operations & DND.DROP_MOVE) != 0
+                        ? DND.DROP_MOVE : DND.DROP_COPY;
+            }
             @Override public void dragOver(DropTargetEvent event) {
+                event.detail = (event.operations & DND.DROP_MOVE) != 0
+                        ? DND.DROP_MOVE : DND.DROP_COPY;
                 event.feedback = DND.FEEDBACK_INSERT_BEFORE | DND.FEEDBACK_SCROLL;
             }
             @Override public void drop(DropTargetEvent event) {
