@@ -18,12 +18,15 @@ manual refresh.
 
 ## Controls
 
-The feature is enabled by default for Zephyr projects only. Turn it off under
-**Window > Preferences > Zephyr Workbench > Automatically show C/C++ completions
-from the first letter**. It does not alter Eclipse's global CDT completion
-settings or the contents of any project. Non-Zephyr C/C++ projects and custom
-Devicetree/YAML editors keep their existing behavior. CDT continues to own
-`.`, `->` and `::` completions, insertion, ranking and proposal information.
+The first-letter popup is enabled by default for Zephyr projects only. Turn
+it off under **Window > Preferences > Zephyr Workbench > Automatically show C/C++
+completions from the first letter**. Workbench also turns off CDT's two implicit
+insertion preferences at startup, including saved values from older workspaces.
+These CDT settings are shared by all native C/C++ editors inside this Workbench
+installation (including non-Zephyr projects), but are not changed in other
+Eclipse installations or in any project source files. Custom Devicetree/YAML
+editors keep their existing behavior. CDT continues to own `.`, `->` and
+`::` completions, ranking and proposal information.
 
 ## Safe suggestion-only mode
 
@@ -33,20 +36,21 @@ The Workbench's first-letter request must not change source code. CDT's own
 - **Insert single proposals automatically**
 - **Insert common prefixes automatically**
 
-Workbench sets these **defaults** to off for new CDT preference profiles
-so that suggestions remain available without rewriting source. Existing
-explicit CDT preferences are preserved. If either option is already enabled,
-untick **both** to restore the first-letter popup. Otherwise the Workbench
-**does not automatically invoke** CDT Content Assist, because doing so could
-replace a partially typed keyword (for example, `void` may become
-`volatile`). The guard checks both when typing and immediately before the
-delayed request. The default applies to CDT inside this Workbench, while
-explicit preferences in other CDT projects are never silently changed.
+Workbench sets both the **defaults and effective saved preferences** to off
+when it starts. Unlike changing defaults alone, this also repairs existing
+workspaces that previously enabled automatic single-proposal insertion or
+common-prefix insertion. This is a Workbench-wide CDT setting, not an individual
+project setting. It keeps proposal popups while protecting typed source text
+(for example, `static void` must not turn into `static volatileid`).
 
-Existing manual **Ctrl+Space** remains available, with the semantics set by
-your CDT preferences. If you want suggestion-only manual completion too,
-untick the same options. Explicitly choosing a proposal with Enter, Tab, or
-clicking it still inserts that proposal.
+If either option is subsequently re-enabled manually during the session, the
+Workbench **does not automatically invoke** first-letter CDT Content Assist
+until both are unchecked again; this fails closed rather than modifying code.
+The guard checks on typing and immediately before the delayed request.
+
+Manual **Ctrl+Space** follows CDT preferences. With both insertion preferences
+off, it is suggestion-only. Only explicitly choosing a proposal with Enter, Tab,
+or a click inserts that proposal.
 
 ## Safety and tests
 
@@ -57,8 +61,17 @@ if focus or editor changes, the token is removed, or typing moves beyond it.
 The plugin removes its listener at stop. No workspace configuration or firmware
 files are modified by the trigger itself.
 
-Run `python3 scripts/test_smart_completion.py` for standalone trigger tests,
-and run the ordinary Tycho/native installed Eclipse smoke before merging.
-The standalone test does **not** validate actual popup positioning, CDT
-index coverage, or cross-platform physical UI behaviour. Those require the
-installed Eclipse smoke and manual Windows confirmation.
+Run `python3 scripts/test_smart_completion.py` for standalone trigger and
+saved-preference repair tests, then the ordinary Tycho/native installed Eclipse
+smoke before merging. On Windows, test an **existing workspace** that had both
+CDT insertion preferences enabled: restart the updated Workbench, confirm they
+are unchecked, and type `static void`, `void test(void)`, and `volatile`
+both quickly and with pauses after `v` and `vo`. The text must not change
+without an explicit proposal selection. Verify first-letter suggestions still
+appear, and Enter/Tab/click still accept a chosen suggestion. Also verify a
+non-Zephyr editor's insertion settings are suggestion-only within the same
+Workbench installation.
+
+The standalone test does **not** validate actual popup positioning, CDT index
+coverage, or physical UI behaviour. Those require the installed Eclipse smoke
+and manual Windows confirmation.
