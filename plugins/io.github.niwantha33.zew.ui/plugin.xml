@@ -130,6 +130,10 @@
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.UpdateStartup"/></extension>
   <extension point="org.eclipse.ui.startup"><startup class="io.github.niwantha33.zew.ui.SmartCompletionStartup"/></extension>
   <extension point="org.eclipse.ui.views">
+    <view id="io.github.niwantha33.zew.ui.workflowStudio"
+          name="Zephyr Workflow Studio"
+          class="io.github.niwantha33.zew.ui.WorkflowStudioView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.developerHome"
           name="Zephyr Development Dashboard"
           class="io.github.niwantha33.zew.ui.ZephyrDeveloperHomeView"
@@ -271,6 +275,7 @@
     <command id="io.github.niwantha33.zew.verifyProject" name="Verify Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.embeddedHubBoards" name="Open EmbeddedHub Board Discovery" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.workflowStudio" name="Open Zephyr Workflow Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.hardwareStudio" name="Open Hardware Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.umlClasses" name="Open Automatic UML C/C++ Class Diagram" categoryId="io.github.niwantha33.zew.commands"/>
@@ -330,6 +335,7 @@
     <handler commandId="io.github.niwantha33.zew.verifyProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.planProjectUpgrade" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.embeddedHubBoards" class="io.github.niwantha33.zew.ui.EmbeddedHubBoardCatalogueHandler"/>
+    <handler commandId="io.github.niwantha33.zew.workflowStudio" class="io.github.niwantha33.zew.ui.WorkflowStudioHandler"/>
     <handler commandId="io.github.niwantha33.zew.hardwareStudio" class="io.github.niwantha33.zew.ui.HardwareStudioHandler"/>
     <handler commandId="io.github.niwantha33.zew.configurationStudio" class="io.github.niwantha33.zew.ui.ConfigurationStudioHandler"/>
     <handler commandId="io.github.niwantha33.zew.umlClasses" class="io.github.niwantha33.zew.ui.UmlClassHandler"/>
@@ -400,6 +406,9 @@
         <menu id="io.github.niwantha33.zew.menu.configure" label="Configure Project">
           <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio..." style="push"/>
           <command commandId="io.github.niwantha33.zew.projectSettings" label="Board and Build Profile Settings..." style="push"/>
+        </menu>
+        <menu id="io.github.niwantha33.zew.menu.workflow" label="Automate Workflow">
+          <command commandId="io.github.niwantha33.zew.workflowStudio" label="Workflow Studio (drag and drop)..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.build" label="Build Firmware">
           <command commandId="io.github.niwantha33.zew.build" label="Build Selected Project" style="push"/>
