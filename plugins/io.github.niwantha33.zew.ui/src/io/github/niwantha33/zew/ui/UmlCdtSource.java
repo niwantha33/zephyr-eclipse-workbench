@@ -105,7 +105,15 @@ public final class UmlCdtSource {
 
     private static void collectFreeFunctions(ITranslationUnit unit, List<String> functions)
             throws CModelException {
+        int examined = 0;
         for (ICElement child : unit.getChildren()) {
+            if (++examined > MAX_VISITED) {
+                if (functions.size() == UmlClassModel.MAX_MEMBERS)
+                    functions.set(UmlClassModel.MAX_MEMBERS - 1,
+                            "... outline scan limit reached");
+                else functions.add("... outline scan limit reached");
+                break;
+            }
             if (!(child instanceof IFunctionDeclaration function)) continue;
             String rendered = signature(function);
             // CDT can expose both prototype and definition; avoid duplicate
