@@ -149,6 +149,7 @@ for p in bundles:
                         'DtsGraphView', 'DtsGraphCanvas', 'DtsGraphModel', 'DtsGraphLoader',
                          'HardwareStudioDocument', 'HardwareStudioView', 'HardwareStudioHandler',
                         'UmlClassView', 'UmlClassCanvas', 'UmlClassModel', 'UmlCdtSource', 'UmlClassHandler',
+                        'UmlProjectGraph', 'UmlProjectCdtIndex',
                         'YamlBindingIntelligence', 'YamlHardwareModel',
                         'YamlTwisterModel', 'YamlDiagnosticModel', 'YamlDiagnosticMarkers',
                         'YamlScalarEdit', 'YamlPatchValidator'):

@@ -54,6 +54,25 @@ public final class UmlClassSmoke {
         check(canvas.getClass().getMethod("cardCount").invoke(canvas)
                         .equals(Integer.valueOf(1)),
                 "native SWT also renders source-backed C module boxes");
+        var graphType = bundle.loadClass("io.github.niwantha33.zew.ui.UmlProjectGraph");
+        var nodeType = bundle.loadClass("io.github.niwantha33.zew.ui.UmlProjectGraph$Node");
+        var edgeType = bundle.loadClass("io.github.niwantha33.zew.ui.UmlProjectGraph$Edge");
+        var graphSnapshotType = bundle.loadClass("io.github.niwantha33.zew.ui.UmlProjectGraph$Snapshot");
+        Object mainFn = nodeType.getConstructor(String.class, String.class, String.class, int.class)
+                .newInstance("main:3", "main", "src/main.c", 3);
+        Object sensorFn = nodeType.getConstructor(String.class, String.class, String.class, int.class)
+                .newInstance("sensor:7", "sensor_read", "src/sensor.c", 7);
+        Object edge = edgeType.getConstructor(String.class, String.class)
+                .newInstance("main:3", "sensor:7");
+        Object graph = graphType.getMethod("of", String.class, List.class, List.class,
+                        int.class, boolean.class, String.class)
+                .invoke(null, "sample", List.of(mainFn, sensorFn), List.of(edge),
+                        2, false, "CDT direct call");
+        view.getClass().getMethod("displayProjectObservation", graphSnapshotType)
+                .invoke(view, graph);
+        check(canvas.getClass().getMethod("cardCount").invoke(canvas)
+                        .equals(Integer.valueOf(2)) && copy.getEnabled(),
+                "native SWT renders two linked project functions and enables export");
         page.hideView(view);
         check(canvas.isDisposed(), "native UML controls dispose correctly");
     }
