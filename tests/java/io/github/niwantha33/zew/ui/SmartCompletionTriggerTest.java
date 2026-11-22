@@ -9,6 +9,32 @@ public final class SmartCompletionTriggerTest {
     }
 
     public static void main(String[] args) {
+        // An existing Eclipse workspace can store 'true' even when our new
+        // default is false. Repair all four combinations without gratuitously
+        // rewriting already-safe settings.
+        for (boolean single : new boolean[] { false, true }) {
+            for (boolean prefix : new boolean[] { false, true }) {
+                var settings = new java.util.HashMap<String, Boolean>();
+                settings.put(SmartCompletionTrigger.CDT_AUTO_INSERT, single);
+                settings.put(SmartCompletionTrigger.CDT_COMMON_PREFIX_INSERT, prefix);
+                final int[] writes = { 0 };
+                java.util.function.Consumer<String> disable = key -> {
+                    settings.put(key, false);
+                    writes[0]++;
+                };
+                SmartCompletionTrigger.enforceSuggestionOnly(
+                        key -> settings.getOrDefault(key, false), disable);
+                check(!settings.get(SmartCompletionTrigger.CDT_AUTO_INSERT)
+                                && !settings.get(SmartCompletionTrigger.CDT_COMMON_PREFIX_INSERT)
+                                && writes[0] == (single ? 1 : 0) + (prefix ? 1 : 0),
+                        "saved CDT settings repaired (single=" + single + ", prefix=" + prefix + ")");
+                SmartCompletionTrigger.enforceSuggestionOnly(
+                        key -> settings.getOrDefault(key, false), disable);
+                check(writes[0] == (single ? 1 : 0) + (prefix ? 1 : 0),
+                        "suggestion-only repair is idempotent");
+            }
+        }
+
         check(SmartCompletionTrigger.safeForAutomaticInvocation(false, false),
                 "automatic suggestions are safe when CDT inserts nothing without acceptance");
         check(!SmartCompletionTrigger.safeForAutomaticInvocation(true, false),
