@@ -151,10 +151,11 @@ public final class UmlClassCanvas extends Canvas {
             int sy = sourceRect.y + sourceRect.height / 2;
             int ty = targetRect.y + targetRect.height / 2;
             if (sourceRect.x == targetRect.x) {
+                boolean down = targetRect.y > sourceRect.y;
                 sx = sourceRect.x + sourceRect.width / 2;
                 tx = targetRect.x + targetRect.width / 2;
-                sy = sourceRect.y + sourceRect.height;
-                ty = targetRect.y;
+                sy = down ? sourceRect.y + sourceRect.height : sourceRect.y;
+                ty = down ? targetRect.y : targetRect.y + targetRect.height;
             }
             gc.drawLine(sx, sy, tx, ty);
             int arrow = 6;
