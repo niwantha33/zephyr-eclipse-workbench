@@ -111,7 +111,7 @@ public final class UmlCdtSource {
                 if (functions.size() == UmlClassModel.MAX_MEMBERS)
                     functions.set(UmlClassModel.MAX_MEMBERS - 1,
                             "... outline scan limit reached");
-                else functions.add("... outline scan limit reached");
+                else if (!functions.isEmpty()) functions.add("... outline scan limit reached");
                 break;
             }
             if (!(child instanceof IFunctionDeclaration function)) continue;
