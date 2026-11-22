@@ -117,7 +117,7 @@ public final class WorkflowStudioView extends ViewPart {
         column(canvas, "Step", 65);
         column(canvas, "Operation", 160);
         column(canvas, "Status", 205);
-        canvas.addListener(SWT.Selection, event -> showDetails());
+        canvas.addListener(SWT.Selection, event -> { showDetails(); controls(); });
         Composite actions = new Composite(centre, SWT.NONE);
         actions.setLayoutData(fillHorizontal());
         actions.setLayout(layout(3, 5));
