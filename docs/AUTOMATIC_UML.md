@@ -25,21 +25,38 @@ then choose **Zephyr → Tools and Setup → Refresh C/C++ Editor Settings**.
 Reopen the C/C++ file and press **Refresh diagram**. This is a CDT model
 prerequisite, not a signal that the Zephyr firmware or build failed.
 
+## Project links (development)
+
+With a saved source file open in the target CDT project, choose **Project links**
+in the Automatic UML view. This starts a bounded, read-only CDT index/AST scan
+and draws **direct function-call** arrows across the project source files.
+Double-click a function box to open its actual source definition. Choose
+**Generate from active file** to return to the class/structure preview.
+**Copy PlantUML** exports the currently visible graph, including verified arrows.
+
+The initial project graph scans at most 24 source files, 64 function nodes and
+96 unique arrows. The status explicitly marks incomplete scans. It excludes
+unresolved calls, indirect callbacks, macro-only calls, potential/ambiguous
+targets, virtual dispatch and out-of-project definitions. Relationships are
+**static source evidence, not runtime execution**. Only CDT-managed workspace
+source files count; generated or external files and CMake-linked sibling sources
+outside the imported Eclipse project are not traversed. As with the file view,
+build once and refresh CDT editor settings if the index is missing.
+
 ## Deliberate boundaries
 
 - **No manual drawing** is needed for the initial class/structure view.
   The canvas is generated from CDT model elements, not handwritten example
   diagrams and not a regex-based source parser.
-- The scope is **one selected translation unit**, including modelled nested
-  definitions and top-level free-function signatures. Headers, macros, compile
-  conditions and templates are only as complete as the current CDT outline.
-  File-module functions have no inferred call edges or execution order.
-  Namespaced free functions are not yet included in the module box.
-  Generated relations are **not** claimed.
-- This preview does **not** infer associations, inheritance, actual calls,
-  RTOS messaging, state-machine transitions, or a sequence of execution.
-  C function-pointer calls and indirect callbacks cannot be inferred safely
-  from basic outlines.
+- **File outline mode** covers one selected translation unit, including modelled
+  nested definitions and top-level free-function signatures. Headers, macros,
+  compile conditions and templates are only as complete as CDT's model.
+  The file-module preview itself has no inferred call edges or execution order.
+  Namespaced free functions are not yet included in its module box.
+- **Project links mode** displays only verified direct call expressions resolved
+  by CDT to a unique function definition. It does not infer associations,
+  inheritance, RTOS messaging, indirect function-pointer calls, dynamic dispatch,
+  state-machine transitions or any sequence of actual execution.
 - It does **not** imply a source file is in the firmware image, that an ELF
   was flashed, that a function executed or that a thread was scheduled.
 - The view is **read-only**. It makes no build, flash, source edit or network
@@ -56,10 +73,12 @@ prerequisite, not a signal that the Zephyr firmware or build failed.
 
 - `tests/core/UmlClassModelTests.java`: deterministic class/module export,
   immutable snapshots, bounds and escaping of source content.
-- `tests/eclipse/UmlClassSmoke.java`: installed UI view registration,
-  native Canvas projection, export availability and widget disposal.
-- `scripts/verify_site.py`: checks all five implementation classes are
-  present in the published bundle.
+- `tests/core/UmlProjectGraphTests.java`: project links, deterministic export,
+  omitted unsupported edges, immutability and sanitization.
+- `tests/eclipse/UmlClassSmoke.java`: installed UI registration,
+  file/project Canvas projections, export availability and disposal.
+- `scripts/verify_site.py`: requires all UML implementation classes in the
+  installed bundle.
 - Still required before promising release: exact-head Linux Tycho/p2 and
   installed SWT smoke, Windows tests, real C and C++ source acceptance
   (including a regular Zephyr `main.c` with no structures), large-file bounds
@@ -67,8 +86,9 @@ prerequisite, not a signal that the Zephyr firmware or build failed.
 
 ## Next reviewed increments
 
-**Milestone 2:** CDT index-backed cross-file class relationships and
-call graph, with exact links and uncertainty/truncation indicators.
+**Milestone 2 (partial):** Bounded CDT-backed direct-call relationships
+across imported project sources. Inheritance and richer relationships are
+not yet implemented.
 
 **Milestone 3:** Zephyr API/object interaction maps (threads, semaphores,
 mutexes, queues, work items) generated only when source or build artefacts
