@@ -48,14 +48,20 @@ public final class UmlClassView extends ViewPart {
         if (part == this || !(selection instanceof IStructuredSelection items)
                 || items.size() != 1) return;
         IFile file = asFile(items.getFirstElement());
-        if (!projectMode && isCode(file) && !file.equals(source)) inspect(file);
+        if (isCode(file) && !file.equals(source)) {
+            if (projectMode) source = file;
+            else inspect(file);
+        }
     };
     private final IPartListener editorListener = new IPartListener() {
         @Override public void partActivated(IWorkbenchPart part) {
             if (part instanceof IEditorPart editor
                     && editor.getEditorInput() instanceof IFileEditorInput input) {
                 IFile file = input.getFile();
-                if (!projectMode && isCode(file) && !file.equals(source)) inspect(file);
+                if (isCode(file) && !file.equals(source)) {
+            if (projectMode) source = file;
+            else inspect(file);
+        }
             }
         }
         @Override public void partBroughtToTop(IWorkbenchPart part) {}
