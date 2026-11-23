@@ -21,6 +21,17 @@ class QuickHelpIntegrationTests(unittest.TestCase):
         self.assertTrue(any(e.tag == 'menuContribution' and e.get('locationURI', '').startswith('popup:#TextEditorContext')
                             and any(c.get('commandId') == command for c in e.iter()) for e in all_tags))
 
+    def test_native_workbench_smoke_sources_registered(self):
+        """Every smoke class invoked by WorkbenchSmoke must be compiled into its test bundle."""
+        import re
+        workbench = (ROOT / 'tests/eclipse/WorkbenchSmoke.java').read_text(encoding='utf-8')
+        editor_smoke = (ROOT / 'scripts/editor_smoke.py').read_text(encoding='utf-8')
+        invoked = set(re.findall(r'\b([A-Za-z][A-Za-z0-9]*Smoke)\.run\(\)', workbench))
+        self.assertIn('QuickHelpSmoke', invoked)
+        for name in sorted(invoked):
+            with self.subTest(smoke=name):
+                self.assertIn(f"tests/eclipse/{name}.java", editor_smoke)
+
     def test_catalogue_is_packaged(self):
         build = (CORE / 'build.properties').read_text(encoding='utf-8')
         self.assertIn('quick-help/', build)
