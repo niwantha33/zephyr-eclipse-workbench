@@ -1,0 +1,8 @@
+format: 1
+# One officially attributed, version-pinned API record per file.
+k_thread_create.help
+gpio_pin_toggle_dt.help
+k_timer_start.help
+k_sem_take.help
+k_mutex_lock.help
+k_msgq_put.help

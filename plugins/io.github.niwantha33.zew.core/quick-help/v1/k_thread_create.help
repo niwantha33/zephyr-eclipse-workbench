@@ -1,0 +1,55 @@
+id: k_thread_create
+title: Create a thread
+category: Threads
+version: 4.4.0
+aliases: create_task|create task|create a thread|start new thread|spawn worker|start task|thread creation
+signature: k_tid_t k_thread_create(struct k_thread *new_thread, k_thread_stack_t *stack, size_t stack_size, k_thread_entry_t entry, void *p1, void *p2, void *p3, int prio, uint32_t options, k_timeout_t delay);
+source: https://github.com/zephyrproject-rtos/zephyr/blob/v4.4.0/include/zephyr/kernel.h#L444-L450
+related: K_THREAD_DEFINE|K_THREAD_STACK_DEFINE|k_thread_join|k_thread_abort|k_sleep
+## Explanation
+Start another piece of application work in its own Zephyr thread. The name "create_task" is a search intention, not a Zephyr API. The actual function is k_thread_create().
+## Parameters
+new_thread: writable, uninitialized thread control block (struct k_thread).
+stack: memory allocated by K_THREAD_STACK_DEFINE (or another supported stack macro).
+stack_size: K_THREAD_STACK_SIZEOF(stack), NOT sizeof(stack).
+entry: the function that the thread runs, accepting three void * arguments.
+p1, p2, p3: values passed to the entry function (NULL if unused).
+prio: scheduling priority; smaller numeric values generally run first for preemptible threads.
+options: thread options; 0 for a standard supervisor thread.
+delay: K_NO_WAIT to make the thread ready immediately; otherwise a timeout.
+Returns: new thread ID (k_tid_t).
+## Example
+#include <zephyr/kernel.h>
+
+#define WORKER_STACK_SIZE 1024
+#define WORKER_PRIORITY   0
+
+K_THREAD_STACK_DEFINE(worker_stack, WORKER_STACK_SIZE);
+static struct k_thread worker_control;
+
+static void worker(void *p1, void *p2, void *p3)
+{
+    ARG_UNUSED(p1);
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
+    while (1) {
+        printk("Worker is running\n");
+        k_sleep(K_SECONDS(1));
+    }
+}
+
+int main(void)
+{
+    k_tid_t tid = k_thread_create(&worker_control, worker_stack,
+                                 K_THREAD_STACK_SIZEOF(worker_stack),
+                                 worker, NULL, NULL, NULL,
+                                 WORKER_PRIORITY, 0, K_NO_WAIT);
+    ARG_UNUSED(tid);
+    k_sleep(K_FOREVER);
+    return 0;
+}
+## Requirements
+Assumptions: standard supervisor-mode Zephyr application, sufficient RAM for this additional thread and its stack, kernel threading enabled, normal application main() entry. No peripheral Devicetree overlay required. Test the stack size against your own workload.
+For printed output, enable CONFIG_PRINTK and a suitable console in the project/board configuration if they are not already enabled.
+## Mistakes
+Do not use sizeof(worker_stack) for stack_size: Zephyr requires the stack helper macro. Thread creation and sleeping are thread-context operations; do not use this example in an ISR. Do not pass a pointer to a temporary stack or control block that goes out of scope. A thread that returns permanently terminates; it is not an automatically restarting task.

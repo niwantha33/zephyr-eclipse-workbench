@@ -1,0 +1,48 @@
+id: gpio_pin_toggle_dt
+title: Blink an LED using Devicetree
+category: GPIO
+version: 4.4.0
+aliases: blink led|blink LED|toggle led|flash led|blink a light|gpio toggle|led blink|switch LED on and off
+signature: static inline int gpio_pin_toggle_dt(const struct gpio_dt_spec *spec);
+source: https://github.com/zephyrproject-rtos/zephyr/blob/v4.4.0/include/zephyr/drivers/gpio.h#L1755-L1758
+related: GPIO_DT_SPEC_GET|gpio_pin_configure_dt|gpio_is_ready_dt|gpio_pin_set_dt
+## Explanation
+Change a GPIO output from one state to the other. This example uses the board's led0 Devicetree alias to locate the actual GPIO controller and pin, rather than inventing a pin number.
+## Parameters
+spec: pointer to the gpio_dt_spec that describes a GPIO controller, pin and Devicetree flags.
+Returns: 0 on success, or a negative error from the GPIO driver.
+## Example
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/gpio.h>
+
+#define LED_NODE DT_ALIAS(led0)
+#if !DT_NODE_EXISTS(LED_NODE)
+#error "This board has no led0 alias: select an LED board or add an overlay"
+#endif
+
+static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED_NODE, gpios);
+
+int main(void)
+{
+    if (!gpio_is_ready_dt(&led)) {
+        printk("LED GPIO controller is not ready\n");
+        return 1;
+    }
+    if (gpio_pin_configure_dt(&led, GPIO_OUTPUT_INACTIVE) != 0) {
+        return 1;
+    }
+    while (1) {
+        if (gpio_pin_toggle_dt(&led) != 0) {
+            return 1;
+        }
+        k_sleep(K_MSEC(500));
+    }
+    return 0;
+}
+## Requirements
+Board assumption: an enabled led0 alias referring to a gpio-leds node with a valid gpios property. A board without that alias NEEDS a correct board-specific Devicetree overlay; pin/controller details cannot be guessed. The selected target must build with GPIO support (CONFIG_GPIO=y and the relevant controller driver). Confirm its generated zephyr.dts and .config; do not assume every board has a user LED.
+For printed output, enable CONFIG_PRINTK and a suitable console in the project/board configuration if they are not already enabled.
+## Mistakes
+Do not confuse the alias led0 with a physical pad number. Check gpio_is_ready_dt() before use and check the configuration call's error code. GPIO_ACTIVE_LOW is handled by the specification flags; the observed electrical level depends on board wiring. The loop uses k_sleep(), which must not run in an ISR.

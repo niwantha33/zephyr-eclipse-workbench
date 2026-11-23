@@ -27,6 +27,7 @@ out = root / 'build-core-tests'
 out.mkdir(exist_ok=True)
 shutil.copyfile(root / 'plugins/io.github.niwantha33.zew.core/src/svd-part-mappings.json', out / 'svd-part-mappings.json')
 shutil.copyfile(root / 'plugins/io.github.niwantha33.zew.core/src/svd-download-catalog.json', out / 'svd-download-catalog.json')
+shutil.copytree(root / 'plugins/io.github.niwantha33.zew.core/quick-help', out / 'quick-help', dirs_exist_ok=True)
 suffix = '.exe' if os.name == 'nt' else ''
 java_home = os.environ.get('JAVA_HOME')
 def tool(name):
@@ -72,6 +73,7 @@ sources += [root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33
             root / 'plugins/io.github.niwantha33.zew.ui/src/io/github/niwantha33/zew/ui/DevicetreeEditorDiagnostics.java']
 subprocess.run([tool('javac'), '--release', '21', '--add-modules', 'jdk.httpserver', '-encoding', 'UTF-8', '-d', str(out), *map(str, sources)], check=True, cwd=root)
 subprocess.run([tool('java'), '-cp', str(out), 'CoreTests'], check=True, cwd=root, timeout=90)
+subprocess.run([tool('java'), '-cp', str(out), 'QuickHelpCatalogTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'HardwareStudioDocumentTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationStudioVisualDocumentTests'], check=True, cwd=root, timeout=90)
 subprocess.run([tool('java'), '-cp', str(out), 'ConfigurationStudioVisualRequestTests'], check=True, cwd=root, timeout=90)

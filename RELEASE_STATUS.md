@@ -1,6 +1,17 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Quick Help offline search (2026-11-23 — draft review, not released)
+
+- Added a six-topic pinned Zephyr 4.4.0 offline catalogue, intent/synonym/typo search,
+  version unknown/mismatch labels, original examples and official source links.
+- Added a dockable SWT view, editor-selection action, background loading/search and
+  an unregistered optional AI integration interface; no credentials or network required.
+- Local JDK 21 QuickHelpCatalogTests: 100 assertions passed. Native Eclipse,
+  Tycho package, example firmware compilation and hardware checks remain PENDING.
+- No merge, installer release, production or G0 gate acceptance is claimed.
+
+
 ## Configuration Studio PR #272 build repair (2026-11-20)
 
 - Linux and Windows run `44802984195` both stopped at the same Java

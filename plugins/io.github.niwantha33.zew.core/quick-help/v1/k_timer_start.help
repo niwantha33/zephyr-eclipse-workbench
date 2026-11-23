@@ -1,0 +1,34 @@
+id: k_timer_start
+title: Start a periodic timer
+category: Timers
+version: 4.4.0
+aliases: start timer|periodic timer|run every second|schedule timer|timer tick|tick every second|repeating timer
+signature: void k_timer_start(struct k_timer *timer, k_timeout_t duration, k_timeout_t period);
+source: https://github.com/zephyrproject-rtos/zephyr/blob/v4.4.0/include/zephyr/kernel.h#L1971-L1972
+related: K_TIMER_DEFINE|k_timer_init|k_timer_stop|k_timer_status_sync
+## Explanation
+Start a Zephyr kernel timer. The first timeout controls the initial expiration; a nonzero period repeats. This example waits for timer expirations from a thread, instead of running slow work in a timer expiry callback.
+## Parameters
+timer: pointer to an initialized timer, for example one declared by K_TIMER_DEFINE.
+duration: first expiration delay, such as K_MSEC(250).
+period: repeat interval, or K_NO_WAIT for a one-shot timer.
+Returns: nothing (void).
+## Example
+#include <zephyr/kernel.h>
+
+K_TIMER_DEFINE(heartbeat, NULL, NULL);
+
+int main(void)
+{
+    k_timer_start(&heartbeat, K_MSEC(100), K_SECONDS(1));
+    while (1) {
+        uint32_t expirations = k_timer_status_sync(&heartbeat);
+        printk("Timer expirations since last check: %u\n", expirations);
+    }
+    return 0;
+}
+## Requirements
+Assumptions: a Zephyr kernel application with kernel timers and a working system clock. No additional Devicetree pins are required. The example uses a kernel timer, not a particular SoC hardware timer peripheral.
+For printed output, enable CONFIG_PRINTK and a suitable console in the project/board configuration if they are not already enabled.
+## Mistakes
+Do not assume a timer callback is a normal thread: expiry functions execute in the system clock interrupt context and must not sleep or block. Starting an already running timer resets its timing/status. K_FOREVER as the initial duration does not start counting. k_timer_status_sync() waits and therefore belongs in thread context.

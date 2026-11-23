@@ -142,6 +142,9 @@
           name="Zephyr Getting Started"
           class="io.github.niwantha33.zew.ui.ZephyrBeginnerView"
           restorable="true"/>
+    <view id="io.github.niwantha33.zew.ui.quickHelp"
+          name="Zephyr Quick Help" class="io.github.niwantha33.zew.ui.QuickHelpView"
+          restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.documentation"
           name="Zephyr Documentation &amp; References"
           class="io.github.niwantha33.zew.ui.ZephyrDocumentationView" restorable="true"/>
@@ -305,6 +308,7 @@
     <command id="io.github.niwantha33.zew.setup" name="Set Up Zephyr" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.debugTools" name="Manage Shared OpenOCD Debug Tools" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.tools" name="Install / Manage Zephyr Tools" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.quickHelp" name="Open Offline Zephyr Quick Help" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.documentation" name="Open Zephyr Documentation and References" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.about" name="About Zephyr Workbench" categoryId="io.github.niwantha33.zew.commands"/>
     <category id="io.github.niwantha33.zew.commands" name="Zephyr Workbench"/>
@@ -375,6 +379,7 @@
     <handler commandId="io.github.niwantha33.zew.setup" class="io.github.niwantha33.zew.ui.SetupHandler"/>
     <handler commandId="io.github.niwantha33.zew.debugTools" class="io.github.niwantha33.zew.ui.DebugToolsHandler"/>
     <handler commandId="io.github.niwantha33.zew.tools" class="io.github.niwantha33.zew.ui.ToolsHandler"/>
+    <handler commandId="io.github.niwantha33.zew.quickHelp" class="io.github.niwantha33.zew.ui.QuickHelpHandler"/>
     <handler commandId="io.github.niwantha33.zew.documentation" class="io.github.niwantha33.zew.ui.ZephyrDocumentationHandler"/>
     <handler commandId="io.github.niwantha33.zew.about" class="io.github.niwantha33.zew.ui.VersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.checkUpdates" class="io.github.niwantha33.zew.ui.UpdateHandler"/>
@@ -468,12 +473,19 @@
           <command commandId="io.github.niwantha33.zew.umlClasses" label="Automatic UML..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.help" label="Help and Updates">
+          <command commandId="io.github.niwantha33.zew.quickHelp" label="Quick Help (offline)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.documentation" label="Documentation and References..." style="push"/>
           <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check for Updates..." style="push"/>
           <command commandId="io.github.niwantha33.zew.updateConnection" label="Configure Updates..." style="push"/>
           <command commandId="io.github.niwantha33.zew.about" label="About Zephyr Workbench..." style="push"/>
         </menu>
       </menu>
+    </menuContribution>
+  </extension>
+  <!-- Selected code in the standard Eclipse text-editor context menu. -->
+  <extension point="org.eclipse.ui.menus">
+    <menuContribution locationURI="popup:#TextEditorContext?after=additions">
+      <command commandId="io.github.niwantha33.zew.quickHelp" label="Zephyr Quick Help for Selection..." style="push"/>
     </menuContribution>
   </extension>
   <!-- Project Explorer / Package Explorer: a focused right-click entry for

@@ -1,0 +1,42 @@
+id: k_sem_take
+title: Wait for a semaphore
+category: Semaphores
+version: 4.4.0
+aliases: wait for semaphore|wait semaphore|take sem|pend semaphore|wait for signal|signal task|synchronize task|acquire semaphore
+signature: int k_sem_take(struct k_sem *sem, k_timeout_t timeout);
+source: https://github.com/zephyrproject-rtos/zephyr/blob/v4.4.0/include/zephyr/kernel.h#L3745
+related: K_SEM_DEFINE|k_sem_init|k_sem_give|k_sem_reset
+## Explanation
+Wait until a semaphore has a positive count, then decrease the count by one. Useful for signalling that work or an event is ready. k_sem_take() is the Zephyr name; a search such as "pend semaphore" is not itself an API.
+## Parameters
+sem: pointer to an initialized k_sem object.
+timeout: K_NO_WAIT to check immediately, K_FOREVER to wait indefinitely, or a finite timeout such as K_SECONDS(2).
+Returns: 0 if taken, -EBUSY for a no-wait failure, or -EAGAIN on timeout/reset.
+## Example
+#include <zephyr/kernel.h>
+
+K_SEM_DEFINE(event_ready, 0, 1);
+
+static void notify(struct k_timer *timer)
+{
+    ARG_UNUSED(timer);
+    k_sem_give(&event_ready);
+}
+
+K_TIMER_DEFINE(notify_timer, notify, NULL);
+
+int main(void)
+{
+    k_timer_start(&notify_timer, K_SECONDS(1), K_NO_WAIT);
+    if (k_sem_take(&event_ready, K_SECONDS(2)) == 0) {
+        printk("Event received\n");
+    } else {
+        printk("Semaphore wait timed out\n");
+    }
+    return 0;
+}
+## Requirements
+Assumptions: normal Zephyr kernel application, clock enabled for K_SECONDS timeouts. K_SEM_DEFINE(event_ready, 0, 1) creates a zero-count binary-style semaphore. This example uses no board-specific hardware and no Devicetree overlay.
+For printed output, enable CONFIG_PRINTK and a suitable console in the project/board configuration if they are not already enabled.
+## Mistakes
+Only K_NO_WAIT is permitted as the timeout when k_sem_take() is called in ISR context; blocking in an ISR is invalid. k_sem_give() is ISR-safe in this Zephyr version. A semaphore does not track thread ownership; use a mutex for exclusive ownership and priority inheritance.
