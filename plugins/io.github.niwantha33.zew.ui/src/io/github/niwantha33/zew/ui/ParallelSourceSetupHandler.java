@@ -313,6 +313,11 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                             command.add("--sdk");
                             command.add(sdk);
                         }
+                        String cmake = settings.getProperty("tools.cmake", "");
+                        if (!cmake.isBlank()) {
+                            command.add("--cmake");
+                            command.add(cmake);
+                        }
                         new ProcessRunner().run(command, currentWorkspace,
                                 Duration.ofSeconds(90), monitor::isCanceled, line -> {
                                     try {
