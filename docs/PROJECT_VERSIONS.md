@@ -192,3 +192,19 @@ the existing setup and previous version selection intact. Test with
 \`python -m unittest tests.tools.test_release_catalog tests.tools.test_release_sources\`
 (or \`python -m unittest discover -s tests/tools -p 'test_release_*.py'\`).
 CI build/package and Windows Eclipse smoke testing are required before merge.
+
+
+The **Inspect Selected Packages** button is another explicit, read-only
+network request. It fetches a small allowlisted set of version-tagged upstream
+files (SDK_VERSION, cmake/modules/python.cmake,
+scripts/requirements-base.txt, cmake/modules/zephyr_default.cmake) and shows
+side-by-side *current versus selected* SDK recommendation and minimum
+Python/West/CMake requirements. It labels each comparison as a minimum check
+or advisory, not as an installed or build-qualified candidate. For example,
+the Zephyr 4.5.0 CMake build scripts require 3.28.0; the 4.4.0 and 4.5.0
+SDK_VERSION files both currently read 1.0.1. This does not prove that their
+modules, drivers or application ABI are compatible.
+
+Metadata reads are bounded, timeout-limited and restricted to official upstream
+hosts, exact stable tags and allowlisted paths. No permission to install,
+execute downloaded code, change tools or modify manifests is implied.
