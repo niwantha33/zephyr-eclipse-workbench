@@ -1,6 +1,14 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## CodeQL Java analysis quality (2026-11-24 — PR pending verification)
+
+- Main run [45442165394](https://github.com/niwantha33/zephyr-eclipse-workbench/actions/runs/45442165394) finished successfully but reported only 71% resolved call targets and 77% known expression types (85% advisory threshold).
+- Inspection of the run log confirms buildless Java dependency resolution failed: Maven Central returned HTTP 429 for the pinned Tycho 5.0.4 extension, after which CodeQL inferred Eclipse dependencies rather than using the actual p2 classpath.
+- The review branch changes only the security workflow to CodeQL **manual** mode with JDK 21, Maven dependency caching and the same fail-closed, bounded Tycho `clean verify` retry script used for package CI. No pinned versions, dependency repositories or release checks are weakened.
+- A PR-head CodeQL run must establish whether real compiled-source coverage and both quality metrics improve; no success, release qualification, security completeness or G0 pass is claimed until measured. Main is not modified by this draft.
+
+
 ## Quick Help offline search (2026-11-23 — draft review, not released)
 
 - Added a six-topic pinned Zephyr 4.4.0 offline catalogue, intent/synonym/typo search,
