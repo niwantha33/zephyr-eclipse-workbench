@@ -158,3 +158,37 @@ fixtures, native Windows and Linux clean-room tests, Eclipse build timings,
 cancel/retry tests, a persisted-project relocation test, source archive
 restore with upstream unavailable, and a physical-board migration test.
 This PR does not pass the G0 release gate.
+
+
+## Version discovery and selection (development slice, 2026-11-24)
+
+The **Zephyr > Help and Updates > Check Zephyr Versions...** entry opens the
+existing separate-source manager. It now shows an offline inventory of the
+selected West workspace, its selected SDK version, and recorded source-only
+candidates. **Check Official Zephyr Releases** is an explicit network operation
+which reads the upstream \`zephyrproject-rtos/zephyr\` GitHub releases API,
+filters drafts/prereleases and displays the stable versions in numeric order.
+The user can select a version and read the upstream release notes in Eclipse.
+A separate **Check Workbench Updates** action continues to use Eclipse p2.
+
+The chosen release drives the proposed new directory, but a manually edited
+destination is never silently changed. The existing \`release_sources.py\`
+plan/install/compare workflow remains unchanged: explicit confirmation, separate
+staging, exact tag/manifest verification, source-only marker, no automatic
+rebind, no overwrites, and no implicit \`west update\` to an installed workspace.
+
+**Compatibility disclosure:** The current SDK is shown for comparison only.
+The target release's \`SDK_VERSION\`, Python/West/wheel requirements, CMake,
+Ninja, architecture-specific toolchains, HAL/board modules and vendor blobs
+cannot be declared compatible from GitHub release metadata alone. These remain
+unknown until a candidate checkout is inspected, a distinct environment is
+provisioned and real firmware builds pass. A recorded source-only folder is
+not considered build-ready or safe to select as the active project setup.
+
+There is no background network polling for Zephyr releases, automatic SDK
+installation, package upgrade, migration or project promotion in this slice.
+The metadata check can fail offline or hit GitHub API limits; it must leave
+the existing setup and previous version selection intact. Test with
+\`python -m unittest tests.tools.test_release_catalog tests.tools.test_release_sources\`
+(or \`python -m unittest discover -s tests/tools -p 'test_release_*.py'\`).
+CI build/package and Windows Eclipse smoke testing are required before merge.
