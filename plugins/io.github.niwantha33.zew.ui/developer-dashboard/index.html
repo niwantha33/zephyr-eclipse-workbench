@@ -1,0 +1,171 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Zephyr Development Dashboard</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    font: 15px/1.45 system-ui, "Segoe UI", Arial, sans-serif;
+    --page:#f5f6f8; --card:#fff; --ink:#202636; --muted:#5e687c;
+    --line:#d7dbe2; --blue:#2161bd; --selected:#edf3ff;
+    --accent:#dfe6f0; --warn-bg:#fff0c8; --warn-ink:#77500f;
+    --ok-bg:#e3f4e8; --ok-ink:#21633d;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--page); color:var(--ink); }
+  button { font:inherit; cursor:pointer; min-height:46px; padding:10px 16px;
+           border:1px solid #939dad; border-radius:7px; color:var(--ink);
+           background:var(--card); transition:background .12s ease; }
+  button:hover { background:var(--accent); }
+  button:focus-visible { outline:3px solid #82aef2; outline-offset:2px; }
+  button:disabled { cursor:not-allowed; opacity:.45; }
+  .primary { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:650; }
+  .primary:hover { background:#1a50a2; }
+  .shell { max-width:1620px; margin:auto; padding:34px 40px 20px; }
+  .hero { display:flex; align-items:center; justify-content:space-between; gap:24px;
+          margin-bottom:30px; }
+  .eyebrow { text-transform:uppercase; font-weight:650; letter-spacing:.075em;
+             color:var(--muted); font-size:13px; }
+  h1 { font-size:30px; line-height:1.2; letter-spacing:-.03em; margin:10px 0 14px;
+       overflow-wrap:anywhere; font-weight:650; }
+  .chips { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .chip { font-size:13px; display:inline-flex; padding:5px 14px; border-radius:24px;
+          border:1px solid var(--line); background:var(--card); max-width:100%;
+          overflow-wrap:anywhere; }
+  .chip.status { border-color:transparent; background:var(--warn-bg); color:var(--warn-ink); font-weight:650; }
+  .chip.status.built { background:var(--ok-bg); color:var(--ok-ink); }
+  .grid { display:grid; grid-template-columns:minmax(0,2fr) minmax(300px,1fr); gap:28px; align-items:start; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+          padding:28px 34px; box-shadow:0 1px 2px rgba(25,35,55,.035); }
+  h2 { font-size:19px; font-weight:650; margin:0 0 2px; }
+  .subtitle { color:var(--muted); margin:0 0 8px; }
+  .steps { margin-top:12px; }
+  .step { display:grid; grid-template-columns:44px minmax(0,1fr) minmax(210px,40%);
+          gap:18px; align-items:center; padding:18px 0; border-top:1px solid var(--line); }
+  .step.active { background:var(--selected); border-radius:8px;
+                 padding:18px 14px; margin:0 -14px; border-top-color:transparent; }
+  .step.active + .step { border-top-color:transparent; }
+  .number { display:flex; align-items:center; justify-content:center; width:40px; height:40px;
+            border-radius:50%; background:#e7e9ee; color:#202636; font-weight:650; font-size:17px; }
+  .step.active .number { background:var(--blue); color:#fff; }
+  .step h3 { margin:0 0 3px; font-size:16px; font-weight:650; }
+  .step p { color:var(--muted); margin:0; font-size:14px; }
+  .step button { width:100%; }
+  .side { display:grid; gap:28px; }
+  .facts { margin:17px 0 0; display:grid; grid-template-columns:100px minmax(0,1fr);
+           column-gap:12px; row-gap:12px; font-size:14px; }
+  dt { color:var(--muted); }
+  dd { margin:0; overflow-wrap:anywhere; }
+  .tools { margin-top:16px; display:grid; gap:12px; }
+  .tool { text-align:left; display:flex; align-items:center; gap:12px; width:100%; }
+  .tool .icon { color:var(--blue); font-weight:bold; font-size:20px; width:24px; text-align:center; }
+  .note { display:flex; align-items:flex-start; gap:12px; color:var(--muted);
+          font-size:13px; margin-top:30px; }
+  .note svg { flex:none; margin-top:1px; }
+  .setup { white-space:nowrap; }
+  @media(max-width:1010px) {
+    .grid { grid-template-columns:1fr; }
+    .side { grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+  }
+  @media(max-width:700px) {
+    .shell { padding:20px 15px; }
+    .hero { align-items:flex-start; flex-direction:column; gap:16px; margin-bottom:18px; }
+    .card { padding:18px 20px; }
+    .step { grid-template-columns:38px minmax(0,1fr); gap:10px; }
+    .step button { grid-column:2; }
+    .step.active { margin:0 -7px; padding:14px 7px; }
+    .side { grid-template-columns:1fr; }
+    h1 { font-size:25px; }
+  }
+  @media(prefers-color-scheme:dark) {
+    :root { --page:#20242d; --card:#2a303b; --ink:#f3f5fa; --muted:#bdc6d6;
+            --line:#4b5360; --blue:#3979d8; --selected:#283f65; --accent:#404a5b;
+            --warn-bg:#51401a; --warn-ink:#ffdb7c; --ok-bg:#1c4833; --ok-ink:#a8edc0; }
+    button { border-color:#758092; }
+    .number { background:#444d5a; color:#fff; }
+  }
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="hero">
+    <div>
+      <div class="eyebrow">Active project</div>
+      <h1>{{PROJECT}}</h1>
+      <div class="chips">
+        <span class="chip" aria-label="Selected board">{{BOARD}}</span>
+        <span class="chip status {{STATUS_CLASS}}" role="status">{{STATUS}}</span>
+      </div>
+    </div>
+    <button class="setup" type="button" data-action="guided">Open Guided Setup</button>
+  </header>
+  <div class="grid">
+    <section class="card" aria-labelledby="workflow-title">
+      <h2 id="workflow-title">Workflow</h2>
+      <p class="subtitle">Work top to bottom. Each step builds on the one before.</p>
+      <div class="steps">
+        <div class="step">
+          <span class="number" aria-hidden="true">1</span>
+          <div><h3>Pins and peripherals</h3>
+            <p>Check pin assignments and peripheral settings before you build.</p></div>
+          <button type="button" data-action="pins" {{PROJECT_DISABLED}}>Explore Pins and Peripherals</button>
+        </div>
+        <div class="step {{BUILD_ACTIVE}}">
+          <span class="number" aria-hidden="true">2</span>
+          <div><h3>Build</h3>
+            <p>Compile firmware to generate hardware evidence. {{BUILD_HINT}}</p></div>
+          <button type="button" class="{{BUILD_BUTTON}}" data-action="build" {{PROJECT_DISABLED}}>Build Firmware</button>
+        </div>
+        <div class="step {{FLASH_ACTIVE}}">
+          <span class="number" aria-hidden="true">3</span>
+          <div><h3>Build and flash</h3>
+            <p>Open the workflow to build and flash, without starting the debugger.</p></div>
+          <button type="button" data-action="workflow" {{PROJECT_DISABLED}}>Automate Build and Flash…</button>
+        </div>
+        <div class="step">
+          <span class="number" aria-hidden="true">4</span>
+          <div><h3>Debug</h3>
+            <p>Flash the board and start a debug session when you are ready.</p></div>
+          <button type="button" data-action="debug" {{PROJECT_DISABLED}}>Flash and Debug…</button>
+        </div>
+      </div>
+    </section>
+    <aside class="side">
+      <section class="card" aria-labelledby="status-title">
+        <h2 id="status-title">Project status</h2>
+        <dl class="facts">
+          <dt>Project</dt><dd>{{PROJECT}}</dd>
+          <dt>Board</dt><dd>{{BOARD}}</dd>
+          <dt>Build</dt><dd>{{BUILD_DETAIL}}</dd>
+          <dt>Next</dt><dd>{{NEXT}}</dd>
+        </dl>
+      </section>
+      <section class="card" aria-labelledby="tools-title">
+        <h2 id="tools-title">Project tools</h2>
+        <div class="tools">
+          <button type="button" class="tool" data-action="source"><span class="icon" aria-hidden="true">▱</span>Browse Source Files</button>
+          <button type="button" class="tool" data-action="settings" {{PROJECT_DISABLED}}><span class="icon" aria-hidden="true">☷</span>Advanced Board and Build Settings…</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+  <footer class="note">
+    <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="8"/><path d="M10 9v5M10 6v1"/></svg>
+    <span>Opening a source file uses the normal Eclipse editor. This dashboard is optional and can be closed. An ELF file alone does not prove successful flashing or device operation.</span>
+  </footer>
+</main>
+<script>
+  'use strict';
+  document.addEventListener('click', function(event) {
+    var button = event.target.closest('button[data-action]');
+    if (!button || button.disabled) return;
+    var action = button.getAttribute('data-action');
+    if (typeof window.zewDashboardAction === 'function') window.zewDashboardAction(action);
+  });
+</script>
+</body>
+</html>
