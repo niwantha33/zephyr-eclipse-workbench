@@ -21,7 +21,7 @@
 
 ## Reader-friendly UI (presentation iteration)
 
-- The panel now provides six one-click starter tasks, a compact two-column API result browser,
+- The panel provides a single prominent search field (no task-shortcut buttons), a compact two-column API result browser,
   and a short title/summary instead of showing every documentation field in one text dump.
 - The detail pane has **Overview**, **C example**, and **API reference** tabs. It includes
   version-state labels (UNKNOWN/MISMATCH/MATCH), colour-assisted section headings, a read-only
@@ -36,3 +36,7 @@
 
 **UI verification:** The Eclipse/Tycho native integration workflow and an actual human visual
 review of narrow/dark/high-DPI modes must pass on the PR head before approval.
+
+## Search-first simplification (2026-11-24)
+
+Removed the six preset task buttons to reduce visual clutter. Type the task or API name in the single search field. Existing offline catalogue, matching logic, results, documentation tabs, copy example, pinned sources and project version states remain unchanged.

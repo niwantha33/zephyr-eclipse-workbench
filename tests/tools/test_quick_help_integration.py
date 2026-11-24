@@ -36,11 +36,19 @@ class QuickHelpIntegrationTests(unittest.TestCase):
         source = (UI / 'src/io/github/niwantha33/zew/ui/QuickHelpView.java').read_text(encoding='utf-8')
         for feature in ('new TabFolder(', 'new ScrolledComposite(', 'new StyledText(',
                         'void resizeText(', 'SWT.VERTICAL', 'SWT.HORIZONTAL',
-                        'new StyleRange(', 'updateScrollSize(', 'STARTERS'):
+                        'new StyleRange(', 'updateScrollSize('):
             with self.subTest(feature=feature):
                 self.assertIn(feature, source)
         self.assertNotIn('COMPLETE EXAMPLE (main.c)\\n', source,
                          'Do not regress to the previous single giant text panel')
+
+    def test_search_only_without_shortcut_buttons(self):
+        source = (UI / 'src/io/github/niwantha33/zew/ui/QuickHelpView.java').read_text(encoding='utf-8')
+        self.assertIn('SWT.SEARCH', source)
+        self.assertIn('search.addModifyListener', source)
+        self.assertNotIn('STARTERS', source)
+        self.assertNotIn('starterGrid', source)
+        self.assertIn('new TabFolder(', source)
 
     def test_catalogue_is_packaged(self):
         build = (CORE / 'build.properties').read_text(encoding='utf-8')
