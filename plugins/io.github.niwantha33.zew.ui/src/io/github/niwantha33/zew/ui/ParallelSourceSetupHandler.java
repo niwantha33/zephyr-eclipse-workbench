@@ -338,8 +338,12 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                                 }, ProjectContext.environment(settings)).requireSuccess();
                         if (monitor.isCanceled()) return Status.CANCEL_STATUS;
                         Display.getDefault().asyncExec(() -> {
-                            if (releaseDetails.isDisposed() || !selectedTag.equals(release.getText().trim()))
+                            if (releaseDetails.isDisposed()) return;
+                            inspectButton.setEnabled(true);
+                            if (!selectedTag.equals(release.getText().trim())) {
+                                checkStatus.setText("Version changed; inspect the newly selected release again.");
                                 return;
+                            }
                             releaseDetails.setText("PACKAGE COMPARISON for " + selectedTag
                                     + "\nCurrent installation  ->  selected release requirements\n\n"
                                     + packages + "\n" + resultNote[0]
