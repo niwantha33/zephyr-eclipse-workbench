@@ -45,11 +45,6 @@ import io.github.niwantha33.zew.core.ZephyrReferenceCatalog;
 /** Native, theme-adaptive Zephyr learning panel. Offline and read-only by design. */
 public final class QuickHelpView extends ViewPart {
     public static final String ID = Activator.ID + ".quickHelp";
-    private static final String[][] STARTERS = {
-        {"Create thread", "create_task"}, {"Blink LED", "blink led"},
-        {"Start timer", "periodic timer"}, {"Semaphore", "wait for semaphore"},
-        {"Protect data", "protect shared variable"}, {"Send message", "message queue"}
-    };
     private static final Pattern C_TOKENS = Pattern.compile(
             "//[^\\n]*|/\\*(?s:.*?)\\*/|\"(?:\\\\.|[^\"\\\\])*\"|"
             + "'(?:\\\\.|[^'\\\\])*'|\\b(?:void|int|static|const|return|if|else|while|for|"
@@ -158,25 +153,6 @@ public final class QuickHelpView extends ViewPart {
         search.setFont(bodyFont);
         search.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         search.addModifyListener(event -> requestSearch());
-
-        Composite starterGrid = new Composite(parent, SWT.NONE);
-        GridLayout starterLayout = new GridLayout(3, true);
-        starterLayout.marginWidth = 0;
-        starterLayout.marginHeight = 0;
-        starterLayout.horizontalSpacing = 6;
-        starterLayout.verticalSpacing = 5;
-        starterGrid.setLayout(starterLayout);
-        starterGrid.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        for (String[] starter : STARTERS) {
-            Button button = new Button(starterGrid, SWT.PUSH);
-            button.setText(starter[0]);
-            button.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            button.setToolTipText("Find: " + starter[1]);
-            button.addListener(SWT.Selection, event -> {
-                search.setText(starter[1]);
-                search.setFocus();
-            });
-        }
 
         Composite projectRow = new Composite(parent, SWT.NONE);
         projectRow.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -301,7 +277,7 @@ public final class QuickHelpView extends ViewPart {
         apiLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         statusLabel = new Label(identity, SWT.NONE);
         statusLabel.setForeground(muted);
-        summaryLabel = body(right, "Select one of the quick-start topics or type an API name.");
+        summaryLabel = body(right, "Type an API name or describe what you want to do.");
         summaryLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         matchLabel = new Label(right, SWT.WRAP);
         matchLabel.setForeground(muted);
@@ -578,7 +554,7 @@ public final class QuickHelpView extends ViewPart {
         } finally {
             results.setRedraw(true);
         }
-        resultsLabel.setText(term.isBlank() ? "Explore six starter topics"
+        resultsLabel.setText(term.isBlank() ? "Type a task or API name to search"
                 : hits.isEmpty() ? "No local match — try a shorter phrase."
                 : hits.size() + " matching API" + (hits.size() == 1 ? "" : "s"));
         updateSelection();
@@ -601,7 +577,7 @@ public final class QuickHelpView extends ViewPart {
             titleLabel.setText("Pick an API to start learning");
             apiLabel.setText("");
             statusLabel.setText("");
-            summaryLabel.setText("Try one of the six quick-start topics or search a task in plain English.");
+            summaryLabel.setText("Search an API name or describe a task in plain English.");
             matchLabel.setText("");
             learnExplanation.setText("Select an API to start.");
             learnRequirements.setText("Board and configuration requirements will appear here.");
