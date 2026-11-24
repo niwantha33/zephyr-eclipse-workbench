@@ -16,7 +16,7 @@ jobs:
   codeql-java:
     name: CodeQL (Java)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 65
     permissions:
       contents: read
       security-events: write
@@ -25,14 +25,28 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Build mode 'none' analyses Java source without invoking the
-      # Tycho/p2 build. The existing build.yml remains the build gate.
+      - name: Set up JDK 21 and cache Maven dependencies
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6 pinned
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # Source-only extraction missed Tycho's Eclipse/p2 classpath and could
+      # not resolve the pinned extension when Maven Central returned HTTP 429.
+      # Trace the same fail-closed Tycho build used by the package workflow
+      # so CodeQL observes the actual compiled Java and resolved dependencies.
       - name: Initialize CodeQL for Java
         uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4 pinned
         with:
           languages: java-kotlin
-          build-mode: none
+          build-mode: manual
           queries: security-extended
+      - name: Compile Eclipse plug-ins for CodeQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          qualifier="$(date -u +%Y%m%d%H%M%S)"
+          python3 scripts/retry_maven_tycho.py --qualifier "$qualifier"
       - name: Analyse Java source
         uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4 pinned
         with:
