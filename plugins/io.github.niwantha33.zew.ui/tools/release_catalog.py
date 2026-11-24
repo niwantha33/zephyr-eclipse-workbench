@@ -167,7 +167,7 @@ def official_releases(allow_network, opener=None):
             continue
         releases[tag] = {
             "tag": tag, "published": published[:10], "title": name[:160],
-            "notes": "".join(ch for ch in body[:2400] if ch >= " " or ch in "\\n\\t"),
+            "notes": "".join(ch for ch in body[:2400] if ch >= " " or ch in "\n\t"),
             "url": url,
         }
     return sorted(releases.values(), key=lambda item: parse_version(item["tag"]), reverse=True)
