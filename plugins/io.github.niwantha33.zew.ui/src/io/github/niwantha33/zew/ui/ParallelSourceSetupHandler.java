@@ -68,6 +68,7 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
         private Label inventory;
         private Label checkStatus;
         private Button checkButton;
+        private Button inspectButton;
         private String lastSuggested;
         private final List<ReleaseRow> rows = new ArrayList<>();
 
@@ -102,9 +103,13 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
             checkButton.setText("Check Official Zephyr Releases");
             checkButton.setToolTipText("Explicitly contact the official GitHub Zephyr release API.");
             checkButton.addListener(SWT.Selection, e -> refreshCatalog(true));
+            inspectButton = new Button(grid, SWT.PUSH);
+            inspectButton.setText("Inspect Selected Packages");
+            inspectButton.setToolTipText("Read version-specific upstream SDK/Python/West requirements; no installation.");
+            inspectButton.addListener(SWT.Selection, e -> inspectRequirements());
             checkStatus = new Label(grid, SWT.WRAP);
             checkStatus.setText("Offline by default. Checking releases contacts GitHub only when requested.");
-            checkStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+            checkStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
             versionTable = new Table(grid, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL);
             versionTable.setHeaderVisible(true);
@@ -201,6 +206,7 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
         private void refreshCatalog(boolean online) {
             if (checkButton.isDisposed()) return;
             checkButton.setEnabled(false);
+            inspectButton.setEnabled(false);
             checkStatus.setText(online ? "Checking official Zephyr releases..." : "Inspecting local versions...");
             Job catalog = new Job(online ? "Check official Zephyr releases" : "Inspect local Zephyr versions") {
                 @Override protected IStatus run(IProgressMonitor monitor) {
@@ -261,6 +267,7 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                                 versionTable.notifyListeners(SWT.Selection, new org.eclipse.swt.widgets.Event());
                             }
                             checkButton.setEnabled(true);
+                            inspectButton.setEnabled(true);
                             inventory.getParent().layout(true, true);
                         });
                         return Status.OK_STATUS;
@@ -270,6 +277,7 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                             checkStatus.setText("Version check failed: " + failure.getMessage()
                                     + ". Existing setup is unchanged.");
                             checkButton.setEnabled(true);
+                            inspectButton.setEnabled(true);
                             checkStatus.getParent().layout(true, true);
                         });
                         return new Status(IStatus.ERROR, Activator.ID,
@@ -279,6 +287,77 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
             };
             catalog.setSystem(true);
             catalog.schedule();
+        }
+
+        private void inspectRequirements() {
+            String selectedTag = release.getText().trim();
+            if (!stableRelease(selectedTag)) {
+                setErrorMessage("Select a stable release tag before inspecting its package requirements.");
+                return;
+            }
+            inspectButton.setEnabled(false);
+            checkStatus.setText("Inspecting " + selectedTag + " SDK/Python/West requirements...");
+            Job job = new Job("Inspect Zephyr " + selectedTag + " dependencies") {
+                @Override protected IStatus run(IProgressMonitor monitor) {
+                    var packages = new StringBuilder();
+                    String[] resultNote = new String[1];
+                    try {
+                        Path script = Path.of(FileLocator.toFileURL(
+                                Activator.getDefault().getBundle().getEntry(CATALOG_SCRIPT)).toURI());
+                        List<String> command = new ArrayList<>(List.of(
+                                settings.getProperty("python"), script.toString(), "inspect",
+                                "--workspace", currentWorkspace.toString(),
+                                "--release", selectedTag, "--allow-network"));
+                        String sdk = settings.getProperty("tools.sdk", "");
+                        if (!sdk.isBlank()) {
+                            command.add("--sdk");
+                            command.add(sdk);
+                        }
+                        new ProcessRunner().run(command, currentWorkspace,
+                                Duration.ofSeconds(90), monitor::isCanceled, line -> {
+                                    try {
+                                        String[] parts = line.split("\\t", -1);
+                                        if (parts.length == 6 && "PACKAGE".equals(parts[0])) {
+                                            packages.append(decode(parts[1])).append(": ")
+                                                    .append(decode(parts[2])).append("  ->  ")
+                                                    .append(decode(parts[3])).append("\n")
+                                                    .append("   ").append(decode(parts[4]))
+                                                    .append("; ").append(decode(parts[5])).append("\n\n");
+                                        } else if (parts.length == 2 &&
+                                                ("DONE".equals(parts[0]) || "ERROR".equals(parts[0]))) {
+                                            resultNote[0] = decode(parts[1]);
+                                        }
+                                    } catch (IllegalArgumentException ignored) {
+                                        // Ignore malformed metadata rather than presenting it as a dependency.
+                                    }
+                                }, ProjectContext.environment(settings)).requireSuccess();
+                        if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                        Display.getDefault().asyncExec(() -> {
+                            if (releaseDetails.isDisposed() || !selectedTag.equals(release.getText().trim()))
+                                return;
+                            releaseDetails.setText("PACKAGE COMPARISON for " + selectedTag
+                                    + "\nCurrent installation  ->  selected release requirements\n\n"
+                                    + packages + "\n" + resultNote[0]
+                                    + "\n\nMinimum versions alone never establish firmware build compatibility.");
+                            checkStatus.setText("Package preview received. No installation or changes made.");
+                            inspectButton.setEnabled(true);
+                        });
+                        return Status.OK_STATUS;
+                    } catch (java.io.InterruptedIOException cancelled) {
+                        return Status.CANCEL_STATUS;
+                    } catch (Exception error) {
+                        Display.getDefault().asyncExec(() -> {
+                            if (checkStatus.isDisposed()) return;
+                            checkStatus.setText("Package inspection failed: " + error.getMessage());
+                            inspectButton.setEnabled(true);
+                        });
+                        return new Status(IStatus.ERROR, Activator.ID,
+                                "Zephyr package inspection failed: " + error.getMessage(), error);
+                    }
+                }
+            };
+            job.setSystem(true);
+            job.schedule();
         }
 
         private void validateInputs() {
