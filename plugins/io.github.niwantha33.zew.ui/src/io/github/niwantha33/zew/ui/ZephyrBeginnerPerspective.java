@@ -28,6 +28,7 @@ public final class ZephyrBeginnerPerspective implements IPerspectiveFactory {
 
         layout.addShowViewShortcut(EmbeddedHubBoardCatalogueView.ID);
         layout.addShowViewShortcut(ConfigurationHomeView.ID);
+        layout.addShowViewShortcut(QuickHelpView.ID);
         layout.addShowViewShortcut(Activator.ID + ".dtsGraph");
         layout.addShowViewShortcut(Activator.ID + ".yamlStructure");
         layout.addShowViewShortcut(SocRegistersHandler.VIEW_ID);

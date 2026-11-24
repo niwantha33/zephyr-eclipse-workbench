@@ -1,0 +1,57 @@
+id: k_msgq_put
+title: Send a message between threads
+category: Message queues
+version: 4.4.0
+aliases: send queue message|message queue|send task message|enqueue data|post message|send to worker|interthread message
+signature: int k_msgq_put(struct k_msgq *msgq, const void *data, k_timeout_t timeout);
+source: https://github.com/zephyrproject-rtos/zephyr/blob/v4.4.0/include/zephyr/kernel.h#L5342
+related: K_MSGQ_DEFINE|k_msgq_get|k_msgq_init|k_msgq_purge
+## Explanation
+Copy one fixed-size message into a Zephyr message queue so another thread can receive it in FIFO order. The queue owns its copied message bytes, not your original pointer.
+## Parameters
+msgq: pointer to an initialized message queue.
+data: pointer to an object whose size matches the queue's configured message size.
+timeout: K_NO_WAIT, K_FOREVER, or a finite duration to wait for a free slot.
+Returns: 0 on success, -ENOMSG if no wait and no space (or purged), or -EAGAIN after timeout.
+## Example
+#include <zephyr/kernel.h>
+#include <stdint.h>
+
+struct reading {
+    uint32_t value;
+};
+
+K_MSGQ_DEFINE(reading_queue, sizeof(struct reading), 4, 4);
+
+static void receiver(void *a, void *b, void *c)
+{
+    ARG_UNUSED(a);
+    ARG_UNUSED(b);
+    ARG_UNUSED(c);
+    struct reading item;
+    while (1) {
+        if (k_msgq_get(&reading_queue, &item, K_FOREVER) == 0) {
+            printk("Received: %u\n", (unsigned int)item.value);
+        }
+    }
+}
+
+K_THREAD_DEFINE(receiver_id, 1024, receiver, NULL, NULL, NULL, 0, 0, 0);
+
+int main(void)
+{
+    uint32_t count = 0;
+    while (1) {
+        struct reading item = {.value = count++};
+        if (k_msgq_put(&reading_queue, &item, K_NO_WAIT) != 0) {
+            printk("Queue full: item not sent\n");
+        }
+        k_sleep(K_SECONDS(1));
+    }
+    return 0;
+}
+## Requirements
+Assumptions: a kernel-thread-enabled Zephyr application and enough RAM for a four-element queue and receiver stack. K_MSGQ_DEFINE allocates a queue with fixed-size copied messages; here the alignment argument is 4. No peripheral or Devicetree configuration required.
+For printed output, enable CONFIG_PRINTK and a suitable console in the project/board configuration if they are not already enabled.
+## Mistakes
+Do not enqueue a pointer when you meant to copy the pointed-to data: the queue copies exactly its configured message size. Check queue-full/timeout return codes. k_msgq_put() can be called from an ISR only with K_NO_WAIT, because blocking is not allowed. k_msgq_get() also requires K_NO_WAIT in an ISR.
