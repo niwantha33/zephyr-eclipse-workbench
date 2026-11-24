@@ -34,9 +34,34 @@ def parse_version(value):
     return tuple(int(part) for part in match.groups()) if match else None
 
 
+def zephyr_checkout(workspace):
+    """Resolve source using upstream West metadata, not a fixed workspace layout."""
+    if (workspace / ".west" / "config").is_file():
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "west", "list", "zephyr",
+                 "--format", "{abspath}"],
+                cwd=workspace, shell=False, stdin=subprocess.DEVNULL,
+                capture_output=True, text=True, errors="replace", timeout=15)
+            candidates = result.stdout.strip().splitlines()
+            if result.returncode == 0 and len(candidates) == 1:
+                source = Path(candidates[0]).resolve()
+                if (source / "VERSION").is_file():
+                    return source
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    # Offline fallback when West is not installed. Never infer arbitrary paths.
+    candidates = [p for p in (workspace / "zephyr", workspace / "external" / "zephyr")
+                  if (p / "VERSION").is_file()]
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def installed_version(workspace):
-    version = workspace / "zephyr" / "VERSION"
-    if not version.is_file() or version.is_symlink():
+    source = zephyr_checkout(workspace)
+    if source is None:
+        return ""
+    version = source / "VERSION"
+    if version.is_symlink():
         return ""
     try:
         values = dict(re.findall(r"^(VERSION_MAJOR|VERSION_MINOR|PATCHLEVEL)\s*=\s*(\d+)",
