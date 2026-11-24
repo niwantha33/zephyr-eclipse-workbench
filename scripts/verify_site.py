@@ -65,6 +65,12 @@ for p in bundles:
             expected_visual = root / 'plugins/io.github.niwantha33.zew.ui' / visual
             if visual not in z.namelist() or z.read(visual) != expected_visual.read_bytes():
                 raise SystemExit('Installed visual Configuration Studio differs from tested source')
+            # The development dashboard must ship with its exact tested HTML,
+            # not silently drop to the legacy fallback due to missing assets.
+            dashboard = 'developer-dashboard/index.html'
+            expected_dashboard = root / 'plugins/io.github.niwantha33.zew.ui' / dashboard
+            if dashboard not in z.namelist() or z.read(dashboard) != expected_dashboard.read_bytes():
+                raise SystemExit('Installed Development Dashboard differs from tested source')
             for classfile in ('ConfigurationStudioVisualDocument.class',
                               'ConfigurationStudioVisualRequest.class',
                               'ConfigurationStudioVisualRequest$Reviewed.class'):
