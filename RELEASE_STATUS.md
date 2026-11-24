@@ -1,6 +1,13 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Development Dashboard UX slice (2026-11-24 — review branch, not released)
+
+- Changed only the Development Dashboard presentation toward the reference: active project and board, honest artifact-status badge, four explicit workflow steps, project status, and project tools. Responsive light/dark layout and accessible buttons live in one offline packaged HTML resource.
+- Existing Project Explorer, Configuration Studio hardware focus, Zephyr build scheduling, Workflow Studio, native flash/debug command, Project Properties, and Guided Setup remain the action owners. The browser bridge accepts only seven fixed action identifiers; navigation is blocked, and browser failure falls back to the previous SWT dashboard.
+- Project/board text is HTML-escaped; an ELF file is labelled present but **not validated against target or flashing**. Missing project or setup evidence is not fabricated. Asset, action and package-integrity regression checks added.
+- **Validation pending:** exact PR-head Linux Tycho package, installed Eclipse UI smoke, Windows firmware matrix, and physical board. Do not merge or claim release approval solely on this code change. G0 remains OPEN.
+
 ## CodeQL Java analysis quality (2026-11-24 — PR pending verification)
 
 - Main run [45442165394](https://github.com/niwantha33/zephyr-eclipse-workbench/actions/runs/45442165394) finished successfully but reported only 71% resolved call targets and 77% known expression types (85% advisory threshold).
