@@ -143,5 +143,51 @@ class ReleaseCatalogTests(unittest.TestCase):
         self.assertFalse((self.workspace / ".zew").exists())
 
 
+    def test_inspect_version_specific_sdk_python_west_without_installing(self):
+        texts = {
+            "SDK_VERSION": "1.0.1\n",
+            "cmake/modules/python.cmake": "set(PYTHON_MINIMUM_REQUIRED 3.12)\n",
+            "scripts/requirements-base.txt": "PyYAML>=6.0\nwest>=0.14.0\n",
+        }
+
+        class MetadataOpener:
+            def __init__(self):
+                self.calls = []
+            def open(self, request, timeout):
+                self.calls.append(request.full_url)
+                name = request.full_url.split("/v4.5.0/", 1)[1]
+                return Response(texts[name].encode("utf-8"))
+
+        client = MetadataOpener()
+        before = (self.workspace / "zephyr" / "VERSION").read_bytes()
+        rows = catalog.requirement_preview("v4.5.0", self.workspace,
+                                           self.sdk, True, client)
+        by_name = {item[0]: item for item in rows}
+        self.assertEqual("1.0.1 (recommended)", by_name["Zephyr SDK"][2])
+        self.assertEqual("Matches recommendation; build unverified", by_name["Zephyr SDK"][3])
+        self.assertEqual(">=3.12", by_name["Python"][2])
+        self.assertEqual(">=0.14.0", by_name["West"][2])
+        self.assertEqual("Not validated", by_name["West modules and HALs"][3])
+        self.assertEqual(3, len(client.calls))
+        self.assertEqual(before, (self.workspace / "zephyr" / "VERSION").read_bytes())
+
+    def test_package_inspection_rejects_unapproved_network_and_refs(self):
+        with self.assertRaisesRegex(ValueError, "allow-network"):
+            catalog.requirement_preview("v4.5.0", self.workspace, self.sdk, False)
+        for tag in ("main", "v4.5.0-rc1", "v4.5.0/../../main"):
+            with self.subTest(tag=tag), self.assertRaises(ValueError):
+                catalog.release_metadata(tag, "SDK_VERSION")
+        with self.assertRaisesRegex(ValueError, "non-allowlisted"):
+            catalog.release_metadata("v4.5.0", "../secrets.txt")
+
+    def test_malformed_version_requirement_aborts_advisory_instead_of_guessing(self):
+        class BadOpener:
+            def open(self, request, timeout):
+                return Response(b"unknown\n")
+        with self.assertRaises(ValueError):
+            catalog.requirement_preview("v4.5.0", self.workspace, self.sdk,
+                                        True, BadOpener())
+
+
 if __name__ == "__main__":
     unittest.main()
