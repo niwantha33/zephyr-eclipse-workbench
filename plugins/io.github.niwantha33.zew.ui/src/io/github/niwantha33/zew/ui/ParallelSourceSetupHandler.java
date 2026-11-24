@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.ui;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Properties;
 
@@ -21,6 +23,7 @@ import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.dialogs.TitleAreaDialog;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
@@ -30,6 +33,9 @@ import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableColumn;
+import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.IConsole;
@@ -51,68 +57,228 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
     }
 
     static final class SourceDialog extends TitleAreaDialog {
+        private static final String CATALOG_SCRIPT = "tools/release_catalog.py";
         private final Path currentWorkspace;
         private final Path originalSetup;
+        private final Properties settings;
         private Text release;
         private Text destination;
+        private Table versionTable;
+        private Text releaseDetails;
+        private Label inventory;
+        private Label checkStatus;
+        private Button checkButton;
+        private String lastSuggested;
+        private final List<ReleaseRow> rows = new ArrayList<>();
 
-        SourceDialog(Shell shell, Path currentWorkspace, Path originalSetup) {
+        private record ReleaseRow(String tag, String date, String status,
+                                  String title, String notes, String url) { }
+
+        SourceDialog(Shell shell, Path currentWorkspace, Path originalSetup, Properties settings) {
             super(shell);
             this.currentWorkspace = currentWorkspace;
             this.originalSetup = originalSetup;
+            this.settings = settings;
             setHelpAvailable(false);
+            setShellStyle(getShellStyle() | SWT.RESIZE);
         }
+
+        @Override protected Point getInitialSize() { return new Point(920, 760); }
 
         @Override protected Control createDialogArea(Composite parent) {
             Composite main = (Composite) super.createDialogArea(parent);
-            setTitle("Prepare a separate Zephyr release");
-            setMessage("Stage 1 — download source and modules with West. SDK, project "
-                    + "migration and firmware builds are NOT included.");
+            setTitle("Zephyr releases and version selection");
+            setMessage("Choose an official stable version. Your current source, SDK, Python "
+                    + "environment, modules and application stay unchanged.");
             Composite grid = new Composite(main, SWT.NONE);
             grid.setLayout(new GridLayout(3, false));
             grid.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
-            new Label(grid, SWT.NONE).setText("Release tag");
-            release = new Text(grid, SWT.BORDER);
-            release.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            release.setText("v4.5.0"); // Example, not an automatic latest-version claim.
-            new Label(grid, SWT.NONE);
+            inventory = new Label(grid, SWT.WRAP);
+            inventory.setText("Reading the selected project's local source and SDK versions...");
+            inventory.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1));
 
-            new Label(grid, SWT.NONE).setText("New workspace folder");
+            checkButton = new Button(grid, SWT.PUSH);
+            checkButton.setText("Check Official Zephyr Releases");
+            checkButton.setToolTipText("Explicitly contact the official GitHub Zephyr release API.");
+            checkButton.addListener(SWT.Selection, e -> refreshCatalog(true));
+            checkStatus = new Label(grid, SWT.WRAP);
+            checkStatus.setText("Offline by default. Checking releases contacts GitHub only when requested.");
+            checkStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+
+            versionTable = new Table(grid, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE | SWT.V_SCROLL);
+            versionTable.setHeaderVisible(true);
+            versionTable.setLinesVisible(true);
+            GridData tableData = new GridData(SWT.FILL, SWT.FILL, true, true, 3, 1);
+            tableData.heightHint = 140;
+            versionTable.setLayoutData(tableData);
+            for (String[] column : new String[][] {
+                    {"Version", "155"}, {"Published", "125"}, {"Local / update state", "520"}}) {
+                TableColumn header = new TableColumn(versionTable, SWT.LEFT);
+                header.setText(column[0]);
+                header.setWidth(Integer.parseInt(column[1]));
+            }
+            versionTable.addListener(SWT.Selection, event -> {
+                int index = versionTable.getSelectionIndex();
+                if (index < 0 || index >= rows.size()) return;
+                ReleaseRow selected = rows.get(index);
+                release.setText(selected.tag());
+                releaseDetails.setText(selected.title() + "\n" + selected.url()
+                        + "\nPublished: " + selected.date()
+                        + "\nStatus: " + selected.status()
+                        + "\n\n" + selected.notes()
+                        + "\n\nPackage checks: Zephyr source + West modules are pinned per selected "
+                        + "tag. A new SDK, Python/West packages, CMake and per-board "
+                        + "toolchains are NOT assumed compatible and are NOT installed here. "
+                        + "A separate fully qualified setup and trial build are required.");
+            });
+
+            new Label(grid, SWT.NONE).setText("Selected stable tag");
+            release = new Text(grid, SWT.BORDER);
+            release.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+            release.setText("v4.5.0"); // Input example only; never claim this is the newest.
+
+            new Label(grid, SWT.NONE).setText("New source folder");
             destination = new Text(grid, SWT.BORDER);
             destination.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            destination.setText(originalSetup.resolveSibling("zephyr-src-v4.5.0").toString());
+            lastSuggested = suggestion(release.getText());
+            destination.setText(lastSuggested);
             Button browse = new Button(grid, SWT.PUSH);
             browse.setText("Parent...");
             browse.addListener(SWT.Selection, event -> {
                 DirectoryDialog picker = new DirectoryDialog(getShell());
-                picker.setMessage("Choose the EXISTING parent folder. A NEW release-specific folder will be created inside it.");
-                String parentPath = destination.getText();
+                picker.setMessage("Choose an EXISTING parent. A new versioned child folder will be created.");
                 try {
-                    Path suggested = Path.of(parentPath).getParent();
+                    Path suggested = Path.of(destination.getText()).getParent();
                     if (suggested != null) picker.setFilterPath(suggested.toString());
-                } catch (Exception ignored) { /* User may still correct the path. */ }
+                } catch (Exception ignored) { /* The user can correct the path. */ }
                 String selected = picker.open();
                 if (selected != null)
                     destination.setText(Path.of(selected, "zephyr-src-" + release.getText().trim()).toString());
             });
 
+            releaseDetails = new Text(grid, SWT.BORDER | SWT.MULTI | SWT.READ_ONLY
+                    | SWT.WRAP | SWT.V_SCROLL);
+            GridData detailsData = new GridData(SWT.FILL, SWT.FILL, true, true, 3, 1);
+            detailsData.heightHint = 160;
+            releaseDetails.setLayoutData(detailsData);
+            releaseDetails.setText("Check official releases to select a version and read its notes. "
+                    + "Existing source-only candidates will appear in the offline list.");
+
             Label explanation = new Label(grid, SWT.WRAP);
-            explanation.setText("The original Zephyr workspace is protected. A new folder must not already exist. "
-                    + "This operation downloads the selected official Zephyr tag and all West modules. "
-                    + "Partial downloads are preserved for manual inspection. "
-                    + "The result is SOURCE ONLY, not an SDK-equipped or build-ready setup.");
+            explanation.setText("SAFETY: This prepares source and West modules in a NEW folder, never "
+                    + "over the current checkout. SDK, Python/West dependencies, build profiles, "
+                    + "application, flash and debug settings will not change. "
+                    + "A source-only candidate is NOT a build-ready Zephyr environment.");
             explanation.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1));
 
-            release.addModifyListener(event -> validateInputs());
+            release.addModifyListener(event -> {
+                String nextSuggestion = suggestion(release.getText());
+                if (destination.getText().equals(lastSuggested))
+                    destination.setText(nextSuggestion);
+                lastSuggested = nextSuggestion;
+                validateInputs();
+            });
             destination.addModifyListener(event -> validateInputs());
             return main;
         }
 
+        private String suggestion(String tag) {
+            return originalSetup.resolveSibling("zephyr-src-" + tag.trim()).toString();
+        }
+
         @Override protected void createButtonsForButtonBar(Composite parent) {
-            createButton(parent, IDialogConstants.OK_ID, "Prepare Sources...", true);
+            createButton(parent, IDialogConstants.OK_ID, "Prepare Selected Sources...", true);
             createButton(parent, IDialogConstants.CANCEL_ID, IDialogConstants.CANCEL_LABEL, false);
             validateInputs();
+            refreshCatalog(false);
+        }
+
+        private static String decode(String encoded) {
+            return new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
+        }
+
+        private void refreshCatalog(boolean online) {
+            if (checkButton.isDisposed()) return;
+            checkButton.setEnabled(false);
+            checkStatus.setText(online ? "Checking official Zephyr releases..." : "Inspecting local versions...");
+            Job catalog = new Job(online ? "Check official Zephyr releases" : "Inspect local Zephyr versions") {
+                @Override protected IStatus run(IProgressMonitor monitor) {
+                    List<ReleaseRow> found = new ArrayList<>();
+                    String[] state = new String[4];
+                    String[] message = new String[1];
+                    try {
+                        Path script = Path.of(FileLocator.toFileURL(
+                                Activator.getDefault().getBundle().getEntry(CATALOG_SCRIPT)).toURI());
+                        List<String> command = new ArrayList<>(List.of(
+                                settings.getProperty("python"), script.toString(),
+                                online ? "check" : "local",
+                                "--workspace", currentWorkspace.toString(),
+                                "--sources-parent", originalSetup.getParent().toString()));
+                        String sdk = settings.getProperty("tools.sdk", "");
+                        if (!sdk.isBlank()) {
+                            command.add("--sdk");
+                            command.add(sdk);
+                        }
+                        if (online) command.add("--allow-network");
+                        var result = new ProcessRunner().run(command, currentWorkspace,
+                                Duration.ofSeconds(40), monitor::isCanceled, line -> {
+                                    try {
+                                        String[] parts = line.split("\\t", -1);
+                                        if (parts.length < 2) return;
+                                        if ("STATE".equals(parts[0]) && parts.length == 5) {
+                                            for (int i = 0; i < state.length; i++)
+                                                state[i] = decode(parts[i + 1]);
+                                        } else if ("RELEASE".equals(parts[0]) && parts.length == 7) {
+                                            found.add(new ReleaseRow(decode(parts[1]), decode(parts[2]),
+                                                    decode(parts[3]), decode(parts[4]), decode(parts[5]),
+                                                    decode(parts[6])));
+                                        } else if ("DONE".equals(parts[0]) || "ERROR".equals(parts[0])) {
+                                            message[0] = decode(parts[1]);
+                                        }
+                                    } catch (IllegalArgumentException ignored) {
+                                        // Malformed response must not be treated as a release.
+                                    }
+                                }, ProjectContext.environment(settings));
+                        result.requireSuccess();
+                        if (monitor.isCanceled()) return Status.CANCEL_STATUS;
+                        Display.getDefault().asyncExec(() -> {
+                            if (versionTable.isDisposed()) return;
+                            rows.clear();
+                            rows.addAll(found);
+                            versionTable.removeAll();
+                            for (ReleaseRow item : found) {
+                                TableItem row = new TableItem(versionTable, SWT.NONE);
+                                row.setText(new String[] { item.tag(), item.date(), item.status() });
+                            }
+                            if (state[0] != null)
+                                inventory.setText("Current Zephyr: " + state[0] + "    |    SDK: " + state[1]
+                                        + "\nWorkspace: " + state[2] + "\nSDK selection: " + state[3]);
+                            checkStatus.setText(message[0] == null
+                                    ? "No releases were returned." : message[0]);
+                            if (online && !found.isEmpty()) {
+                                versionTable.setSelection(0);
+                                versionTable.notifyListeners(SWT.Selection, new org.eclipse.swt.widgets.Event());
+                            }
+                            checkButton.setEnabled(true);
+                            inventory.getParent().layout(true, true);
+                        });
+                        return Status.OK_STATUS;
+                    } catch (Exception failure) {
+                        Display.getDefault().asyncExec(() -> {
+                            if (checkStatus.isDisposed()) return;
+                            checkStatus.setText("Version check failed: " + failure.getMessage()
+                                    + ". Existing setup is unchanged.");
+                            checkButton.setEnabled(true);
+                            checkStatus.getParent().layout(true, true);
+                        });
+                        return new Status(IStatus.ERROR, Activator.ID,
+                                "Zephyr release discovery failed: " + failure.getMessage(), failure);
+                    }
+                }
+            };
+            catalog.setSystem(true);
+            catalog.schedule();
         }
 
         private void validateInputs() {
@@ -120,7 +286,7 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
             String error = null;
             try {
                 if (!stableRelease(release.getText().trim()))
-                    error = "Enter a stable tag such as v4.5.0 (not main or an RC).";
+                    error = "Select an official stable version such as v4.5.0 (not main or an RC).";
                 else {
                     Path proposed = Path.of(destination.getText().trim()).toAbsolutePath().normalize();
                     Path current = currentWorkspace.toRealPath();
@@ -130,13 +296,13 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                             || proposed.startsWith(originalSetup.toRealPath())
                             || originalSetup.toRealPath().startsWith(proposed))
                         error = "Keep the candidate outside the original setup and West workspace.";
-                    else if (Files.exists(proposed))
+                    else if (Files.exists(proposed) || Files.isSymbolicLink(proposed))
                         error = "The candidate already exists. Choose a new folder.";
                     else if (proposed.getParent() == null || !Files.isDirectory(proposed.getParent()))
                         error = "Create or select an existing parent folder first.";
                 }
             } catch (Exception exception) {
-                error = "Enter a valid release and absolute workspace path.";
+                error = "Enter a valid release and absolute source folder path.";
             }
             setErrorMessage(error);
             getButton(IDialogConstants.OK_ID).setEnabled(error == null);
@@ -165,7 +331,7 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
 
         Path currentWorkspace = Path.of(settings.getProperty("workspace"));
         Path originalSetup = Path.of(settings.getProperty("zew.setupRoot"));
-        var dialog = new SourceDialog(HandlerUtil.getActiveShell(event), currentWorkspace, originalSetup);
+        var dialog = new SourceDialog(HandlerUtil.getActiveShell(event), currentWorkspace, originalSetup, settings);
         if (dialog.open() != Window.OK) return null;
         String release = dialog.release();
         Path destination = dialog.destination();
