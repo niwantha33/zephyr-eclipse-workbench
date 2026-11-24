@@ -18,3 +18,21 @@
 **Versioned source references:**
 - `https://github.com/zephyrproject-rtos/zephyr/blob/v4.4.0/include/zephyr/kernel.h`
 - `https://github.com/zephyrproject-rtos/zephyr/blob/v4.4.0/include/zephyr/drivers/gpio.h`
+
+## Reader-friendly UI (presentation iteration)
+
+- The panel now provides six one-click starter tasks, a compact two-column API result browser,
+  and a short title/summary instead of showing every documentation field in one text dump.
+- The detail pane has **Overview**, **C example**, and **API reference** tabs. It includes
+  version-state labels (UNKNOWN/MISMATCH/MATCH), colour-assisted section headings, a read-only
+  C code viewer with basic syntax highlighting, copy and official-source buttons.
+- **A− / A+** adjusts text sizes inside this view (not globally); the splitter rotates vertically
+  in narrow docks and overview/reference pages scroll with wrapping text. Dark/light colours
+  adapt to the active Eclipse parent background. All created fonts and colours are disposed.
+- Every example remains marked as **not independently compiled for the selected board**.
+  No AI, network lookup, source edits, or inferred build/flash support was added.
+- Native SWT smoke now verifies all three learning tabs, the offline search and read-only code.
+  A separate integration test prevents reintroduction of the monolithic text dump.
+
+**UI verification:** The Eclipse/Tycho native integration workflow and an actual human visual
+review of narrow/dark/high-DPI modes must pass on the PR head before approval.

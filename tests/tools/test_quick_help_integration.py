@@ -32,6 +32,16 @@ class QuickHelpIntegrationTests(unittest.TestCase):
             with self.subTest(smoke=name):
                 self.assertIn(f"tests/eclipse/{name}.java", editor_smoke)
 
+    def test_learning_view_not_a_plain_text_dump(self):
+        source = (UI / 'src/io/github/niwantha33/zew/ui/QuickHelpView.java').read_text(encoding='utf-8')
+        for feature in ('new TabFolder(', 'new ScrolledComposite(', 'new StyledText(',
+                        'void resizeText(', 'SWT.VERTICAL', 'SWT.HORIZONTAL',
+                        'new StyleRange(', 'updateScrollSize(', 'STARTERS'):
+            with self.subTest(feature=feature):
+                self.assertIn(feature, source)
+        self.assertNotIn('COMPLETE EXAMPLE (main.c)\\n', source,
+                         'Do not regress to the previous single giant text panel')
+
     def test_catalogue_is_packaged(self):
         build = (CORE / 'build.properties').read_text(encoding='utf-8')
         self.assertIn('quick-help/', build)
