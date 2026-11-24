@@ -156,13 +156,107 @@ def mark(release, current, prepared):
     return "Available (current version unknown)"
 
 
+
+# Fetch only the selected tag's upstream text files. This is an advisory preview,
+# NOT a verified installation or a promise that the user's compiler will work.
+RAW_PREFIX = "https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/"
+METADATA_FILES = ("SDK_VERSION", "cmake/modules/python.cmake",
+                  "scripts/requirements-base.txt")
+MAX_METADATA = 256 * 1024
+
+
+def release_metadata(tag, filename, opener=None):
+    if parse_version(tag) is None or filename not in METADATA_FILES:
+        raise ValueError("Invalid stable release or non-allowlisted upstream metadata")
+    opener = opener or urllib.request.build_opener(NoRedirect())
+    request = urllib.request.Request(RAW_PREFIX + tag + "/" + filename,
+                                     headers={"User-Agent": "Zephyr-Eclipse-Workbench-Release-Catalog"})
+    try:
+        with opener.open(request, timeout=15) as response:
+            if response.status != 200:
+                raise ValueError("Upstream metadata HTTP " + str(response.status))
+            data = response.read(MAX_METADATA + 1)
+    except urllib.error.HTTPError as error:
+        raise ValueError("Release " + tag + " does not provide " + filename
+                         + " (HTTP " + str(error.code) + ")") from error
+    except (urllib.error.URLError, OSError, TimeoutError) as error:
+        raise ValueError("Cannot inspect " + filename + ": " + str(error)) from error
+    if len(data) > MAX_METADATA:
+        raise ValueError("Upstream metadata exceeds size limit: " + filename)
+    try:
+        return data.decode("utf-8")
+    except UnicodeError as error:
+        raise ValueError("Non-text release metadata: " + filename) from error
+
+
+def requirement_preview(release, workspace, sdk, allow_network, opener=None):
+    """Compare exact selected-tag minimums to the CURRENT environment only."""
+    if not allow_network:
+        raise ValueError("Inspecting version-specific dependencies requires --allow-network")
+    if parse_version(release) is None:
+        raise ValueError("Select an exact stable Zephyr release first")
+    sdk_text, python_text, requirements = (
+        release_metadata(release, filename, opener) for filename in METADATA_FILES
+    )
+    required_sdk = sdk_text.strip()
+    if not re.fullmatch(r"\d+\.\d+\.\d+", required_sdk):
+        raise ValueError("Invalid SDK_VERSION from the selected upstream release")
+    python_match = re.search(r"set\(PYTHON_MINIMUM_REQUIRED\s+(\d+\.\d+(?:\.\d+)?)",
+                             python_text)
+    west_match = re.search(r"(?m)^west\s*>=\s*(\d+\.\d+(?:\.\d+)?)\s*$",
+                           requirements)
+    if not python_match or not west_match:
+        raise ValueError("Selected release dependency minimums could not be confirmed")
+    import importlib.metadata
+    try:
+        current_west = importlib.metadata.version("west")
+    except importlib.metadata.PackageNotFoundError:
+        current_west = "Not installed"
+    current_python = ".".join(map(str, sys.version_info[:3]))
+    current_sdk = installed_sdk(sdk)
+    current_zephyr = installed_version(workspace)
+
+    def at_least(installed, required):
+        try:
+            lhs = [int(x) for x in re.findall(r"^\d+(?:\.\d+){1,2}", installed)[0].split(".")]
+            rhs = [int(x) for x in required.split(".")]
+            return tuple((lhs + [0, 0])[:3]) >= tuple((rhs + [0, 0])[:3])
+        except (IndexError, ValueError):
+            return False
+
+    rows = [
+        ("Zephyr source", current_zephyr or "Unknown", release,
+         "Separate checkout required", "No in-place update of the current West workspace"),
+        ("Zephyr SDK", current_sdk or "Not selected", required_sdk + " (recommended)",
+         "Matches recommendation; build unverified" if current_sdk == required_sdk
+         else "Needs separate compatibility review",
+         "SDK_VERSION is a recommendation from the selected tag, not a full compatibility test"),
+        ("Python", current_python, ">=" + python_match.group(1),
+         "Minimum met in current interpreter" if at_least(current_python, python_match.group(1))
+         else "Current interpreter below minimum",
+         "Version alone does not confirm installed wheels/isolated environment"),
+        ("West", current_west, ">=" + west_match.group(1),
+         "Minimum met in current interpreter" if at_least(current_west, west_match.group(1))
+         else "West missing or below minimum",
+         "Each West manifest has release-specific module revisions"),
+        ("Python packages", "Current venv only", "Requirements of " + release,
+         "Not validated", "Check selected tag's requirements with isolated Python packages"),
+        ("West modules and HALs", "Current manifest", "Selected tag's manifest",
+         "Not validated", "Must run official West freeze and compare exact module SHAs"),
+        ("CMake, Ninja and compilers", "Current installed tools", "Board-dependent",
+         "Not validated", "Configure and pristine-build against candidate before switching"),
+    ]
+    return rows
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("local", "check"))
+    parser.add_argument("action", choices=("local", "check", "inspect"))
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--sdk", type=Path)
     parser.add_argument("--sources-parent", type=Path)
     parser.add_argument("--allow-network", action="store_true")
+    parser.add_argument("--release", default="")
     args = parser.parse_args(argv)
     current = installed_version(args.workspace)
     sdk_version = installed_sdk(args.sdk)
@@ -179,6 +273,12 @@ def main(argv=None):
             emit("RELEASE", tag, info["published"], mark(info, current, recorded),
                  info["title"], info["notes"], info["url"])
         emit("DONE", "Local inspection only. Check releases to request official version metadata.")
+        return
+    if args.action == "inspect":
+        for row in requirement_preview(args.release, args.workspace, args.sdk,
+                                       args.allow_network):
+            emit("PACKAGE", *row)
+        emit("DONE", "Dependency minimums are advisory; no install or build verification performed.")
         return
     releases = official_releases(args.allow_network)
     for item in releases:
