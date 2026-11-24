@@ -96,3 +96,13 @@ the host with user privileges; explicit user approval is mandatory.
 
 The Evidence Engine Program's G0 and G3 gates remain open. Do not
 merge or publish a stable Workbench release based solely on these fixtures.
+
+
+### New opt-in discovery layer (2026-11-24)
+
+A separately reviewable development PR adds read-only installed version/SDK
+inventory and an official Zephyr stable release picker to the existing Stage 1
+Eclipse dialog. This does **not** advance Stage 2 SDK/toolchain provisioning.
+No claim of a compatible SDK, Python environment or successful trial build is
+made from release metadata. Checks contact GitHub only when the user presses
+**Check Official Zephyr Releases**. Existing installs remain pinned.
