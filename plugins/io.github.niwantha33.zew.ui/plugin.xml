@@ -273,7 +273,7 @@
     <command id="io.github.niwantha33.zew.debugExpressionProbe" name="Inspect GDB Symbol (Read-only)" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.socRegisters" name="Show Debug Data and Hardware Register Explorer" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.faultAnalysis" name="Investigate Fatal Log" categoryId="io.github.niwantha33.zew.commands"/>
-    <command id="io.github.niwantha33.zew.prepareParallelSources" name="Prepare Parallel Zephyr Release Sources" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.prepareParallelSources" name="Check Zephyr Versions and Prepare Parallel Sources" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.snapshotProject" name="Snapshot Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.verifyProject" name="Verify Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
@@ -460,7 +460,7 @@
           <command commandId="io.github.niwantha33.zew.debugTools" label="Manage OpenOCD Tools..." style="push"/>
           <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment..." style="push"/>
           <separator name="environment" visible="true"/>
-          <command commandId="io.github.niwantha33.zew.prepareParallelSources" label="Prepare Parallel Release Sources..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.prepareParallelSources" label="Zephyr Versions and Parallel Sources..." style="push"/>
           <command commandId="io.github.niwantha33.zew.snapshotProject" label="Snapshot Project Environment..." style="push"/>
           <command commandId="io.github.niwantha33.zew.verifyProject" label="Verify Project Environment..." style="push"/>
           <command commandId="io.github.niwantha33.zew.planProjectUpgrade" label="Preview Project Upgrade..." style="push"/>
@@ -475,8 +475,9 @@
         <menu id="io.github.niwantha33.zew.menu.help" label="Help and Updates">
           <command commandId="io.github.niwantha33.zew.quickHelp" label="Quick Help (offline)..." style="push"/>
           <command commandId="io.github.niwantha33.zew.documentation" label="Documentation and References..." style="push"/>
-          <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check for Updates..." style="push"/>
-          <command commandId="io.github.niwantha33.zew.updateConnection" label="Configure Updates..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.prepareParallelSources" label="Check Zephyr Versions..." style="push"/>
+           <command commandId="io.github.niwantha33.zew.checkUpdates" label="Check Workbench Updates..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.updateConnection" label="Configure Workbench Updates..." style="push"/>
           <command commandId="io.github.niwantha33.zew.about" label="About Zephyr Workbench..." style="push"/>
         </menu>
       </menu>
