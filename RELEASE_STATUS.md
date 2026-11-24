@@ -801,3 +801,19 @@ EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.
   Documentation: [Automatic UML milestone 1](docs/AUTOMATIC_UML.md).
 - **Validation pending at exact PR head.** This is not released, hardware-tested,
   or evidence of the broader G0 gate closing. No automatic update is published.
+
+
+### Zephyr release version catalogue — development, pending qualification (2026-11-24)
+
+- Added explicit official stable release discovery and a selectable, offline-first
+  version list within the existing separate-source workflow.
+- Local version, current selected SDK and source-only candidates are reported;
+  published release notes and comparison to the current Zephyr version are
+  displayed without calling a candidate build-ready.
+- The existing source stage/verify process continues without any in-place West
+  update, SDK replacement, project rebinding, automatic migration or network
+  check on startup.
+- **Not qualified:** new feature tests and headless CI/package checks still
+  require evidence at this PR's exact head, plus real Windows/Linux checks.
+  SDK provisioning, candidate build qualification and release promotion remain
+  explicitly out of scope for this slice.
