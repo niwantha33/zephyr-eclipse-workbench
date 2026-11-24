@@ -11,6 +11,8 @@ import base64
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -161,7 +163,7 @@ def mark(release, current, prepared):
 # NOT a verified installation or a promise that the user's compiler will work.
 RAW_PREFIX = "https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/"
 METADATA_FILES = ("SDK_VERSION", "cmake/modules/python.cmake",
-                  "scripts/requirements-base.txt")
+                  "scripts/requirements-base.txt", "cmake/modules/zephyr_default.cmake")
 MAX_METADATA = 256 * 1024
 
 
@@ -189,13 +191,13 @@ def release_metadata(tag, filename, opener=None):
         raise ValueError("Non-text release metadata: " + filename) from error
 
 
-def requirement_preview(release, workspace, sdk, allow_network, opener=None):
+def requirement_preview(release, workspace, sdk, allow_network, opener=None, cmake=None):
     """Compare exact selected-tag minimums to the CURRENT environment only."""
     if not allow_network:
         raise ValueError("Inspecting version-specific dependencies requires --allow-network")
     if parse_version(release) is None:
         raise ValueError("Select an exact stable Zephyr release first")
-    sdk_text, python_text, requirements = (
+    sdk_text, python_text, requirements, cmake_text = (
         release_metadata(release, filename, opener) for filename in METADATA_FILES
     )
     required_sdk = sdk_text.strip()
@@ -205,7 +207,9 @@ def requirement_preview(release, workspace, sdk, allow_network, opener=None):
                              python_text)
     west_match = re.search(r"(?m)^west\s*>=\s*(\d+\.\d+(?:\.\d+)?)\s*$",
                            requirements)
-    if not python_match or not west_match:
+    cmake_match = re.search(r"cmake_minimum_required\(VERSION\s+(\d+\.\d+(?:\.\d+)?)",
+                            cmake_text, re.I)
+    if not python_match or not west_match or not cmake_match:
         raise ValueError("Selected release dependency minimums could not be confirmed")
     import importlib.metadata
     try:
@@ -215,6 +219,18 @@ def requirement_preview(release, workspace, sdk, allow_network, opener=None):
     current_python = ".".join(map(str, sys.version_info[:3]))
     current_sdk = installed_sdk(sdk)
     current_zephyr = installed_version(workspace)
+    cmake_path = str(cmake) if cmake is not None else shutil.which("cmake")
+    current_cmake = "Not found"
+    if cmake_path:
+        try:
+            output = subprocess.run([cmake_path, "--version"], shell=False,
+                                    stdin=subprocess.DEVNULL, capture_output=True,
+                                    text=True, errors="replace", timeout=10)
+            match = re.search(r"cmake version\s+(\d+\.\d+(?:\.\d+)?)", output.stdout, re.I)
+            if output.returncode == 0 and match:
+                current_cmake = match.group(1)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
 
     def at_least(installed, required):
         try:
@@ -239,6 +255,10 @@ def requirement_preview(release, workspace, sdk, allow_network, opener=None):
          "Minimum met in current interpreter" if at_least(current_west, west_match.group(1))
          else "West missing or below minimum",
          "Each West manifest has release-specific module revisions"),
+        ("CMake", current_cmake, ">=" + cmake_match.group(1),
+         "Minimum met in current CMake" if at_least(current_cmake, cmake_match.group(1))
+         else "CMake missing or below minimum",
+         "Selected release's upstream Zephyr build scripts; other tools also require verification"),
         ("Python packages", "Current venv only", "Requirements of " + release,
          "Not validated", "Check selected tag's requirements with isolated Python packages"),
         ("West modules and HALs", "Current manifest", "Selected tag's manifest",
@@ -257,6 +277,7 @@ def main(argv=None):
     parser.add_argument("--sources-parent", type=Path)
     parser.add_argument("--allow-network", action="store_true")
     parser.add_argument("--release", default="")
+    parser.add_argument("--cmake", type=Path)
     args = parser.parse_args(argv)
     current = installed_version(args.workspace)
     sdk_version = installed_sdk(args.sdk)
@@ -276,7 +297,7 @@ def main(argv=None):
         return
     if args.action == "inspect":
         for row in requirement_preview(args.release, args.workspace, args.sdk,
-                                       args.allow_network):
+                                       args.allow_network, cmake=args.cmake):
             emit("PACKAGE", *row)
         emit("DONE", "Dependency minimums are advisory; no install or build verification performed.")
         return
