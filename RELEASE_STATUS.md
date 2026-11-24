@@ -817,3 +817,6 @@ EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.
   require evidence at this PR's exact head, plus real Windows/Linux checks.
   SDK provisioning, candidate build qualification and release promotion remain
   explicitly out of scope for this slice.
+
+- Version-specific SDK recommendation, Python, West and CMake minimums can be
+  previewed from an explicitly selected upstream tag; checks are advisory only.
