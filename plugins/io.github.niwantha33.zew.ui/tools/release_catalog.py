@@ -104,6 +104,8 @@ def prepared_releases(parent):
             if locked.stat().st_size > MAX_LOCK:
                 continue
             record = json.loads(locked.read_text(encoding="utf-8"))
+            if not isinstance(record, dict):
+                continue
             release = record.get("release", "")
             if (record.get("kind") == "zephyr-source-only"
                     and record.get("status") == "SOURCE_VERIFIED_ONLY"
@@ -165,7 +167,8 @@ def official_releases(allow_network, opener=None):
             continue
         releases[tag] = {
             "tag": tag, "published": published[:10], "title": name[:160],
-            "notes": body[:2400], "url": url,
+            "notes": "".join(ch for ch in body[:2400] if ch >= " " or ch in "\\n\\t"),
+            "url": url,
         }
     return sorted(releases.values(), key=lambda item: parse_version(item["tag"]), reverse=True)
 
