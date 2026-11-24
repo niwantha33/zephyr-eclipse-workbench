@@ -97,6 +97,21 @@ class ReleaseCatalogTests(unittest.TestCase):
         self.assertEqual("Older release",
                          catalog.mark({"tag": "v4.3.0"}, "v4.4.0", set()))
 
+
+    def test_nonstandard_checkout_is_resolved_from_west_metadata(self):
+        other = self.parent / "external-checkout"
+        other.mkdir()
+        (other / "VERSION").write_text(
+            "VERSION_MAJOR = 4\nVERSION_MINOR = 5\nPATCHLEVEL = 0\n")
+        (self.workspace / ".west").mkdir()
+        (self.workspace / ".west" / "config").write_text("[manifest]\npath=zephyr\n")
+        fake = subprocess.CompletedProcess(args=[], returncode=0,
+                                           stdout=str(other) + "\n", stderr="")
+        with patch.object(catalog.subprocess, "run", return_value=fake) as runner:
+            self.assertEqual("v4.5.0", catalog.installed_version(self.workspace))
+            self.assertEqual("west", runner.call_args.args[0][2])
+        self.assertEqual("", catalog.installed_version(self.parent / "missing"))
+
     def test_recorded_candidate_is_source_only_never_build_ready(self):
         candidate = self.parent / "zephyr-src-v4.5.0"
         (candidate / ".zew").mkdir(parents=True)
