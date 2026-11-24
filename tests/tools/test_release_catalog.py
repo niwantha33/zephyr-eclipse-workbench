@@ -148,6 +148,7 @@ class ReleaseCatalogTests(unittest.TestCase):
             "SDK_VERSION": "1.0.1\n",
             "cmake/modules/python.cmake": "set(PYTHON_MINIMUM_REQUIRED 3.12)\n",
             "scripts/requirements-base.txt": "PyYAML>=6.0\nwest>=0.14.0\n",
+            "cmake/modules/zephyr_default.cmake": "cmake_minimum_required(VERSION 3.28.0)\n",
         }
 
         class MetadataOpener:
@@ -167,8 +168,9 @@ class ReleaseCatalogTests(unittest.TestCase):
         self.assertEqual("Matches recommendation; build unverified", by_name["Zephyr SDK"][3])
         self.assertEqual(">=3.12", by_name["Python"][2])
         self.assertEqual(">=0.14.0", by_name["West"][2])
+        self.assertEqual(">=3.28.0", by_name["CMake"][2])
         self.assertEqual("Not validated", by_name["West modules and HALs"][3])
-        self.assertEqual(3, len(client.calls))
+        self.assertEqual(4, len(client.calls))
         self.assertEqual(before, (self.workspace / "zephyr" / "VERSION").read_bytes())
 
     def test_package_inspection_rejects_unapproved_network_and_refs(self):
