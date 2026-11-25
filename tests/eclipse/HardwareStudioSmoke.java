@@ -201,6 +201,29 @@ public final class HardwareStudioSmoke {
         page.hideView(view);
         if (browser instanceof Browser web)
             check(web.isDisposed(), "browser releases native resources on close");
+        var physical = page.showView("io.github.niwantha33.zew.ui.physicalHardwareStudio");
+        check("Hardware Studio — Package and Signals".equals(physical.getTitle()),
+                "dedicated physical view registered separately from topology");
+        check(bundle.getEntry("hardware-studio/package.html") != null,
+                "physical view offline resource installed");
+        physical.getClass().getMethod("displayObservation", snapshotType, String.class)
+                .invoke(physical, empty, "");
+        var physicalBrowser = field(physical, "browser");
+        if (physicalBrowser instanceof Browser web) {
+            long until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(7);
+            boolean ready = false;
+            while (System.nanoTime() < until && !web.isDisposed()) {
+                try {
+                    ready = Boolean.TRUE.equals(eval(web, "!!document.getElementById('package')"
+                            + " && document.getElementById('package').hidden"
+                            + " && !!document.getElementById('details')"));
+                } catch (RuntimeException pending) { /* browser loading */ }
+                if (ready) break;
+                if (!web.getDisplay().readAndDispatch()) Thread.sleep(15);
+            }
+            check(ready, "unsupported or missing board does not fabricate package pins");
+        }
+        page.hideView(physical);
         System.out.println("HardwareStudioSmoke PASS");
     }
 }

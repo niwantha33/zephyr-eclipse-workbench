@@ -162,6 +162,10 @@ for p in bundles:
                 entry = 'io/github/niwantha33/zew/ui/' + cls + '.class'
                 if entry not in z.namelist():
                     raise SystemExit('Missing installed YAML component: ' + cls)
+            bundled_package = z.read('hardware-studio/package.html')
+            original_package = (root / 'plugins/io.github.niwantha33.zew.ui/hardware-studio/package.html').read_bytes()
+            if bundled_package != original_package or b'__HARDWARE_STUDIO_DATA__' not in bundled_package:
+                raise SystemExit('Physical Hardware Studio offline UI missing or differs from tested source')
             bundled_hardware = z.read('hardware-studio/index.html')
             original_hardware = (root / 'plugins/io.github.niwantha33.zew.ui/hardware-studio/index.html').read_bytes()
             if bundled_hardware != original_hardware or b'__HARDWARE_STUDIO_DATA__' not in bundled_hardware:
