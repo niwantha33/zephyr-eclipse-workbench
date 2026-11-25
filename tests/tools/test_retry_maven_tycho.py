@@ -41,6 +41,38 @@ class TychoReleaseRetryTests(unittest.TestCase):
         ):
             self.assertFalse(retry.retryable_tycho_failure(log, VERSION), log)
 
+    def test_main_release_429_descriptor_failure_is_retryable(self):
+        version = "5.0.4"
+        warning = ("[WARNING] GET request to https://repo.maven.apache.org/maven2/"
+                   "org/eclipse/tycho/tycho-maven-plugin/5.0.4/"
+                   "tycho-maven-plugin-5.0.4.pom failed (attempt 1 of 4) "
+                   "due to status 429. Retrying in 5000 ms")
+        descriptor = ("[ERROR] Failed to read artifact descriptor for "
+                      "org.eclipse.tycho:tycho-maven-plugin:jar:5.0.4")
+
+        def classify(lines, exit_code=1):
+            with mock.patch.object(retry.subprocess, "Popen") as popen:
+                process = popen.return_value.__enter__.return_value
+                process.stdout = iter(line + "\n" for line in lines)
+                process.wait.return_value = exit_code
+                return retry.run_once(["mvn"], version)
+
+        self.assertEqual(classify([warning, descriptor]), (1, True))
+        self.assertEqual(classify([warning]), (1, False))
+        self.assertEqual(classify([descriptor]), (1, False))
+        self.assertEqual(classify([warning.replace("5.0.4", "5.0.3"), descriptor]),
+                         (1, False))
+        self.assertEqual(classify([warning.replace("repo.maven.apache.org", "other.example"),
+                                   descriptor]), (1, False))
+        self.assertEqual(classify([warning.replace("status 429", "status 4290"),
+                                   descriptor]), (1, False))
+        self.assertEqual(classify(["[WARNING] GET request to https://repo.maven.apache.org/"
+                                   "maven2/.meta/prefixes.txt failed due to status 429.",
+                                   descriptor]), (1, False))
+        self.assertEqual(classify([warning, descriptor.replace("5.0.4", "5.0.40")]),
+                         (1, False))
+        self.assertEqual(classify([warning, "[ERROR] Compilation failure"]), (1, False))
+
     def test_retries_missing_plugin_then_succeeds(self):
         calls = []
         responses = iter([(1, True), (0, False)])
