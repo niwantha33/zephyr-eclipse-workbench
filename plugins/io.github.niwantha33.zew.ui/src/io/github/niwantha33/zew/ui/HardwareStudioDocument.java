@@ -28,6 +28,12 @@ public final class HardwareStudioDocument {
     public static String render(String template, DtsGraphModel.Snapshot observation,
                                 String project, String build, String focus, boolean stale,
                                 String selectedTheme, String board, String profile) {
+        return render(template, observation, project, build, focus, stale, selectedTheme, board, profile, false);
+    }
+
+    public static String render(String template, DtsGraphModel.Snapshot observation,
+                                String project, String build, String focus, boolean stale,
+                                String selectedTheme, String board, String profile, boolean physical) {
         if (template == null || template.length() > 180_000
                 || template.indexOf(TOKEN) < 0
                 || template.indexOf(TOKEN) != template.lastIndexOf(TOKEN))
@@ -66,9 +72,10 @@ public final class HardwareStudioDocument {
                 .append(",\"y\":").append(card.y()).append('}');
         }
         json.append("],\"edges\":[");
-        for (int i = 0; i < layout.edges().size(); i++) {
+        var edges = physical ? snapshot.edges() : layout.edges();
+        for (int i = 0; i < edges.size(); i++) {
             if (i > 0) json.append(',');
-            var edge = layout.edges().get(i);
+            var edge = edges.get(i);
             json.append("{\"source\":"); quote(json, edge.source());
             json.append(",\"target\":"); quote(json, edge.target());
             json.append(",\"kind\":"); quote(json, edge.kind());
