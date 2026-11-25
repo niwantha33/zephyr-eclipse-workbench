@@ -151,6 +151,8 @@ public final class HardwareStudioSmoke {
                         && !html.contains("https://"),
                 "offline UI and only locally bundled content");
         var view = page.showView("io.github.niwantha33.zew.ui.hardwareStudio");
+        check("Configuration Studio — DTS Topology".equals(view.getTitle()),
+                "topology belongs to Configuration Studio without changing the restored view ID");
         check("HardwareStudioView".equals(view.getClass().getSimpleName()),
                 "new Eclipse ViewPart registered");
         var browser = field(view, "browser");

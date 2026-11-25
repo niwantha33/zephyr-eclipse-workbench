@@ -34,7 +34,7 @@ import org.eclipse.ui.part.ViewPart;
 import org.eclipse.ui.texteditor.ITextEditor;
 
 /**
- * Hardware Studio 0.1: offline, modern Eclipse-embedded read-only view of
+ * DTS Topology: offline, modern Eclipse-embedded read-only view of
  * generated Devicetree. It never contacts GDB, probes, vendor CDNs or targets.
  * The legacy SWT Graph Studio remains available until separately qualified.
  */
@@ -61,10 +61,10 @@ public final class HardwareStudioView extends ViewPart {
         parent.setLayout(new GridLayout(1, false));
         try {
             var entry = Activator.getDefault().getBundle().getEntry("hardware-studio/index.html");
-            if (entry == null) throw new IOException("Packaged Hardware Studio interface not found");
+            if (entry == null) throw new IOException("Packaged DTS Topology interface not found");
             try (var stream = entry.openStream()) {
                 byte[] bytes = stream.readNBytes(180_001);
-                if (bytes.length > 180_000) throw new IOException("Hardware Studio interface too large");
+                if (bytes.length > 180_000) throw new IOException("DTS Topology interface too large");
                 template = new String(bytes, StandardCharsets.UTF_8);
             }
             browser = new Browser(parent, SWT.NONE);
@@ -112,7 +112,7 @@ public final class HardwareStudioView extends ViewPart {
             browser = null;
             fallback = new Label(parent, SWT.WRAP);
             fallback.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            fallback.setText("Hardware Studio's embedded browser is unavailable. "
+            fallback.setText("DTS Topology's embedded browser is unavailable. "
                     + "The existing native DTS Graph Studio still works. "
                     + "On Windows check WebView2; on Linux check WebKitGTK. "
                     + unavailable.getClass().getSimpleName());
@@ -174,7 +174,7 @@ public final class HardwareStudioView extends ViewPart {
         boardName = "";
         profileName = "";
         render(DtsGraphModel.unavailable("Inspecting selected generated Devicetree…"), "");
-        job = new Job("Hardware Studio · inspect selected Devicetree") {
+        job = new Job("DTS Topology · inspect selected Devicetree") {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 DtsGraphModel.Snapshot observed;
                 String foundBoard = "";
@@ -244,7 +244,7 @@ public final class HardwareStudioView extends ViewPart {
                     theme, boardName, profileName);
             browser.setText(document);
         } catch (RuntimeException invalid) {
-            browser.setText("<html><body><h2>Hardware Studio unavailable</h2>"
+            browser.setText("<html><body><h2>DTS Topology unavailable</h2>"
                     + "<p>Invalid evidence or HTML model. Existing Graph Studio remains available.</p>"
                     + "</body></html>");
         }

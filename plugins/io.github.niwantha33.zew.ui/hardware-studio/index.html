@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hardware Studio · Devicetree Explorer</title>
+<title>Configuration Studio · DTS Topology</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,"Segoe UI",system-ui,sans-serif;--bg:#0c1422;--panel:#121f32;--panel2:#19293f;--line:#283b55;--muted:#a9bad1;--text:#ebf3fd;--accent:#67d3ed;--soft:#1e4059;--good:#62d8a0;--warn:#f5be7b;--shadow:rgba(0,0,0,.24)}
 :root.light{color-scheme:light;--bg:#f2f6fb;--panel:#fff;--panel2:#eaf0f7;--line:#cbd7e4;--muted:#51677e;--text:#17283a;--accent:#087c9f;--soft:#dceef5;--good:#087e53;--warn:#9b5600;--shadow:rgba(40,62,90,.12)}
@@ -53,7 +53,7 @@
 <body>
 <div class="studio">
 <header class="top">
-  <div class="brand"><div class="symbol" aria-hidden="true">◇</div><div><strong>Hardware Studio</strong><small>DEVICETREE EXPLORER · 0.1</small></div></div>
+  <div class="brand"><div class="symbol" aria-hidden="true">◇</div><div><strong>Configuration Studio</strong><small>DTS TOPOLOGY · READ-ONLY</small></div></div>
   <div class="context"><strong id="projectTitle">Select a Zephyr project</strong><small id="buildTitle">Waiting for an exact build selection</small></div>
   <span class="pill" id="evidencePill">NO BUILD</span>
   <button class="action" id="help" type="button" title="Help and keyboard shortcuts" aria-haspopup="dialog">Help</button>
@@ -75,10 +75,10 @@
     <nav class="nav-scroll" id="navigation" aria-label="Devicetree nodes"></nav>
   </aside>
   <section class="workspace" aria-label="Devicetree graph">
-    <div class="canvas-head"><div class="canvas-title"><h2>Hardware topology</h2><p id="graphSub">Resolved parent-child and typed references</p></div>
+    <div class="canvas-head"><div class="canvas-title"><h2>DTS topology</h2><p id="graphSub">Resolved parent-child and typed references</p></div>
       <div class="controls"><button type="button" class="action" id="zoomOut" title="Zoom out">−</button><button type="button" class="action" id="fit" title="Fit all visible blocks">Fit</button><button type="button" class="action" id="zoomIn" title="Zoom in">+</button><button type="button" class="action" id="resetLayout" title="Restore the original automatically generated block positions" disabled>Reset layout</button></div>
     </div>
-    <div class="viewport" id="viewport" tabindex="0" aria-label="Scrollable zoomable hardware topology. Drag blocks to rearrange this visual layout without changing Devicetree.">
+    <div class="viewport" id="viewport" tabindex="0" aria-label="Scrollable zoomable Devicetree topology. Drag blocks to rearrange this visual layout without changing Devicetree.">
       <div class="scaled" id="scaled"><div class="graph" id="graph"><svg class="wires" id="wires" aria-hidden="true"></svg><div id="cards"></div></div></div>
     </div>
     <footer class="canvas-footer"><div class="legend"><span><i class="swatch solid"></i>Parent / child</span><span><i class="swatch dashed"></i>Resolved reference</span></div><span id="graphCount">0 nodes</span></footer>
@@ -92,7 +92,7 @@
     <div class="detail-actions"><button class="action primary" id="openSource" type="button" disabled>Open generated DTS source</button><button class="action" id="openGraph" type="button" disabled>Classic Graph Studio</button></div>
   </aside>
 </div>
-<div class="help-overlay" id="helpDialog" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle"><div class="help-panel"><h2 id="helpTitle">Explore verified hardware evidence</h2><p>Search by path, compatible string or label. Choose a node to inspect its generated Devicetree record. Double-click a graph card, or select a navigator result, to centre its neighbourhood. Drag a graph block to rearrange it; lines follow the block. Focus a block and use arrow keys to nudge it (Shift+arrow for smaller steps). Reset layout restores the original positions. Dragging is only a temporary visual arrangement: it does not change Devicetree, saved project settings or firmware, and it resets on refresh or when opening another graph. On the background, drag to pan. When the canvas has keyboard focus, arrow keys pan the graph; + and − zoom, F fits, ? opens help, and Escape closes help.</p><p>Solid lines represent observed hierarchy. Dashed lines represent parser-resolved references. Enabled is a Devicetree configuration status, <strong>not</strong> electrical wiring, a running driver or live hardware state. Unknown status is never treated as enabled.</p><button type="button" class="action primary" id="closeHelp">Close</button></div></div>
+<div class="help-overlay" id="helpDialog" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle"><div class="help-panel"><h2 id="helpTitle">Explore generated Devicetree evidence</h2><p>Search by path, compatible string or label. Choose a node to inspect its generated Devicetree record. Double-click a graph card, or select a navigator result, to centre its neighbourhood. Drag a graph block to rearrange it; lines follow the block. Focus a block and use arrow keys to nudge it (Shift+arrow for smaller steps). Reset layout restores the original positions. Dragging is only a temporary visual arrangement: it does not change Devicetree, saved project settings or firmware, and it resets on refresh or when opening another graph. On the background, drag to pan. When the canvas has keyboard focus, arrow keys pan the graph; + and − zoom, F fits, ? opens help, and Escape closes help.</p><p>Solid lines represent observed hierarchy. Dashed lines represent parser-resolved references. Enabled is a Devicetree configuration status, <strong>not</strong> electrical wiring, a running driver or live hardware state. Unknown status is never treated as enabled.</p><button type="button" class="action primary" id="closeHelp">Close</button></div></div>
 </div>
 <script>
 'use strict';

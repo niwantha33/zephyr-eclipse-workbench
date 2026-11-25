@@ -1,6 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## DTS Topology navigation (review branch, not released)
+
+- Existing read-only Devicetree topology now belongs to Configure Project and is reachable from Configuration Studio's visual and native views. Existing command/view IDs, selected build, node identity, offline renderer and fallback are retained.
+- No physical pin or package mapping is added. Existing Kconfig, native pin-route evidence and overlay functionality are retained in this slice.
+- Added menu ownership and installed view title assertions. Exact-head CI and physical verification remain pending; G0 remains OPEN.
+
 ## Development Dashboard UX slice (2026-11-24 — review branch, not released)
 
 - Changed only the Development Dashboard presentation toward the reference: active project and board, honest artifact-status badge, four explicit workflow steps, project status, and project tools. Responsive light/dark layout and accessible buttons live in one offline packaged HTML resource.

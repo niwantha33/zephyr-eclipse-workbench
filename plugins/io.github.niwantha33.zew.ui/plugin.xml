@@ -211,7 +211,7 @@
           class="io.github.niwantha33.zew.ui.YamlStructureView"
           restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.hardwareStudio"
-          name="Hardware Studio — Devicetree"
+          name="Configuration Studio — DTS Topology"
           class="io.github.niwantha33.zew.ui.HardwareStudioView"
           restorable="true"/>
     <view id="io.github.niwantha33.zew.ui.dtsGraph"
@@ -279,7 +279,7 @@
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.embeddedHubBoards" name="Open EmbeddedHub Board Discovery" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.workflowStudio" name="Open Zephyr Workflow Studio" categoryId="io.github.niwantha33.zew.commands"/>
-    <command id="io.github.niwantha33.zew.hardwareStudio" name="Open Hardware Studio" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.hardwareStudio" name="Open DTS Topology" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.configurationStudio" name="Open Configuration Studio" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.umlClasses" name="Open Automatic UML C/C++ Class Diagram" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.traceCompassIntegration" name="Open Trace Compass Integration" categoryId="io.github.niwantha33.zew.commands"/>
@@ -405,11 +405,10 @@
         <menu id="io.github.niwantha33.zew.menu.board" label="Board and Hardware">
           <command commandId="io.github.niwantha33.zew.projectSettings" label="Change Project Board and Profile..." style="push"/>
           <command commandId="io.github.niwantha33.zew.embeddedHubBoards" label="Browse Available Boards..." style="push"/>
-          <separator name="boardStudio" visible="true"/>
-          <command commandId="io.github.niwantha33.zew.hardwareStudio" label="Hardware Studio..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.configure" label="Configure Project">
           <command commandId="io.github.niwantha33.zew.configurationStudio" label="Configuration Studio..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.hardwareStudio" label="DTS Topology..." style="push"/>
           <command commandId="io.github.niwantha33.zew.projectSettings" label="Board and Build Profile Settings..." style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.workflow" label="Automate Workflow">
