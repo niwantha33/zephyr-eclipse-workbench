@@ -41,7 +41,7 @@ Official references:
 5. **More tools** reveals the complete legacy expert action strip; its default
    state is collapsed. **Show details** reveals the secondary toolbar and four
    existing metrics, without removing them.
-6. **Open graphical Hardware Studio** hands off the exact selected project and
+6. **Open DTS Topology** hands off the exact selected project and
    built directory and only a real generated-DTS node path. If no project/build
    is selected, it explains why it cannot show a live configuration.
 7. No source writer, Kconfig backend, overlay preview, diagnostic engine,
@@ -68,7 +68,7 @@ Official references:
   100%, 125%, 150%, 200%, light/dark/high contrast, docked/detached.
 - Select GPIO 0/1: no automatic evidence expansion. Click source trace,
   draft, GPIO example, and validation: correct evidence tab becomes accessible.
-- Open graphical Hardware Studio and verify exact project, board, profile,
+- Open DTS Topology and verify exact project, board, profile,
   build freshness and selected node. Unavailable/stale must remain explicit.
 - Exercise cancel/commit/backups and source edits separately; hardware-on-desk
   and physical pin claims remain unverified until a real test.

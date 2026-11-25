@@ -76,9 +76,9 @@ The Chip Pin Canvas and peripheral views connect controllers, properties and
 logical pin routes with their underlying Devicetree declarations.
 [Hardware Studio guide](docs/VISUAL_HARDWARE_STUDIO.md).
 
-### Hardware Studio — embedded Devicetree preview
+### Configuration Studio — DTS Topology
 
-Experimental **Hardware Studio** embeds a polished, locally bundled, offline
+The **DTS Topology** view (Zephyr → Configure Project → DTS Topology) embeds a polished, locally bundled, offline
 browser UI **inside Eclipse**. It offers a searchable device navigator, a
 read-only selected-build topology, an evidence inspector and direct links to
 the existing generated-source editor and classic DTS Graph Studio.

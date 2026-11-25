@@ -472,7 +472,7 @@ public final class ConfigurationStudioView extends ViewPart {
         var focusBar = new Composite(hardware, SWT.NONE);
         focusBar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         focusBar.setLayout(new GridLayout(3, false));
-        action(focusBar, "Open graphical Hardware Studio", this::openModernHardwareStudio)
+        action(focusBar, "Open DTS Topology", this::openModernHardwareStudio)
                 .setToolTipText("Show this exact board, build and selected controller graphically.");
         evidenceToggle = action(focusBar, "Show evidence", () -> {
             evidenceExpanded = !evidenceExpanded;
@@ -2425,7 +2425,7 @@ public final class ConfigurationStudioView extends ViewPart {
     /** Pass through the selected generated DTS node, never a guessed pin. */
     private void openModernHardwareStudio() {
         if (project == null || !project.isAccessible() || inspectionBuild == null) {
-            MessageDialog.openInformation(getSite().getShell(), "Hardware Studio",
+            MessageDialog.openInformation(getSite().getShell(), "DTS Topology",
                     "Select a Zephyr project and an exact board/profile build first.");
             return;
         }
@@ -2438,7 +2438,7 @@ public final class ConfigurationStudioView extends ViewPart {
             if (part instanceof HardwareStudioView studio)
                 studio.displayProject(project, inspectionBuild, focus);
         } catch (org.eclipse.ui.PartInitException error) {
-            MessageDialog.openError(getSite().getShell(), "Hardware Studio unavailable",
+            MessageDialog.openError(getSite().getShell(), "DTS Topology unavailable",
                     error.getMessage());
         }
     }

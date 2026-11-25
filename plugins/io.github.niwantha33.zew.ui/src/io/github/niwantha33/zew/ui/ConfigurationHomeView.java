@@ -619,9 +619,9 @@ public final class ConfigurationHomeView extends ViewPart {
         validateApply = button(nav, "Open verified review…", this::reviewSelected);
         // Main Hardware view is the default entry point. Make the graph
         // discoverable here, not only in the separate Advanced Studio toolbar.
-        hardwareStudioButton = button(right, "Hardware Studio — interactive explorer",
+        hardwareStudioButton = button(right, "DTS Topology — interactive explorer",
                 this::openHardwareStudio);
-        hardwareStudioButton.setToolTipText("Open the modern read-only hardware graph "
+        hardwareStudioButton.setToolTipText("Open the read-only generated Devicetree topology "
                 + "inside Eclipse using the exact selected board and build profile.");
         dtsGraphButton = button(right, "DTS Graph Studio — connected blocks",
                 this::openDtsGraph);
@@ -1507,13 +1507,13 @@ public final class ConfigurationHomeView extends ViewPart {
      */
     private void openHardwareStudio() {
         if (project == null || !project.isAccessible()) {
-            MessageDialog.openInformation(getSite().getShell(), "Hardware Studio",
+            MessageDialog.openInformation(getSite().getShell(), "DTS Topology",
                     "Select a Zephyr application in Project Explorer first.");
             return;
         }
         Evidence selected = evidence;
         if (selected == null || selected.build() == null) {
-            MessageDialog.openInformation(getSite().getShell(), "Hardware Studio",
+            MessageDialog.openInformation(getSite().getShell(), "DTS Topology",
                     "Select a board/profile and configure or build to generate zephyr.dts.");
             return;
         }
@@ -1524,8 +1524,8 @@ public final class ConfigurationHomeView extends ViewPart {
             if (part instanceof HardwareStudioView studio)
                 studio.displayProject(project, selected.build(), preferred);
         } catch (PartInitException unavailable) {
-            MessageDialog.openError(getSite().getShell(), "Hardware Studio",
-                    "The embedded Hardware Studio is not installed: " + unavailable.getMessage());
+            MessageDialog.openError(getSite().getShell(), "DTS Topology",
+                    "The embedded DTS Topology is not installed: " + unavailable.getMessage());
         }
     }
 

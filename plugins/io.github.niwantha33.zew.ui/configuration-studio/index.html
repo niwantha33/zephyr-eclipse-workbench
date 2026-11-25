@@ -307,7 +307,7 @@ function overview(root) {
 function hardware(root) {
   const h=head(root,'HARDWARE','Peripheral setup',
     'Choose an observed peripheral category; states describe a generated configuration, not silicon capability or runtime activity.');
-  h.append(btn('Open Hardware Studio',()=>host('hardware-studio',''),'action primary'));
+  h.append(btn('Open DTS Topology',()=>host('hardware-studio',''),'action primary'));
   noBuild(root);
   const bar=add(root,'div','toolbar');
   const input=el('input','search');input.type='search';input.placeholder='Search GPIO, ADC, UART, status or description…';
@@ -411,11 +411,11 @@ function renderInspector() {
     p('Explanation',item.explanation,dl);p('Next step',item.nextAction,dl);
     actions.append(btn('Guided '+item.category+' setup',()=>host('guide',item.category),'action primary'));
     if(item.controller) {
-      actions.append(btn('Open exact controller in Hardware Studio',
+      actions.append(btn('Open exact controller in DTS Topology',
         ()=>host('hardware-focus',item.controller),'action'));
       actions.append(btn('Inspect DTS / DTSI sources',
         ()=>host('source-hardware',item.controller),'action'));
-    }else actions.append(btn('Open Hardware Studio',()=>host('hardware-studio',''),'action'));
+    }else actions.append(btn('Open DTS Topology',()=>host('hardware-studio',''),'action'));
   }else if(type==='issue') {
     add(detail,'h3','',item.title);
     const dl=add(detail,'dl');p('Evidence',item.detail,dl);p('Next step',item.nextAction,dl);
