@@ -1,0 +1,122 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hardware Studio — Package &amp; signals</title>
+<style>
+:root{color-scheme:dark;--bg:#0c1422;--panel:#142235;--line:#344861;--text:#ebf3fd;--muted:#a9bad1;--accent:#68d2ed;--gpio:#56c6a0;--candidate:#e9bb6c;font:14px "Segoe UI",system-ui,sans-serif}
+:root.light{color-scheme:light;--bg:#edf2f8;--panel:#fff;--line:#aebed1;--text:#1b2c40;--muted:#43566c;--accent:#087b9c;--gpio:#147c58;--candidate:#875b0b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 12px}p{margin:8px 0;line-height:1.45}small,.muted{color:var(--muted)}button,input,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:7px}button{cursor:pointer}button:hover,button:focus-visible{border-color:var(--accent);outline:1px solid var(--accent)}button:disabled{opacity:.45;cursor:default}.spacer{flex:1}.layout{display:grid;grid-template-columns:minmax(180px,235px) minmax(400px,1fr) minmax(210px,280px);gap:12px;padding:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}.nodes{display:flex;flex-direction:column;gap:5px;max-height:64vh;overflow:auto}.nodes button{text-align:left;overflow-wrap:anywhere}.nodes button.active{border-color:var(--accent);color:var(--accent)}.tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tools input{width:100%;min-width:0}.package-scroll{overflow:auto}.package{display:grid;grid-template-columns:118px minmax(390px,1fr) 118px;grid-template-rows:116px auto 116px;min-width:626px;gap:4px}.top,.bottom{grid-column:2;display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:2px}.top{grid-row:1}.bottom{grid-row:3}.left,.right{grid-row:2;display:grid;grid-template-rows:repeat(16,1fr);gap:2px}.left{grid-column:1}.right{grid-column:3}.chip{grid-column:2;grid-row:2;border:2px solid var(--line);border-radius:10px;display:grid;place-content:center;position:relative;text-align:center;background:var(--bg);min-height:360px}.chip:before{content:"";position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid var(--muted);top:13px;left:13px}.pin{font-size:11px;padding:3px 2px;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0}.top .pin,.bottom .pin{writing-mode:vertical-rl}.pin.gpio{border-color:var(--gpio);color:var(--gpio)}.pin.candidate{border-color:var(--candidate);color:var(--candidate)}.pin.selected{outline:2px solid var(--accent);outline-offset:-2px}.pin.related{background:var(--bg);font-weight:bold}.pin.special{color:var(--muted)}.pin.dim{opacity:.3}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-top:12px}.green{color:var(--gpio)}.amber{color:var(--candidate)}.linkrow{border-top:1px solid var(--line);padding:9px 0;overflow-wrap:anywhere}.linkrow button{margin:5px 4px 0 0}.notice{padding:10px 12px;border:1px solid var(--line);border-radius:6px;margin-bottom:12px;overflow-wrap:anywhere}@media(max-width:1050px){.layout{grid-template-columns:200px minmax(0,1fr)}.inspector{grid-column:1/-1}}@media(max-width:650px){.layout{grid-template-columns:minmax(0,1fr)}.inspector{grid-column:auto}.nodes{max-height:220px}}
+</style></head><body>
+<header><div><h1>Hardware Studio</h1><small>Physical package · peripheral connections</small></div><span class="spacer"></span><span id="context"></span><button id="theme">Theme</button><button id="refresh">Refresh</button></header>
+<div class="layout"><aside class="panel"><h2>Peripherals</h2><div class="tools"><input id="search" type="search" placeholder="Search controller or pin" aria-label="Search controller or pin"><select id="category" aria-label="Peripheral type"><option value="">All peripherals</option><option>GPIO</option><option>I2C</option><option>UART</option><option>SPI</option><option>CAN</option><option>ADC</option><option>PWM</option></select></div><div id="nodes" class="nodes"></div></aside>
+<main class="panel"><h2>MCU package · top view</h2><div id="notice" class="notice"></div><div class="package-scroll"><div id="package" class="package" hidden><div class="top" id="top"></div><div class="left" id="left"></div><div class="chip"><strong>MSPM0G3507</strong><p>PM / LQFP64</p><small>Board reference package</small></div><div class="right" id="right"></div><div class="bottom" id="bottom"></div></div></div><div class="legend"><span class="green">● GPIO DTS reference</span><span class="amber">● Pinctrl label candidate</span><span>○ No observed mapping / unknown</span></div><p class="muted">No unreferenced pin is claimed free. Pin labels do not prove electrical wiring or runtime state.</p></main>
+<aside class="panel inspector"><h2>Connection inspector</h2><div id="details"></div></aside></div>
+<script>
+"use strict";
+const DATA = __HARDWARE_STUDIO_DATA__;
+// Pin designations: TI SLASEX6C section 6.1 figure 6-2, factual pin identifiers.
+// Exact reference board device: TI SLAU873E section 1.4, MSPM0G3507SPMR.
+const PIN_NAMES = "PB13 PB14 PB15 PB16 PA12 PA13 PA14 PA15 PA16 PA17 PA18 PA19 PA20 PB17 PB18 PB19 PA21 PA22 PB20 PB21 PB22 PB23 PB24 PA23 PA24 PA25 PB25 PB26 PB27 PA26 PA27 VCORE PA0 PA1 PA28 PA29 PA30 NRST PA31 VDD VSS PA2 PA3 PA4 PA5 PA6 PB0 PB1 PA7 PB2 PB3 PB4 PB5 PA8 PA9 PA10 PA11 PB6 PB7 PB8 PB9 PB10 PB11 PB12".split(" ");
+function supportsBoard(board){return board==="lp_mspm0g3507"||board==="lp_mspm0g3507/mspm0g3507";}
+function gpioPin(edge,target){
+  if(!target||edge.kind!=="gpio"||!target.compatible.split(", ").includes("ti,mspm0-gpio"))return null;
+  const labels=target.labels.split(",");
+  const a=labels.includes("gpioa"),b=labels.includes("gpiob");
+  const m=/^\[\d+\] pin=(\d{1,2})$/.exec(edge.detail);
+  if(a===b||!m||Number(m[1])>31)return null;
+  const name="P"+(a?"A":"B")+Number(m[1]);
+  return PIN_NAMES.includes(name)?name:null;
+}
+function labelPin(edge,target){
+  if(!target||edge.kind!=="pinctrl")return null;
+  const candidates=new Set();
+  for(const label of target.labels.split(",")){
+    const m=/^(?:[a-z][a-z0-9]*_)+p([ab])(\d{1,2})$/.exec(label);
+    if(m){const name="P"+m[1].toUpperCase()+Number(m[2]);if(PIN_NAMES.includes(name))candidates.add(name);}
+  }
+  return candidates.size===1?[...candidates][0]:null;
+}
+function collect(data){
+  const nodes=new Map(data.nodes.map(n=>[n.path,n]));
+  if(!supportsBoard(data.board)||!data.observed||data.state!=="built")return [];
+  const links=[];
+  for(const e of data.edges){
+    const target=nodes.get(e.target),source=nodes.get(e.source);
+    if(!target||!source)continue;
+    const gpio=gpioPin(e,target),candidate=labelPin(e,target);
+    if(gpio||candidate)links.push({pin:gpio||candidate,kind:gpio?"gpio":"candidate",edge:e,source,target});
+  }
+  return links;
+}
+// DOM rendering below; data is inserted only using textContent.
+const $=id=>document.getElementById(id);
+const nodes=new Map(DATA.nodes.map(n=>[n.path,n]));
+const links=collect(DATA);
+let selectedPin="",focus=nodes.has(DATA.focus)?DATA.focus:"";
+const pinButtons=new Map();
+function host(action,value=""){if(typeof zewHardwareAction==="function")zewHardwareAction(action,value);}
+function el(tag,text,cls){const x=document.createElement(tag);if(text)x.textContent=text;if(cls)x.className=cls;return x;}
+function action(text,fn){const x=el("button",text);x.type="button";x.addEventListener("click",fn);return x;}
+function nodeLabel(n){return n.labels||n.name;}
+function related(l){return l.source.path===focus||l.target.path===focus;}
+function renderPins(){
+  const query=$("search").value.trim().toUpperCase();
+  for(const [name,button] of pinButtons){
+    const all=links.filter(l=>l.pin===name);
+    button.className="pin"+(all.some(l=>l.kind==="gpio")?" gpio":all.length?" candidate":!/^P[AB]\d+$/.test(name)?" special":"");
+    if(name===selectedPin)button.classList.add("selected");
+    if(all.some(related))button.classList.add("related");
+    if(query&&/^P[AB]\d+$/.test(query)&&name!==query)button.classList.add("dim");
+    button.setAttribute("aria-pressed",String(name===selectedPin));
+  }
+}
+function renderNodes(){
+  const root=$("nodes");root.replaceChildren();
+  const q=$("search").value.trim().toLowerCase(),cat=$("category").value.toLowerCase();
+  const peripheral=/gpio|i2c|uart|serial|spi|can|adc|pwm|timer/i;
+  for(const n of DATA.nodes){
+    const text=[n.name,n.labels,n.compatible,n.path].join(" ").toLowerCase();
+    if(!peripheral.test(n.name+" "+n.compatible+" "+n.labels))continue;
+    const associated=links.filter(l=>l.source.path===n.path||l.target.path===n.path);
+    if(cat&&!text.includes(cat)&&!(cat==="uart"&&text.includes("serial")))continue;
+    if(q&&!text.includes(q)&&!associated.some(l=>l.pin.toLowerCase().includes(q)))continue;
+    const b=action(nodeLabel(n)+" · "+n.status,()=>{focus=n.path;selectedPin="";renderPins();renderNodes();renderDetails();host("focus",n.path);});
+    if(n.path===focus)b.classList.add("active");root.append(b);
+  }
+  if(!root.children.length)root.append(el("p","No matching generated peripheral nodes.","muted"));
+}
+function renderDetails(){
+  const root=$("details");root.replaceChildren();
+  if(selectedPin)root.append(el("h2",selectedPin+" · package pin "+(PIN_NAMES.indexOf(selectedPin)+1)));
+  else if(focus)root.append(el("h2",nodeLabel(nodes.get(focus))));
+  else root.append(el("p","Select a pin or peripheral to inspect connections.","muted"));
+  const selected=links.filter(l=>selectedPin?l.pin===selectedPin:focus&&related(l));
+  if((selectedPin||focus)&&!selected.length)root.append(el("p","No resolved pin mapping in this observation. Availability is unknown.","muted"));
+  for(const l of selected){
+    const row=el("div","","linkrow");
+    row.append(el("strong",l.pin+" · "+(l.kind==="gpio"?"GPIO reference":"Label candidate — mux unverified"),l.kind==="gpio"?"green":"amber"));
+    row.append(el("p",nodeLabel(l.source)+" → "+nodeLabel(l.target)));
+    row.append(el("small",l.edge.property+" · "+l.edge.detail+" · "+l.source.status));
+    row.append(action("DTS topology",()=>host("topology",l.source.path)),action("Source",()=>host("source",l.source.path)));
+    root.append(row);
+  }
+  if(focus){root.append(action("Open selected node in DTS topology",()=>host("topology",focus)));}
+}
+function addPins(id,numbers){
+  for(const n of numbers){const name=PIN_NAMES[n-1],b=action(n+" "+name,()=>{selectedPin=name;renderPins();renderDetails();});b.title="Physical pin "+n+" · "+name;b.setAttribute("aria-label",b.title);pinButtons.set(name,b);$(id).append(b);}
+}
+const sequence=(start,count,step=1)=>Array.from({length:count},(_,i)=>start+i*step);
+document.documentElement.classList.toggle("light",DATA.theme==="light");
+$("theme").onclick=()=>{const light=document.documentElement.classList.toggle("light");host("theme",light?"light":"dark");};
+$("refresh").onclick=()=>host("refresh");
+$("search").oninput=()=>{renderNodes();renderPins();};
+$("category").onchange=renderNodes;
+$("context").textContent=[DATA.project,DATA.board,DATA.profile].filter(Boolean).join(" · ")||"Select a Zephyr project";
+const known=supportsBoard(DATA.board);
+$("package").hidden=!known;
+$("notice").textContent=known?("Reference package: TI SLASEX6C Fig. 6-2 / SLAU873E §1.4. "+(!DATA.observed?"Build evidence unavailable.":DATA.stale?"Stale build — references are historical.":DATA.state!=="built"?"Binding-aware references unavailable.":"Generated DTS observation — not measured hardware.")):"Exact package mapping unavailable for the selected board. No package pins are guessed.";
+if(known){addPins("top",sequence(64,16,-1));addPins("left",sequence(1,16));addPins("right",sequence(48,16,-1));addPins("bottom",sequence(17,16));}
+renderPins();renderNodes();renderDetails();
+</script></body></html>

@@ -255,7 +255,7 @@ public final class ConfigurationHomeView extends ViewPart {
     }
 
     private void onHardwareStudioSelection(ZephyrViewContextHub.Selection selection) {
-        if (selection == null || !"hardware-studio".equals(selection.origin())
+        if (selection == null || !java.util.Set.of("hardware-studio", "physical-hardware-studio").contains(selection.origin())
                 || project == null || evidence == null || evidence.build() == null
                 || !project.equals(selection.project())
                 || !evidence.build().toAbsolutePath().normalize()

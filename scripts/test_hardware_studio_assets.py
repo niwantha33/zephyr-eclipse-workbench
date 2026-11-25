@@ -82,6 +82,41 @@ def main():
             # after an extensive Python test suite. Retain the syntax gate,
             # but allow a bounded slow process startup (no silent skip).
             subprocess.run([node, "--check", str(path)], check=True, timeout=45)
+    package = ASSET.with_name("package.html").read_text(encoding="utf-8")
+    assert package.count("__HARDWARE_STUDIO_DATA__") == 1
+    assert "default-src 'none'" in package and "fetch(" not in package
+    assert "innerHTML" not in package
+    parser = Inspect()
+    parser.feed(package)
+    assert {"package", "top", "bottom", "left", "right", "nodes", "details"} <= parser.ids
+    if node:
+        with tempfile.TemporaryDirectory(prefix="zew-package-js-") as folder:
+            path = Path(folder) / "package.js"
+            path.write_text(parser.inline_script, encoding="utf-8")
+            subprocess.run([node, "--check", str(path)], check=True, timeout=45)
+            prefix = parser.inline_script.split("// DOM rendering below;")[0].replace(
+                "__HARDWARE_STUDIO_DATA__", "{}")
+            assertions = r"""
+const assert = require("node:assert/strict");
+assert.equal(PIN_NAMES.length,64);
+assert.equal(new Set(PIN_NAMES).size,64);
+assert.equal(PIN_NAMES[17],"PA22");
+assert.equal(PIN_NAMES[39],"VDD");
+assert.equal(PIN_NAMES[40],"VSS");
+assert.equal(PIN_NAMES[63],"PB12");
+assert.equal(supportsBoard("lp_mspm0g3507"),true);
+assert.equal(supportsBoard("other_mspm0g3507"),false);
+const e={kind:"gpio",detail:"[0] pin=22"};
+assert.equal(gpioPin(e,{compatible:"ti,mspm0-gpio",labels:"gpioa"}),"PA22");
+assert.equal(gpioPin(e,{compatible:"ti,mspm0-gpio",labels:"gpiob"}),"PB22");
+assert.equal(gpioPin(e,{compatible:"other,gpio",labels:"gpioa"}),null);
+assert.equal(gpioPin({...e,detail:"[0] pin=31"},{compatible:"ti,mspm0-gpio",labels:"gpiob"}),null);
+assert.equal(labelPin({kind:"pinctrl"},{labels:"uart0_tx_pa10"}),"PA10");
+assert.equal(labelPin({kind:"pinctrl"},{labels:"uart0_tx_pa10,uart0_tx_pa11"}),null);
+assert.deepEqual(collect({board:"other",observed:true,state:"built",nodes:[],edges:[]}),[]);
+"""
+            path.write_text(prefix + assertions, encoding="utf-8")
+            subprocess.run([node, str(path)], check=True, timeout=45)
     print("HardwareStudioAssets PASS: offline packaged UI and JS syntax where Node is available")
 
 

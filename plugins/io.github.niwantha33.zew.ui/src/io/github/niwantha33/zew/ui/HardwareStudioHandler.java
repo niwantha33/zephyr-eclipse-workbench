@@ -11,7 +11,8 @@ public final class HardwareStudioHandler extends AbstractHandler {
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
         try {
             var page = HandlerUtil.getActiveWorkbenchWindowChecked(event).getActivePage();
-            var part = page.showView(HardwareStudioView.ID);
+            boolean physical = "io.github.niwantha33.zew.physicalHardwareStudio".equals(event.getCommand().getId());
+            var part = page.showView(physical ? HardwareStudioView.PHYSICAL_ID : HardwareStudioView.ID);
             if (part instanceof HardwareStudioView view) {
                 var project = SelectedProject.from(event);
                 if (project != null && project.isAccessible()) {
