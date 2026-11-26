@@ -21,11 +21,19 @@ existing configurations are not prompted or replaced.
    Use **Project > Build Project** to rebuild. If Eclipse Build Automatically is
    enabled, changes in source/configuration also trigger the project builder.
 
-This first profile targets **qemu_x86/atom** and verifies compilation without
-physical hardware. The wizard currently offers one pinned release/profile:
-Zephyr 4.4.0, SDK 1.0.1 and the x86 GNU compiler. Emulator execution, generic
-board/vendor selection, physical flashing and debugging are follow-up work.
-It is not yet a complete all-board onboarding product.
+The default first profile targets **qemu_x86/atom** and verifies compilation
+without physical hardware: Zephyr 4.4.0, SDK 1.0.1 and the x86 GNU compiler.
+**Check releases** explicitly contacts the official GitHub release API and
+lists recent stable published versions (up to two pages). Selecting another
+version changes the suggested folder and review plan. That path uses the pinned
+bootstrap tools to download the exact selected Zephyr release and West modules,
+records their frozen manifest, and leaves a source-only workspace. It does
+not install a compatible SDK, validate release-specific build dependencies,
+create Hello World, or bind an environment. The source-only marker is distinct
+from build-ready setup; a separate qualified SDK and trial build are required.
+Pre-releases, moving branches and draft releases are excluded.
+Emulator execution, generic board/vendor setup, flashing and debugging remain
+separate; this is not a complete all-board onboarding product.
 
 ## Isolation and recovery
 

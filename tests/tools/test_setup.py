@@ -24,6 +24,13 @@ spec.loader.exec_module(setup)
 
 
 class SetupTests(unittest.TestCase):
+    def test_source_profile_markers_are_distinct_and_validate_tags(self):
+        self.assertEqual(setup.source_profile_marker(None), 'first-build-win-x64-v1\n')
+        self.assertEqual(setup.source_profile_marker('v3.7.0'), 'source-only-win-x64-v1:v3.7.0\n')
+        for bad in ('v4.4.0', 'main', 'v4.5.0-rc1', 'v4.5.0;echo'):
+            with self.assertRaises(ValueError):
+                setup.source_profile_marker(bad)
+
     def test_windows_build_arguments_use_cmake_paths(self):
         command = setup.first_build_command(r'C:\Sandbox\Zephyr Setup Ω\python\python.exe',
                 r'C:\Sandbox\Zephyr Setup Ω\projects\hello_world',
