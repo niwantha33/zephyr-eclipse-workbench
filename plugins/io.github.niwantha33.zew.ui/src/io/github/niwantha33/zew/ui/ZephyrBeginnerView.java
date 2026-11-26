@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.github.niwantha33.zew.ui;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResourceChangeEvent;
 import org.eclipse.core.resources.IResourceChangeListener;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.SWTError;
+import org.eclipse.swt.browser.Browser;
+import org.eclipse.swt.browser.BrowserFunction;
 import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.layout.FillLayout;
@@ -47,9 +54,18 @@ public final class ZephyrBeginnerView extends ViewPart {
     private Label selected, board, profile, buildOutput;
     private ISelectionListener selectionListener;
     private IResourceChangeListener resourceListener;
+    private Browser browser;
+    private String guideTemplate;
+    private String lastRendered;
+    private int currentStep;
 
     @Override public void createPartControl(Composite parent) {
         parent.setLayout(new FillLayout());
+        if (createVisualGuide(parent)) {
+            installListeners(parent);
+            refresh();
+            return;
+        }
         SashForm panes = new SashForm(parent, SWT.HORIZONTAL);
 
         // The left column is navigation and project context, never a list of
@@ -93,23 +109,129 @@ public final class ZephyrBeginnerView extends ViewPart {
         navigation.addListener(SWT.Selection, event -> showStep(navigation.getSelectionIndex()));
         navigation.select(0);
         showStep(0);
+        installListeners(parent);
+        refresh();
+    }
 
+    /** The same project and resource listeners are used by both presentations. */
+    private void installListeners(Composite parent) {
         selectionListener = (part, selection) -> refresh();
         getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(selectionListener);
         var display = parent.getDisplay();
         resourceListener = event -> {
             if (event.getType() != IResourceChangeEvent.POST_CHANGE || display.isDisposed()) return;
             display.asyncExec(() -> {
-                if (!scroll.isDisposed()) refresh();
+                if ((browser != null && !browser.isDisposed())
+                        || (scroll != null && !scroll.isDisposed())) refresh();
             });
         };
         ResourcesPlugin.getWorkspace().addResourceChangeListener(
                 resourceListener, IResourceChangeEvent.POST_CHANGE);
-        refresh();
+    }
+
+    /** Offline HTML guide; native SWT view below remains a functional fallback. */
+    private boolean createVisualGuide(Composite parent) {
+        try {
+            var plugin = Activator.getDefault();
+            var entry = plugin.getBundle().getEntry("getting-started/index.html");
+            if (entry == null) throw new IOException("Packaged Getting Started interface is missing");
+            try (var stream = entry.openStream()) {
+                byte[] bytes = stream.readNBytes(40_001);
+                if (bytes.length > 40_000) throw new IOException("Getting Started interface is too large");
+                guideTemplate = new String(bytes, StandardCharsets.UTF_8);
+            }
+            browser = new Browser(parent, SWT.NONE);
+            browser.addLocationListener(new org.eclipse.swt.browser.LocationAdapter() {
+                @Override public void changing(org.eclipse.swt.browser.LocationEvent event) {
+                    if (event.location != null && !event.location.isBlank()
+                            && !"about:blank".equalsIgnoreCase(event.location)) event.doit = false;
+                }
+            });
+            new BrowserFunction(browser, "zewGettingStarted") {
+                @Override public Object function(Object[] arguments) {
+                    if (arguments == null || arguments.length != 1
+                            || !(arguments[0] instanceof String action)) return "DENIED";
+                    if (action.matches("step:[0-6]")) {
+                        currentStep = action.charAt(5) - '0';
+                        return "SELECTED";
+                    }
+                    if (!java.util.Set.of("new-project", "project-explorer", "browse-boards",
+                            "hardware", "properties", "configuration", "build", "flash",
+                            "flash-debug", "debug-workspace", "trace", "timeline", "cpu",
+                            "dts", "yaml", "registers", "developer").contains(action))
+                        return "DENIED";
+                    browser.getDisplay().asyncExec(() -> {
+                        if (browser == null || browser.isDisposed()) return;
+                        switch (action) {
+                            case "new-project" -> command("io.github.niwantha33.zew.quickStart");
+                            case "project-explorer" -> openProjectExplorer();
+                            case "browse-boards" -> command("io.github.niwantha33.zew.embeddedHubBoards");
+                            case "hardware" -> configuration("hardware");
+                            case "properties" -> properties();
+                            case "configuration" -> configuration("system");
+                            case "build" -> build();
+                            case "flash" -> command("io.github.niwantha33.zew.flash");
+                            case "flash-debug" -> command("io.github.niwantha33.zew.flashDebug");
+                            case "debug-workspace" -> debugPerspective();
+                            case "trace" -> openView("Debug Trace Console", ZephyrTraceConsoleView.ID);
+                            case "timeline" -> openView("Thread Timeline", ThreadTimelineView.ID);
+                            case "cpu" -> openView("CPU Load", ZephyrCpuLoadView.ID);
+                            case "dts" -> openView("Devicetree Graph Studio", Activator.ID + ".dtsGraph");
+                            case "yaml" -> openView("YAML Connected Blocks", Activator.ID + ".yamlStructure");
+                            case "registers" -> openView("Hardware Register Explorer", SocRegistersHandler.VIEW_ID);
+                            case "developer" -> command("io.github.niwantha33.zew.developerPerspective");
+                            default -> { /* All unrecognised requests are denied above. */ }
+                        }
+                    });
+                    return "QUEUED";
+                }
+            };
+            return true;
+        } catch (IOException | SWTError | RuntimeException unavailable) {
+            if (browser != null && !browser.isDisposed()) browser.dispose();
+            browser = null;
+            guideTemplate = null;
+            var plugin = Activator.getDefault();
+            if (plugin != null) plugin.getLog().log(new Status(IStatus.WARNING, Activator.ID,
+                    "Visual Getting Started unavailable; using the native SWT guide", unavailable));
+            return false;
+        }
+    }
+
+    private static String escapeHtml(String value) {
+        return (value == null ? "" : value).replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
+    }
+
+    private void renderGuide(ProjectSummary summary) {
+        if (browser == null || browser.isDisposed() || guideTemplate == null) return;
+        String html = guideTemplate
+                .replace("{{PROJECT}}", escapeHtml(summary.name()))
+                .replace("{{BOARD}}", escapeHtml(summary.board()))
+                .replace("{{PROFILE}}", escapeHtml(summary.profile()))
+                .replace("{{OUTPUT}}", escapeHtml(summary.output()))
+                .replace("{{OUTPUT_CLASS}}", summary.hasElf() ? "info" : "warn")
+                .replace("{{STEP}}", Integer.toString(currentStep));
+        // No reload on unrelated workspace changes: preserves focus and scroll position.
+        if (!html.equals(lastRendered)) {
+            lastRendered = html;
+            browser.setText(html);
+        }
+    }
+
+    private void openProjectExplorer() {
+        try {
+            var explorer = getSite().getPage().showView("org.eclipse.ui.navigator.ProjectExplorer");
+            explorer.setFocus();
+        } catch (PartInitException error) {
+            MessageDialog.openError(getSite().getShell(), "Project Explorer", error.getMessage());
+        }
     }
 
     /** Show the selected task in the second column without running anything. */
     private void showStep(int step) {
+        if (step < 0 || step >= STEPS.length) return;
+        currentStep = step;
         if (content == null || content.isDisposed()) return;
         for (Control child : content.getChildren()) child.dispose();
         switch (step) {
@@ -118,6 +240,7 @@ public final class ZephyrBeginnerView extends ViewPart {
                 line(content, "• What: Create a Zephyr application or import an existing one.");
                 line(content, "• How: Open the wizard, then select the project in Project Explorer.");
                 button(content, "New / Import Project...", () -> command("io.github.niwantha33.zew.quickStart"));
+                button(content, "Open Project Explorer", this::openProjectExplorer);
                 break;
             case 1:
                 heading(content, "2   Choose your hardware");
@@ -207,46 +330,58 @@ public final class ZephyrBeginnerView extends ViewPart {
                 getSite().getPage().getActiveEditor());
     }
 
-    private void refresh() {
-        if (selected == null || selected.isDisposed()) return;
+    private record ProjectSummary(String name, String board, String profile,
+                                  String output, boolean hasElf) {}
+
+    private ProjectSummary projectSummary() {
         IProject project = project();
-        if (project == null) {
-            selected.setText("Select a Zephyr project in Project Explorer.");
-            board.setText("Board: not selected");
-            profile.setText("Profile: not selected");
-            buildOutput.setText("Build output: not checked");
-            updateScrollSize();
-            return;
-        }
-        selected.setText(project.getName());
-        Path root = project.getLocation().toFile().toPath();
+        if (project == null) return new ProjectSummary(
+                "Select a Zephyr project", "Not selected", "Not selected",
+                "No project selected", false);
+        Path root = project.getLocation() == null ? null : project.getLocation().toFile().toPath();
         String target = "";
         try {
-            if (Files.isRegularFile(root.resolve(".zew/project.json")))
+            if (root != null && Files.isRegularFile(root.resolve(".zew/project.json")))
                 target = ProjectProfile.read(root).board();
-            else if (Files.isRegularFile(root.resolve(".zew/project.properties")))
+            else if (root != null && Files.isRegularFile(root.resolve(".zew/project.properties")))
                 target = ZephyrProjectFiles.readBoard(root);
             else target = ProjectContext.settings(project).getProperty("board", "");
         } catch (Exception ignored) { /* Never guess a board. */ }
-        board.setText("Board: " + (target.isBlank() ? "not configured" : target));
-        try {
-            var choices = BuildProfileChoices.available(root);
-            var active = BuildProfileChoices.selected(choices,
-                    project.getPersistentProperty(ProjectContext.BUILD_CONFIGURATION),
-                    project.getPersistentProperty(ProjectContext.NAMED_PROFILE));
-            profile.setText("Profile: " + active.label());
-        } catch (Exception missing) {
-            profile.setText("Profile: configure in Project Properties");
+        if (target == null || target.isBlank()) target = "Not configured";
+
+        String activeProfile = "Configure in Project Properties";
+        if (root != null) {
+            try {
+                var choices = BuildProfileChoices.available(root);
+                var active = BuildProfileChoices.selected(choices,
+                        project.getPersistentProperty(ProjectContext.BUILD_CONFIGURATION),
+                        project.getPersistentProperty(ProjectContext.NAMED_PROFILE));
+                activeProfile = active.label();
+            } catch (Exception ignored) { /* Missing profile remains explicit. */ }
         }
+
+        boolean hasElf = false;
+        String output = "Build setup incomplete";
         try {
             Path elf = ProjectContext.buildDirectory(project, ProjectContext.settings(project))
                     .resolve("zephyr/zephyr.elf");
-            buildOutput.setText(Files.isRegularFile(elf)
-                    ? "Build output: ELF present (not target-verified)"
-                    : "Build output: no ELF for active profile");
-        } catch (Exception missing) {
-            buildOutput.setText("Build output: setup incomplete");
+            hasElf = Files.isRegularFile(elf);
+            output = hasElf ? "ELF present (not target-verified)" : "No ELF for active profile";
+        } catch (Exception ignored) { /* Never imply that a build succeeded. */ }
+        return new ProjectSummary(project.getName(), target, activeProfile, output, hasElf);
+    }
+
+    private void refresh() {
+        ProjectSummary summary = projectSummary();
+        if (browser != null && !browser.isDisposed()) {
+            renderGuide(summary);
+            return;
         }
+        if (selected == null || selected.isDisposed()) return;
+        selected.setText(summary.name());
+        board.setText("Board: " + summary.board());
+        profile.setText("Profile: " + summary.profile());
+        buildOutput.setText("Build output: " + summary.output());
         updateScrollSize();
     }
 
@@ -330,7 +465,8 @@ public final class ZephyrBeginnerView extends ViewPart {
     }
 
     @Override public void setFocus() {
-        if (navigation != null && !navigation.isDisposed()) navigation.setFocus();
+        if (browser != null && !browser.isDisposed()) browser.setFocus();
+        else if (navigation != null && !navigation.isDisposed()) navigation.setFocus();
     }
 
     @Override public void dispose() {

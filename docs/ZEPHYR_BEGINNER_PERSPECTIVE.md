@@ -17,11 +17,18 @@ The Zephyr menu now uses task names, with specialised investigations in dedicate
 
 Both workspaces are layouts only: switching them cannot flash/reset a target.
 
+## Getting Started visual update (review branch)
+
+- The offline visual guide follows a seven-step left navigation, one right-hand instruction card and a full-width project status strip. Project name, board, active build profile and ELF presence are read from the selected Eclipse project; the sample screenshot values are not hardcoded.
+- Step selection is local and has no build, flash or debug side effects. Each button invokes an allowlisted existing Eclipse handler or view. Navigation is keyboard accessible; the interface responds to narrower layouts and dark system themes.
+- The packaged offline HTML is loaded through SWT Browser, with a native SWT guide as a fallback when browser support or the asset is unavailable. No network requests or external assets are used.
+- ELF presence is labelled **not target-verified**. CI compilation, installed workbench checks, screen-reader review and physical-hardware qualification must be assessed separately.
+
 ## Two-column Getting Started guide
 
 - The left navigation keeps seven concise, keyboard-selectable workflow steps and live selected-project, board, profile and ELF-presence context.
 - The right pane shows **only the selected step**: its purpose, three or fewer short usage notes, and explicit actions.
-- Drag the central divider to resize navigation and instructions. Either column can scroll independently.
+- The visual guide automatically adapts to available width and scrolls with the view. The native SWT fallback still supports dragging its central divider.
 - Choosing a step changes only the right-pane content. Pressing a tool/action button opens the corresponding existing Eclipse view, wizard or command; it is not embedded in the guide.
 - Build, flash and debug remain explicit user actions. ELF presence does not verify target execution; trace and CPU tools must not imply live capture without evidence.
 - Advanced tools remain discoverable by name, without showing every option on initial load.

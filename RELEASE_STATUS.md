@@ -1,6 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Getting Started visual redesign (2026-11-26 — review branch)
+
+- Added an offline seven-step Getting Started layout matching the submitted UI reference: selectable navigation, contextual instructions, explicit actions and a separate project/board/profile/ELF status footer.
+- Uses actual selected-project metadata, escapes it before rendering HTML, and allows only named Eclipse actions. Existing SWT presentation remains as fallback; selecting a step cannot build, flash or change target configuration.
+- Packaged HTML resource and an action/markup contract test added. **Not yet qualified**: Tycho package, Linux/Windows native workbench, DPI/theme/accessibility checks and hardware tests; no release gate is claimed passed.
+
 ## Release Tycho retry correction (review branch, not released)
 
 - After PR #287 merged, main run 45627564306 passed core/Python tests and Windows firmware qualification but Maven Central returned HTTP 429 for the pinned Tycho 5.0.4 POM.
