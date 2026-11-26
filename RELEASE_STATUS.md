@@ -1,6 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Release Tycho retry correction (review branch, not released)
+
+- After PR #287 merged, main run 45627564306 passed core/Python tests and Windows firmware qualification but Maven Central returned HTTP 429 for the pinned Tycho 5.0.4 POM.
+- The transport warning and subsequent artifact-descriptor failure did not match the existing retry classifier. Recognize the paired exact-version Central download warning and descriptor error; generic metadata throttling, unrelated versions and compile errors remain non-retryable.
+- Retain the three-attempt limit, original dependency pin, repositories, qualifier, read-only build runner and publication gates. Regression fixture uses the observed log form; exact-head CI and successful publication remain unverified.
+
 ## Physical package view (review branch, not released)
 
 - Separate Hardware Studio menu opens a read-only LQFP64 reference package for the exact LP-MSPM0G3507 board; unsupported board identities show no guessed pinout.
