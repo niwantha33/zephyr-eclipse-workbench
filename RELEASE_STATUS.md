@@ -1,6 +1,13 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Getting Started visual redesign (2026-11-26 — review branch)
+
+- Added an offline seven-step Getting Started layout matching the submitted UI reference: selectable navigation, contextual instructions, explicit actions and a separate project/board/profile/ELF status footer.
+- Uses actual selected-project metadata, escapes it before rendering HTML, and allows only named Eclipse actions. Existing SWT presentation remains as fallback; selecting a step cannot build, flash or change target configuration.
+- Packaged HTML resource and an action/markup contract test added. **Not yet qualified**: Tycho package, Linux/Windows native workbench, DPI/theme/accessibility checks and hardware tests; no release gate is claimed passed.
+
+
 ## Physical package view (review branch, not released)
 
 - Separate Hardware Studio menu opens a read-only LQFP64 reference package for the exact LP-MSPM0G3507 board; unsupported board identities show no guessed pinout.
