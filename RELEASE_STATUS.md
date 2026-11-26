@@ -7,6 +7,11 @@
 - Uses actual selected-project metadata, escapes it before rendering HTML, and allows only named Eclipse actions. Existing SWT presentation remains as fallback; selecting a step cannot build, flash or change target configuration.
 - Packaged HTML resource and an action/markup contract test added. **Not yet qualified**: Tycho package, Linux/Windows native workbench, DPI/theme/accessibility checks and hardware tests; no release gate is claimed passed.
 
+## Release Tycho retry correction (review branch, not released)
+
+- After PR #287 merged, main run 45627564306 passed core/Python tests and Windows firmware qualification but Maven Central returned HTTP 429 for the pinned Tycho 5.0.4 POM.
+- The transport warning and subsequent artifact-descriptor failure did not match the existing retry classifier. Recognize the paired exact-version Central download warning and descriptor error; generic metadata throttling, unrelated versions and compile errors remain non-retryable.
+- Retain the three-attempt limit, original dependency pin, repositories, qualifier, read-only build runner and publication gates. Regression fixture uses the observed log form; exact-head CI and successful publication remain unverified.
 
 ## Physical package view (review branch, not released)
 

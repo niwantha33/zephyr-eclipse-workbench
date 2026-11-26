@@ -41,8 +41,26 @@ def retryable_tycho_failure(line: str, version: str) -> bool:
         line, flags=re.IGNORECASE))
 
 
+def rate_limited_tycho_download(line: str, version: str) -> bool:
+    """Maven 3.9+/4 transport warnings can omit artifact coordinates."""
+    base = "https://repo.maven.apache.org/maven2/org/eclipse/tycho/tycho-maven-plugin/"
+    artifact = re.escape(base + version + "/tycho-maven-plugin-" + version)
+    return bool(re.search(
+        r"GET request to " + artifact + r"\.(?:pom|jar)\s+failed\b.*\bstatus 429\b",
+        line, flags=re.IGNORECASE))
+
+
+def tycho_descriptor_failure(line: str, version: str) -> bool:
+    return bool(re.search(
+        r"Failed to read artifact descriptor for\s+"
+        r"org\.eclipse\.tycho:tycho-maven-plugin:jar:" + re.escape(version)
+        + r"(?=\s|$|[.,;])", line, flags=re.IGNORECASE))
+
+
 def run_once(command: list[str], version: str) -> tuple[int, bool]:
     retryable = False
+    rate_limited = False
+    descriptor_failed = False
     with subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                           errors="replace", bufsize=1) as process:
@@ -51,7 +69,10 @@ def run_once(command: list[str], version: str) -> tuple[int, bool]:
             sys.stdout.write(line)
             sys.stdout.flush()
             retryable |= retryable_tycho_failure(line, version)
-        return process.wait(), retryable
+            rate_limited |= rate_limited_tycho_download(line, version)
+            descriptor_failed |= tycho_descriptor_failure(line, version)
+        # A generic 429 (e.g. metadata) or descriptor error alone is not enough.
+        return process.wait(), retryable or (rate_limited and descriptor_failed)
 
 
 def run_with_retry(command: list[str], version: str,
