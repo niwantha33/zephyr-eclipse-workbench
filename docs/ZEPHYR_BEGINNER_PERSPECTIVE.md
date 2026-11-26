@@ -28,7 +28,7 @@ Both workspaces are layouts only: switching them cannot flash/reset a target.
 
 - The left navigation keeps seven concise, keyboard-selectable workflow steps and live selected-project, board, profile and ELF-presence context.
 - The right pane shows **only the selected step**: its purpose, three or fewer short usage notes, and explicit actions.
-- Drag the central divider to resize navigation and instructions. Either column can scroll independently.
+- The visual guide automatically adapts to available width and scrolls with the view. The native SWT fallback still supports dragging its central divider.
 - Choosing a step changes only the right-pane content. Pressing a tool/action button opens the corresponding existing Eclipse view, wizard or command; it is not embedded in the guide.
 - Build, flash and debug remain explicit user actions. ELF presence does not verify target execution; trace and CPU tools must not imply live capture without evidence.
 - Advanced tools remain discoverable by name, without showing every option on initial load.
