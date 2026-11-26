@@ -7,6 +7,13 @@
 - The transport warning and subsequent artifact-descriptor failure did not match the existing retry classifier. Recognize the paired exact-version Central download warning and descriptor error; generic metadata throttling, unrelated versions and compile errors remain non-retryable.
 - Retain the three-attempt limit, original dependency pin, repositories, qualifier, read-only build runner and publication gates. Regression fixture uses the observed log form; exact-head CI and successful publication remain unverified.
 
+## Physical package view (review branch, not released)
+
+- Separate Hardware Studio menu opens a read-only LQFP64 reference package for the exact LP-MSPM0G3507 board; unsupported board identities show no guessed pinout.
+- Pin identifiers transcribed as factual data from TI SLASEX6C Fig. 6-2; board part identity from SLAU873E §1.4. No vendor artwork or SDK redistributed.
+- Binding-resolved GPIO references and separately labelled pinctrl-name candidates are linked to selected-build DTS nodes. No mux encoding, electrical usage, free-pin claim or source edits. No physical verification or G0 pass.
+- Automated asset checks and exact-head CI required before review.
+
 ## DTS Topology navigation (review branch, not released)
 
 - Existing read-only Devicetree topology now belongs to Configure Project and is reachable from Configuration Studio's visual and native views. Existing command/view IDs, selected build, node identity, offline renderer and fallback are retained.

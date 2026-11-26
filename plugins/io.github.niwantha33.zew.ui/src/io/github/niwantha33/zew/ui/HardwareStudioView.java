@@ -40,6 +40,9 @@ import org.eclipse.ui.texteditor.ITextEditor;
  */
 public final class HardwareStudioView extends ViewPart {
     public static final String ID = Activator.ID + ".hardwareStudio";
+    public static final String PHYSICAL_ID = Activator.ID + ".physicalHardwareStudio";
+    private boolean physical;
+    private String selectionOrigin() { return physical ? "physical-hardware-studio" : "hardware-studio"; }
     private final AtomicInteger generation = new AtomicInteger();
     private Browser browser;
     private Label fallback;
@@ -58,9 +61,10 @@ public final class HardwareStudioView extends ViewPart {
 
     @Override
     public void createPartControl(Composite parent) {
+        physical = PHYSICAL_ID.equals(getViewSite().getId());
         parent.setLayout(new GridLayout(1, false));
         try {
-            var entry = Activator.getDefault().getBundle().getEntry("hardware-studio/index.html");
+            var entry = Activator.getDefault().getBundle().getEntry(physical ? "hardware-studio/package.html" : "hardware-studio/index.html");
             if (entry == null) throw new IOException("Packaged DTS Topology interface not found");
             try (var stream = entry.openStream()) {
                 byte[] bytes = stream.readNBytes(180_001);
@@ -85,7 +89,7 @@ public final class HardwareStudioView extends ViewPart {
                             || !(arguments[0] instanceof String action)
                             || !(arguments[1] instanceof String path))
                         return "DENIED";
-                    if (!java.util.Set.of("refresh", "focus", "source", "graph", "theme").contains(action)
+                    if (!java.util.Set.of("refresh", "focus", "source", "graph", "theme", "topology").contains(action)
                             || ("refresh".equals(action) && !path.isEmpty())
                             || ("theme".equals(action) && !"dark".equals(path) && !"light".equals(path))
                             || (!"theme".equals(action) && !"refresh".equals(action)
@@ -98,6 +102,7 @@ public final class HardwareStudioView extends ViewPart {
                             case "focus" -> focus(path);
                             case "source" -> openSource(path);
                             case "graph" -> openClassicGraph(path);
+                            case "topology" -> openTopology(path);
                             case "theme" -> theme = path;
                             default -> { /* guarded above */ }
                         }
@@ -155,7 +160,7 @@ public final class HardwareStudioView extends ViewPart {
         } else if (!choice.identity().nodePath().isBlank()
                 && snapshot != null && snapshot.observed()
                 && snapshot.nodes().stream().anyMatch(n -> n.path().equals(choice.identity().nodePath()))
-                && !"hardware-studio".equals(choice.origin())) {
+                && !selectionOrigin().equals(choice.origin())) {
             focus = choice.identity().nodePath();
             render(snapshot, focus);
         }
@@ -241,7 +246,7 @@ public final class HardwareStudioView extends ViewPart {
             String document = HardwareStudioDocument.render(template, evidence, projectName,
                     buildName, selectedFocus,
                     staleSnapshot && evidence != null && evidence.observed(),
-                    theme, boardName, profileName);
+                    theme, boardName, profileName, physical);
             browser.setText(document);
         } catch (RuntimeException invalid) {
             browser.setText("<html><body><h2>DTS Topology unavailable</h2>"
@@ -296,7 +301,16 @@ public final class HardwareStudioView extends ViewPart {
         render(snapshot, path);
         if (project != null && build != null)
             ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
-                    .publish(project, build, path, "hardware-studio");
+                    .publish(project, build, path, selectionOrigin());
+    }
+
+    private void openTopology(String path) {
+        if (project == null || build == null || verifiedNode(path) == null) return;
+        try {
+            var part = getSite().getPage().showView(ID);
+            if (part instanceof HardwareStudioView view)
+                view.displayProject(project, build, path);
+        } catch (PartInitException ignored) { /* optional topology view */ }
     }
 
     private void openClassicGraph(String path) {
