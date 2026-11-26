@@ -1,0 +1,260 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Zephyr Getting Started</title>
+<style>
+  :root {
+    color-scheme:light dark;
+    font:15px/1.45 system-ui,"Segoe UI",Arial,sans-serif;
+    --page:#f4f5f8;--card:#fff;--ink:#1f2630;--sub:#5a606a;--stroke:#dfe2e6;
+    --accent:#4434c8;--accent-hover:#3526a8;--soft:#ebecef;--focus:#9b90ff;
+    --warn:#fff3d8;--warn-ink:#835807;--info:#ebf2ff;--info-ink:#22589b;
+  }
+  * {box-sizing:border-box;}
+  body {margin:0;background:var(--page);color:var(--ink);min-width:280px;}
+  button {font:inherit;cursor:pointer;}
+  button:focus-visible {outline:3px solid var(--focus);outline-offset:3px;}
+  .shell {max-width:1700px;margin:0 auto;padding:28px 32px 26px;min-height:100vh;display:flex;flex-direction:column;gap:20px;}
+  .hero {display:flex;justify-content:space-between;align-items:end;gap:16px;}
+  h1 {font-size:26px;line-height:1.15;letter-spacing:-.035em;margin:0 0 4px;font-weight:720;}
+  .hero p {margin:0;color:var(--sub);font-size:14px;}
+  .counter {white-space:nowrap;font-size:13px;color:var(--sub);padding-bottom:3px;}
+  .main {display:grid;grid-template-columns:minmax(260px,32%) minmax(0,1fr);gap:20px;min-height:490px;flex:1;}
+  .card {border:1px solid var(--stroke);border-radius:14px;background:var(--card);min-width:0;box-shadow:0 1px 2px rgba(20,25,40,.025);}
+  .steps-card {padding:10px;min-height:0;}
+  .steps {display:flex;flex-direction:column;gap:4px;}
+  .step {display:flex;align-items:center;gap:14px;width:100%;min-height:56px;text-align:left;
+         background:transparent;border:1px solid transparent;border-radius:10px;padding:10px 13px;color:var(--ink);}
+  .step:hover {background:var(--page);}
+  .step[aria-current="step"],.step[aria-current="step"]:hover {background:var(--accent);color:#fff;}
+  .number {display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;
+           background:var(--soft);font-weight:700;font-size:14px;color:var(--ink);}
+  .step[aria-current="step"] .number {background:white;color:var(--accent);}
+  .step-copy {display:flex;flex-direction:column;min-width:0;}
+  .step-name {font-weight:700;font-size:15px;line-height:1.25;}
+  .step-detail {font-size:12px;line-height:1.35;color:var(--sub);}
+  .step[aria-current="step"] .step-detail {color:#efedff;}
+  .details-card {padding:34px 40px 30px;display:flex;flex-direction:column;min-height:490px;}
+  .panel {flex:1;}
+  .panel[hidden] {display:none!important;}
+  .eyebrow {color:var(--accent);font-weight:750;font-size:12px;letter-spacing:.085em;text-transform:uppercase;margin:0 0 20px;}
+  h2 {font-size:29px;line-height:1.22;letter-spacing:-.025em;margin:0 0 22px;font-weight:720;overflow-wrap:anywhere;}
+  .facts {display:grid;grid-template-columns:90px minmax(0,1fr);gap:13px 16px;margin:0 0 28px;}
+  .facts dt {font-weight:700;color:var(--sub);}
+  .facts dd {margin:0;overflow-wrap:anywhere;}
+  .actions {display:flex;flex-wrap:wrap;gap:12px;}
+  .action {border:1px solid #bfc3ca;border-radius:10px;min-height:48px;padding:11px 22px;
+           color:var(--ink);background:var(--card);font-weight:650;}
+  .action:hover {background:var(--page);}
+  .action.primary {background:var(--accent);color:#fff;border-color:var(--accent);}
+  .action.primary:hover {background:var(--accent-hover);}
+  .note {font-size:13px;margin:20px 0 0;color:var(--sub);max-width:690px;}
+  .next {border-top:1px solid var(--stroke);padding-top:23px;margin-top:38px;
+         display:flex;justify-content:space-between;align-items:center;gap:16px;color:var(--sub);font-size:13px;}
+  .next button {background:transparent;color:var(--accent);font-weight:700;border:0;padding:6px 0;text-align:right;}
+  .next button:hover {text-decoration:underline;}
+  .statusbar {border:1px solid var(--stroke);border-radius:13px;background:var(--card);padding:15px 24px;
+              display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.75fr) auto;
+              align-items:center;gap:18px;}
+  .status-field {min-width:0;}
+  .status-label {display:block;font-size:11px;letter-spacing:.075em;text-transform:uppercase;
+                 font-weight:700;color:var(--sub);}
+  .status-value {display:block;overflow-wrap:anywhere;font-size:14px;}
+  .mono {font-family:ui-monospace,SFMono-Regular,Consolas,monospace;}
+  .status-pill {border-radius:24px;padding:7px 13px;background:var(--warn);color:var(--warn-ink);
+                font-size:12px;font-weight:700;line-height:1.3;text-align:center;}
+  .status-pill.info {background:var(--info);color:var(--info-ink);}
+  .status-pill:before {content:"⚠";margin-right:7px;}
+  .status-pill.info:before {content:"ℹ";}
+  @media(max-width:870px) {
+    .shell {padding:18px 16px;}
+    .main {grid-template-columns:minmax(195px,34%) minmax(0,1fr);gap:12px;}
+    .details-card {padding:26px 22px;}
+    h2 {font-size:24px;}
+    .statusbar {grid-template-columns:repeat(2,minmax(0,1fr));}
+  }
+  @media(max-width:580px) {
+    .shell {padding:15px 12px;}
+    .hero {align-items:start;}
+    h1 {font-size:23px;}
+    .main {display:flex;flex-direction:column;min-height:0;}
+    .steps-card {padding:8px;}
+    .steps {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;}
+    .step {gap:7px;padding:9px 7px;min-height:55px;}
+    .number {width:25px;height:25px;font-size:12px;}
+    .step-name {font-size:13px;}
+    .step-detail {font-size:11px;}
+    .details-card {min-height:360px;padding:25px 20px;}
+    .facts {grid-template-columns:58px minmax(0,1fr);gap:9px 12px;}
+    .actions {flex-direction:column;align-items:stretch;}
+    .statusbar {padding:13px;gap:12px;}
+    .status-pill {grid-column:1/-1;}
+  }
+  @media(prefers-color-scheme:dark) {
+    :root {--page:#1e222c;--card:#292f3a;--ink:#f3f5fa;--sub:#c2cbd8;--stroke:#4b5361;
+           --accent:#7364e5;--accent-hover:#6152cc;--soft:#444e5d;--focus:#b9adff;
+           --warn:#54411f;--warn-ink:#ffdb88;--info:#233c58;--info-ink:#b9d8ff;}
+    .step[aria-current="step"] .number {color:#4434c8;}
+    .action {border-color:#778295;}
+    .step[aria-current="step"] .step-detail {color:#f0edff;}
+  }
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="hero">
+    <div>
+      <h1>Getting started</h1>
+      <p>Work through the steps in order, or jump to any step. Instructions appear on the right.</p>
+    </div>
+    <span class="counter" id="step-counter" aria-live="polite">Step 1 of 7</span>
+  </header>
+  <div class="main">
+    <nav class="card steps-card" aria-label="Getting started steps">
+      <div class="steps">
+        <button class="step" type="button" data-step="0" aria-current="step"><span class="number" aria-hidden="true">1</span><span class="step-copy"><span class="step-name">Project</span><span class="step-detail">Create or import an application</span></span></button>
+        <button class="step" type="button" data-step="1"><span class="number" aria-hidden="true">2</span><span class="step-copy"><span class="step-name">Hardware</span><span class="step-detail">Choose board and devicetree</span></span></button>
+        <button class="step" type="button" data-step="2"><span class="number" aria-hidden="true">3</span><span class="step-copy"><span class="step-name">Configuration</span><span class="step-detail">Kconfig and overlays</span></span></button>
+        <button class="step" type="button" data-step="3"><span class="number" aria-hidden="true">4</span><span class="step-copy"><span class="step-name">Build</span><span class="step-detail">Compile the active profile</span></span></button>
+        <button class="step" type="button" data-step="4"><span class="number" aria-hidden="true">5</span><span class="step-copy"><span class="step-name">Flash &amp; Debug</span><span class="step-detail">Run on the target</span></span></button>
+        <button class="step" type="button" data-step="5"><span class="number" aria-hidden="true">6</span><span class="step-copy"><span class="step-name">Inspect &amp; Analyse</span><span class="step-detail">Memory, threads, traces</span></span></button>
+        <button class="step" type="button" data-step="6"><span class="number" aria-hidden="true">7</span><span class="step-copy"><span class="step-name">More Tools</span><span class="step-detail">Extra utilities</span></span></button>
+      </div>
+    </nav>
+    <section class="card details-card" aria-label="Selected step instructions">
+      <article class="panel" data-panel="0">
+        <p class="eyebrow">Step 1 · Project</p>
+        <h2>Open or create a project</h2>
+        <dl class="facts"><dt>What</dt><dd>Create a Zephyr application, or import an existing one.</dd>
+          <dt>How</dt><dd>Open the wizard, then select the project in Project Explorer.</dd></dl>
+        <div class="actions">
+          <button type="button" class="action primary" data-action="new-project">New / Import Project…</button>
+          <button type="button" class="action" data-action="project-explorer">Open Project Explorer</button>
+        </div>
+      </article>
+      <article class="panel" data-panel="1" hidden>
+        <p class="eyebrow">Step 2 · Hardware</p><h2>Choose your hardware</h2>
+        <dl class="facts"><dt>What</dt><dd>Choose the exact board and processor target for your project.</dd>
+          <dt>How</dt><dd>Browse available boards, then confirm the saved target in Project Properties.</dd>
+          <dt>Note</dt><dd>Browsing does not change the selected board.</dd></dl>
+        <div class="actions"><button type="button" class="action primary" data-action="browse-boards">Browse Available Boards…</button>
+          <button type="button" class="action" data-action="hardware">Explore Current Hardware</button>
+          <button type="button" class="action" data-action="properties">Project Board Settings…</button></div>
+      </article>
+      <article class="panel" data-panel="2" hidden>
+        <p class="eyebrow">Step 3 · Configuration</p><h2>Configure your firmware</h2>
+        <dl class="facts"><dt>What</dt><dd>Inspect devicetree connections, overlays, Kconfig and enabled peripherals.</dd>
+          <dt>How</dt><dd>Start with guided hardware, then open advanced RTOS and build settings when needed.</dd>
+          <dt>Note</dt><dd>Changing configuration requires an explicit action and a rebuild.</dd></dl>
+        <div class="actions"><button type="button" class="action primary" data-action="hardware">Explore Pins and Peripherals…</button>
+          <button type="button" class="action" data-action="configuration">Build and RTOS Settings…</button></div>
+      </article>
+      <article class="panel" data-panel="3" hidden>
+        <p class="eyebrow">Step 4 · Build</p><h2>Build your firmware</h2>
+        <dl class="facts"><dt>What</dt><dd>Compile the active board and build profile.</dd>
+          <dt>How</dt><dd>Build, then check the Console and Problems views for diagnostics.</dd>
+          <dt>Note</dt><dd>A local ELF file does not prove that firmware ran on the device.</dd></dl>
+        <div class="actions"><button type="button" class="action primary" data-action="build">Build Firmware</button></div>
+      </article>
+      <article class="panel" data-panel="4" hidden>
+        <p class="eyebrow">Step 5 · Flash &amp; Debug</p><h2>Run on your board</h2>
+        <dl class="facts"><dt>What</dt><dd>Program a connected board or start a debugging session.</dd>
+          <dt>How</dt><dd>Connect the correct debug probe and verify the selected target first.</dd>
+          <dt>Note</dt><dd>Flashing and debugging can reset or alter hardware. Selecting this step does neither.</dd></dl>
+        <div class="actions"><button type="button" class="action primary" data-action="flash">Flash Firmware…</button>
+          <button type="button" class="action" data-action="flash-debug">Flash and Debug…</button>
+          <button type="button" class="action" data-action="debug-workspace">Hardware Debug Workspace</button></div>
+      </article>
+      <article class="panel" data-panel="5" hidden>
+        <p class="eyebrow">Step 6 · Inspect &amp; Analyse</p><h2>Inspect firmware behaviour</h2>
+        <dl class="facts"><dt>What</dt><dd>Inspect traces, thread scheduling and CPU activity when evidence is available.</dd>
+          <dt>How</dt><dd>Start with Debug Trace Console, then view captured timeline and CPU-load evidence.</dd>
+          <dt>Note</dt><dd>Missing or offline captures are not live target data.</dd></dl>
+        <div class="actions"><button type="button" class="action primary" data-action="trace">Debug Trace Console…</button>
+          <button type="button" class="action" data-action="timeline">Thread Timeline…</button>
+          <button type="button" class="action" data-action="cpu">CPU Load…</button></div>
+      </article>
+      <article class="panel" data-panel="6" hidden>
+        <p class="eyebrow">Step 7 · More Tools</p><h2>Explore additional tools</h2>
+        <dl class="facts"><dt>What</dt><dd>Inspect project configuration, connected YAML and supported target registers.</dd>
+          <dt>How</dt><dd>Choose a specialised tool when you need its evidence.</dd>
+          <dt>Note</dt><dd>Unavailable registers and build evidence remain unavailable, not guessed.</dd></dl>
+        <div class="actions"><button type="button" class="action primary" data-action="dts">Devicetree Graph Studio…</button>
+          <button type="button" class="action" data-action="yaml">YAML Connected Blocks…</button>
+          <button type="button" class="action" data-action="registers">Hardware Register Explorer…</button>
+          <button type="button" class="action" data-action="developer">Development Workspace</button></div>
+      </article>
+      <div class="next"><span id="next-hint">Next: choose your board and devicetree</span>
+        <button type="button" id="next-button" data-step="1">Hardware →</button></div>
+    </section>
+  </div>
+  <footer class="statusbar" aria-label="Selected project status">
+    <div class="status-field"><span class="status-label">Current project</span><span class="status-value mono">{{PROJECT}}</span></div>
+    <div class="status-field"><span class="status-label">Board</span><span class="status-value mono">{{BOARD}}</span></div>
+    <div class="status-field"><span class="status-label">Profile</span><span class="status-value">{{PROFILE}}</span></div>
+    <span class="status-pill {{OUTPUT_CLASS}}" role="status">{{OUTPUT}}</span>
+  </footer>
+</main>
+<script>
+(function() {
+  'use strict';
+  var hints = [
+    'Next: choose your board and devicetree',
+    'Next: configure your firmware',
+    'Next: compile the active profile',
+    'Next: flash or debug explicitly',
+    'Next: inspect available evidence',
+    'Next: explore additional tools',
+    'Back to the beginning'
+  ];
+  var names = ['Hardware','Configuration','Build','Flash & Debug','Inspect & Analyse','More Tools','Project'];
+  function bridge(message) {
+    if (typeof window.zewGettingStarted === 'function') window.zewGettingStarted(message);
+  }
+  function selectStep(index, notify) {
+    if (!Number.isInteger(index) || index < 0 || index > 6) return;
+    document.querySelectorAll('[data-step]').forEach(function(button) {
+      if (!button.classList.contains('step')) return;
+      if (Number(button.getAttribute('data-step')) === index) button.setAttribute('aria-current','step');
+      else button.removeAttribute('aria-current');
+    });
+    document.querySelectorAll('[data-panel]').forEach(function(panel) {
+      panel.hidden = Number(panel.getAttribute('data-panel')) !== index;
+    });
+    document.getElementById('step-counter').textContent = 'Step ' + (index + 1) + ' of 7';
+    document.getElementById('next-hint').textContent = hints[index];
+    var next = document.getElementById('next-button');
+    next.textContent = names[index] + ' →';
+    next.setAttribute('data-step', String((index + 1) % 7));
+    if (notify) bridge('step:' + index);
+  }
+  document.addEventListener('click',function(event) {
+    var button = event.target.closest('button');
+    if (!button) return;
+    if (button.hasAttribute('data-step')) {
+      selectStep(Number(button.getAttribute('data-step')),true);
+    } else if (button.hasAttribute('data-action')) {
+      bridge(button.getAttribute('data-action'));
+    }
+  });
+  document.addEventListener('keydown',function(event) {
+    var button = event.target.closest('button.step');
+    if (!button || !['ArrowDown','ArrowUp','Home','End'].includes(event.key)) return;
+    var index = Number(button.getAttribute('data-step'));
+    if (event.key === 'ArrowDown') index = (index + 1) % 7;
+    if (event.key === 'ArrowUp') index = (index + 6) % 7;
+    if (event.key === 'Home') index = 0;
+    if (event.key === 'End') index = 6;
+    event.preventDefault();
+    selectStep(index,true);
+    document.querySelector('.step[data-step="' + index + '"]').focus();
+  });
+  selectStep({{STEP}},false);
+})();
+</script>
+</body>
+</html>
