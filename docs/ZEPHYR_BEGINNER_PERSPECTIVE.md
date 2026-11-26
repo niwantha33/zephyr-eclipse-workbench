@@ -17,6 +17,13 @@ The Zephyr menu now uses task names, with specialised investigations in dedicate
 
 Both workspaces are layouts only: switching them cannot flash/reset a target.
 
+## Getting Started visual update (review branch)
+
+- The offline visual guide follows a seven-step left navigation, one right-hand instruction card and a full-width project status strip. Project name, board, active build profile and ELF presence are read from the selected Eclipse project; the sample screenshot values are not hardcoded.
+- Step selection is local and has no build, flash or debug side effects. Each button invokes an allowlisted existing Eclipse handler or view. Navigation is keyboard accessible; the interface responds to narrower layouts and dark system themes.
+- The packaged offline HTML is loaded through SWT Browser, with a native SWT guide as a fallback when browser support or the asset is unavailable. No network requests or external assets are used.
+- ELF presence is labelled **not target-verified**. CI compilation, installed workbench checks, screen-reader review and physical-hardware qualification must be assessed separately.
+
 ## Two-column Getting Started guide
 
 - The left navigation keeps seven concise, keyboard-selectable workflow steps and live selected-project, board, profile and ELF-presence context.
