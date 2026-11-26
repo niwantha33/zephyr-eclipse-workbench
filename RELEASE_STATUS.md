@@ -1,6 +1,14 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Setup release selection (review branch, not released)
+
+- Retain the native Eclipse wizard and pinned 4.4.0 first-build path; add explicit official stable-release discovery without requiring an existing Python installation.
+- Alternate versions use a separate release-owned source preparation root, exact tag/West manifest verification, and no build-ready marker, SDK provisioning or automatic project binding. Source-only is not firmware compatibility.
+- Offline default, visible network failure, review reset, and folder/profile mismatch rejection. Full multi-version SDK/dependency qualification and physical-board selection remain pending.
+- Native Windows setup and exact-head Tycho/CI validation are pending; no release or G0 qualification claimed.
+
+
 ## Getting Started visual redesign (2026-11-26 — review branch)
 
 - Added an offline seven-step Getting Started layout matching the submitted UI reference: selectable navigation, contextual instructions, explicit actions and a separate project/board/profile/ELF status footer.

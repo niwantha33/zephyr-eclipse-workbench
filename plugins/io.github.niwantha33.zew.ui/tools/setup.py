@@ -6,6 +6,7 @@ No global PATH/registry edits, no module/blob updates, no user-source replacemen
 The Java bootstrap reserves the directory and holds its installation lock.
 """
 import argparse
+import re
 from email.parser import BytesParser
 import hashlib
 import http.client
@@ -469,11 +470,31 @@ def first_build_command(python, project, build, board, ninja):
             '-DPython3_EXECUTABLE:FILEPATH=' + cmake_path(python)]
 
 
-def setup(root, lock):
+def source_profile_marker(source_release):
+    if source_release is None:
+        return 'first-build-win-x64-v1\n'
+    if not re.fullmatch(r'v(0|[1-9][0-9]{0,7})\.[0-9]{1,8}\.[0-9]{1,8}', source_release) or source_release == 'v4.4.0':
+        raise ValueError('Select a different exact stable source release')
+    return 'source-only-win-x64-v1:' + source_release + '\n'
+
+
+def prepare_alternate_sources(root, git, source_release, environment):
+    # Embedded Python deliberately excludes the script directory; grant only
+    # the copied, packaged installer directory to this child process.
+    helper = ("import sys,pathlib;sys.path.insert(0,sys.argv[1]);"
+              "import release_sources as s;"
+              "s.prepare_fresh(pathlib.Path(sys.argv[2]),sys.argv[3],"
+              "pathlib.Path(sys.executable),pathlib.Path(sys.argv[4]))")
+    run([sys.executable, '-c', helper, Path(__file__).resolve().parent,
+         root, source_release, git], root, environment, 9900)
+
+
+def setup(root, lock, source_release=None):
     validate_lock(lock)
+    marker = source_profile_marker(source_release)
     if sys.platform != 'win32' or sys.maxsize <= 2**32:
         raise ValueError('This installer profile supports native Windows x64 only; use existing tools on other hosts')
-    if not (root / '.zew-managed').is_file() or (root / '.zew-managed').read_text() != 'first-build-win-x64-v1\n':
+    if not (root / '.zew-managed').is_file() or (root / '.zew-managed').read_text() != marker:
         raise ValueError('Setup root is not owned by the workbench')
     install_runtime_support(root)
     if shutil.disk_usage(root).free < 5 * 1024**3:
@@ -492,6 +513,11 @@ def setup(root, lock):
     for executable in (cmake, ninja):
         if not executable.is_file():
             raise ValueError('Installed build executable is missing: ' + str(executable))
+    if source_release is not None:
+        log('Preparing exact stable source release ' + source_release + ' (no SDK or firmware build)')
+        prepare_alternate_sources(root, git, source_release, environment)
+        log('SOURCE VERIFIED ONLY — SDK and firmware build qualification remain separate.')
+        return
     log('PHASE 2/5 — Installing SDK and the x86 compiler only')
     sdk = install_sdk(root)
     environment.update(ZEPHYR_SDK_INSTALL_DIR=cmake_path(sdk), ZEPHYR_TOOLCHAIN_VARIANT='zephyr')
@@ -517,9 +543,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--lock', required=True, type=Path)
+    parser.add_argument('--source-release', default=None)
     args = parser.parse_args()
     try:
-        setup(args.root.resolve(), json.loads(args.lock.read_text(encoding='utf-8')))
+        setup(args.root.resolve(), json.loads(args.lock.read_text(encoding='utf-8')), args.source_release)
     except Exception as error:
         log('FAILED — ' + str(error))
         log('Existing environments were preserved. Retry with the same folder to reuse verified downloads.')

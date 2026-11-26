@@ -9,6 +9,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.List;
+import java.util.ArrayList;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -50,23 +53,93 @@ public final class SetupWizard extends Wizard {
 
     private final class LocationPage extends WizardPage {
         Text folder;
-        LocationPage() { super("location"); setTitle("Your first Zephyr build"); setDescription("Windows x64 • Zephyr 4.4.0 • No hardware or terminal required"); }
+        private Combo release;
+        private Label target;
+        private Label releaseStatus;
+        private Button check;
+        private Job catalogJob;
+        private String suggested;
+        private List<String> tags = List.of(SetupReleaseCatalog.PINNED);
+        String tag() { return tags.get(Math.max(0, release.getSelectionIndex())); }
+        boolean firstBuild() { return SetupReleaseCatalog.PINNED.equals(tag()); }
+        String marker() { return firstBuild() ? "first-build-win-x64-v1\n" : "source-only-win-x64-v1:" + tag() + "\n"; }
+        private String suggestedFolder() {
+            return Path.of(System.getProperty("user.home"), "ZephyrWorkbench",
+                    (firstBuild() ? "first-build-" : "source-") + tag().substring(1)).toString();
+        }
+        LocationPage() { super("location"); setTitle("Your first Zephyr environment"); setDescription("Windows x64 • Isolated setup • No terminal required"); }
         @Override public void createControl(Composite parent) {
             var body = new Composite(parent, SWT.NONE); body.setLayout(new GridLayout(3, false));
             var intro = new Label(body, SWT.WRAP);
-            intro.setText("We will install a private Python runtime, Git, build tools and one compiler, obtain Zephyr, create Hello World and verify a firmware build. Your existing environment stays separate.\n\nThis first profile compiles for QEMU x86 without a board. Running the emulator, physical-board setup, flashing and debugging are separate steps.");
+            intro.setText("Choose a Zephyr release. The pinned first-build profile installs the reviewed tools and compiles Hello World. Other official releases can be downloaded with their West modules into a separate source workspace. SDK and build qualification for those releases are separate steps. Existing environments stay unchanged.");
             var introduction = new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1); introduction.widthHint = 650; intro.setLayoutData(introduction);
             new Label(body, SWT.NONE).setText("Install folder:");
             folder = new Text(body, SWT.BORDER); folder.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
             folder.setText(Path.of(System.getProperty("user.home"), "ZephyrWorkbench", "first-build-4.4.0").toString());
+            suggested = folder.getText();
             var browse = new Button(body, SWT.PUSH); browse.setText("Browse...");
             browse.addListener(SWT.Selection, e -> { var picker = new DirectoryDialog(getShell()); picker.setFilterPath(folder.getText()); String value = picker.open(); if (value != null) folder.setText(value); });
-            new Label(body, SWT.NONE).setText("Zephyr release:"); var release = new Combo(body, SWT.READ_ONLY); release.setItems("4.4.0 — pinned first-build profile"); release.select(0);
-            new Label(body, SWT.NONE);
-            new Label(body, SWT.NONE).setText("First target:"); var board = new Combo(body, SWT.READ_ONLY); board.setItems("No hardware — qemu_x86/atom"); board.select(0);
-            new Label(body, SWT.NONE);
-            var existing = new Label(body, SWT.WRAP); existing.setText("Already have Zephyr? Close this wizard and use Zephyr > Install / Manage Zephyr Tools to reuse it."); existing.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1));
-            folder.addModifyListener(e -> validate()); setControl(body); validate();
+            new Label(body, SWT.NONE).setText("Zephyr release:");
+            release = new Combo(body, SWT.READ_ONLY);
+            release.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+            release.setItems(SetupReleaseCatalog.label(SetupReleaseCatalog.PINNED)); release.select(0);
+            check = new Button(body, SWT.PUSH); check.setText("Check releases...");
+            check.setToolTipText("Contact the official Zephyr GitHub release API; no installation.");
+            check.addListener(SWT.Selection, e -> refreshReleases());
+            release.addListener(SWT.Selection, e -> selectionChanged());
+            releaseStatus = new Label(body, SWT.WRAP);
+            releaseStatus.setText("Offline: the pinned profile is available. Check releases to discover other stable versions.");
+            var statusData = new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1); statusData.widthHint = 650;
+            releaseStatus.setLayoutData(statusData);
+            new Label(body, SWT.NONE).setText("Setup target:");
+            target = new Label(body, SWT.WRAP);
+            target.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+            var existing = new Link(body, SWT.WRAP);
+            existing.setText("Already have Zephyr? <a>Open Install / Manage Zephyr Tools</a> to reuse it.");
+            existing.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 3, 1));
+            existing.addListener(SWT.Selection, e -> new ToolsDialog(getShell()).open());
+            body.addDisposeListener(e -> { if (catalogJob != null) catalogJob.cancel(); });
+            folder.addModifyListener(e -> validate()); setControl(body); selectionChanged();
+        }
+        private void selectionChanged() {
+            String next = suggestedFolder();
+            if (folder.getText().equals(suggested)) folder.setText(next);
+            suggested = next;
+            target.setText(firstBuild() ? "No hardware — qemu_x86/atom (compile only)"
+                    : "Source and West modules only — SDK and first build not included");
+            target.getParent().layout(true, true);
+            validate();
+        }
+        private void refreshReleases() {
+            check.setEnabled(false);
+            releaseStatus.setText("Checking official stable releases...");
+            var display = check.getDisplay();
+            catalogJob = new Job("Check official Zephyr releases") {
+                @Override protected IStatus run(IProgressMonitor monitor) {
+                    try {
+                        var found = SetupReleaseCatalog.fetch();
+                        if (!monitor.isCanceled()) display.asyncExec(() -> {
+                            if (release.isDisposed()) return;
+                            String selected = tag();
+                            tags = found;
+                            release.setItems(tags.stream().map(SetupReleaseCatalog::label).toArray(String[]::new));
+                            int index = tags.indexOf(selected);
+                            release.select(index < 0 ? tags.indexOf(SetupReleaseCatalog.PINNED) : index);
+                            releaseStatus.setText("Official stable releases loaded. Only the pinned profile includes a qualified first-build installer.");
+                            check.setEnabled(true); selectionChanged();
+                        });
+                        return Status.OK_STATUS;
+                    } catch (Exception failure) {
+                        if (!monitor.isCanceled()) display.asyncExec(() -> {
+                            if (release.isDisposed()) return;
+                            releaseStatus.setText("Release check failed. Existing choices remain available; retry when online.");
+                            check.setEnabled(true); releaseStatus.getParent().layout(true, true);
+                        });
+                        return new Status(IStatus.ERROR, Activator.ID, "Official release check failed", failure);
+                    }
+                }
+            };
+            catalogJob.setSystem(true); catalogJob.schedule();
         }
         void validate() {
             String error = null;
@@ -75,6 +148,9 @@ public final class SetupWizard extends Wizard {
                 Path root = Path.of(folder.getText().trim());
                 if (folder.getText().isBlank() || !root.isAbsolute()) error = "Choose an absolute installation folder.";
                 else if (Files.exists(root) && !Files.isDirectory(root)) error = "The selected path is a file.";
+                else if (Files.isRegularFile(root.resolve(".zew-managed"))
+                        && !Files.readString(root.resolve(".zew-managed")).equals(marker()))
+                    error = "This folder belongs to another release or setup profile. Choose a separate folder.";
                 else if (Files.isDirectory(root) && !Files.isRegularFile(root.resolve(".zew-managed"))) {
                     try (var files = Files.list(root)) { if (files.findAny().isPresent()) error = "Choose an empty folder, or a previous workbench setup folder to retry. Existing files will not be replaced."; }
                 }
@@ -84,7 +160,8 @@ public final class SetupWizard extends Wizard {
     }
     private final class ReviewPage extends WizardPage {
         Text plan;
-        ReviewPage() { super("review"); setTitle("Review and install"); setDescription("Review the pinned tools, their licences and the destination before starting."); }
+        Button agreement;
+        ReviewPage() { super("review"); setTitle("Review and install"); setDescription("Review the selected release, tools, licences and destination before starting."); }
         @Override public void createControl(Composite parent) {
             var body = new Composite(parent, SWT.NONE); body.setLayout(new GridLayout());
             plan = new Text(body, SWT.MULTI | SWT.READ_ONLY | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
@@ -96,12 +173,23 @@ public final class SetupWizard extends Wizard {
                     copyResource("tools/setup-licences.txt", notes); Program.launch(notes.toString());
                 } catch (Exception error) { setErrorMessage(error.getMessage()); }
             });
-            var agreement = new Button(body, SWT.CHECK); agreement.setText("I have reviewed the installation plan and licence records. Install these tools and build Hello World.");
+            agreement = new Button(body, SWT.CHECK); agreement.setText("I have reviewed the installation plan and licence records. Proceed with the selected setup.");
             agreement.addListener(SWT.Selection, e -> setPageComplete(agreement.getSelection()));
             setControl(body); setPageComplete(false);
         }
         @Override public void setVisible(boolean visible) {
-            if (visible && plan != null) plan.setText("Destination: " + location.folder.getText().trim()
+            if (visible && plan != null) {
+                agreement.setSelection(false); setPageComplete(false);
+                if (!location.firstBuild()) {
+                    plan.setText("Destination: " + location.folder.getText().trim()
+                            + "\n\nSelected official stable Zephyr release: " + location.tag()
+                            + "\n\nInstall the reviewed portable Python 3.13.7, MinGit 2.50.1 and pinned Python packages as SOURCE PREPARATION tools."
+                            + "\nDownload the selected Zephyr tag and West modules, verify the source revision and record the frozen manifest."
+                            + "\n\nThis does NOT install a release-specific SDK, qualify Python dependencies for firmware, create a project or build firmware."
+                            + "\nThe selected release and its upstream modules have their own licence terms; the linked records cover the pinned bootstrap tools only."
+                            + "\n\nNetwork required; source and modules can require several gigabytes. Existing environments remain unchanged."
+                            + "\nResult: a separate source-only workspace, not a build-ready environment.");
+                } else plan.setText("Destination: " + location.folder.getText().trim()
                     + "\n\nPython 3.13.7 (PSF and bundled third-party notices)\nMinGit 2.50.1 (GPL and bundled component licences)"
                     + "\nWest 1.5.0, CMake 3.31.10, Ninja 1.13.2\nPinned Python dependencies; licences include MIT, BSD, Apache, PSF and LGPL"
                     + "\nZephyr 4.4.0 at immutable revision 684c9e8f32e4373a21098559f748f06915f950c9"
@@ -109,6 +197,7 @@ public final class SetupWizard extends Wizard {
                     + "\n\nAllow approximately 1 GB of downloads and at least 5 GiB free disk space. Internet speed affects installation time."
                     + "\n\nVerified downloads are cached for retries. Interrupted installation stays marked incomplete. No administrator account, global PATH edits, vendor blobs or probe packages are required."
                     + "\n\nResult: editable Hello World source in Project Explorer and a verified firmware build. Emulator execution and physical hardware support are not part of this first profile.");
+            }
             super.setVisible(visible);
         }
     }
@@ -121,22 +210,25 @@ public final class SetupWizard extends Wizard {
                 || Job.getJobManager().find(ResourcesPlugin.FAMILY_MANUAL_BUILD).length != 0
                 || !ACTIVE.compareAndSet(false, true)) { MessageDialog.openInformation(getShell(), "Setup busy", "Finish the current build or setup operation first."); return false; }
         Path root = Path.of(location.folder.getText().trim()).toAbsolutePath().normalize();
+        String tag = location.tag();
+        String marker = location.marker();
+        boolean firstBuild = location.firstBuild();
         var console = new MessageConsole("Zephyr Beginner Setup", null); ConsolePlugin.getDefault().getConsoleManager().addConsoles(new org.eclipse.ui.console.IConsole[] {console});
         ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
         try (var output = console.newMessageStream()) {
             getContainer().run(true, true, monitor -> {
                 try {
-                    monitor.beginTask("Set up Zephyr and build Hello World", IProgressMonitor.UNKNOWN);
+                    monitor.beginTask(firstBuild ? "Set up Zephyr and build Hello World" : "Prepare Zephyr " + tag + " sources", IProgressMonitor.UNKNOWN);
                     Files.createDirectories(root);
                     if (!Files.isRegularFile(root.resolve(".zew-managed"))) {
                         try (var files = Files.list(root)) { if (files.findAny().isPresent()) throw new java.io.IOException("Installation folder is not empty; existing files were preserved."); }
-                        Files.writeString(root.resolve(".zew-managed"), "first-build-win-x64-v1\n", StandardOpenOption.CREATE_NEW);
+                        Files.writeString(root.resolve(".zew-managed"), marker, StandardOpenOption.CREATE_NEW);
                     }
                     try (var channel = FileChannel.open(root.resolve(".zew-install.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE); var lock = channel.tryLock()) {
                         if (lock == null) throw new java.io.IOException("Another Eclipse instance is using this installation folder.");
                         var report = (java.util.function.Consumer<String>) text -> { monitor.subTask(text); output.println(text); };
-                        if (!Files.readString(root.resolve(".zew-managed")).equals("first-build-win-x64-v1\n")) throw new java.io.IOException("This directory belongs to a different setup profile.");
-                        if (Files.isRegularFile(root.resolve(".zew-ready")) && Files.isRegularFile(root.resolve("environment.properties"))
+                        if (!Files.readString(root.resolve(".zew-managed")).equals(marker)) throw new java.io.IOException("This directory belongs to a different setup profile.");
+                        if (firstBuild && Files.isRegularFile(root.resolve(".zew-ready")) && Files.isRegularFile(root.resolve("environment.properties"))
                                 && Files.isRegularFile(root.resolve("projects/hello_world/.zew-build/first/zephyr/zephyr.elf"))) {
                             report.accept("Reusing the completed managed environment. Existing tools and project files were preserved."); return;
                         }
@@ -154,17 +246,26 @@ public final class SetupWizard extends Wizard {
                         copyResource("tools/managed_sitecustomize.py", root.resolve("installer/managed_sitecustomize.py"));
                         copyResource("tools/setup-lock.json", root.resolve("installer/setup-lock.json"));
                         copyResource("tools/setup-licences.txt", root.resolve("installer/setup-licences.txt"));
-                        new ProcessRunner().run(List.of(root.resolve("python/python.exe").toString(), "-u", root.resolve("installer/setup.py").toString(),
-                                "--root", root.toString(), "--lock", root.resolve("installer/setup-lock.json").toString()), root,
-                                Duration.ofHours(2), monitor::isCanceled, report).requireSuccess();
-                        if (!Files.isRegularFile(root.resolve(".zew-ready"))) throw new java.io.IOException("Setup did not produce a verified first build.");
+                        var command = new ArrayList<>(List.of(root.resolve("python/python.exe").toString(), "-u", root.resolve("installer/setup.py").toString(),
+                                "--root", root.toString(), "--lock", root.resolve("installer/setup-lock.json").toString()));
+                        if (!firstBuild) {
+                            copyResource("tools/release_sources.py", root.resolve("installer/release_sources.py"));
+                            copyResource("tools/project_versions.py", root.resolve("installer/project_versions.py"));
+                            command.addAll(List.of("--source-release", tag));
+                        }
+                        new ProcessRunner().run(command, root, Duration.ofHours(3), monitor::isCanceled, report).requireSuccess();
+                        Path proof = root.resolve(firstBuild ? ".zew-ready" : "workspace/.zew-source-ready");
+                        if (!Files.isRegularFile(proof)) throw new java.io.IOException("Setup did not produce the expected verification marker.");
                     }
                 } catch (java.io.InterruptedIOException error) { throw new InterruptedException("Setup cancelled. Completed downloads are preserved for retry."); }
                 catch (InterruptedException error) { throw error; }
                 catch (Exception error) { throw new java.lang.reflect.InvocationTargetException(error); }
                 finally { monitor.done(); }
             });
-            importProject(root);
+            if (firstBuild) importProject(root);
+            else MessageDialog.openInformation(getShell(), "Zephyr sources prepared",
+                    "Verified sources and West modules for " + tag + " are in:\n" + root.resolve("workspace")
+                    + "\n\nSDK selection and a successful firmware build are still required. No existing project was changed.");
             return true;
         } catch (InterruptedException error) { MessageDialog.openInformation(getShell(), "Setup cancelled", "Completed downloads were preserved. Open Set Up Zephyr again with the same folder to retry."); return false; }
         catch (Exception error) { Throwable cause = error.getCause() == null ? error : error.getCause(); MessageDialog.openError(getShell(), "Zephyr setup", cause.getMessage() + "\n\nSee the Zephyr Beginner Setup console. Retry the same folder to reuse verified downloads."); return false; }

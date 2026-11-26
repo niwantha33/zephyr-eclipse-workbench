@@ -41,11 +41,12 @@ def check_release(release):
 
 
 def check_destination(destination, current, original_setup=None):
-    if not destination.is_absolute() or not current.is_absolute():
+    if not destination.is_absolute() or (current is not None and not current.is_absolute()):
         raise VersionError("The new workspace and the original workspace need absolute paths")
+    if destination.is_symlink():
+        raise VersionError("Candidate destination must not be a symbolic link")
     destination = destination.resolve()
-    current = current.resolve()
-    protected = [current]
+    protected = [current.resolve()] if current is not None else []
     if original_setup is not None:
         protected.append(original_setup.resolve())
     for path in protected:
@@ -136,6 +137,32 @@ def write_file_once(path, text):
 
 
 def install(release, destination, current, python, git, allow_network, original_setup=None):
+    if current is None:
+        raise VersionError("Specify the original West workspace")
+    return _install(release, destination, current, python, git, allow_network, original_setup)
+
+
+def prepare_fresh(root, release, python, git):
+    """Fresh wizard only: separate version-bound owned root; never build-ready."""
+    check_release(release)
+    root = root.resolve()
+    marker = root / ".zew-managed"
+    if (release == "v4.4.0" or not marker.is_file() or marker.is_symlink()
+            or marker.read_text() != "source-only-win-x64-v1:" + release + "\n"
+            or (root / ".zew-ready").exists() or (root / "environment.properties").exists()):
+        raise VersionError("Fresh source setup requires a separate version-owned root")
+    target = root / "workspace"
+    if target.is_symlink():
+        raise VersionError("Refusing a linked source destination")
+    if target.exists():
+        record = verify_candidate(target, python, git)
+        if record["release"] != release:
+            raise VersionError("Existing source candidate belongs to a different release")
+        return record
+    return _install(release, target, None, python, git, True)
+
+
+def _install(release, destination, current, python, git, allow_network, original_setup=None):
     check_release(release)
     destination = check_destination(destination, current, original_setup)
     if not allow_network:

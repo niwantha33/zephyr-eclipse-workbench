@@ -51,6 +51,23 @@ class ReleaseSourceTests(unittest.TestCase):
             "firmware_built": False
         }
 
+    def test_fresh_source_setup_is_version_bound_and_not_build_ready(self):
+        root = self.parent / "fresh"; root.mkdir()
+        marker = root / ".zew-managed"
+        marker.write_text("source-only-win-x64-v1:v4.5.0\n")
+        with patch.object(sources, "run"), patch.object(
+                sources, "capture_sources", return_value=(self.manifest, self.record)):
+            result = sources.prepare_fresh(root, "v4.5.0", self.python, self.git)
+        self.assertFalse(result["build_ready"])
+        self.assertTrue((root / "workspace/.zew-source-ready").is_file())
+        self.assertFalse((root / ".zew-ready").exists())
+        self.assertFalse((root / "environment.properties").exists())
+        with self.assertRaises(sources.VersionError):
+            sources.prepare_fresh(root, "v4.3.0", self.python, self.git)
+        with patch.object(sources, "verify_candidate", return_value=self.record) as verify:
+            self.assertEqual(self.record, sources.prepare_fresh(root, "v4.5.0", self.python, self.git))
+            verify.assert_called_once()
+
     def test_sdk_recommendation_is_read_from_exact_checkout(self):
         zephyr = self.parent / "zephyr"
         zephyr.mkdir()
