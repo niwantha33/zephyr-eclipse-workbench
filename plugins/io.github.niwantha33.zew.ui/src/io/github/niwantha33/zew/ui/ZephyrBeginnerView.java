@@ -240,6 +240,7 @@ public final class ZephyrBeginnerView extends ViewPart {
                 line(content, "• What: Create a Zephyr application or import an existing one.");
                 line(content, "• How: Open the wizard, then select the project in Project Explorer.");
                 button(content, "New / Import Project...", () -> command("io.github.niwantha33.zew.quickStart"));
+                button(content, "Open Project Explorer", this::openProjectExplorer);
                 break;
             case 1:
                 heading(content, "2   Choose your hardware");
