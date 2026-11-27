@@ -1,6 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## DTS-first Configuration Studio (2026-11-27)
+
+- Configuration Studio opens the existing DTS Topology for the selected project, board and build profile. Hardware Studio hands off the exact selected node. The normal menu and `.dts`, `.dtsi` and `.overlay` context actions share the topology view.
+- Source-only projects can open their DTS files or edit an application overlay before building. Completed builds refresh topology for the matching project. Kconfig remains available under Kconfig and Project Settings.
+
 ## Managed environment and MSPM0 signal qualification candidate (2026-11-27)
 
 - Managed Windows Setup and Eclipse Build/Clean isolate tool search. Managed OpenOCD and Espressif launches use the selected tool paths. Build and Clean verify cached CMake, Ninja and Python bindings. Pristine Rebuild regenerates a stale cache on request.

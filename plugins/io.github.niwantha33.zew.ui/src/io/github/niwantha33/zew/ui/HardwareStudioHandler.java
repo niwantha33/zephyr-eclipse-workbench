@@ -15,14 +15,8 @@ public final class HardwareStudioHandler extends AbstractHandler {
             var part = page.showView(physical ? HardwareStudioView.PHYSICAL_ID : HardwareStudioView.ID);
             if (part instanceof HardwareStudioView view) {
                 var project = SelectedProject.from(event);
-                if (project != null && project.isAccessible()) {
-                    try {
-                        var settings = ProjectContext.settings(project);
-                        view.displayProject(project, ProjectContext.buildDirectory(project, settings), null);
-                    } catch (Exception incomplete) {
-                        view.displayProject(null, null, null);
-                    }
-                }
+                if (project != null && ZephyrProjectLifecycle.canInspect(project))
+                    view.displayCurrentProject(project);
             }
         } catch (Exception unavailable) {
             throw new ExecutionException("Cannot open embedded DTS Topology", unavailable);

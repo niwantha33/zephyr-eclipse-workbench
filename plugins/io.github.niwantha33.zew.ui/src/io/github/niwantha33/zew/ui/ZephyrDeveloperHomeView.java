@@ -340,9 +340,8 @@ public final class ZephyrDeveloperHomeView extends ViewPart {
         IProject selected = requireProject();
         if (selected == null) return;
         try {
-            var view = (ConfigurationHomeView) getSite().getPage().showView(ConfigurationHomeView.ID);
-            view.displayProject(selected);
-            view.openSection("hardware");
+            var view = (HardwareStudioView) getSite().getPage().showView(HardwareStudioView.ID);
+            view.displayCurrentProject(selected);
         } catch (Exception error) {
             failure("Hardware and peripherals", error);
         }

@@ -8,12 +8,10 @@ import org.eclipse.core.resources.IFile;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.ui.handlers.HandlerUtil;
 
-/** Every Zephyr configuration action opens the SAME three-section Studio. */
+/** Routes DTS source actions to Configuration Studio and configuration requests to the settings tools. */
 public final class ConfigurationStudioHandler extends AbstractHandler {
-    /** Ordinary Zephyr menu launches always start with the visual guide.
-     * Resource-specific deep links require an explicit project/file popup.
-     * Merely having prj.conf selected in Project Explorer is not a deep link.
-     */
+    private static final String SETTINGS_COMMAND = "io.github.niwantha33.zew.projectConfiguration";
+
     enum Entry { START, HARDWARE, PROJECT_OVERRIDES }
 
     static Entry navigationFor(boolean explicitPopup, String resourcePath) {
@@ -26,17 +24,7 @@ public final class ConfigurationStudioHandler extends AbstractHandler {
     }
 
     static String targetViewId(Entry entry) {
-        // Resource-specific actions select a section, NOT a different,
-        // independent editor with stale selection and seven primary tabs.
-        return ConfigurationHomeView.ID;
-    }
-
-    static String initialSection(Entry entry) {
-        return switch (entry) {
-            case HARDWARE -> "hardware";
-            case PROJECT_OVERRIDES -> "system";
-            case START -> "overview";
-        };
+        return entry == Entry.PROJECT_OVERRIDES ? ConfigurationHomeView.ID : HardwareStudioView.ID;
     }
 
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
@@ -51,17 +39,24 @@ public final class ConfigurationStudioHandler extends AbstractHandler {
         // never result in the old Start Here view or a blank workbench.
         if (project != null && !ZephyrProjectLifecycle.canInspect(project))
             project = null;
-        String relative = null;
-        if (selection instanceof IStructuredSelection items && items.size() == 1
-                && items.getFirstElement() instanceof IFile file)
-            relative = file.getProjectRelativePath().toPortableString();
-        Entry entry = navigationFor(activeMenu instanceof IStructuredSelection, relative);
+        IFile source = selection instanceof IStructuredSelection items && items.size() == 1
+                && items.getFirstElement() instanceof IFile file ? file : null;
+        String relative = source == null ? null : source.getProjectRelativePath().toPortableString();
+        Entry entry = SETTINGS_COMMAND.equals(event.getCommand().getId())
+                ? Entry.PROJECT_OVERRIDES : navigationFor(activeMenu instanceof IStructuredSelection, relative);
         try {
             var page = HandlerUtil.getActiveWorkbenchWindowChecked(event).getActivePage();
-            var home = (ConfigurationHomeView) page.showView(targetViewId(entry));
-            if (project != null) home.displayProject(project);
-            else home.displayMissingProject();
-            home.openSection(initialSection(entry));
+            var part = page.showView(targetViewId(entry));
+            if (part instanceof HardwareStudioView studio) {
+                studio.displayCurrentProject(project);
+                if (entry == Entry.HARDWARE && project != null && source != null
+                        && project.equals(source.getProject()) && source.exists())
+                    org.eclipse.ui.ide.IDE.openEditor(page, source, true);
+            } else if (part instanceof ConfigurationHomeView settings) {
+                if (project != null) settings.displayProject(project);
+                else settings.displayMissingProject();
+                settings.openKconfigSettings();
+            }
         } catch (Exception error) {
             throw new ExecutionException("Could not open Zephyr Configuration Studio.", error);
         }

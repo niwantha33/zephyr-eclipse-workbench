@@ -47,6 +47,7 @@ public final class HardwareStudioView extends ViewPart {
     private Browser browser;
     private Label fallback;
     private Button fallbackAction;
+    private Button fallbackOverlay;
     private String template;
     private AutoCloseable contextSubscription;
     private Job job;
@@ -89,21 +90,26 @@ public final class HardwareStudioView extends ViewPart {
                             || !(arguments[0] instanceof String action)
                             || !(arguments[1] instanceof String path))
                         return "DENIED";
-                    if (!java.util.Set.of("refresh", "focus", "source", "graph", "theme", "topology", "configure").contains(action)
+                    if (!java.util.Set.of("refresh", "focus", "source", "graph", "theme", "topology", "overlay").contains(action)
                             || ("refresh".equals(action) && !path.isEmpty())
+                            || ("overlay".equals(action) && (physical || !path.isEmpty() || project == null
+                                    || !project.isAccessible()))
                             || ("theme".equals(action) && !"dark".equals(path) && !"light".equals(path))
-                            || (!"theme".equals(action) && !"refresh".equals(action)
+                            || (!java.util.Set.of("theme", "refresh", "overlay").contains(action)
                                     && verifiedNode(path) == null))
                         return "DENIED";
+                    IProject actionProject = project;
                     browser.getDisplay().asyncExec(() -> {
                         if (browser == null || browser.isDisposed()) return;
                         switch (action) {
-                            case "refresh" -> load();
+                            case "refresh" -> refreshAfterBuild(project);
                             case "focus" -> focus(path);
                             case "source" -> openSource(path);
                             case "graph" -> openClassicGraph(path);
                             case "topology" -> openTopology(path);
-                            case "configure" -> openConfiguration(path);
+                            case "overlay" -> {
+                                if (java.util.Objects.equals(project, actionProject)) openApplicationOverlay();
+                            }
                             case "theme" -> theme = path;
                             default -> { /* guarded above */ }
                         }
@@ -112,7 +118,7 @@ public final class HardwareStudioView extends ViewPart {
                 }
             };
             render(DtsGraphModel.unavailable(
-                    "Open Configuration Studio → Hardware, choose a project/board/profile and build first."), "");
+                    "Select a Zephyr project in Project Explorer to open DTS sources and build evidence."), "");
         } catch (SWTError | IOException | RuntimeException unavailable) {
             if (browser != null && !browser.isDisposed()) browser.dispose();
             browser = null;
@@ -125,24 +131,48 @@ public final class HardwareStudioView extends ViewPart {
             fallbackAction = new Button(parent, SWT.PUSH);
             fallbackAction.setText("Open classic Devicetree Graph Studio");
             fallbackAction.addListener(SWT.Selection, event -> openClassicGraph(focus));
+            fallbackAction.setEnabled(false);
+            if (!physical) {
+                fallbackOverlay = new Button(parent, SWT.PUSH);
+                fallbackOverlay.setText("Edit app.overlay");
+                fallbackOverlay.setEnabled(false);
+                fallbackOverlay.addListener(SWT.Selection, event -> openApplicationOverlay());
+            }
         }
         contextSubscription = ZephyrViewContextHub.forWindow(getSite().getWorkbenchWindow())
                 .subscribe(this::onSelection);
     }
 
-    /** Explicit exact-build handoff from Configuration Studio; no guessed global build. */
+    /** Resolve the current profile while retaining source access for unconfigured projects. */
+    void displayCurrentProject(IProject selected) {
+        try {
+            Path current = selected == null ? null
+                    : ProjectContext.buildDirectory(selected, ProjectContext.settings(selected)).toAbsolutePath().normalize();
+            displayProject(selected, current, selected != null && selected.equals(project)
+                    && current != null && current.equals(build) ? focus : null);
+        } catch (Exception unconfigured) {
+            displayProject(selected, null, null);
+        }
+    }
+
+    void refreshAfterBuild(IProject built) {
+        if (built != null && built.equals(project)) displayCurrentProject(built);
+    }
+
+    /** Explicit exact-build handoff from Hardware Studio. */
     public void displayProject(IProject selected, Path selectedBuild, String preferredNode) {
         if (selected == null || !selected.isAccessible() || selectedBuild == null) {
             generation.incrementAndGet();
             if (job != null) job.cancel();
-            project = null;
+            project = selected != null && selected.isAccessible() ? selected : null;
             build = null;
             boardName = "";
             profileName = "";
             snapshot = null;
             staleSnapshot = true;
             focus = "";
-            render(DtsGraphModel.unavailable("Choose an open Zephyr project and configured build."), "");
+            render(DtsGraphModel.unavailable(project == null ? "Select a Zephyr project in Project Explorer."
+                    : "Select a board and build profile to generate the Devicetree topology."), "");
             return;
         }
         project = selected;
@@ -240,6 +270,10 @@ public final class HardwareStudioView extends ViewPart {
     }
 
     private void render(DtsGraphModel.Snapshot evidence, String selectedFocus) {
+        if (fallbackAction != null && !fallbackAction.isDisposed())
+            fallbackAction.setEnabled(project != null && build != null);
+        if (fallbackOverlay != null && !fallbackOverlay.isDisposed())
+            fallbackOverlay.setEnabled(project != null && project.isAccessible());
         if (browser == null || browser.isDisposed() || template == null) return;
         String projectName = project == null ? "" : project.getName();
         String buildName = build == null ? "" : build.toString();
@@ -315,15 +349,9 @@ public final class HardwareStudioView extends ViewPart {
         } catch (PartInitException ignored) { /* optional topology view */ }
     }
 
-    private void openConfiguration(String path) {
-        if (project == null || build == null || verifiedNode(path) == null) return;
-        try {
-            var part = getSite().getPage().showView(ConfigurationHomeView.ID);
-            if (part instanceof ConfigurationHomeView view)
-                view.openHardwareNode(project, build, path);
-        } catch (PartInitException error) {
-            Activator.getDefault().getLog().log(error.getStatus());
-        }
+    private void openApplicationOverlay() {
+        if (project != null && project.isAccessible())
+            ConfigurationStudioView.openOverlay(project, "app.overlay", getSite().getPage(), getSite().getShell());
     }
 
     private void openClassicGraph(String path) {

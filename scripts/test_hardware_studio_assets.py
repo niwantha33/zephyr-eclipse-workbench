@@ -52,7 +52,7 @@ def main():
     expected = {
         "navigation", "search", "cards", "wires", "viewport", "detail",
         "references", "refresh", "fit", "zoomIn", "zoomOut",
-        "theme", "openSource", "openGraph", "help", "helpDialog",
+        "theme", "editOverlay", "openSource", "openGraph", "help", "helpDialog",
         "closeHelp", "category",
     }
     assert expected <= parser.ids, "Missing interactive Hardware Studio element"

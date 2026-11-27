@@ -112,12 +112,11 @@ function renderDetails(){
     row.append(el("strong",(l.pin?l.pin+" · ":"")+mapping,l.kind==="candidate"||l.kind==="state"?"amber":"green"));
     row.append(el("p",nodeLabel(l.source)+" → "+nodeLabel(l.target)));
     row.append(el("small",l.edge.property+" · "+l.edge.detail+" · "+l.source.status));
-    row.append(action("DTS topology",()=>host("topology",l.source.path)),
-      action("Configuration Studio",()=>host("configure",l.source.path)),
+    row.append(action("Configuration Studio",()=>host("topology",l.source.path)),
       action("Source",()=>host("source",l.source.path)));
     root.append(row);
   }
-  if(focus){root.append(action("Open selected node in DTS topology",()=>host("topology",focus)));}
+  if(focus){root.append(action("Open selected node in Configuration Studio",()=>host("topology",focus)));}
 }
 function addPins(id,numbers){
   for(const n of numbers){const name=PIN_NAMES[n-1],b=action(n+" "+name,()=>{selectedPin=name;renderPins();renderDetails();});b.title="Physical pin "+n+" · "+name;b.setAttribute("aria-label",b.title);pinButtons.set(name,b);$(id).append(b);}

@@ -447,12 +447,12 @@ public final class ConfigurationStudioTests {
             ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget("", true),
                     "project root context menu available");
             for (String file : new String[]{"prj.conf", ".project", "demo.prj",
-                    "app.overlay", "boards/custom.overlay"}) {
+                    "app.overlay", "boards/custom.overlay", "boards/custom.dts", "boards/custom.dtsi"}) {
                 ok(io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget(file, false),
                         "project configuration context offered for " + file);
             }
             for (String file : new String[]{"main.c", "CMakeLists.txt", "README.md",
-                    "../unrelated.prj", "other.txt"}) {
+                    "../unrelated.prj", ".zew-build/default/zephyr/zephyr.dts", "other.txt"}) {
                 ok(!io.github.niwantha33.zew.core.ConfigurationStudioResources.contextTarget(file, false),
                         "no irrelevant context menu for " + file);
             }

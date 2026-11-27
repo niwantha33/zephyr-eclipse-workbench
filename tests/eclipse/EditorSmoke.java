@@ -1335,19 +1335,16 @@ public final class EditorSmoke implements IApplication {
                             .filter(c -> c.getSimpleName().equals("Entry"))
                             .findFirst().orElseThrow();
                     var target = handlerType.getDeclaredMethod("targetViewId", routeEnum);
-                    var section = handlerType.getDeclaredMethod("initialSection", routeEnum);
                     target.setAccessible(true);
-                    section.setAccessible(true);
                     var menuEntry = route.invoke(null, false, "app.overlay");
                     var overlayEntry = route.invoke(null, true, "app.overlay");
                     var projectEntry = route.invoke(null, true, "prj.conf");
-                    check(target.invoke(null, menuEntry).equals("io.github.niwantha33.zew.ui.configurationHome")
-                            && target.invoke(null, overlayEntry).equals("io.github.niwantha33.zew.ui.configurationHome")
+                    check(target.invoke(null, menuEntry).equals("io.github.niwantha33.zew.ui.hardwareStudio")
+                            && target.invoke(null, overlayEntry).equals("io.github.niwantha33.zew.ui.hardwareStudio")
                             && target.invoke(null, projectEntry).equals("io.github.niwantha33.zew.ui.configurationHome")
-                            && section.invoke(null, menuEntry).equals("overview")
-                            && section.invoke(null, overlayEntry).equals("hardware")
-                            && section.invoke(null, projectEntry).equals("system"),
-                            "menu and explicit file context all target ONE three-section Studio");
+                            && route.invoke(null, true, "boards/fixture.dts").toString().equals("HARDWARE")
+                            && route.invoke(null, true, "boards/fixture.dtsi").toString().equals("HARDWARE"),
+                            "DTS menu and DTS sources route to topology while prj.conf routes to settings");
                     // The three-section Studio and legacy advanced Studio may share an
                     // Eclipse view stack. Menu/navigation checks above can select the
                     // other part; an obscured SWT tab has a zero-sized viewport.
