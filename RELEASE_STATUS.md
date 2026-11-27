@@ -1,6 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## CodeQL coordinated action update (2026-11-27, review branch)
+
+- Dependabot PRs #292 and #293 each passed the package build but failed CodeQL analysis: init/analyze versions 4.39.3 and 4.39.4 did not match. Both now pin the official v4.39.4 tag's commit, and Dependabot groups CodeQL actions together.
+- Preserve JDK 21, traced manual Tycho compilation, security-extended queries and all existing CI checks. Add regression tests for identical immutable action pins and grouping. Exact-head CI pending; no gate or release claim.
+
 ## Project environment recovery — development slice, not released
 
 - Consolidate project lock, verify and upgrade preview into a Project Environment Manager; add explicit verified reattachment to a trusted ready setup, including when the previous setup is unavailable.
