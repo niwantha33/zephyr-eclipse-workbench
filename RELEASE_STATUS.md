@@ -1,4 +1,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
+
+## Managed child environment inheritance — development, unqualified
+
+Explicit managed Windows build and selected OpenOCD/Espressif runner paths now remove ambient Python, Git, CMake, compiler and Zephyr inputs before applying selected tool settings. External-tool workflows retain their inherited configuration. Headless map regression added; exact-head CI and native Windows matrix pending. This is not complete ENV-01/02: other managed actions, candidate lock subprocesses, vendor runners and CDT GDB child environments still need audit. G0 remains open.
+
 # Evidence Engine release status — 2026-10-30
 
 ## DTS-first Configuration Studio (2026-11-27)

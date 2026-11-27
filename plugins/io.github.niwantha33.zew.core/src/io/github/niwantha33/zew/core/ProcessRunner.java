@@ -49,10 +49,7 @@ public final class ProcessRunner {
         // Do not rely on shell activation. The selected venv supplies Python; prepend its Scripts/bin
         // directory so West and Python-installed helper executables resolve consistently.
         var environment = builder.environment();
-        overrides.forEach((key, value) -> {
-            String actual = environment.keySet().stream().filter(k -> k.equalsIgnoreCase(key)).findFirst().orElse(key);
-            environment.put(actual, value);
-        });
+        ProcessEnvironment.apply(environment, overrides);
         var pathKey = environment.keySet().stream().filter(k -> k.equalsIgnoreCase("PATH")).findFirst().orElse("PATH");
         var executableParent = Path.of(command.getFirst()).toAbsolutePath().getParent();
         if (overrides.keySet().stream().noneMatch(k -> k.equalsIgnoreCase("PATH")))

@@ -233,7 +233,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             var command = params.plan().command(params.settings().getProperty("python"));
             var builder = new ProcessBuilder(command);
             builder.directory(Path.of(params.settings().getProperty("workspace")).toFile());
-            builder.environment().putAll(ProjectContext.targetEnvironment(params.settings(), command));
+            io.github.niwantha33.zew.core.ProcessEnvironment.apply(builder.environment(), ProjectContext.targetEnvironment(params.settings(), command));
             builder.redirectErrorStream(true);
             var console = new MessageConsole("Zephyr DSF-GDB — "
                     + configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, ""), null);

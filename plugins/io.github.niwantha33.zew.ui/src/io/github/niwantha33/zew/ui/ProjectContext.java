@@ -7,6 +7,7 @@ import java.util.*;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.QualifiedName;
 import io.github.niwantha33.zew.core.ProjectProfile;
+import io.github.niwantha33.zew.core.ProcessEnvironment;
 import io.github.niwantha33.zew.core.ProjectToolPath;
 import io.github.niwantha33.zew.core.WestCommands;
 
@@ -112,7 +113,7 @@ final class ProjectContext {
     }
 
     private static Map<String, String> environment(Properties settings, boolean isolatedWindowsBuild) {
-        var values = new LinkedHashMap<String, String>();
+        var values = new ProcessEnvironment(isolatedWindowsBuild);
         var host = System.getenv();
         String pathKey = host.keySet().stream().filter(k -> k.equalsIgnoreCase("PATH")).findFirst().orElse("PATH");
         values.put(pathKey, ProjectToolPath.resolve(settings, host, isolatedWindowsBuild));
@@ -125,6 +126,8 @@ final class ProjectContext {
             values.put("CMAKE_PROGRAM_PATH", "");
             values.put("WEST_CONFIG_SYSTEM", "NUL");
             values.put("WEST_CONFIG_GLOBAL", "NUL");
+            values.put("GIT_CONFIG_NOSYSTEM", "1");
+            values.put("GIT_CONFIG_GLOBAL", "NUL");
             values.put("WEST_CONFIG_LOCAL", Path.of(settings.getProperty("workspace"), ".west", "config").toString());
         }
         return values;
