@@ -36,7 +36,7 @@ jobs:
       # Trace the same fail-closed Tycho build used by the package workflow
       # so CodeQL observes the actual compiled Java and resolved dependencies.
       - name: Initialize CodeQL for Java
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4 pinned
+        uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           languages: java-kotlin
           build-mode: manual
@@ -48,6 +48,6 @@ jobs:
           qualifier="$(date -u +%Y%m%d%H%M%S)"
           python3 scripts/retry_maven_tycho.py --qualifier "$qualifier"
       - name: Analyse Java source
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4 pinned
+        uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           category: /language:java-kotlin
