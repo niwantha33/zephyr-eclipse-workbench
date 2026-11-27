@@ -172,6 +172,8 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 return;
             }
             var paths = BoardTools.buildPaths(settings, buildDirectory, environment, monitor);
+            boolean refreshCache = !clean && (paths.freshConfiguration() || pristine || recoveryPristine);
+            if (!refreshCache) ProjectContext.verifyManagedBuildCache(settings, buildDirectory);
             environment.put("ZEPHYR_BASE", paths.workspace() + "/zephyr");
             environment.put("ZEPHYR_SDK_INSTALL_DIR", paths.sdk());
             var command = new ArrayList<>(List.of(settings.getProperty("python"), "-m", "west", "build",
@@ -243,7 +245,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     // tools marked NOTFOUND, so it is not authoritative.
                     var configure = new ArrayList<>(command);
                     configure.add(4, "--cmake-only");
-                    if (paths.freshConfiguration() || pristine || recoveryPristine) {
+                    if (refreshCache) {
                         stream.println(pristine ? "Explicit pristine rebuild; regenerating only this target build folder." : "Refreshing this managed target for a verified Windows short-path alias.");
                         if (recoveryPristine) stream.println("Recovered environment: regenerate target build cache.");
                         configure.add(5, "--pristine=always");
@@ -262,6 +264,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                                 monitor::isCanceled, log, environment);
                     }
                     requireConfigured(configured, kconfigFailure, stream::println);
+                    ProjectContext.verifyManagedBuildCache(settings, buildDirectory);
                     // Confirm that every explicitly selected file reached the
                     // actual Zephyr preprocessor, not just the CMake command.
                     // This is intentionally NOT required of unselected overlays.
@@ -302,6 +305,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                         missing = inspectRequiredHostTools(runner, inspectCommands, workspace, monitor, environment);
                     }
                     BuildArtifacts.verifyArchitecture(buildDirectory);
+                    ProjectContext.verifyManagedBuildCache(settings, buildDirectory);
                     stream.println("Preflight: generated build commands have no unresolved host tool placeholders.");
                 }
                 stage[0] = clean ? "Clean" : "Compile and generate firmware";

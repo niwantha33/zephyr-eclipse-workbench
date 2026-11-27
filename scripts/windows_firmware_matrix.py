@@ -210,9 +210,13 @@ def main():
         raise ValueError('Native Windows x64 is required for this integration test')
     root = args.root.resolve()
     python = root / 'python/python.exe' if args.run_only else bootstrap(root)
+    # A conflicting parent installation must never become a build dependency.
+    competing_tools = root / 'ci-competing-tools'
+    competing_tools.mkdir(exist_ok=True)
+    for tool in ('cmake', 'ninja', 'git', 'python'):
+        (competing_tools / (tool + '.cmd')).write_text('@exit /b 99\n', encoding='ascii')
     env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1', GIT_TERMINAL_PROMPT='0')
-    for key in ('PYTHONHOME', 'PYTHONPATH', 'ZEPHYR_BASE', 'ZEPHYR_SDK_INSTALL_DIR', 'ZEPHYR_TOOLCHAIN_VARIANT', 'BOARD', 'CONF_FILE'):
-        env.pop(key, None)
+    env['PATH'] = str(competing_tools) + os.pathsep + env.get('PATH', '')
     if not args.run_only:
         run([python, '-u', root / 'installer/setup.py', '--root', root,
              '--lock', root / 'installer/setup-lock.json'], root, env)
@@ -221,8 +225,15 @@ def main():
     if not (root / '.zew-ready').is_file():
         raise ValueError('CI managed environment is not ready')
     workspace = root / 'workspace'
-    ninja = root / 'python/Scripts/ninja.exe'
-    env['PATH'] = os.pathsep.join(map(str, [root / 'python', root / 'python/Scripts', root / 'git/cmd', root / 'board-python/esp32s3/Scripts', root / 'board-python/esp32s3/bin', root / 'sdk/hosttools/bin', root / 'sdk/hosttools/usr/bin'])) + os.pathsep + env.get('PATH', '')
+    installer_spec = importlib.util.spec_from_file_location('zew_ci_setup', root / 'installer/setup.py')
+    installer = importlib.util.module_from_spec(installer_spec)
+    installer_spec.loader.exec_module(installer)
+    lock = json.loads((root / 'installer/setup-lock.json').read_text(encoding='utf-8'))
+    cmake = installer.installed_executable(root, lock, 'cmake')
+    ninja = installer.installed_executable(root, lock, 'ninja')
+    env = installer.managed_environment(root, cmake, ninja, root / 'git/cmd/git.exe', env, root / 'sdk')
+    if str(competing_tools) in env['PATH'].split(os.pathsep):
+        raise ValueError('Competing host tools leaked into the managed build PATH')
     env.update(ZEPHYR_BASE=(workspace / 'zephyr').as_posix(), ZEPHYR_TOOLCHAIN_VARIANT='zephyr',
                ZEPHYR_SDK_INSTALL_DIR=(root / 'sdk').as_posix())
     text = run([python, root / 'installer/hardware_catalog.py', '--zephyr', workspace / 'zephyr'], root, env, capture=True)
@@ -271,6 +282,19 @@ def main():
             run([*prepare, '--require-host-tool', 'IMGTOOL'], workspace, env)
             run([*configure, '-UIMGTOOL'], workspace, env)
         run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
+        vendor_pad = {'stm32': 'PA2', 'nordic': 'P0.06', 'xtensa': 'GPIO43', 'riscv': 'GPIO21'}.get(label)
+        if vendor_pad:
+            observation = run([python, '-I', '-X', 'utf8',
+                               REPO / 'plugins/io.github.niwantha33.zew.ui/scripts/dts_graph_observe.py',
+                               '--build', build_arg, '--zephyr', Path(workspace_arg) / 'zephyr',
+                               '--application', app], workspace, env, capture=True)
+            records = [(row[0], *[base64.b64decode(cell, validate=True).decode('utf-8') for cell in row[1:]])
+                       for line in observation.splitlines()[1:] if line
+                       for row in [line.split('\t')]]
+            if not any(len(row) == 6 and row[0] == 'E' and row[3] == 'pinmux'
+                       and row[5].startswith('default ' + vendor_pad + ' ') for row in records):
+                raise ValueError('Expected generated default pinmux pad missing for ' + target + ': ' + vendor_pad)
+            print('PASS: verified generated DTS pinmux for ' + target + ' at ' + vendor_pad, flush=True)
         if label == 'ti':
             # Capture and verify the exact native Java receipt on REAL Zephyr
             # output. Fixture-only tests previously missed post-build false
@@ -396,6 +420,12 @@ def main():
                            or r[1] not in paths or r[2] not in paths))
                        for r in graph_records):
                     raise ValueError('Real DTS graph invented an unresolved hardware relation')
+                real_muxes = {(r[4], r[5]) for r in graph_records if r[0] == 'E' and r[3] == 'pinmux'}
+                expected_muxes = {('TX', 'default PA10 0x140002'),
+                                  ('CANRX', 'default PA13 0x220006')}
+                if not expected_muxes.issubset(real_muxes):
+                    raise ValueError('Real MSPM0 UART/CAN pinmux observations missing: '
+                                     + repr(sorted(expected_muxes - real_muxes)))
                 if hashlib.sha256(generated_dts.read_bytes()).hexdigest() != dts_hash:
                     raise ValueError('Read-only DTS graph observer modified generated DTS')
                 print('PASS: native DTS Graph Studio observed real selected MSPM0 topology')

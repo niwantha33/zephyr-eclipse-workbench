@@ -89,7 +89,7 @@ public final class HardwareStudioView extends ViewPart {
                             || !(arguments[0] instanceof String action)
                             || !(arguments[1] instanceof String path))
                         return "DENIED";
-                    if (!java.util.Set.of("refresh", "focus", "source", "graph", "theme", "topology").contains(action)
+                    if (!java.util.Set.of("refresh", "focus", "source", "graph", "theme", "topology", "configure").contains(action)
                             || ("refresh".equals(action) && !path.isEmpty())
                             || ("theme".equals(action) && !"dark".equals(path) && !"light".equals(path))
                             || (!"theme".equals(action) && !"refresh".equals(action)
@@ -103,6 +103,7 @@ public final class HardwareStudioView extends ViewPart {
                             case "source" -> openSource(path);
                             case "graph" -> openClassicGraph(path);
                             case "topology" -> openTopology(path);
+                            case "configure" -> openConfiguration(path);
                             case "theme" -> theme = path;
                             default -> { /* guarded above */ }
                         }
@@ -306,11 +307,23 @@ public final class HardwareStudioView extends ViewPart {
 
     private void openTopology(String path) {
         if (project == null || build == null || verifiedNode(path) == null) return;
+        focus(path);
         try {
             var part = getSite().getPage().showView(ID);
             if (part instanceof HardwareStudioView view)
                 view.displayProject(project, build, path);
         } catch (PartInitException ignored) { /* optional topology view */ }
+    }
+
+    private void openConfiguration(String path) {
+        if (project == null || build == null || verifiedNode(path) == null) return;
+        try {
+            var part = getSite().getPage().showView(ConfigurationHomeView.ID);
+            if (part instanceof ConfigurationHomeView view)
+                view.openHardwareNode(project, build, path);
+        } catch (PartInitException error) {
+            Activator.getDefault().getLog().log(error.getStatus());
+        }
     }
 
     private void openClassicGraph(String path) {

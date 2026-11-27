@@ -167,9 +167,10 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                     staging = stageCaptureTool(settings.getProperty("python"), settings, monitor, report);
                     var ports = DebugPorts.select(3335);
                     plan = ports.apply(plan, runner);
-                    var builder = new ProcessBuilder(plan.command(settings.getProperty("python")));
+                    var serverCommand = plan.command(settings.getProperty("python"));
+                    var builder = new ProcessBuilder(serverCommand);
                     builder.directory(Path.of(settings.getProperty("workspace")).toFile());
-                    builder.environment().putAll(ProjectContext.environment(settings));
+                    builder.environment().putAll(ProjectContext.targetEnvironment(settings, serverCommand));
                     builder.redirectErrorStream(true);
                     server = builder.start();
                     Process owned = server;

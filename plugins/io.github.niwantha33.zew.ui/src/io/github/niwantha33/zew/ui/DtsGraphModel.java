@@ -99,7 +99,7 @@ public final class DtsGraphModel {
                         if (values.length != 6 || state == null || edges.size() >= MAX_EDGES)
                             return unavailable("Malformed or oversized graph edge set.");
                         Edge edge = new Edge(values[1], values[2], values[3], values[4], values[5]);
-                        if (!Set.of("phandle", "phandle-array", "gpio", "pinctrl",
+                        if (!Set.of("phandle", "phandle-array", "gpio", "pinctrl", "pinmux",
                                 "clock", "interrupt", "reset", "path").contains(edge.kind())
                                 || !distinct.add(edge))
                             return unavailable("Unknown or duplicate Devicetree relation.");

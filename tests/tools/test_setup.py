@@ -224,6 +224,25 @@ with zipfile.ZipFile(output/'docopt-0.6.2-py3-none-any.whl','w') as wheel:
     def test_ready_only_after_verified_firmware_and_bindings(self):
         self._build_case(True)
 
+    def test_managed_search_excludes_global_tools_from_installer_and_matrix(self):
+        root = Path.cwd() / 'setup'
+        windows = root.parent / 'windows'
+        foreign = root.parent / 'foreign'
+        cmake = setup.installed_executable(root, self.lock(), 'cmake')
+        ninja = setup.installed_executable(root, self.lock(), 'ninja')
+        git = root / 'git/cmd/git.exe'
+        host = {'Path': str(foreign), 'SystemRoot': str(windows),
+                'CMAKE_PROGRAM_PATH': str(foreign), 'WEST_CONFIG_LOCAL': str(foreign / 'config')}
+        for sdk in (None, root / 'sdk'):
+            env = setup.managed_environment(root, cmake, ninja, git, host, sdk)
+            paths = env['PATH'].split(setup.os.pathsep)
+            self.assertEqual(paths[:3], [str(cmake.parent), str(ninja.parent), str(git.parent)])
+            self.assertIn(str(windows / 'System32'), paths)
+            self.assertNotIn(str(foreign), paths)
+            self.assertNotIn('CMAKE_PROGRAM_PATH', env)
+            self.assertNotIn('WEST_CONFIG_LOCAL', env)
+            self.assertEqual(str(root / 'sdk/hosttools/bin') in paths, sdk is not None)
+
     def _build_case(self, success):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); (root / '.zew-managed').write_text('first-build-win-x64-v1\n'); workspace = root / 'workspace'; workspace.mkdir()

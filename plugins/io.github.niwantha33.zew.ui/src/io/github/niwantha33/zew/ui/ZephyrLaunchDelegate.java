@@ -86,13 +86,14 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
                     Path output = ProjectContext.buildDirectory(project, settings);
                     var plan = TargetOperations.prepare(
                             output, settings.getProperty("board"), action, "");
+                    ProjectContext.verifyManagedBuildCache(settings, plan.buildDirectory());
                     if ("debugserver".equals(action)) plan = SharedDebugTools.bindDebugTool(plan, settings);
                     command = plan.command(settings.getProperty("python"));
                 }
                 if (monitor.isCanceled()) return;
                 var builder = new ProcessBuilder(command);
                 builder.directory(Path.of(settings.getProperty("workspace")).toFile());
-                builder.environment().putAll(ProjectContext.environment(settings));
+                builder.environment().putAll(ProjectContext.targetEnvironment(settings, command));
                 builder.redirectErrorStream(true);
                 process = builder.start();
                 if (DebugPlugin.newProcess(launch, process, "Zephyr " + action + " — " + project.getName()) == null)
