@@ -52,6 +52,11 @@ jobs:
           python3 -c 'import sys; assert sys.version_info >= (3, 10), sys.version'
           mvn -version
           mvn -version | python3 -c 'import re,sys; s=sys.stdin.read(); m=re.search(r"Apache Maven (\d+)\.(\d+)\.", s); assert m and tuple(map(int,m.groups())) >= (3,9), s'
+      - name: Cache Maven repository for the exact dependency inputs
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.m2/repository
+          key: zew-maven-v1-${{ runner.os }}-${{ runner.arch }}-jdk21-${{ hashFiles('**/pom.xml', 'releng/**/*.target', '.mvn/**') }}
       - name: Install pinned test metadata dependencies
         run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3 west==1.5.0 kconfiglib==14.1.0
       - name: Run all core and Python dependency regression tests
@@ -320,6 +325,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          EXPECTED_RELEASE_VERSION: ${{ needs.build_and_verify.outputs.version }}
+          EXPECTED_SITE_SHA256: ${{ needs.build_and_verify.outputs.site_sha256 }}
         run: |
           set -euo pipefail
           export GIT_TERMINAL_PROMPT=0
@@ -335,7 +342,17 @@ jobs:
           chmod 700 "$ASKPASS"
           trap 'rm -f "$ASKPASS"' EXIT
           GIT_ASKPASS="$ASKPASS" git -C "$RUNNER_TEMP/zephyr-p2-updates" push "https://github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/updates
-          echo "Published the qualified release; previous immutable releases retained." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo '## Published development update'
+            echo "Source commit: `$GITHUB_SHA`"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "Version: $EXPECTED_RELEASE_VERSION"
+            echo "Site tree SHA-256: `$EXPECTED_SITE_SHA256`"
+            echo 'Linux package and installed UI: passed'
+            echo 'Windows seven-scenario firmware qualification: passed'
+            echo 'Physical hardware flash/debug: not tested by this workflow'
+            echo 'Previous immutable releases retained.'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove staging worktree
         if: always()
         shell: bash

@@ -8,7 +8,7 @@ Status: first build versions recorded below; complete dependency licence audit r
 |---|---|---|
 | JDK | Ubuntu OpenJDK 21.0.12+8-1~24.04 | Build host only; not bundled |
 | Maven | Apache Maven 3.9.11 | Build host only; not bundled |
-| Tycho | 5.0.3 from Maven Central | Build dependency; not bundled |
+| Tycho | 5.0.4 from Maven Central | Build dependency; not bundled |
 | Eclipse target | Platform 4.41, R-4.41-202608281142 | Referenced target/runtime; not bundled |
 | Eclipse compiler | ECJ 3.45.0.v20260224-0835, resolved by Tycho | Build dependency; not bundled |
 | Original feature and plug-ins | 0.1.0 development build | Apache-2.0; full LICENSE included in each JAR |

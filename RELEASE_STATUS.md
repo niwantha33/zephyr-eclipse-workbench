@@ -904,3 +904,8 @@ EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.
 - Add offline ZIP64 archive export, bounded metadata inspection, per-file SHA-256 verification, same-path no-overwrite restoration and firmware byte comparison CLI; explicit private-copy and trust acknowledgements.
 - Self-contained managed setups only. Reject external core paths, links/junctions and unsupported members. Preserve historical ready marker only after verification, not as current build evidence. Archive is not sanitised or authenticated; retain a trusted external digest.
 - Add synthetic positive/negative tests; exact-head CI, native clean-machine offline build, licensing review, historical host and external dependency recovery remain pending. G0 remains open.
+
+
+## CI qualification hardening — development PR, 2026-11-27
+
+Baseline d098bf4 passed main publication, its Windows firmware qualification, CodeQL and Pages. Proposed changes add exact-input Maven caching, full qualification on main pushes, upstream CodeQL metric checks, direct workflow reference pin audit and exact-SHA Actions summaries. See [CI qualification](docs/CI_QUALIFICATION.md). Exact PR head and post-merge checks, owner branch protection, complete dependency review, performance measurements and physical hardware remain unverified. G0 remains open.
