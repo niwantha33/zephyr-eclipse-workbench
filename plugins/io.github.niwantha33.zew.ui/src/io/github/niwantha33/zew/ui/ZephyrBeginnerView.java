@@ -409,11 +409,17 @@ public final class ZephyrBeginnerView extends ViewPart {
 
     private void configuration(String section) {
         try {
-            var home = (ConfigurationHomeView) getSite().getPage().showView(ConfigurationHomeView.ID);
             IProject project = project();
-            if (project == null) home.displayMissingProject();
-            else home.displayProject(project);
-            home.openSection(section);
+            var page = getSite().getPage();
+            if ("hardware".equals(section)) {
+                var topology = (HardwareStudioView) page.showView(HardwareStudioView.ID);
+                topology.displayCurrentProject(project);
+            } else {
+                var home = (ConfigurationHomeView) page.showView(ConfigurationHomeView.ID);
+                if (project == null) home.displayMissingProject();
+                else home.displayProject(project);
+                home.openSection(section);
+            }
         } catch (PartInitException error) {
             MessageDialog.openError(getSite().getShell(), "Configuration Studio", error.getMessage());
         }

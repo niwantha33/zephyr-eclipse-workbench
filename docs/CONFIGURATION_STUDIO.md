@@ -51,10 +51,16 @@ and a reconfigure/build gate. Do not implement automatic DTS changes without
 validating node identity and preventing conflicts.
 
 
-The Zephyr menu now has **Configuration Studio (Kconfig / Devicetree)**.
-Select an imported project in Project Explorer and open the command. This is
-a native Eclipse SWT/JFace view; no secondary browser, VS Code, tkinter or
-unmanaged Python installation is required.
+Select a project in Project Explorer and choose **Zephyr → Configure Project
+→ Configuration Studio (Devicetree)** to open DTS Topology for its board and
+build profile. Open the same controller directly from Hardware Studio.
+Select **Edit app.overlay** in the topology before or after the first build,
+or open an existing `.dts`, `.dtsi` or `.overlay` through its Project Explorer
+context action. A successful build refreshes the open topology.
+
+Use **Zephyr → Configure Project → Kconfig and Project Settings** for the
+settings, dependencies and diagnostics described below. The `prj.conf`
+context action opens that same settings workspace.
 
 ## Kconfiglib dependency inspector (Step 05)
 

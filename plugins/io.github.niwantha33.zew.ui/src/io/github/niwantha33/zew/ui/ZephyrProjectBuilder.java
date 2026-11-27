@@ -117,6 +117,9 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 var studioPart = page.findView(ConfigurationStudioView.ID);
                 if (studioPart instanceof ConfigurationStudioView studio)
                     studio.refreshAfterBuild(builtProject);
+                for (String id : List.of(HardwareStudioView.ID, HardwareStudioView.PHYSICAL_ID))
+                    if (page.findView(id) instanceof HardwareStudioView topology)
+                        topology.refreshAfterBuild(builtProject);
             }
         });
     }

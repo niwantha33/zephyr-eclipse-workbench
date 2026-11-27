@@ -78,7 +78,6 @@ public final class ConfigurationHomeView extends ViewPart {
     private Label navigationEmpty, editSupport;
     private List<FocusedConfigurationModel.Row> overviewRows = List.of();
     private String category = "ADC", controllerPath = "";
-    private ZephyrViewContextHub.Selection requestedHardwareNode;
     private Composite stepHost;
     private StackLayout stepLayout;
     private Composite[] pages;
@@ -120,7 +119,7 @@ public final class ConfigurationHomeView extends ViewPart {
         var title = new Composite(heading, SWT.NONE);
         title.setLayoutData(fillWidth());
         title.setLayout(new GridLayout(1, false));
-        new Label(title, SWT.NONE).setText("ZEPHYR  /  CONFIGURATION STUDIO");
+        new Label(title, SWT.NONE).setText("ZEPHYR  /  PROJECT SETTINGS STUDIO");
         header = new Label(title, SWT.WRAP);
         header.setLayoutData(fillWidth());
         header.setText("Select a Zephyr project  •  Board unknown  •  Profile unknown");
@@ -780,7 +779,7 @@ public final class ConfigurationHomeView extends ViewPart {
         detailGeneration.incrementAndGet();
         if (refreshJob != null) refreshJob.cancel();
         if (detailJob != null) detailJob.cancel();
-        setPartName("Zephyr Configuration Studio");
+        setPartName("Zephyr Project Settings Studio");
         clear("No Zephyr project selected. Select a project in Project Explorer, "
                 + "then choose Refresh here. No hardware data is available until "
                 + "the selected board/profile has generated a build.");
@@ -788,34 +787,32 @@ public final class ConfigurationHomeView extends ViewPart {
     }
 
     public void displayProject(IProject selected) {
-        requestedHardwareNode = null;
         if (selected == null || !selected.isAccessible()) {
             displayMissingProject();
             return;
         }
         project = selected;
-        setPartName("Configuration Studio — " + selected.getName());
+        setPartName("Project Settings Studio — " + selected.getName());
         primary.setSelection(OVERVIEW);
         visualSection = "overview";
         showVisual();
         refresh();
     }
 
-    void openHardwareNode(IProject selected, Path build, String path) {
-        if (selected == null || !selected.isAccessible()) return;
-        displayProject(selected);
-        requestedHardwareNode = new ZephyrViewContextHub.Selection(selected,
-                new io.github.niwantha33.zew.core.ZephyrSelectionIdentity(selected.getName(), build, path),
-                "physical-hardware-studio");
-        openSection("hardware");
-    }
-
     public void openSection(String section) {
         if (primary == null || primary.isDisposed()) return;
         visualSection = List.of("hardware", "software", "system").contains(section)
                 ? section : "overview";
-        primary.setSelection("hardware".equals(section) ? HARDWARE
-                : "system".equals(section) ? BUILD : OVERVIEW);
+        primary.setSelection(switch (visualSection) {
+            case "hardware" -> HARDWARE;
+            case "software", "system" -> BUILD;
+            default -> OVERVIEW;
+        });
+        if ("software".equals(visualSection) && (visualBrowser == null || visualBrowser.isDisposed())
+                && project != null && project.isAccessible()) {
+            advanced("software");
+            return;
+        }
         showVisual(); // Menu and project-resource entry always use the visual surface.
     }
 
@@ -958,13 +955,7 @@ public final class ConfigurationHomeView extends ViewPart {
                 post(display, () -> {
                     if (ticket == generation.get() && project == selected
                             && header != null && !header.isDisposed()) {
-                        evidence = result;
-                        if (requestedHardwareNode != null) {
-                            var requested = requestedHardwareNode;
-                            requestedHardwareNode = null;
-                            onHardwareStudioSelection(requested);
-                        }
-                        render();
+                        evidence = result; render();
                     }
                 });
                 return Status.OK_STATUS;

@@ -20,7 +20,7 @@ class ConfigurationStudioFocusTests(unittest.TestCase):
         cls.handler = (UI / "ConfigurationStudioHandler.java").read_text(encoding="utf-8")
 
     def test_primary_entry_remains_visual(self):
-        self.assertIn("return ConfigurationHomeView.ID;", self.handler)
+        self.assertIn("return entry == Entry.PROJECT_OVERRIDES ? ConfigurationHomeView.ID : HardwareStudioView.ID;", self.handler)
         self.assertIn('visualGuideButton = action(primary, "Visual Studio", this::openModernConfiguration)', self.legacy)
         self.assertIn("home.openSection(page);", self.legacy)
         self.assertIn('overview(tab("Overview"))', self.home)
@@ -56,11 +56,11 @@ class ConfigurationStudioFocusTests(unittest.TestCase):
     def test_topology_menu_belongs_to_configuration(self):
         plugin = ET.parse(UI.parents[5] / "plugin.xml").getroot()
         menus = {m.attrib.get("id"): m for m in plugin.iter("menu")}
-        command = "io.github.niwantha33.zew.hardwareStudio"
+        command = "io.github.niwantha33.zew.configurationStudio"
         configure = menus["io.github.niwantha33.zew.menu.configure"]
         board = menus["io.github.niwantha33.zew.menu.board"]
         self.assertTrue(any(c.get("commandId") == command and
-                            c.get("label") == "DTS Topology..."
+                            c.get("label") == "Configuration Studio (Devicetree)..."
                             for c in configure.findall("command")))
         self.assertFalse(any(c.get("commandId") == command
                              for c in board.findall("command")))
@@ -72,7 +72,7 @@ class ConfigurationStudioFocusTests(unittest.TestCase):
         self.assertNotIn("Open Hardware Studio", visual)
 
     def test_visual_and_advanced_tabs_are_distinguishable(self):
-        self.assertIn('setPartName("Configuration Studio — " + selected.getName());', self.home)
+        self.assertIn('setPartName("Project Settings Studio — " + selected.getName());', self.home)
         self.assertIn('setPartName("Advanced Configuration — " + selected.getName());', self.legacy)
 
 

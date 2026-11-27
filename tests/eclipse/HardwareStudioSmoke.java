@@ -55,6 +55,53 @@ public final class HardwareStudioSmoke {
         return browser.evaluate("return " + expression + ";");
     }
 
+    private static void sourceOnlyOverlay(org.eclipse.ui.IWorkbenchPage page,
+            org.eclipse.ui.IViewPart view, Browser browser) throws Exception {
+        var workspace = org.eclipse.core.resources.ResourcesPlugin.getWorkspace();
+        var project = workspace.getRoot().getProject("ZewDtsSourceOnlySmoke");
+        check(!project.exists(), "source-only fixture project name is unused");
+        project.create(null);
+        try {
+            project.open(null);
+            var overlay = project.getFile("app.overlay");
+            overlay.create(new java.io.ByteArrayInputStream(new byte[0]), true, null);
+            var select = view.getClass().getDeclaredMethod("displayCurrentProject", org.eclipse.core.resources.IProject.class);
+            select.setAccessible(true);
+            select.invoke(view, project);
+            Display display = browser.getDisplay();
+            long until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
+            boolean shown = false;
+            while (System.nanoTime() < until && !browser.isDisposed()) {
+                if (loaded(browser) && Boolean.TRUE.equals(eval(browser,
+                        "document.getElementById('projectTitle').textContent === 'ZewDtsSourceOnlySmoke'"
+                        + " && !document.getElementById('editOverlay').disabled"
+                        + " && document.getElementById('evidencePill').textContent === 'NO BUILD'"))) {
+                    shown = true;
+                    break;
+                }
+                if (!display.readAndDispatch()) Thread.sleep(15);
+            }
+            check(shown, "source-only project can edit overlay before the first build");
+            check("DENIED".equals(eval(browser, "window.zewHardwareAction('overlay','../file')")),
+                    "overlay bridge denies arbitrary paths");
+            check("QUEUED".equals(eval(browser, "window.zewHardwareAction('overlay','')")),
+                    "fixed overlay action accepted for source-only project");
+            until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
+            while (System.nanoTime() < until) {
+                var editor = page.getActiveEditor();
+                if (editor != null && editor.getEditorInput() instanceof org.eclipse.ui.IFileEditorInput input
+                        && input.getFile().equals(overlay)) {
+                    page.closeEditor(editor, false);
+                    return;
+                }
+                if (!display.readAndDispatch()) Thread.sleep(15);
+            }
+            throw new AssertionError("Source-only overlay action did not open the existing project file");
+        } finally {
+            project.delete(true, true, null);
+        }
+    }
+
     private static void capture(Shell shell, Path destination) throws Exception {
         shell.layout(true, true);
         shell.redraw();
@@ -195,6 +242,7 @@ public final class HardwareStudioSmoke {
                             + "document.getElementById('search').dispatchEvent(new Event('input'));"),
                     "restore navigator");
             screenshotMatrix(web);
+            sourceOnlyOverlay(page, view, web);
         } else {
             System.out.println("HardwareStudioBrowser NOT QUALIFIED: SWT Browser runtime missing");
         }

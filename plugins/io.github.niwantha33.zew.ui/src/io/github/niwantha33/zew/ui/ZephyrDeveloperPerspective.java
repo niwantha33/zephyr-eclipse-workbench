@@ -29,6 +29,7 @@ public final class ZephyrDeveloperPerspective implements IPerspectiveFactory {
         layout.addShowViewShortcut(ZephyrBeginnerView.ID);
         layout.addShowViewShortcut(QuickHelpView.ID);
         layout.addShowViewShortcut(ConfigurationHomeView.ID);
+        layout.addShowViewShortcut(HardwareStudioView.ID);
         layout.addShowViewShortcut(WorkflowStudioView.ID);
         layout.addShowViewShortcut(EmbeddedHubBoardCatalogueView.ID);
         layout.addShowViewShortcut(HardwareStudioView.ID);

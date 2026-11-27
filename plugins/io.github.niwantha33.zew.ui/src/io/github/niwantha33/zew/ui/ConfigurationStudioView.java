@@ -4215,23 +4215,33 @@ public final class ConfigurationStudioView extends ViewPart {
     }
 
     private void openOverlay() {
-        if (project == null) return;
+        openOverlay(project, selectedOverlay, getSite().getPage(), getSite().getShell());
+    }
+
+    static void openOverlay(IProject project, String relative, org.eclipse.ui.IWorkbenchPage page,
+                            org.eclipse.swt.widgets.Shell shell) {
+        if (project == null || !project.isAccessible()) return;
         try {
+            if (!io.github.niwantha33.zew.core.ConfigurationStudioResources.hardware(relative)
+                    || !relative.endsWith(".overlay")) throw new java.io.IOException("Select a project overlay.");
             Path app = project.getLocation().toFile().toPath().toRealPath();
-            Path overlay = app.resolve(selectedOverlay).normalize();
+            Path overlay = app.resolve(relative).normalize();
             if (!overlay.startsWith(app)) throw new java.io.IOException("Overlay is outside the application.");
-            if (!Files.exists(overlay) && !"app.overlay".equals(selectedOverlay))
-                throw new java.io.IOException("The selected overlay no longer exists: " + selectedOverlay);
-            if (!Files.exists(overlay) && MessageDialog.openConfirm(getSite().getShell(),
+            if (!Files.exists(overlay) && !"app.overlay".equals(relative))
+                throw new java.io.IOException("The selected overlay no longer exists: " + relative);
+            if (!Files.exists(overlay) && MessageDialog.openConfirm(shell,
                     "Create application overlay", "Create an empty app.overlay in this project?\n"
                             + "The file will be recognised as an application hardware overlay on the next "
                             + "Zephyr configure. No pins, clocks or peripheral nodes will be changed automatically."))
                 Files.writeString(overlay, "/* Application hardware overlay. Validate against this board's bindings. */\n",
                         java.nio.charset.StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
-            project.refreshLocal(IResource.DEPTH_INFINITE, null);
-            if (Files.isRegularFile(overlay)) openResource(selectedOverlay);
+            if (!Files.isRegularFile(overlay)) return;
+            if (!overlay.toRealPath().startsWith(app)) throw new java.io.IOException("Overlay is outside the application.");
+            var file = project.getFile(relative);
+            file.refreshLocal(IResource.DEPTH_ZERO, null);
+            IDE.openEditor(page, file, true);
         } catch (Exception error) {
-            MessageDialog.openError(getSite().getShell(), "Devicetree overlay", error.getMessage());
+            MessageDialog.openError(shell, "Devicetree overlay", error.getMessage());
         }
     }
 

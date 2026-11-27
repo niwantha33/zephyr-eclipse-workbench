@@ -58,6 +58,7 @@
   <span class="pill" id="evidencePill">NO BUILD</span>
   <button class="action" id="help" type="button" title="Help and keyboard shortcuts" aria-haspopup="dialog">Help</button>
   <button class="action" id="theme" type="button" title="Toggle the interface theme">Light theme</button>
+  <button class="action" id="editOverlay" type="button" disabled>Edit app.overlay</button>
   <button class="action primary" id="refresh" type="button">↻ Refresh</button>
 </header>
 <div class="main">
@@ -342,14 +343,15 @@ function renderGraph(){
 }
 function init(){
   $('projectTitle').textContent=(DATA.project || 'Select a Zephyr project')+(DATA.board?'  ·  '+DATA.board:'')+(DATA.profile?'  ·  '+DATA.profile:'');
-  $('buildTitle').textContent=DATA.build || 'Select a board/profile in Configuration Studio';
+  $('buildTitle').textContent=DATA.build || 'Select a board and build profile';
+  $('editOverlay').disabled=!DATA.project;
   const pill=$('evidencePill');
   const fixture=String(DATA.reason||'').startsWith('CI FIXTURE');
   if(fixture){
     $('projectTitle').textContent='CI FIXTURE — DISPLAY TEST ONLY';
     $('buildTitle').textContent='No real board, profile, firmware or connected target';
   }
-  pill.textContent=fixture?'CI FIXTURE — NO HARDWARE':DATA.stale?'BUILD MAY BE STALE':DATA.observed?(DATA.state==='hierarchy-only'?'HIERARCHY ONLY':'BUILT EVIDENCE'):'NO BUILD';
+  pill.textContent=fixture?'CI FIXTURE — NO HARDWARE':!DATA.observed?'NO BUILD':DATA.stale?'BUILD MAY BE STALE':DATA.state==='hierarchy-only'?'HIERARCHY ONLY':'BUILT EVIDENCE';
   pill.className='pill '+(fixture||DATA.stale?'warn':DATA.observed?'good':'');
   document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
     filter=button.dataset.filter;
@@ -364,6 +366,7 @@ function init(){
   $('fit').addEventListener('click',fitGraph);
   $('resetLayout').addEventListener('click',resetLayout);
   $('refresh').addEventListener('click',()=>host('refresh',''));
+  $('editOverlay').addEventListener('click',()=>host('overlay',''));
   $('openSource').addEventListener('click',()=>{if(selected)host('source',selected)});
   $('openGraph').addEventListener('click',()=>{if(selected)host('graph',selected)});
   function applyTheme(){document.documentElement.classList.toggle('light',theme==='light');$('theme').textContent=theme==='dark'?'Light theme':'Dark theme';}

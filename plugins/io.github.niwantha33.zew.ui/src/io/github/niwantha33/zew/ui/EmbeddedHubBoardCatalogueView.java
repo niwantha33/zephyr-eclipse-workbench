@@ -489,9 +489,8 @@ public final class EmbeddedHubBoardCatalogueView extends ViewPart {
     private void inspectProject() {
         if (project == null || !project.isAccessible()) return;
         try {
-            var home = (ConfigurationHomeView) getSite().getPage().showView(ConfigurationHomeView.ID);
-            home.displayProject(project);
-            home.openSection("hardware");
+            var topology = (HardwareStudioView) getSite().getPage().showView(HardwareStudioView.ID);
+            topology.displayCurrentProject(project);
         } catch (Exception error) {
             status.setText("Cannot open the hardware explorer: " + error.getMessage());
         }
