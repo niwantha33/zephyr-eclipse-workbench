@@ -68,25 +68,31 @@ public final class HardwareStudioSmoke {
             var select = view.getClass().getDeclaredMethod("displayCurrentProject", org.eclipse.core.resources.IProject.class);
             select.setAccessible(true);
             select.invoke(view, project);
-            Display display = browser.getDisplay();
-            long until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
-            boolean shown = false;
-            while (System.nanoTime() < until && !browser.isDisposed()) {
-                if (loaded(browser) && Boolean.TRUE.equals(eval(browser,
-                        "document.getElementById('projectTitle').textContent === 'ZewDtsSourceOnlySmoke'"
-                        + " && !document.getElementById('editOverlay').disabled"
-                        + " && document.getElementById('evidencePill').textContent === 'NO BUILD'"))) {
-                    shown = true;
-                    break;
+            Display display = view.getSite().getShell().getDisplay();
+            if (browser != null) {
+                long until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
+                boolean shown = false;
+                while (System.nanoTime() < until && !browser.isDisposed()) {
+                    if (loaded(browser) && Boolean.TRUE.equals(eval(browser,
+                            "document.getElementById('projectTitle').textContent === 'ZewDtsSourceOnlySmoke'"
+                            + " && !document.getElementById('editOverlay').disabled"
+                            + " && document.getElementById('evidencePill').textContent === 'NO BUILD'"))) {
+                        shown = true;
+                        break;
+                    }
+                    if (!display.readAndDispatch()) Thread.sleep(15);
                 }
-                if (!display.readAndDispatch()) Thread.sleep(15);
+                check(shown, "source-only project can edit overlay before the first build");
+                check("DENIED".equals(eval(browser, "window.zewHardwareAction('overlay','../file')")),
+                        "overlay bridge denies arbitrary paths");
+                check("QUEUED".equals(eval(browser, "window.zewHardwareAction('overlay','')")),
+                        "fixed overlay action accepted for source-only project");
+            } else {
+                var overlayButton = (org.eclipse.swt.widgets.Button) field(view, "fallbackOverlay");
+                check(overlayButton.getEnabled(), "native fallback enables editing before the first build");
+                overlayButton.notifyListeners(SWT.Selection, new org.eclipse.swt.widgets.Event());
             }
-            check(shown, "source-only project can edit overlay before the first build");
-            check("DENIED".equals(eval(browser, "window.zewHardwareAction('overlay','../file')")),
-                    "overlay bridge denies arbitrary paths");
-            check("QUEUED".equals(eval(browser, "window.zewHardwareAction('overlay','')")),
-                    "fixed overlay action accepted for source-only project");
-            until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
+            long until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
             while (System.nanoTime() < until) {
                 var editor = page.getActiveEditor();
                 if (editor != null && editor.getEditorInput() instanceof org.eclipse.ui.IFileEditorInput input
@@ -242,10 +248,10 @@ public final class HardwareStudioSmoke {
                             + "document.getElementById('search').dispatchEvent(new Event('input'));"),
                     "restore navigator");
             screenshotMatrix(web);
-            sourceOnlyOverlay(page, view, web);
         } else {
             System.out.println("HardwareStudioBrowser NOT QUALIFIED: SWT Browser runtime missing");
         }
+        sourceOnlyOverlay(page, view, browser instanceof Browser web ? web : null);
         page.hideView(view);
         if (browser instanceof Browser web)
             check(web.isDisposed(), "browser releases native resources on close");

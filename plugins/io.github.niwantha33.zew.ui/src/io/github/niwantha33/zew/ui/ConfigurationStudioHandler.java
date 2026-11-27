@@ -55,7 +55,7 @@ public final class ConfigurationStudioHandler extends AbstractHandler {
             } else if (part instanceof ConfigurationHomeView settings) {
                 if (project != null) settings.displayProject(project);
                 else settings.displayMissingProject();
-                settings.openSection("software");
+                settings.openKconfigSettings();
             }
         } catch (Exception error) {
             throw new ExecutionException("Could not open Zephyr Configuration Studio.", error);

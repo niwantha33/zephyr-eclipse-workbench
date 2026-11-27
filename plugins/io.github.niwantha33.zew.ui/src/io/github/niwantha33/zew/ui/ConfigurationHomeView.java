@@ -808,12 +808,13 @@ public final class ConfigurationHomeView extends ViewPart {
             case "software", "system" -> BUILD;
             default -> OVERVIEW;
         });
-        if ("software".equals(visualSection) && (visualBrowser == null || visualBrowser.isDisposed())
-                && project != null && project.isAccessible()) {
+        showVisual();
+    }
+
+    void openKconfigSettings() {
+        openSection("software");
+        if ((visualBrowser == null || visualBrowser.isDisposed()) && project != null && project.isAccessible())
             advanced("software");
-            return;
-        }
-        showVisual(); // Menu and project-resource entry always use the visual surface.
     }
 
     /** Called on the UI thread after this project's managed firmware build. */
