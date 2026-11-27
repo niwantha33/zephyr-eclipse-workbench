@@ -282,6 +282,19 @@ def main():
             run([*prepare, '--require-host-tool', 'IMGTOOL'], workspace, env)
             run([*configure, '-UIMGTOOL'], workspace, env)
         run([python, '-m', 'west', 'build', '-d', build_arg], workspace, env)
+        vendor_pad = {'stm32': 'PA2', 'nordic': 'P0.06', 'xtensa': 'GPIO43', 'riscv': 'GPIO21'}.get(label)
+        if vendor_pad:
+            observation = run([python, '-I', '-X', 'utf8',
+                               REPO / 'plugins/io.github.niwantha33.zew.ui/scripts/dts_graph_observe.py',
+                               '--build', build_arg, '--zephyr', Path(workspace_arg) / 'zephyr',
+                               '--application', app], workspace, env, capture=True)
+            records = [(row[0], *[base64.b64decode(cell, validate=True).decode('utf-8') for cell in row[1:]])
+                       for line in observation.splitlines()[1:] if line
+                       for row in [line.split('\t')]]
+            if not any(len(row) == 6 and row[0] == 'E' and row[3] == 'pinmux'
+                       and row[5].startswith('default ' + vendor_pad + ' ') for row in records):
+                raise ValueError('Expected generated default pinmux pad missing for ' + target + ': ' + vendor_pad)
+            print('PASS: verified generated DTS pinmux for ' + target + ' at ' + vendor_pad, flush=True)
         if label == 'ti':
             # Capture and verify the exact native Java receipt on REAL Zephyr
             # output. Fixture-only tests previously missed post-build false

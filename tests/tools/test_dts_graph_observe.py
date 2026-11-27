@@ -147,6 +147,33 @@ class DtsObserverTests(unittest.TestCase):
         header.write_text("#define MSP_PINMUX(pincm, function) (pincm | function)\n")
         self.assertEqual(graph.ti_bus_pins(self.zephyr, root), {})
 
+    def test_vendor_pin_values_use_the_selected_header_definitions(self):
+        include = self.zephyr / "include/zephyr/dt-bindings/pinctrl"
+        include.mkdir(parents=True)
+        cases = [
+            ("st,stm32-pinctrl",
+             {"STM32_PORT_SHIFT": 9, "STM32_PORT_MASK": 31, "STM32_LINE_SHIFT": 5,
+              "STM32_LINE_MASK": 15, "STM32_MODE_SHIFT": 0, "STM32_MODE_MASK": 31},
+             0x47, ("AF7", "PA2"), 0x10047),
+            ("nordic,nrf-pinctrl",
+             {"NRF_PIN_POS": 0, "NRF_PIN_MSK": 511, "NRF_FUN_POS": 24,
+              "NRF_FUN_MSK": 255, "NRF_FUN_UART_TX": 0},
+             0x06, ("UART_TX", "P0.06"), 0x1ff),
+            ("espressif,esp32-pinctrl",
+             {"ESP32_PIN_NUM_SHIFT": 0, "ESP32_PIN_NUM_MASK": 63, "ESP32_PIN_SIGI_SHIFT": 6,
+              "ESP32_PIN_SIGI_MASK": 511, "ESP32_PIN_SIGO_SHIFT": 15, "ESP32_PIN_SIGO_MASK": 511},
+             (511 << 6) | (14 << 15) | 43, ("OUT14", "GPIO43"), 1 << 30),
+        ]
+        for compatible, definitions, value, expected, invalid in cases:
+            with self.subTest(compatible=compatible):
+                header = graph.PIN_HEADERS[compatible]
+                (include / header).write_text("".join(
+                    f"#define {key} {number:#x}U\n" for key, number in definitions.items()))
+                fields = graph.pin_definitions(self.zephyr, header)
+                self.assertEqual(graph.vendor_pin_value(compatible, fields, value), expected)
+                self.assertIsNone(graph.vendor_pin_value(compatible, fields, invalid))
+                self.assertIsNone(graph.vendor_pin_value(compatible, {}, value))
+
     def test_windows_crlf_cache_preserves_verified_selected_checkout(self):
         # CMake writes CRLF cache records on Windows, with spaces supported
         # in application/checkout paths. The trailing \r is NOT part of the path.

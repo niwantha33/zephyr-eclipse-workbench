@@ -27,6 +27,11 @@ TI_BUS_PIN = re.compile(
     r"\b((?:i2c|spi|uart|canfd)\d+)_([a-z0-9_]+)_(p[ab]\d{1,2})\s*:\s*"
     r"[a-z0-9_]+\s*\{\s*pinmux\s*=\s*"
     r"<MSP_PINMUX\(\s*(\d+)\s*,\s*MSPM0_PIN_FUNCTION_(\d+)\s*\)>\s*;")
+PIN_HEADERS = {
+    "st,stm32-pinctrl": "stm32-pinctrl.h",
+    "nordic,nrf-pinctrl": "nrf-pinctrl.h",
+    "espressif,esp32-pinctrl": "esp-pinctrl-common.h",
+}
 
 
 def emit(tag: str, *values: object) -> None:
@@ -93,6 +98,91 @@ def ti_bus_pin(pins, paths, source, target):
     return None
 
 
+def pin_definitions(zephyr, header):
+    path = zephyr / "include/zephyr/dt-bindings/pinctrl" / header
+    try:
+        source = checked(path, 64 * 1024).decode("utf-8")
+    except (OSError, ValueError):
+        return {}
+    return {key: int(value, 16 if value.lower().startswith("0x") else 10)
+            for key, value in re.findall(
+        r"(?m)^#define[ \t]+(\w+)[ \t]+(0[xX][0-9a-fA-F]+|[0-9]+)[uUlL]*\b", source)}
+
+
+def vendor_pin_value(compatible, fields, value):
+    """Use the selected checkout's defined fields; keep unresolved signal names explicit."""
+    def get(shift, mask):
+        offset, bits = fields[shift], fields[mask]
+        if not 0 <= offset < 32 or not 1 <= bits <= 0xffff:
+            raise ValueError("unexpected pinctrl field")
+        return (value >> offset) & bits
+
+    try:
+        if compatible == "st,stm32-pinctrl":
+            port = get("STM32_PORT_SHIFT", "STM32_PORT_MASK")
+            pin = get("STM32_LINE_SHIFT", "STM32_LINE_MASK")
+            mode = get("STM32_MODE_SHIFT", "STM32_MODE_MASK")
+            if value > 0x3fff or port not in {*range(17), 25} or pin > 15 or mode > 17:
+                return None
+            signal = f"AF{mode}" if mode < 16 else ("Analog" if mode == 16 else "GPIO")
+            return signal, f"P{chr(65 + port)}{pin}"
+        if compatible == "nordic,nrf-pinctrl":
+            pin = get("NRF_PIN_POS", "NRF_PIN_MSK")
+            function = get("NRF_FUN_POS", "NRF_FUN_MSK")
+            if pin == fields["NRF_PIN_MSK"]:
+                return None
+            names = [name.removeprefix("NRF_FUN_") for name, number in fields.items()
+                     if name.startswith("NRF_FUN_") and name not in {"NRF_FUN_POS", "NRF_FUN_MSK"}
+                     and number == function]
+            signal = names[0] if len(names) == 1 else f"Function {function}"
+            return signal, f"P{pin // 32}.{pin % 32:02d}"
+        if compatible == "espressif,esp32-pinctrl":
+            if value > 0xffffff:  # Other encodings include flags outside the GPIO-matrix cell.
+                return None
+            pin = get("ESP32_PIN_NUM_SHIFT", "ESP32_PIN_NUM_MASK")
+            incoming = get("ESP32_PIN_SIGI_SHIFT", "ESP32_PIN_SIGI_MASK")
+            outgoing = get("ESP32_PIN_SIGO_SHIFT", "ESP32_PIN_SIGO_MASK")
+            def signal_name(direction, index):
+                names = [name[4:] for name, number in fields.items()
+                         if name.startswith("ESP_") and name.endswith("_" + direction)
+                         and number == index]
+                return names[0] if len(names) == 1 else f"{direction}{index}"
+
+            signals = [signal_name("IN", incoming)] if incoming != fields["ESP32_PIN_SIGI_MASK"] else []
+            if outgoing != fields["ESP32_PIN_SIGO_MASK"]:
+                signals.append(signal_name("OUT", outgoing))
+            return "/".join(signals) or "GPIO matrix", f"GPIO{pin}"
+    except (KeyError, ValueError):
+        return None
+    return None
+
+
+def vendor_bus_pins(headers, paths, children, source, target):
+    parent = paths.get(target.path.rsplit("/", 1)[0])
+    compatible_prop = parent.props.get("compatible") if parent else None
+    if compatible_prop is None:
+        return
+    compatible = next((entry for entry in compatible_prop.to_strings() if entry in headers), None)
+    if compatible is None:
+        return
+    property_name = "psels" if compatible == "nordic,nrf-pinctrl" else "pinmux"
+    for group in (target, *children.get(target.path, ())):
+        prop = group.props.get(property_name)
+        if prop is None or prop.type.name not in {"NUM", "NUMS"}:
+            continue
+        for value in prop.to_nums()[:64]:
+            result = vendor_pin_value(compatible, headers[compatible], value)
+            if result:
+                signal, pad = result
+                if compatible == "st,stm32-pinctrl":
+                    designations = {label[len(owner) + 1:-(len(pad) + 1)].upper()
+                                    for owner in source.labels or [] for label in group.labels or []
+                                    if label.startswith(owner + "_") and label.endswith("_" + pad.lower())}
+                    if len(designations) == 1 and "" not in designations:
+                        signal = f"{next(iter(designations))} ({signal})"
+                yield signal, pad, value
+
+
 def observed(zephyr: Path, application: Path, build: Path):
     zephyr = zephyr.resolve(strict=True)
     application = application.resolve(strict=True)
@@ -133,7 +223,20 @@ def observed(zephyr: Path, application: Path, build: Path):
         if len(nodes) > MAX_NODES:
             return ("unavailable", digest, "Devicetree exceeds graph node safety limit.", [], [])
         by_path = {node.path: node for node in nodes}
+        children = {}
+        for path, node in by_path.items():
+            children.setdefault(path.rsplit("/", 1)[0], []).append(node)
         ti_pins = ti_bus_pins(zephyr, by_path["/"])
+        headers = {compatible: pin_definitions(zephyr, header)
+                   for compatible, header in PIN_HEADERS.items()}
+        root_compatible = by_path["/"].props.get("compatible")
+        if root_compatible is not None:
+            for compatible in root_compatible.to_strings():
+                chip = re.fullmatch(r"espressif,(esp32(?:[csh]\d)?)", compatible)
+                if chip:
+                    headers["espressif,esp32-pinctrl"].update(
+                        pin_definitions(zephyr, chip[1] + "-gpio-sigmap.h"))
+                    break
         nrows = []
         edges = []
         seen_edges = set()
@@ -221,6 +324,9 @@ def observed(zephyr: Path, application: Path, build: Path):
                             signal, pad, mux = pin
                             link(node.path, config.path, "pinmux", signal,
                                  f"{state_name} {pad} {mux:#x}")
+                        for signal, pad, mux in vendor_bus_pins(
+                                headers, by_path, children, by_path[node.path], by_path[config.path]):
+                            link(node.path, config.path, "pinmux", signal, f"{state_name} {pad} {mux:#x}")
             state = "built"
             reason = "Generated DTS + selected-checkout edtlib references; runtime unverified."
         except (ImportError, ValueError, OSError, AttributeError, TypeError):

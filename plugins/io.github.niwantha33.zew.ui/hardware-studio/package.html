@@ -40,21 +40,25 @@ function labelPin(edge,target){
 }
 function muxPin(edge){
   if(edge.kind!=="pinmux")return null;
-  const match=/^([a-zA-Z0-9_-]+) (P[AB]\d{1,2}) (0x[0-9a-f]+)$/.exec(edge.detail);
-  return match&&PIN_NAMES.includes(match[2])?match[2]:null;
+  const match=/^([a-zA-Z0-9_-]+) ([A-Z0-9.]+) (0x[0-9a-f]+)$/.exec(edge.detail);
+  return match?match[2]:null;
 }
 function collect(data){
   const nodes=new Map(data.nodes.map(n=>[n.path,n]));
-  if(!supportsBoard(data.board)||!data.observed||data.state!=="built")return [];
+  if(!data.observed||data.state!=="built")return [];
+  const known=supportsBoard(data.board);
   const links=[];
   const linkKey=(edge,state)=>JSON.stringify([edge.source,edge.target,state]);
   const resolved=new Set(data.edges.filter(muxPin).map(e=>linkKey(e,e.detail.split(" ")[0])));
   for(const e of data.edges){
     const target=nodes.get(e.target),source=nodes.get(e.source);
     if(!target||!source)continue;
-    const gpio=gpioPin(e,target),mux=muxPin(e);
-    const candidate=resolved.has(linkKey(e,e.detail))?null:labelPin(e,target);
-    if(gpio||mux||candidate)links.push({pin:gpio||mux||candidate,kind:gpio?"gpio":mux?"mux":"candidate",edge:e,source,target});
+    const gpioCell=e.kind==="gpio"?/^\[\d+\] pin=(\d+)$/.exec(e.detail):null;
+    const gpio=(known?gpioPin(e,target):null)||(gpioCell?"GPIO "+gpioCell[1]:null);
+    const mux=muxPin(e),unresolved=e.kind==="pinctrl"&&!resolved.has(linkKey(e,e.detail));
+    const candidate=known&&unresolved?labelPin(e,target):null;
+    if(gpio||mux||unresolved)
+      links.push({pin:gpio||mux||candidate||"",kind:gpio?"gpio":mux?"mux":candidate?"candidate":"state",edge:e,source,target});
   }
   return links;
 }
@@ -104,8 +108,8 @@ function renderDetails(){
   if((selectedPin||focus)&&!selected.length)root.append(el("p","No resolved pin mapping in this observation. Availability is unknown.","muted"));
   for(const l of selected){
     const row=el("div","","linkrow");
-    const mapping=l.kind==="gpio"?"GPIO reference":l.kind==="mux"?l.edge.property+" · resolved pinmux":"Label candidate — mux unverified";
-    row.append(el("strong",l.pin+" · "+mapping,l.kind==="candidate"?"amber":"green"));
+    const mapping=l.kind==="gpio"?"GPIO reference":l.kind==="mux"?l.edge.property+" · resolved pinmux":l.kind==="candidate"?"Label candidate · mux unverified":"Pinctrl state · pad unresolved";
+    row.append(el("strong",(l.pin?l.pin+" · ":"")+mapping,l.kind==="candidate"||l.kind==="state"?"amber":"green"));
     row.append(el("p",nodeLabel(l.source)+" → "+nodeLabel(l.target)));
     row.append(el("small",l.edge.property+" · "+l.edge.detail+" · "+l.source.status));
     row.append(action("DTS topology",()=>host("topology",l.source.path)),
@@ -127,7 +131,8 @@ $("category").onchange=renderNodes;
 $("context").textContent=[DATA.project,DATA.board,DATA.profile].filter(Boolean).join(" · ")||"Select a Zephyr project";
 const known=supportsBoard(DATA.board);
 $("package").hidden=!known;
-$("notice").textContent=known?("Reference package: TI SLASEX6C Fig. 6-2 / SLAU873E §1.4. "+(!DATA.observed?"Build evidence unavailable.":DATA.stale?"Stale build — references are historical.":DATA.state!=="built"?"Binding-aware references unavailable.":"Generated DTS observation — not measured hardware.")):"Exact package mapping unavailable for the selected board. No package pins are guessed.";
+const evidenceStatus=!DATA.observed?"Build evidence unavailable.":DATA.stale?"Stale build · references are historical.":DATA.state!=="built"?"Binding-aware references unavailable.":"Select a peripheral to view its generated DTS connections.";
+$("notice").textContent=(known?"Reference package: TI SLASEX6C Fig. 6-2 / SLAU873E §1.4. ":"Package numbering is unavailable for this board. ")+evidenceStatus;
 if(known){addPins("top",sequence(64,16,-1));addPins("left",sequence(1,16));addPins("right",sequence(48,16,-1));addPins("bottom",sequence(17,16));}
 renderPins();renderNodes();renderDetails();
 </script></body></html>
