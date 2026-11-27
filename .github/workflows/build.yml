@@ -242,7 +242,7 @@ jobs:
         run: |
           {
             echo '## Exact-commit qualification'
-            echo "Commit: `$GITHUB_SHA`"
+            echo "Commit: $GITHUB_SHA"
             echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo '| Check | Result |'
             echo '| --- | --- |'
