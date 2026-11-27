@@ -904,3 +904,9 @@ EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.
 - Add offline ZIP64 archive export, bounded metadata inspection, per-file SHA-256 verification, same-path no-overwrite restoration and firmware byte comparison CLI; explicit private-copy and trust acknowledgements.
 - Self-contained managed setups only. Reject external core paths, links/junctions and unsupported members. Preserve historical ready marker only after verification, not as current build evidence. Archive is not sanitised or authenticated; retain a trusted external digest.
 - Add synthetic positive/negative tests; exact-head CI, native clean-machine offline build, licensing review, historical host and external dependency recovery remain pending. G0 remains open.
+
+
+## Environment migration-copy increment — development, unqualified
+
+- Explicit headless `project_versions.py migration-copy --confirm-copy --destination NEW_PATH` uses the same required current/candidate arguments as the upgrade preview, and additionally requires all four candidate executable paths. The original project and environment must match the existing lock. Copies only fingerprinted application files to a new, non-overlapping directory and writes a candidate project lock and frozen manifest. It never copies build outputs or Git history, changes project binding, launches a trial build, or promotes a candidate.
+- Rejects workspace-escaping module aliases and linked project metadata when snapshotting. Offline mocked regression fixtures cover original preservation, source drift, explicit consent, collision and path rejection. External application inputs, executable/SDK provenance closure, candidate subprocess isolation, native UI integration, actual cross-version builds and promotion/rollback remain open. Exact-head CI and installed UI/hardware evidence pending; G0 stays open.
