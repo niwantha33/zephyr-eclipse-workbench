@@ -64,6 +64,24 @@ Available Zephyr menu items:
    environment, and its own toolchain. Read the console for per-module and
    tool differences. No source checkout is changed.
 
+## Recovery of a locked application (development slice)
+
+Open **Zephyr > Project Environment Manager > Attach Original**. Select a
+trusted, separately installed or restored setup folder containing
+`.zew-ready` and `environment.properties`. The existing project lock is
+verified using the candidate environment before its project-local binding
+changes. The former binding need not be available. Project sources, the lock
+and global preferences are not changed. A mismatch or cancellation leaves
+the selected setup unattached. The next build of each target/profile
+regenerates its cache before compiling; preserve original artifacts first.
+
+This does not obtain missing source or tools. A schema-1 lock cannot attest
+SDK contents, Python packages, externally installed host utilities, the OS
+or bit-identical firmware. A matching record is not proof of an archival
+restore. Use the existing CLI `verify-env` against the candidate to inspect
+the same recorded identities. No tools from an untrusted setup should be
+executed. Native integration and clean-machine recovery remain unqualified.
+
 ## Command-line backend for the Eclipse tools bundle
 
 The Python helper `tools/project_versions.py` has the actions

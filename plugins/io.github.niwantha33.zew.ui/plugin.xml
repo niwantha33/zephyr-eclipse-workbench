@@ -278,6 +278,7 @@
     <command id="io.github.niwantha33.zew.socRegisters" name="Show Debug Data and Hardware Register Explorer" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.faultAnalysis" name="Investigate Fatal Log" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.prepareParallelSources" name="Check Zephyr Versions and Prepare Parallel Sources" categoryId="io.github.niwantha33.zew.commands"/>
+    <command id="io.github.niwantha33.zew.environmentManager" name="Project Environment Manager" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.snapshotProject" name="Snapshot Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.verifyProject" name="Verify Project Environment" categoryId="io.github.niwantha33.zew.commands"/>
     <command id="io.github.niwantha33.zew.planProjectUpgrade" name="Preview Project Upgrade" categoryId="io.github.niwantha33.zew.commands"/>
@@ -340,6 +341,7 @@
     <handler commandId="io.github.niwantha33.zew.socRegisters" class="io.github.niwantha33.zew.ui.SocRegistersHandler"/>
     <handler commandId="io.github.niwantha33.zew.faultAnalysis" class="io.github.niwantha33.zew.ui.FaultAnalysisHandler"/>
     <handler commandId="io.github.niwantha33.zew.prepareParallelSources" class="io.github.niwantha33.zew.ui.ParallelSourceSetupHandler"/>
+    <handler commandId="io.github.niwantha33.zew.environmentManager" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.snapshotProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.verifyProject" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
     <handler commandId="io.github.niwantha33.zew.planProjectUpgrade" class="io.github.niwantha33.zew.ui.ProjectVersionHandler"/>
@@ -467,9 +469,7 @@
           <command commandId="io.github.niwantha33.zew.diagnostics" label="Check Environment..." style="push"/>
           <separator name="environment" visible="true"/>
           <command commandId="io.github.niwantha33.zew.prepareParallelSources" label="Zephyr Versions and Parallel Sources..." style="push"/>
-          <command commandId="io.github.niwantha33.zew.snapshotProject" label="Snapshot Project Environment..." style="push"/>
-          <command commandId="io.github.niwantha33.zew.verifyProject" label="Verify Project Environment..." style="push"/>
-          <command commandId="io.github.niwantha33.zew.planProjectUpgrade" label="Preview Project Upgrade..." style="push"/>
+          <command commandId="io.github.niwantha33.zew.environmentManager" label="Project Environment Manager..." style="push"/>
           <command commandId="io.github.niwantha33.zew.editor" label="Refresh C/C++ Editor Settings" style="push"/>
         </menu>
         <menu id="io.github.niwantha33.zew.menu.advanced" label="Advanced Diagnostics">

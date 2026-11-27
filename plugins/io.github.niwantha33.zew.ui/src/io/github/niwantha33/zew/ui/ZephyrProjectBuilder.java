@@ -144,6 +144,13 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             String profileLabel = namedProfile == null ? configuration.label() : namedProfile.label();
             String profileIdentity = namedProfile == null ? configuration.id() : "profile-" + namedProfile.id();
             Path buildDirectory = ProjectContext.buildDirectory(getProject(), settings);
+            String recoveryRoot = getProject().getPersistentProperty(ProjectContext.RECOVERY_BINDING);
+            boolean recoveredBinding = recoveryRoot != null
+                    && recoveryRoot.equals(settings.getProperty("zew.setupRoot"));
+            Path recoveryMarker = buildDirectory.resolve(".zew-recovered-setup");
+            boolean recoveryPristine = !clean && recoveredBinding
+                    && (!Files.isRegularFile(recoveryMarker)
+                        || !recoveryRoot.equals(Files.readString(recoveryMarker)));
             if (expectedBuild != null && !buildDirectory.toAbsolutePath().normalize().equals(Path.of(expectedBuild)))
                 throw new java.io.IOException("The build profile changed while investigation was queued. Select the current build and retry.");
             // Read the old generated artifact BEFORE West's configure/pristine step.
@@ -236,8 +243,9 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                     // tools marked NOTFOUND, so it is not authoritative.
                     var configure = new ArrayList<>(command);
                     configure.add(4, "--cmake-only");
-                    if (paths.freshConfiguration() || pristine) {
+                    if (paths.freshConfiguration() || pristine || recoveryPristine) {
                         stream.println(pristine ? "Explicit pristine rebuild; regenerating only this target build folder." : "Refreshing this managed target for a verified Windows short-path alias.");
+                        if (recoveryPristine) stream.println("Recovered environment: regenerate target build cache.");
                         configure.add(5, "--pristine=always");
                     }
                     stream.println("Preflight: Zephyr configure-only; checking actual host tool dependencies.");
@@ -319,6 +327,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
                 }
                 if (!clean) {
                     Files.writeString(buildDirectory.resolve(".zew-built-target"), board);
+                    if (recoveredBinding) Files.writeString(recoveryMarker, recoveryRoot);
                     // Capture only AFTER the exact build and generated outputs
                     // have passed their existing integrity/target checks.
                     // A missing dependency file yields UNVERIFIED, never a

@@ -1,6 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Project environment recovery — development slice, not released
+
+- Consolidate project lock, verify and upgrade preview into a Project Environment Manager; add explicit verified reattachment to a trusted ready setup, including when the previous setup is unavailable.
+- Preserve the original lock, sources and global preferences. Reject mismatch before binding; regenerate the selected target/profile cache on first recovered build. Preserve production artifacts separately.
+- This is schema-1 identity matching, not full source/tool archival, historical OS recreation or binary reproduction. Exact-head Tycho, native Windows/Linux, clean-machine recovery and G0 remain pending.
+
 ## Setup release selection (review branch, not released)
 
 - Retain the native Eclipse wizard and pinned 4.4.0 first-build path; add explicit official stable-release discovery without requiring an existing Python installation.

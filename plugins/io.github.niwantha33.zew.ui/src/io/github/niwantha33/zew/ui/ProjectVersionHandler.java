@@ -51,7 +51,8 @@ public final class ProjectVersionHandler extends AbstractHandler {
         if (result.exitCode() == 0) return result.output();
         if (result.output().contains("\"status\": \"drift\"")) {
             throw new IOException("The installed Zephyr environment differs from the project's saved lock. "
-                + "See the detailed differences in the Zephyr Project Versions console.");
+                + "See the detailed differences in the Zephyr Project Versions console. "
+                + "Use Project Environment Manager to attach a matching installed setup.");
         }
         String detail = result.output().strip();
         if (detail.startsWith("ERROR: ")) detail = detail.substring(7);
@@ -62,13 +63,15 @@ public final class ProjectVersionHandler extends AbstractHandler {
 
     static void operate(IProject project, String action, Path candidateRoot,
                         IProgressMonitor monitor, Consumer<String> log) throws Exception {
-        Properties settings = ProjectContext.settings(project);
+        boolean attach = action.equals("attach");
+        Properties settings = attach ? ProjectContext.settings(project, candidateRoot)
+                : ProjectContext.settings(project);
         Path script = Path.of(FileLocator.toFileURL(
                 Activator.getDefault().getBundle().getEntry(SCRIPT)).toURI());
         Path application = project.getLocation().toFile().toPath();
         Path workspace = Path.of(settings.getProperty("workspace"));
         var command = new ArrayList<String>(List.of(
-                settings.getProperty("python"), script.toString(), action, "--plain-errors",
+                settings.getProperty("python"), script.toString(), attach ? "verify-env" : action, "--plain-errors",
                 "--application", application.toString(),
                 "--workspace", workspace.toString(),
                 "--python", settings.getProperty("python"),
@@ -94,6 +97,18 @@ public final class ProjectVersionHandler extends AbstractHandler {
         var result = new ProcessRunner().run(command, workspace, Duration.ofMinutes(5),
                 monitor::isCanceled, log, ProjectContext.environment(settings));
         friendlyResult(result, action);
+        if (attach) {
+            if (monitor.isCanceled()) throw new InterruptedIOException("Recovery cancelled");
+            // Only a verified candidate can become the project-local binding.
+            // Mark recovered builds before changing the binding so even a failed
+            // property update cannot permit reuse of an old CMake cache.
+            String root = settings.getProperty("zew.setupRoot");
+            project.setPersistentProperty(ProjectContext.RECOVERY_BINDING, root);
+            project.setPersistentProperty(ProjectContext.SETUP_ROOT, root);
+            log.accept("Original environment record matches; project attached to " + root);
+            log.accept("Next build will configure pristinely for this recovered setup. "
+                    + "SDK libraries and Python dependencies are not fully attested by a schema-1 lock.");
+        }
     }
 
     /** Prevent a locked application from silently compiling against a newer setup. */
@@ -121,6 +136,22 @@ public final class ProjectVersionHandler extends AbstractHandler {
         }
     }
 
+    private static String chooseAction(ExecutionEvent event) {
+        var dialog = new MessageDialog(HandlerUtil.getActiveShell(event),
+                "Project Environment Manager", null,
+                "Capture the original build environment, check it, or attach a matching "
+                + "installed environment. An environment lock is not a backup of tools or source.",
+                MessageDialog.INFORMATION, new String[] {"Create Lock", "Verify", "Attach Original",
+                        "Preview Upgrade", "Cancel"}, 4);
+        return switch (dialog.open()) {
+            case 0 -> "snapshot";
+            case 1 -> "verify";
+            case 2 -> "attach";
+            case 3 -> "plan";
+            default -> "";
+        };
+    }
+
     @Override public Object execute(ExecutionEvent event) throws ExecutionException {
         IProject project = SelectedProject.from(event);
         if (project == null || !ZephyrProjectLifecycle.canInspect(project)) {
@@ -129,11 +160,34 @@ public final class ProjectVersionHandler extends AbstractHandler {
             return null;
         }
         String id = event.getCommand().getId();
-        String action = id.endsWith(".snapshotProject") ? "snapshot"
+        String action = id.endsWith(".environmentManager") ? chooseAction(event)
+                : id.endsWith(".snapshotProject") ? "snapshot"
                 : id.endsWith(".verifyProject") ? "verify"
                 : id.endsWith(".planProjectUpgrade") ? "plan" : "";
         if (action.isEmpty()) return null;
         Path candidateRoot = null;
+        if (action.equals("attach")) {
+            Path lock = project.getLocation().toFile().toPath().resolve(".zew/project-lock.json");
+            if (!Files.isRegularFile(lock)) {
+                MessageDialog.openInformation(HandlerUtil.getActiveShell(event),
+                        "Project lock required", "This project has no saved environment lock. "
+                        + "The original environment cannot be identified safely.");
+                return null;
+            }
+            var picker = new DirectoryDialog(HandlerUtil.getActiveShell(event));
+            picker.setText("Select a trusted, ready original Zephyr environment");
+            picker.setMessage("Choose the restored or separately installed setup folder. "
+                    + "Its local tools will execute to verify the saved lock. "
+                    + "Only matching environments will be attached.");
+            String selected = picker.open();
+            if (selected == null) return null;
+            if (!MessageDialog.openConfirm(HandlerUtil.getActiveShell(event), "Verify and attach environment",
+                    "Trust and execute tools from " + selected + "?\n\n"
+                    + "The project binding changes only if its recorded environment matches. "
+                    + "The next build will regenerate the selected target's build output. "
+                    + "Preserve production artifacts separately before building.")) return null;
+            candidateRoot = Path.of(selected).toAbsolutePath().normalize();
+        }
         if (action.equals("plan")) {
             try {
                 Properties current = ProjectContext.settings(project);
@@ -190,6 +244,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
                         MessageDialog.openInformation(Display.getDefault().getActiveShell(),
                             "Zephyr Project Versions",
                             action.equals("snapshot") ? "The project lock has been captured. See .zew/project-lock.json."
+                            : action.equals("attach") ? "The recorded environment matches and has been attached to this project. The next build regenerates its selected target output."
                             : action.equals("verify") ? "No environment drift detected. Details are in the Zephyr Project Versions console."
                             : "Upgrade comparison is available in the Zephyr Project Versions console. No project or setup files were changed."));
                     return monitor.isCanceled() ? Status.CANCEL_STATUS : Status.OK_STATUS;
@@ -212,6 +267,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
             }
         };
         job.setUser(true);
+        job.setRule(project);
         job.schedule();
         return null;
     }
