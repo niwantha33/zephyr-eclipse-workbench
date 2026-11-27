@@ -3,7 +3,8 @@
 """Reproducible Zephyr project fingerprints and read-only migration previews.
 
 Use West's frozen manifest, never a home-grown manifest resolver. No network,
-checkout, environment change, project source rewrite, or automatic upgrade.
+checkout, original environment change, original source rewrite, or automatic upgrade.
+An explicit migration-copy action prepares a separate, unbuilt application.
 """
 import argparse
 import datetime
@@ -11,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import subprocess
 import sys
 
@@ -74,6 +76,10 @@ def require_clean(git, directory):
                            + str(directory) + " (" + dirty.splitlines()[0][:120] + ")")
 
 
+def is_link(path):
+    return path.is_symlink() or getattr(path, "is_junction", lambda: False)()
+
+
 def project_sources(application):
     files = {}
     for path in sorted(application.rglob("*")):
@@ -86,8 +92,8 @@ def project_sources(application):
             continue
         if relative.as_posix() in (LOCK.as_posix(), FROZEN.as_posix()):
             continue
-        if path.is_symlink():
-            raise VersionError("Project has an unsupported symlink: " + relative.as_posix())
+        if is_link(path):
+            raise VersionError("Project has an unsupported symlink or junction: " + relative.as_posix())
         if not path.is_file():
             continue
         if len(files) >= MAX_FILES or path.stat().st_size > MAX_FILE_BYTES:
@@ -163,6 +169,8 @@ def get_manifest(workspace, python, git, preferred_origin=None):
         names.add(name)
         relative = relative_path(str(project.get("path", name)))
         directory = workspace.joinpath(*relative.parts)
+        if not directory.resolve().is_relative_to(workspace.resolve()):
+            raise VersionError("West module path escapes the selected workspace: " + str(relative))
         present = directory.is_dir()
         if present:
             actual = git_head(git, directory)
@@ -181,6 +189,8 @@ def get_manifest(workspace, python, git, preferred_origin=None):
         resolved.append({"name": name, "path": relative.as_posix(), "commit": revision,
                          "url": url, "installed_at_snapshot": present})
     zephyr = workspace / "zephyr"
+    if not zephyr.resolve().is_relative_to(workspace.resolve()):
+        raise VersionError("Zephyr source path escapes the selected workspace")
     require_clean(git, zephyr)
     return frozen, sorted(resolved, key=lambda item: item["name"]), origin
 
@@ -279,6 +289,10 @@ def write_once(path, contents):
 def snapshot(application, frozen, record):
     target_lock = application / LOCK
     target_manifest = application / FROZEN
+    if is_link(target_lock.parent) or not target_lock.parent.resolve().is_relative_to(application.resolve()):
+        raise VersionError("Project metadata directory must remain inside the application")
+    if is_link(target_lock) or is_link(target_manifest):
+        raise VersionError("Project metadata must not be a symlink or junction")
     if target_lock.exists() or target_manifest.exists():
         previous = load_lock(application)
         if not target_manifest.is_file() or file_hash(target_manifest) != previous["west_manifest_sha256"]:
@@ -298,9 +312,58 @@ def snapshot(application, frozen, record):
             "zephyr": record["zephyr"], "modules_not_installed": record["modules_not_installed"]}
 
 
+def migration_copy(application, destination, workspace, candidate, frozen, record, previous):
+    """Copy only the fingerprinted application files, without Git or build state."""
+    destination = destination.resolve()
+    application = application.resolve()
+    for protected in (application, workspace.resolve(), candidate.resolve()):
+        if destination.is_relative_to(protected) or protected.is_relative_to(destination):
+            raise VersionError("Migration destination must be separate from the application and both workspaces")
+    if destination.exists():
+        raise VersionError("Migration destination already exists; select a new directory")
+    if not destination.parent.is_dir():
+        raise VersionError("Migration destination parent does not exist")
+    expected = previous["application_files"]
+    if record["application_files"] != expected or project_sources(application) != expected:
+        raise VersionError("Application differs from the saved lock; preserve the original revision before migration")
+    if file_hash(application / FROZEN) != previous["west_manifest_sha256"]:
+        raise VersionError("Frozen west manifest missing or changed")
+    # Exclusively create the destination; never remove it automatically on failure.
+    destination.mkdir(exist_ok=False)
+    try:
+        for relative, digest in sorted(expected.items()):
+            parts = relative_path(relative).parts
+            source = application.joinpath(*parts)
+            if (not source.resolve().is_relative_to(application)
+                    or any(is_link(application.joinpath(*parts[:i])) for i in range(1, len(parts) + 1))
+                    or not source.is_file() or file_hash(source) != digest):
+                raise VersionError("Source changed or is unsafe: " + relative)
+            target = destination.joinpath(*parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with source.open("rb") as incoming, target.open("xb") as outgoing:
+                shutil.copyfileobj(incoming, outgoing)
+            shutil.copymode(source, target)
+            if file_hash(target) != digest:
+                raise VersionError("Source changed during copying: " + relative)
+        if (project_sources(destination) != expected or project_sources(application) != expected
+                or load_lock(application) != previous
+                or file_hash(application / FROZEN) != previous["west_manifest_sha256"]):
+            raise VersionError("Original or copied inputs changed during migration")
+        snapshot(destination, frozen, record)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise VersionError("Migration copy incomplete at " + str(destination)
+                           + "; inspect it manually, do not use it as a qualified trial: "
+                           + str(error)) from error
+    return {"status": "migration-copy-created", "destination": str(destination),
+            "old": previous["zephyr"], "candidate": record["zephyr"],
+            "differences": compare(previous, record),
+            "trial_build": "not-run", "promotion": "not-performed",
+            "next": "Import the separate application, explicitly select the candidate environment, and run a pristine build."}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("snapshot", "verify", "verify-env", "plan"))
+    parser.add_argument("action", choices=("snapshot", "verify", "verify-env", "plan", "migration-copy"))
     parser.add_argument("--plain-errors", action="store_true", help="Print user-facing errors instead of JSON")
     parser.add_argument("--application", required=True, type=Path)
     parser.add_argument("--workspace", required=True, type=Path)
@@ -316,6 +379,8 @@ def main(argv=None):
     parser.add_argument("--candidate-git", type=Path)
     parser.add_argument("--candidate-cmake", type=Path)
     parser.add_argument("--candidate-ninja", type=Path)
+    parser.add_argument("--destination", type=Path)
+    parser.add_argument("--confirm-copy", action="store_true")
     args = parser.parse_args(argv)
     application = args.application.resolve()
     workspace = args.workspace.resolve()
@@ -323,17 +388,32 @@ def main(argv=None):
         raise VersionError("Application directory not found: " + str(application))
     if not args.board.strip():
         raise VersionError("Board must be the selected full target identifier")
-    if args.action == "plan":
+    if args.action in ("plan", "migration-copy"):
         if not args.candidate_workspace or not args.candidate_sdk:
             raise VersionError("Select a separate, installed candidate West workspace and SDK")
         previous = load_lock(application)
         candidate = args.candidate_workspace.resolve()
         if candidate == workspace or candidate.is_relative_to(workspace) or workspace.is_relative_to(candidate):
             raise VersionError("Upgrade trial requires a separate West workspace; in-place update is forbidden")
-        _, new = system_record(candidate, args.candidate_python or args.python,
+        if args.action == "migration-copy":
+            if not args.confirm_copy or not args.destination:
+                raise VersionError("Migration copy requires --destination and --confirm-copy")
+            if not all((args.candidate_python, args.candidate_git, args.candidate_cmake, args.candidate_ninja)):
+                raise VersionError("Migration copy requires all candidate tool paths explicitly")
+            original_frozen = application / FROZEN
+            if not original_frozen.is_file() or file_hash(original_frozen) != previous["west_manifest_sha256"]:
+                raise VersionError("Frozen west manifest missing or changed")
+            _, original = system_record(workspace, args.python, args.git, args.sdk.resolve(),
+                                        args.cmake, args.ninja, args.board, application,
+                                        previous.get("manifest_origin"))
+            if compare(previous, original) or original["west_manifest_sha256"] != previous["west_manifest_sha256"]:
+                raise VersionError("Original project or environment differs from the saved lock")
+        frozen, new = system_record(candidate, args.candidate_python or args.python,
                                args.candidate_git or args.git, args.candidate_sdk.resolve(),
                                args.candidate_cmake or args.cmake,
                                args.candidate_ninja or args.ninja, args.board, application)
+        if args.action == "migration-copy":
+            return migration_copy(application, args.destination, workspace, candidate, frozen, new, previous)
         return {"status": "preview-only", "old": previous["zephyr"],
                 "candidate": new["zephyr"], "differences": compare(previous, new),
                 "next": "Copy the application, bind it to the new setup, and run a pristine trial build. No files were modified."}
