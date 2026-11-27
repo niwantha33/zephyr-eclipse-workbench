@@ -15,6 +15,7 @@ import re
 import stat
 import struct
 import sys
+import tempfile
 import zipfile
 
 SCHEMA = 1
@@ -22,6 +23,7 @@ MAX_FILES = 250_000
 MAX_TOTAL = 64 * 1024**3
 MAX_META = 64 * 1024**2
 MAX_CENTRAL = 128 * 1024**2
+MAX_ARCHIVE = MAX_TOTAL + MAX_CENTRAL + MAX_META + 1024**3
 BLOCK = 1024 * 1024
 READY = ".zew-ready"
 PROPERTIES = "environment.properties"
@@ -126,12 +128,12 @@ def inventory(root):
     return files, sorted(directories)
 
 
-def digest_stream(source, target=None, expected=None):
+def digest_stream(source, target=None, expected=None, limit=MAX_TOTAL):
     digest = hashlib.sha256()
     size = 0
     for block in iter(lambda: source.read(BLOCK), b""):
         size += len(block)
-        require(size <= (MAX_TOTAL if expected is None else expected), "File exceeds declared size")
+        require(size <= (limit if expected is None else expected), "File exceeds declared size")
         digest.update(block)
         if target is not None:
             target.write(block)
@@ -140,8 +142,15 @@ def digest_stream(source, target=None, expected=None):
 
 
 def file_digest(path):
+    before = regular(path)
+    require(before.st_size <= MAX_ARCHIVE, "File exceeds digest limit")
     with path.open("rb") as source:
-        return digest_stream(source)[0]
+        digest, _ = digest_stream(source, expected=before.st_size, limit=MAX_ARCHIVE)
+    after = regular(path)
+    require((before.st_size, before.st_mtime_ns, before.st_ctime_ns, before.st_ino)
+            == (after.st_size, after.st_mtime_ns, after.st_ctime_ns, after.st_ino),
+            "File changed while hashing: " + str(path))
+    return digest
 
 
 def export_archive(root, output):
@@ -182,7 +191,7 @@ def export_archive(root, output):
 def bounded_zip(path):
     """Bound the central-directory allocation before ZipFile parses it."""
     size = regular(path).st_size
-    require(22 <= size <= MAX_TOTAL + MAX_CENTRAL + MAX_META + 1024**3, "Archive size outside limits")
+    require(22 <= size <= MAX_ARCHIVE, "Archive size outside limits")
     with path.open("rb") as stream:
         start = max(0, size - 65557)
         stream.seek(start)
@@ -306,8 +315,19 @@ def archive_action(action, archive, destination=None, expected=None):
                 ready = source.read(row["size"] + 1)
             require(len(ready) == row["size"] and hashlib.sha256(ready).hexdigest() == row["sha256"],
                     "Ready marker digest mismatch")
-            with (destination / READY).open("xb") as target:
-                target.write(ready)
+            marker = None
+            try:
+                with tempfile.NamedTemporaryFile(dir=destination, prefix=".zew-ready-",
+                                                 delete=False) as target:
+                    marker = Path(target.name)
+                    target.write(ready)
+                    target.flush()
+                    os.fsync(target.fileno())
+                require(not (destination / READY).exists(), "Unexpected ready marker")
+                os.replace(marker, destination / READY)
+            finally:
+                if marker is not None:
+                    marker.unlink(missing_ok=True)
     return {"status": {"inspect": "metadata-only", "verify": "payload-verified",
                        "restore": "restored-bytes"}[action],
             "original_root": m["root"], "platform": m["platform"], "machine": m["machine"],

@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 SOURCE = (Path(__file__).resolve().parents[2] / "plugins"
@@ -58,6 +59,22 @@ class EnvironmentArchiveTests(unittest.TestCase):
         self.assertEqual("compiler bytes", (self.root / "sdk/compiler").read_text())
         self.assertTrue((self.root / "empty").is_dir())
         self.assertTrue((self.root / ".zew-ready").is_file())
+
+    def test_interrupted_restore_never_publishes_ready_marker(self):
+        self.export()
+        shutil.rmtree(self.root)
+        with patch.object(archive.os, "replace", side_effect=OSError("simulated interruption")):
+            with self.assertRaises(OSError):
+                archive.archive_action("restore", self.output, self.root)
+        self.assertTrue(self.root.is_dir())
+        self.assertFalse((self.root / ".zew-ready").exists())
+
+    def test_truncated_archive_rejected(self):
+        self.export()
+        bad = self.root.parent / "truncated.zip"
+        bad.write_bytes(self.output.read_bytes()[:-10])
+        with self.assertRaises(archive.ArchiveError):
+            archive.archive_action("verify", bad)
 
     def test_wrong_destination_rejected(self):
         self.export()

@@ -1,12 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
-## Private managed environment archival — development slice, not released
-
-- Add offline ZIP64 archive export, bounded metadata inspection, per-file SHA-256 verification, same-path no-overwrite restoration and firmware byte comparison CLI; explicit private-copy and trust acknowledgements.
-- Self-contained managed setups only. Reject external core paths, links/junctions and unsupported members. Preserve historical ready marker only after verification, not as current build evidence. Archive is not sanitised or authenticated; retain a trusted external digest.
-- Add synthetic positive/negative tests; exact-head CI, native clean-machine offline build, licensing review, historical host and external dependency recovery remain pending. G0 remains open.
-
 ## Setup release selection (review branch, not released)
 
 - Retain the native Eclipse wizard and pinned 4.4.0 first-build path; add explicit official stable-release discovery without requiring an existing Python installation.
@@ -876,3 +870,9 @@ EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.
 
 - Version-specific SDK recommendation, Python, West and CMake minimums can be
   previewed from an explicitly selected upstream tag; checks are advisory only.
+
+## Private managed environment archival — development slice, not released
+
+- Add offline ZIP64 archive export, bounded metadata inspection, per-file SHA-256 verification, same-path no-overwrite restoration and firmware byte comparison CLI; explicit private-copy and trust acknowledgements.
+- Self-contained managed setups only. Reject external core paths, links/junctions and unsupported members. Preserve historical ready marker only after verification, not as current build evidence. Archive is not sanitised or authenticated; retain a trusted external digest.
+- Add synthetic positive/negative tests; exact-head CI, native clean-machine offline build, licensing review, historical host and external dependency recovery remain pending. G0 remains open.
