@@ -245,7 +245,7 @@ class ProjectVersionTests(unittest.TestCase):
             import shutil
             shutil.copytree(self.workspace, candidate)
             (candidate / "zephyr" / "VERSION").write_text(
-                "VERSION_MAJOR = 4\\nVERSION_MINOR = 5\\nPATCHLEVEL = 0\\n")
+                "VERSION_MAJOR = 4\nVERSION_MINOR = 5\nPATCHLEVEL = 0\n")
         return self.args("migration-copy", "--candidate-workspace", str(candidate),
                          "--candidate-sdk", str(self.sdk),
                          "--candidate-python", str(self.tools["python"]),
@@ -255,7 +255,7 @@ class ProjectVersionTests(unittest.TestCase):
                          "--destination", str(destination), *extra)
 
     def test_migration_copy_preserves_original_and_creates_new_lock(self):
-        (self.application / "prj.conf").write_text("CONFIG_GPIO=y\\n")
+        (self.application / "prj.conf").write_text("CONFIG_GPIO=y\n")
         versions.snapshot(self.application, *self.record())
         original_lock = (self.application / versions.LOCK).read_bytes()
         original_manifest = (self.application / versions.FROZEN).read_bytes()
@@ -266,7 +266,7 @@ class ProjectVersionTests(unittest.TestCase):
         self.assertEqual("migration-copy-created", result["status"])
         self.assertEqual("not-run", result["trial_build"])
         self.assertEqual("4.5.0", versions.load_lock(destination)["zephyr"]["version"])
-        self.assertEqual("CONFIG_GPIO=y\\n", (destination / "prj.conf").read_text())
+        self.assertEqual("CONFIG_GPIO=y\n", (destination / "prj.conf").read_text())
         self.assertFalse((destination / "build").exists())
         self.assertEqual(original_lock, (self.application / versions.LOCK).read_bytes())
         self.assertEqual(original_manifest, (self.application / versions.FROZEN).read_bytes())
