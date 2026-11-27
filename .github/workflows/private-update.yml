@@ -344,10 +344,10 @@ jobs:
           GIT_ASKPASS="$ASKPASS" git -C "$RUNNER_TEMP/zephyr-p2-updates" push "https://github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/updates
           {
             echo '## Published development update'
-            echo "Source commit: `$GITHUB_SHA`"
+            echo "Source commit: $GITHUB_SHA"
             echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "Version: $EXPECTED_RELEASE_VERSION"
-            echo "Site tree SHA-256: `$EXPECTED_SITE_SHA256`"
+            echo "Site tree SHA-256: $EXPECTED_SITE_SHA256"
             echo 'Linux package and installed UI: passed'
             echo 'Windows seven-scenario firmware qualification: passed'
             echo 'Physical hardware flash/debug: not tested by this workflow'
