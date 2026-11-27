@@ -1,6 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Managed Windows Eclipse build tool search (2026-11-27, review branch)
+
+- Native Eclipse builds and cleans for managed Windows setups now search the selected environment's tool directories and Windows system directories. The Eclipse process's user and machine PATH entries are no longer appended to these child processes.
+- Explicitly selected existing-tool setups and other Workbench operations retain their current search policy. Existing CMake caches can still contain absolute paths from earlier builds. Installer, standalone commands, and hardware runner isolation still require qualification.
+
 ## CodeQL coordinated action update (2026-11-27, review branch)
 
 - Dependabot PRs #292 and #293 each passed the package build but failed CodeQL analysis: init/analyze versions 4.39.3 and 4.39.4 did not match. Both now pin the official v4.39.4 tag's commit, and Dependabot groups CodeQL actions together.

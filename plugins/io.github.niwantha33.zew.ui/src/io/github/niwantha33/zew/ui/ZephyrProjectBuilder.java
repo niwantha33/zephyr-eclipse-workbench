@@ -157,7 +157,7 @@ public final class ZephyrProjectBuilder extends IncrementalProjectBuilder {
             // An unsuccessful build must not publish a new comparison baseline.
             String previousGeneratedConfig = clean ? null
                     : io.github.niwantha33.zew.core.GeneratedConfigHistory.capture(buildDirectory);
-            var environment = ProjectContext.environment(settings);
+            var environment = ProjectContext.buildEnvironment(settings);
             monitor.beginTask(clean ? "Clean Zephyr project" : "Prepare tools and build Zephyr project", IProgressMonitor.UNKNOWN);
             if (!clean) {
                 stage[0] = "Preflight pinned project environment";
