@@ -59,6 +59,30 @@ public final class SetupTests {
                 "missing Windows system root never restores inherited PATH or inserts a current-directory entry");
     }
 
+    private static void checkManagedProcessEnvironment() {
+        var host = new java.util.LinkedHashMap<>(Map.of(
+                "Path", "unselected", "PythonHome", "other-python", "PYTHONPATH", "other-site",
+                "GIT_DIR", "other-repository", "GIT_CONFIG_KEY_0", "alias.bad",
+                "GIT_CONFIG_VALUE_0", "bad", "CMAKE_TOOLCHAIN_FILE", "foreign-toolchain",
+                "CC", "foreign-compiler", "TEMP", "system-temp", "BOARD_ROOT", "other-board"));
+        var ordinary = new java.util.LinkedHashMap<>(host);
+        io.github.niwantha33.zew.core.ProcessEnvironment.apply(ordinary, Map.of("PATH", "selected"));
+        check(ordinary.containsKey("PythonHome") && ordinary.containsKey("CC"),
+                "external environments retain their existing host configuration");
+        var selected = new io.github.niwantha33.zew.core.ProcessEnvironment(true);
+        selected.put("PATH", "selected");
+        selected.put("ZEPHYR_BASE", "selected-source");
+        selected.put("GIT_CONFIG_GLOBAL", "NUL");
+        var child = new java.util.LinkedHashMap<>(host);
+        io.github.niwantha33.zew.core.ProcessEnvironment.apply(child, selected);
+        check(child.size() == 4 && "selected".equals(child.get("Path"))
+                && "selected-source".equals(child.get("ZEPHYR_BASE"))
+                && "NUL".equals(child.get("GIT_CONFIG_GLOBAL"))
+                && "system-temp".equals(child.get("TEMP")),
+                "managed environment removes ambient inputs, retains OS state and applies selected overrides");
+        check(host.size() == 10 && "unselected".equals(host.get("Path")), "host map never changes");
+    }
+
     private static void checkManagedCache(Path root) throws Exception {
         Path build = Files.createDirectory(root.resolve("configured-build"));
         Path python = Files.createFile(root.resolve("selected-python.exe"));
@@ -85,6 +109,7 @@ public final class SetupTests {
         Path root = Files.createTempDirectory("setup Ω ");
         try {
             checkProjectToolPath(root);
+            checkManagedProcessEnvironment();
             checkManagedCache(root);
             var data = root.resolve("file"); Files.writeString(data, "good");
             String hash = "770e607624d689265ca6c44884d0807d9b054d23c473c106c72be9de08b7376c";
