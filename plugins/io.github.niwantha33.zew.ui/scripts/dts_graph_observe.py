@@ -22,6 +22,11 @@ MAX_NODES = 3500
 MAX_EDGES = 6000
 MAX_RECORD_BYTES = 3_000_000
 FORBIDDEN = (b"/include/", b"/incbin/")
+TI_PIN_DEFINITIONS = Path("modules/hal/ti/dts/ti/mspm0/g/mspm0g1x0x_g3x0x-pinctrl.dtsi")
+TI_BUS_PIN = re.compile(
+    r"\b((?:i2c|spi|uart|canfd)\d+)_([a-z0-9_]+)_(p[ab]\d{1,2})\s*:\s*"
+    r"[a-z0-9_]+\s*\{\s*pinmux\s*=\s*"
+    r"<MSP_PINMUX\(\s*(\d+)\s*,\s*MSPM0_PIN_FUNCTION_(\d+)\s*\)>\s*;")
 
 
 def emit(tag: str, *values: object) -> None:
@@ -43,6 +48,49 @@ def checked(path: Path, limit: int) -> bytes:
         raise ValueError("invalid-input-bytes")
     data.decode("utf-8")
     return data
+
+
+def ti_bus_pins(zephyr, root):
+    """Index exact bus mux values from the workspace's TI HAL pin declarations."""
+    compatible = root.props.get("compatible")
+    if compatible is None or "ti,mspm0g3507" not in compatible.to_strings():
+        return {}
+    try:
+        definitions = checked(zephyr.parent / TI_PIN_DEFINITIONS, 1024 * 1024).decode("utf-8")
+        header = checked(zephyr / "include/zephyr/dt-bindings/pinctrl/mspm0-pinctrl.h",
+                         64 * 1024).decode("utf-8")
+    except (OSError, ValueError):
+        return {}
+    # Accept only the encoding defined by this checkout's Zephyr binding.
+    encoding = re.sub(r"\s+", "", header)
+    if "#defineMSP_PINMUX(pincm,function)(((pincm-1)<<0x10)|function)" not in encoding:
+        return {}
+    pins = {}
+    for controller, signal, pad, register, function in TI_BUS_PIN.findall(definitions):
+        register, function = int(register), int(function)
+        if 1 <= register <= 256 and 2 <= function <= 15:
+            value = ((register - 1) << 16) | function
+            pins.setdefault((controller, value), set()).add((signal.upper(), pad.upper()))
+    return pins
+
+
+def ti_bus_pin(pins, paths, source, target):
+    if not pins:
+        return None
+    owner = paths.get(target.path.rsplit("/", 1)[0])
+    prop = target.props.get("pinmux")
+    compatible = owner.props.get("compatible") if owner else None
+    if prop is None or compatible is None or "ti,mspm0-pinctrl" not in compatible.to_strings():
+        return None
+    if prop.type.name != "NUM":
+        return None
+    value = prop.to_num()
+    matches = {match for label in source.labels or []
+               for match in pins.get((label, value), ())}
+    if len(matches) == 1:
+        signal, pad = next(iter(matches))
+        return signal, pad, value
+    return None
 
 
 def observed(zephyr: Path, application: Path, build: Path):
@@ -85,6 +133,7 @@ def observed(zephyr: Path, application: Path, build: Path):
         if len(nodes) > MAX_NODES:
             return ("unavailable", digest, "Devicetree exceeds graph node safety limit.", [], [])
         by_path = {node.path: node for node in nodes}
+        ti_pins = ti_bus_pins(zephyr, by_path["/"])
         nrows = []
         edges = []
         seen_edges = set()
@@ -162,8 +211,16 @@ def observed(zephyr: Path, application: Path, build: Path):
                              "[" + str(index) + "]" + (" " + named if named else ""))
                 for state_record in getattr(node, "pinctrls", []):
                     for config in getattr(state_record, "conf_nodes", []):
+                        state_name = str(state_record.name)[:80]
                         link(node.path, config.path, "pinctrl", "pinctrl",
-                             str(state_record.name)[:80])
+                             state_name)
+                        if config.path not in by_path:
+                            continue
+                        pin = ti_bus_pin(ti_pins, by_path, by_path[node.path], by_path[config.path])
+                        if pin:
+                            signal, pad, mux = pin
+                            link(node.path, config.path, "pinmux", signal,
+                                 f"{state_name} {pad} {mux:#x}")
             state = "built"
             reason = "Generated DTS + selected-checkout edtlib references; runtime unverified."
         except (ImportError, ValueError, OSError, AttributeError, TypeError):

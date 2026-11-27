@@ -11,7 +11,7 @@
 </style></head><body>
 <header><div><h1>Hardware Studio</h1><small>Physical package · peripheral connections</small></div><span class="spacer"></span><span id="context"></span><button id="theme">Theme</button><button id="refresh">Refresh</button></header>
 <div class="layout"><aside class="panel"><h2>Peripherals</h2><div class="tools"><input id="search" type="search" placeholder="Search controller or pin" aria-label="Search controller or pin"><select id="category" aria-label="Peripheral type"><option value="">All peripherals</option><option>GPIO</option><option>I2C</option><option>UART</option><option>SPI</option><option>CAN</option><option>ADC</option><option>PWM</option></select></div><div id="nodes" class="nodes"></div></aside>
-<main class="panel"><h2>MCU package · top view</h2><div id="notice" class="notice"></div><div class="package-scroll"><div id="package" class="package" hidden><div class="top" id="top"></div><div class="left" id="left"></div><div class="chip"><strong>MSPM0G3507</strong><p>PM / LQFP64</p><small>Board reference package</small></div><div class="right" id="right"></div><div class="bottom" id="bottom"></div></div></div><div class="legend"><span class="green">● GPIO DTS reference</span><span class="amber">● Pinctrl label candidate</span><span>○ No observed mapping / unknown</span></div><p class="muted">No unreferenced pin is claimed free. Pin labels do not prove electrical wiring or runtime state.</p></main>
+<main class="panel"><h2>MCU package · top view</h2><div id="notice" class="notice"></div><div class="package-scroll"><div id="package" class="package" hidden><div class="top" id="top"></div><div class="left" id="left"></div><div class="chip"><strong>MSPM0G3507</strong><p>PM / LQFP64</p><small>Board reference package</small></div><div class="right" id="right"></div><div class="bottom" id="bottom"></div></div></div><div class="legend"><span class="green">● GPIO reference / resolved pinmux</span><span class="amber">● Pinctrl label candidate</span><span>○ No observed mapping / unknown</span></div><p class="muted">No unreferenced pin is claimed free. Mappings show the generated configuration. Wiring and runtime state require on-board verification.</p></main>
 <aside class="panel inspector"><h2>Connection inspector</h2><div id="details"></div></aside></div>
 <script>
 "use strict";
@@ -38,15 +38,23 @@ function labelPin(edge,target){
   }
   return candidates.size===1?[...candidates][0]:null;
 }
+function muxPin(edge){
+  if(edge.kind!=="pinmux")return null;
+  const match=/^([a-zA-Z0-9_-]+) (P[AB]\d{1,2}) (0x[0-9a-f]+)$/.exec(edge.detail);
+  return match&&PIN_NAMES.includes(match[2])?match[2]:null;
+}
 function collect(data){
   const nodes=new Map(data.nodes.map(n=>[n.path,n]));
   if(!supportsBoard(data.board)||!data.observed||data.state!=="built")return [];
   const links=[];
+  const linkKey=(edge,state)=>JSON.stringify([edge.source,edge.target,state]);
+  const resolved=new Set(data.edges.filter(muxPin).map(e=>linkKey(e,e.detail.split(" ")[0])));
   for(const e of data.edges){
     const target=nodes.get(e.target),source=nodes.get(e.source);
     if(!target||!source)continue;
-    const gpio=gpioPin(e,target),candidate=labelPin(e,target);
-    if(gpio||candidate)links.push({pin:gpio||candidate,kind:gpio?"gpio":"candidate",edge:e,source,target});
+    const gpio=gpioPin(e,target),mux=muxPin(e);
+    const candidate=resolved.has(linkKey(e,e.detail))?null:labelPin(e,target);
+    if(gpio||mux||candidate)links.push({pin:gpio||mux||candidate,kind:gpio?"gpio":mux?"mux":"candidate",edge:e,source,target});
   }
   return links;
 }
@@ -65,7 +73,7 @@ function renderPins(){
   const query=$("search").value.trim().toUpperCase();
   for(const [name,button] of pinButtons){
     const all=links.filter(l=>l.pin===name);
-    button.className="pin"+(all.some(l=>l.kind==="gpio")?" gpio":all.length?" candidate":!/^P[AB]\d+$/.test(name)?" special":"");
+    button.className="pin"+(all.some(l=>l.kind!=="candidate")?" gpio":all.length?" candidate":!/^P[AB]\d+$/.test(name)?" special":"");
     if(name===selectedPin)button.classList.add("selected");
     if(all.some(related))button.classList.add("related");
     if(query&&/^P[AB]\d+$/.test(query)&&name!==query)button.classList.add("dim");
@@ -81,7 +89,7 @@ function renderNodes(){
     if(!peripheral.test(n.name+" "+n.compatible+" "+n.labels))continue;
     const associated=links.filter(l=>l.source.path===n.path||l.target.path===n.path);
     if(cat&&!text.includes(cat)&&!(cat==="uart"&&text.includes("serial")))continue;
-    if(q&&!text.includes(q)&&!associated.some(l=>l.pin.toLowerCase().includes(q)))continue;
+    if(q&&!text.includes(q)&&!associated.some(l=>l.pin.toLowerCase().includes(q)||l.edge.property.toLowerCase().includes(q)))continue;
     const b=action(nodeLabel(n)+" · "+n.status,()=>{focus=n.path;selectedPin="";renderPins();renderNodes();renderDetails();host("focus",n.path);});
     if(n.path===focus)b.classList.add("active");root.append(b);
   }
@@ -96,10 +104,13 @@ function renderDetails(){
   if((selectedPin||focus)&&!selected.length)root.append(el("p","No resolved pin mapping in this observation. Availability is unknown.","muted"));
   for(const l of selected){
     const row=el("div","","linkrow");
-    row.append(el("strong",l.pin+" · "+(l.kind==="gpio"?"GPIO reference":"Label candidate — mux unverified"),l.kind==="gpio"?"green":"amber"));
+    const mapping=l.kind==="gpio"?"GPIO reference":l.kind==="mux"?l.edge.property+" · resolved pinmux":"Label candidate — mux unverified";
+    row.append(el("strong",l.pin+" · "+mapping,l.kind==="candidate"?"amber":"green"));
     row.append(el("p",nodeLabel(l.source)+" → "+nodeLabel(l.target)));
     row.append(el("small",l.edge.property+" · "+l.edge.detail+" · "+l.source.status));
-    row.append(action("DTS topology",()=>host("topology",l.source.path)),action("Source",()=>host("source",l.source.path)));
+    row.append(action("DTS topology",()=>host("topology",l.source.path)),
+      action("Configuration Studio",()=>host("configure",l.source.path)),
+      action("Source",()=>host("source",l.source.path)));
     root.append(row);
   }
   if(focus){root.append(action("Open selected node in DTS topology",()=>host("topology",focus)));}

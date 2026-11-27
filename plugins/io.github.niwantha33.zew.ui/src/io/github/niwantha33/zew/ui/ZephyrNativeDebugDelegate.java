@@ -71,6 +71,7 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             var plan = io.github.niwantha33.zew.core.TargetOperations.prepare(
                     ProjectContext.buildDirectory(project, settings), settings.getProperty("board"),
                     "debugserver", "");
+            ProjectContext.verifyManagedBuildCache(settings, plan.buildDirectory());
             String yaml = Files.readString(plan.buildDirectory().resolve("zephyr/runners.yaml"), StandardCharsets.UTF_8);
             String runner = io.github.niwantha33.zew.core.DebugBackend.select(yaml,
                     configuration.getAttribute(RUNNER, ""));
@@ -87,9 +88,15 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             if (gdb.length() >= 2 && (gdb.startsWith("\"") && gdb.endsWith("\"")
                     || gdb.startsWith("'") && gdb.endsWith("'")))
                 gdb = gdb.substring(1, gdb.length() - 1);
-            if (!Files.isRegularFile(Path.of(gdb)))
+            Path debugger = Path.of(gdb);
+            if (!Files.isRegularFile(debugger))
                 throw new IOException("Configured GDB executable is missing: " + gdb
                         + ". Install the matching Zephyr SDK debugger and rebuild.");
+            if (ProjectContext.isManagedWindows(settings)
+                    && (!debugger.isAbsolute()
+                        || !debugger.toRealPath().startsWith(Path.of(settings.getProperty("tools.sdk")).toRealPath())))
+                throw new IOException("Configured GDB is outside the selected managed SDK: " + gdb
+                        + ". Select Zephyr > Pristine Rebuild before Debug.");
             Path elf = io.github.niwantha33.zew.core.BuildArtifacts.debugElf(plan.buildDirectory());
             if (!Files.isRegularFile(elf))
                 throw new IOException("Matching ELF debug symbols are missing: " + elf);
@@ -223,9 +230,10 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
             if (portOccupied(params.port()))
                 throw new IOException("GDB TCP port " + params.port() + " is already in use. "
                         + "Another process claimed the allocated port during startup. Retry Debug to select free ports.");
-            var builder = new ProcessBuilder(params.plan().command(params.settings().getProperty("python")));
+            var command = params.plan().command(params.settings().getProperty("python"));
+            var builder = new ProcessBuilder(command);
             builder.directory(Path.of(params.settings().getProperty("workspace")).toFile());
-            builder.environment().putAll(ProjectContext.environment(params.settings()));
+            builder.environment().putAll(ProjectContext.targetEnvironment(params.settings(), command));
             builder.redirectErrorStream(true);
             var console = new MessageConsole("Zephyr DSF-GDB — "
                     + configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, ""), null);

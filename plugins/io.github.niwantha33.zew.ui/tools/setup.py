@@ -489,6 +489,35 @@ def prepare_alternate_sources(root, git, source_release, environment):
          root, source_release, git], root, environment, 9900)
 
 
+def managed_environment(root, cmake, ninja, git, host, sdk=None):
+    """Give the Windows child processes only reviewed tool search directories."""
+    environment = dict(host)
+    for name in ('PYTHONHOME', 'PYTHONPATH', 'VIRTUAL_ENV', 'ZEPHYR_BASE',
+                 'ZEPHYR_SDK_INSTALL_DIR', 'ZEPHYR_TOOLCHAIN_VARIANT', 'BOARD',
+                 'CONF_FILE', 'CMAKE_PREFIX_PATH', 'CMAKE_PROGRAM_PATH',
+                 'WEST_CONFIG_LOCAL'):
+        environment.pop(name, None)
+    paths = [cmake.parent, ninja.parent, git.parent, root / 'python', root / 'python/Scripts']
+    if sdk is not None:
+        paths.extend([sdk / 'hosttools/bin', sdk / 'hosttools/usr/bin',
+                      root / 'board-python/esp32s3/Scripts', root / 'board-python/esp32s3/bin'])
+    system_root = next((value for key, value in host.items()
+                        if key.casefold() == 'systemroot'), '')
+    if system_root and Path(system_root).is_absolute():
+        windows = Path(system_root)
+        paths.extend([windows / 'System32', windows])
+    # os.environ normalises names on Windows. Also accept ordinary maps in tests.
+    for name in list(environment):
+        if name.casefold() == 'path':
+            del environment[name]
+    environment['PATH'] = os.pathsep.join(map(str, dict.fromkeys(paths)))
+    environment.update(PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1',
+                       PYTHONNOUSERSITE='1', GIT_TERMINAL_PROMPT='0',
+                       GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull,
+                       WEST_CONFIG_GLOBAL=os.devnull, WEST_CONFIG_SYSTEM=os.devnull)
+    return environment
+
+
 def setup(root, lock, source_release=None):
     validate_lock(lock)
     marker = source_profile_marker(source_release)
@@ -502,12 +531,7 @@ def setup(root, lock, source_release=None):
     git = root / 'git/cmd/git.exe'
     cmake = installed_executable(root, lock, 'cmake')
     ninja = installed_executable(root, lock, 'ninja')
-    environment = dict(os.environ)
-    environment.update(PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1', GIT_TERMINAL_PROMPT='0', GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
-    environment['PATH'] = os.pathsep.join(map(str, [cmake.parent, ninja.parent, git.parent, root / 'python', root / 'python/Scripts'])) + os.pathsep + environment.get('PATH', '')
-    # Prevent unrelated Zephyr/Python variables from selecting another installation.
-    for name in ('PYTHONHOME', 'PYTHONPATH', 'VIRTUAL_ENV', 'ZEPHYR_BASE', 'ZEPHYR_SDK_INSTALL_DIR', 'ZEPHYR_TOOLCHAIN_VARIANT', 'BOARD', 'CONF_FILE'):
-        environment.pop(name, None)
+    environment = managed_environment(root, cmake, ninja, git, os.environ)
     log('PHASE 1/5 — Installing pinned Python build packages')
     install_packages(lock, root, environment)
     for executable in (cmake, ninja):
@@ -520,6 +544,7 @@ def setup(root, lock, source_release=None):
         return
     log('PHASE 2/5 — Installing SDK and the x86 compiler only')
     sdk = install_sdk(root)
+    environment = managed_environment(root, cmake, ninja, git, os.environ, sdk)
     environment.update(ZEPHYR_SDK_INSTALL_DIR=cmake_path(sdk), ZEPHYR_TOOLCHAIN_VARIANT='zephyr')
     log('PHASE 3/5 — Obtaining the pinned Zephyr source')
     workspace, source = ensure_source(root, git, lock, environment)

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import io.github.niwantha33.zew.core.ProjectToolPath;
+import io.github.niwantha33.zew.core.ManagedBuildCache;
 import io.github.niwantha33.zew.core.SetupFiles;
 import java.io.File;
 import java.nio.file.Files;
@@ -58,10 +59,33 @@ public final class SetupTests {
                 "missing Windows system root never restores inherited PATH or inserts a current-directory entry");
     }
 
+    private static void checkManagedCache(Path root) throws Exception {
+        Path build = Files.createDirectory(root.resolve("configured-build"));
+        Path python = Files.createFile(root.resolve("selected-python.exe"));
+        Path cmake = Files.createFile(root.resolve("selected-cmake.exe"));
+        Path ninja = Files.createFile(root.resolve("selected-ninja.exe"));
+        Path global = Files.createFile(root.resolve("global-cmake.exe"));
+        var settings = new Properties();
+        settings.setProperty("python", python.toString());
+        settings.setProperty("tools.cmake", cmake.toString());
+        settings.setProperty("tools.ninja", ninja.toString());
+        ManagedBuildCache.verify(build, settings);
+        Path cache = build.resolve("CMakeCache.txt");
+        String known = "CMAKE_MAKE_PROGRAM:FILEPATH=" + ninja + "\n_Python3_EXECUTABLE:INTERNAL=" + python + "\n";
+        Files.writeString(cache, known + "CMAKE_COMMAND:INTERNAL=" + cmake + "\n");
+        ManagedBuildCache.verify(build, settings);
+        check(true, "matching managed executable cache can be reused");
+        Files.writeString(cache, known + "CMAKE_COMMAND:INTERNAL=" + global + "\n");
+        rejects(() -> ManagedBuildCache.verify(build, settings), "stale CMake from another installation rejected");
+        Files.writeString(cache, known + "Python3_EXECUTABLE:FILEPATH=python.exe\n");
+        rejects(() -> ManagedBuildCache.verify(build, settings), "unqualified cached Python rejected");
+    }
+
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("setup Ω ");
         try {
             checkProjectToolPath(root);
+            checkManagedCache(root);
             var data = root.resolve("file"); Files.writeString(data, "good");
             String hash = "770e607624d689265ca6c44884d0807d9b054d23c473c106c72be9de08b7376c";
             check(SetupFiles.matches(data, 4, hash), "matching bootstrap bytes accepted");

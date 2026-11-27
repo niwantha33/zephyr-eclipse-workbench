@@ -94,9 +94,21 @@ final class ProjectContext {
     }
 
     static Map<String, String> buildEnvironment(Properties settings) {
-        boolean isolated = java.io.File.separatorChar == '\\'
+        return environment(settings, isManagedWindows(settings));
+    }
+
+    static boolean isManagedWindows(Properties settings) {
+        return java.io.File.separatorChar == '\\'
                 && Files.isRegularFile(Path.of(settings.getProperty("zew.setupRoot"), ".zew-managed"));
-        return environment(settings, isolated);
+    }
+
+    static Map<String, String> targetEnvironment(Properties settings, List<String> command) {
+        boolean managedRunner = command.contains("--openocd") || command.contains("--esp-device");
+        return environment(settings, managedRunner && isManagedWindows(settings));
+    }
+
+    static void verifyManagedBuildCache(Properties settings, Path build) throws java.io.IOException {
+        if (isManagedWindows(settings)) io.github.niwantha33.zew.core.ManagedBuildCache.verify(build, settings);
     }
 
     private static Map<String, String> environment(Properties settings, boolean isolatedWindowsBuild) {
@@ -107,6 +119,14 @@ final class ProjectContext {
         values.put("ZEPHYR_BASE", WestCommands.cmakePath(Path.of(settings.getProperty("workspace"), "zephyr").toString()));
         values.put("ZEPHYR_SDK_INSTALL_DIR", WestCommands.cmakePath(settings.getProperty("tools.sdk")));
         values.put("ZEPHYR_TOOLCHAIN_VARIANT", "zephyr");
+        if (isolatedWindowsBuild) {
+            values.put("PYTHONNOUSERSITE", "1");
+            values.put("CMAKE_PREFIX_PATH", "");
+            values.put("CMAKE_PROGRAM_PATH", "");
+            values.put("WEST_CONFIG_SYSTEM", "NUL");
+            values.put("WEST_CONFIG_GLOBAL", "NUL");
+            values.put("WEST_CONFIG_LOCAL", Path.of(settings.getProperty("workspace"), ".west", "config").toString());
+        }
         return values;
     }
 }

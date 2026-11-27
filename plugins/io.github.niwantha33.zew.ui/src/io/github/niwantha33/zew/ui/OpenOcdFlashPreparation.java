@@ -52,7 +52,7 @@ final class OpenOcdFlashPreparation {
             }
             String output = new ProcessRunner().run(command, Path.of(settings.getProperty("workspace")), Duration.ofSeconds(30),
                     monitor::isCanceled, line -> { if (!line.startsWith("IMAGE\t") && !line.startsWith("TYPE\t")) log.accept(line); },
-                    ProjectContext.environment(settings)).requireCompleteOutput();
+                    ProjectContext.buildEnvironment(settings)).requireCompleteOutput();
             String image = null, type = null;
             for (String line : output.lines().toList()) {
                 if (line.startsWith("IMAGE\t")) image = new String(Base64.getDecoder().decode(line.substring(6)), StandardCharsets.UTF_8);

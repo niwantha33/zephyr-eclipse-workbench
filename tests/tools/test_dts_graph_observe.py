@@ -27,6 +27,8 @@ class Prop:
         return self.value
     def to_nodes(self):
         return self.value
+    def to_num(self):
+        return self.value
 
 
 class Node:
@@ -111,6 +113,39 @@ class DtsObserverTests(unittest.TestCase):
         self.assertEqual(edges, [])
         self.assertEqual(len(nodes), 5)
         self.assertIn("unavailable", reason)
+
+    def test_mspm0_bus_pins_match_generated_cells_against_selected_hal(self):
+        table = self.zephyr.parent / graph.TI_PIN_DEFINITIONS
+        table.parent.mkdir(parents=True)
+        table.write_text("""
+            uart0_tx_pa10: uart0_tx_pa10 { pinmux = <MSP_PINMUX(21, MSPM0_PIN_FUNCTION_2)>; };
+            i2c1_scl_pb2: i2c1_scl_pb2 { pinmux = <MSP_PINMUX(15, MSPM0_PIN_FUNCTION_4)>; };
+            spi0_poci_pb19: spi0_poci_pb19 { pinmux = <MSP_PINMUX(45, MSPM0_PIN_FUNCTION_3)>; };
+            canfd0_canrx_pa13: canfd0_canrx_pa13 { pinmux = <MSP_PINMUX(35, MSPM0_PIN_FUNCTION_6)>; };
+        """)
+        header = self.zephyr / "include/zephyr/dt-bindings/pinctrl/mspm0-pinctrl.h"
+        header.parent.mkdir(parents=True)
+        header.write_text("#define MSP_PINMUX(pincm, function) (((pincm - 1) << 0x10) | function)\n")
+        root = Node("/", 1, {"compatible": Prop("STRINGS", "ti,mspm0g3507")})
+        mux = Node("/pinctrl", 2, {"compatible": Prop("STRINGS", "ti,mspm0-pinctrl")})
+        paths = {mux.path: mux}
+        pins = graph.ti_bus_pins(self.zephyr, root)
+        for bus, value, signal, pad in (
+                ("uart0", 0x140002, "TX", "PA10"),
+                ("i2c1", 0xe0004, "SCL", "PB2"),
+                ("spi0", 0x2c0003, "POCI", "PB19"),
+                ("canfd0", 0x220006, "CANRX", "PA13")):
+            source = Node("/bus", 3)
+            source.labels = [bus]
+            target = Node("/pinctrl/custom_overlay_label", 4, {"pinmux": Prop("NUM", value)})
+            self.assertEqual(graph.ti_bus_pin(pins, paths, source, target), (signal, pad, value))
+            source.labels = ["another_controller"]
+            self.assertIsNone(graph.ti_bus_pin(pins, paths, source, target))
+            source.labels = [bus]
+            target.props["pinmux"] = Prop("NUM", value ^ 0x1f)
+            self.assertIsNone(graph.ti_bus_pin(pins, paths, source, target))
+        header.write_text("#define MSP_PINMUX(pincm, function) (pincm | function)\n")
+        self.assertEqual(graph.ti_bus_pins(self.zephyr, root), {})
 
     def test_windows_crlf_cache_preserves_verified_selected_checkout(self):
         # CMake writes CRLF cache records on Windows, with spaces supported

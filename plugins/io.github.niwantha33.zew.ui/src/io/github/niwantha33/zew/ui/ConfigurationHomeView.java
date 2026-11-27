@@ -78,6 +78,7 @@ public final class ConfigurationHomeView extends ViewPart {
     private Label navigationEmpty, editSupport;
     private List<FocusedConfigurationModel.Row> overviewRows = List.of();
     private String category = "ADC", controllerPath = "";
+    private ZephyrViewContextHub.Selection requestedHardwareNode;
     private Composite stepHost;
     private StackLayout stepLayout;
     private Composite[] pages;
@@ -787,6 +788,7 @@ public final class ConfigurationHomeView extends ViewPart {
     }
 
     public void displayProject(IProject selected) {
+        requestedHardwareNode = null;
         if (selected == null || !selected.isAccessible()) {
             displayMissingProject();
             return;
@@ -797,6 +799,15 @@ public final class ConfigurationHomeView extends ViewPart {
         visualSection = "overview";
         showVisual();
         refresh();
+    }
+
+    void openHardwareNode(IProject selected, Path build, String path) {
+        if (selected == null || !selected.isAccessible()) return;
+        displayProject(selected);
+        requestedHardwareNode = new ZephyrViewContextHub.Selection(selected,
+                new io.github.niwantha33.zew.core.ZephyrSelectionIdentity(selected.getName(), build, path),
+                "physical-hardware-studio");
+        openSection("hardware");
     }
 
     public void openSection(String section) {
@@ -947,7 +958,13 @@ public final class ConfigurationHomeView extends ViewPart {
                 post(display, () -> {
                     if (ticket == generation.get() && project == selected
                             && header != null && !header.isDisposed()) {
-                        evidence = result; render();
+                        evidence = result;
+                        if (requestedHardwareNode != null) {
+                            var requested = requestedHardwareNode;
+                            requestedHardwareNode = null;
+                            onHardwareStudioSelection(requested);
+                        }
+                        render();
                     }
                 });
                 return Status.OK_STATUS;

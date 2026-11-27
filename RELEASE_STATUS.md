@@ -1,6 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Evidence Engine release status — 2026-10-30
 
+## Managed environment and MSPM0 signal qualification candidate (2026-11-27)
+
+- Managed Windows Setup and Eclipse Build/Clean isolate tool search. Managed OpenOCD and Espressif launches use the selected tool paths. Build and Clean verify cached CMake, Ninja and Python bindings. Pristine Rebuild regenerates a stale cache on request.
+- The MSPM0G3507 package view resolves I²C, SPI, UART and CAN signals by comparing generated pinmux values with the selected TI HAL definitions. It also displays GPIO references and unresolved label candidates. Navigation retains the selected project, build and DTS node.
+- The CI firmware matrix runs with competing parent PATH tools. Installed Windows Eclipse, physical Flash/Debug and application-specific mux choices still need on-target observation. Other pinctrl families and runner toolchains require their own verification.
+
 ## Managed Windows Eclipse build tool search (2026-11-27, review branch)
 
 - Native Eclipse builds and cleans for managed Windows setups now search the selected environment's tool directories and Windows system directories. The Eclipse process's user and machine PATH entries are no longer appended to these child processes.
