@@ -7,6 +7,7 @@ import java.util.*;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.QualifiedName;
 import io.github.niwantha33.zew.core.ProjectProfile;
+import io.github.niwantha33.zew.core.ProjectToolPath;
 import io.github.niwantha33.zew.core.WestCommands;
 
 final class ProjectContext {
@@ -89,20 +90,20 @@ final class ProjectContext {
         return settings;
     }
     static Map<String, String> environment(Properties settings) {
+        return environment(settings, false);
+    }
+
+    static Map<String, String> buildEnvironment(Properties settings) {
+        boolean isolated = java.io.File.separatorChar == '\\'
+                && Files.isRegularFile(Path.of(settings.getProperty("zew.setupRoot"), ".zew-managed"));
+        return environment(settings, isolated);
+    }
+
+    private static Map<String, String> environment(Properties settings, boolean isolatedWindowsBuild) {
         var values = new LinkedHashMap<String, String>();
-        var paths = new LinkedHashSet<String>();
-        for (String key : List.of("tools.cmake", "tools.ninja", "tools.git", "python")) paths.add(Path.of(settings.getProperty(key)).getParent().toString());
-        String dtc = settings.getProperty("tools.dtc", "");
-        if (!dtc.isBlank()) paths.add(Path.of(dtc).getParent().toString());
-        paths.add(Path.of(settings.getProperty("tools.sdk"), "hosttools/bin").toString());
-        paths.add(Path.of(settings.getProperty("tools.sdk"), "hosttools/usr/bin").toString());
-        String managedRoot = settings.getProperty("zew.setupRoot", "");
-        if (!managedRoot.isBlank()) {
-            paths.add(Path.of(managedRoot, "board-python/esp32s3/Scripts").toString());
-            paths.add(Path.of(managedRoot, "board-python/esp32s3/bin").toString());
-        }
-        String pathKey = System.getenv().keySet().stream().filter(k -> k.equalsIgnoreCase("PATH")).findFirst().orElse("PATH");
-        values.put(pathKey, String.join(java.io.File.pathSeparator, paths) + java.io.File.pathSeparator + System.getenv().getOrDefault(pathKey, ""));
+        var host = System.getenv();
+        String pathKey = host.keySet().stream().filter(k -> k.equalsIgnoreCase("PATH")).findFirst().orElse("PATH");
+        values.put(pathKey, ProjectToolPath.resolve(settings, host, isolatedWindowsBuild));
         values.put("ZEPHYR_BASE", WestCommands.cmakePath(Path.of(settings.getProperty("workspace"), "zephyr").toString()));
         values.put("ZEPHYR_SDK_INSTALL_DIR", WestCommands.cmakePath(settings.getProperty("tools.sdk")));
         values.put("ZEPHYR_TOOLCHAIN_VARIANT", "zephyr");
