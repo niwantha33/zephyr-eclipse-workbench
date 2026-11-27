@@ -6,6 +6,13 @@
 - Dependabot PRs #292 and #293 each passed the package build but failed CodeQL analysis: init/analyze versions 4.39.3 and 4.39.4 did not match. Both now pin the official v4.39.4 tag's commit, and Dependabot groups CodeQL actions together.
 - Preserve JDK 21, traced manual Tycho compilation, security-extended queries and all existing CI checks. Add regression tests for identical immutable action pins and grouping. Exact-head CI pending; no gate or release claim.
 
+## Project environment recovery — development slice, not released
+
+- Consolidate project lock, verify and upgrade preview into a Project Environment Manager; add explicit verified reattachment to a trusted ready setup, including when the previous setup is unavailable.
+- Preserve the original lock, sources and global preferences. Reject mismatch before binding; regenerate the selected target/profile cache on first recovered build. Preserve production artifacts separately.
+- When the optional archive backend is bundled, expose private export, trusted same-path restore followed by lock verification/attachment, and firmware file comparison in background jobs.
+- This is schema-1 identity matching, not complete historical OS recreation or binary reproduction. Exact-head Tycho, native Windows/Linux, clean-machine recovery and G0 remain pending.
+
 ## Setup release selection (review branch, not released)
 
 - Retain the native Eclipse wizard and pinned 4.4.0 first-build path; add explicit official stable-release discovery without requiring an existing Python installation.

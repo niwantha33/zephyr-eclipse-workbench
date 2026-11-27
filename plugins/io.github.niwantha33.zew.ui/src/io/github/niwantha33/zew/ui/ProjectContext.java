@@ -13,9 +13,18 @@ final class ProjectContext {
     static final QualifiedName BUILD_CONFIGURATION = new QualifiedName(Activator.ID, "buildConfiguration");
     static final QualifiedName NAMED_PROFILE = new QualifiedName(Activator.ID, "namedBuildProfile");
 
+    static final QualifiedName SETUP_ROOT = new QualifiedName(Activator.ID, "setupRoot");
+    static final QualifiedName RECOVERY_BINDING = new QualifiedName(Activator.ID, "recoveryBinding");
+
     static Properties settings(IProject project) throws Exception {
-        String root = project.getPersistentProperty(new QualifiedName(Activator.ID, "setupRoot"));
+        String root = project.getPersistentProperty(SETUP_ROOT);
         if (root == null) throw new java.io.IOException("Select a ready environment in Project Properties > Zephyr.");
+        return settings(project, Path.of(root));
+    }
+
+    /** Resolve a candidate without changing the project or global preferences. */
+    static Properties settings(IProject project, Path candidateRoot) throws Exception {
+        String root = candidateRoot.toRealPath().toString();
         Properties settings = load(Path.of(root));
         settings.setProperty("zew.setupRoot", root);
         settings.setProperty("zew.buildConfiguration", io.github.niwantha33.zew.core.BuildConfiguration
