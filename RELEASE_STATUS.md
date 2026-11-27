@@ -5,7 +5,8 @@
 
 - Consolidate project lock, verify and upgrade preview into a Project Environment Manager; add explicit verified reattachment to a trusted ready setup, including when the previous setup is unavailable.
 - Preserve the original lock, sources and global preferences. Reject mismatch before binding; regenerate the selected target/profile cache on first recovered build. Preserve production artifacts separately.
-- This is schema-1 identity matching, not full source/tool archival, historical OS recreation or binary reproduction. Exact-head Tycho, native Windows/Linux, clean-machine recovery and G0 remain pending.
+- When the optional archive backend is bundled, expose private export, trusted same-path restore followed by lock verification/attachment, and firmware file comparison in background jobs.
+- This is schema-1 identity matching, not complete historical OS recreation or binary reproduction. Exact-head Tycho, native Windows/Linux, clean-machine recovery and G0 remain pending.
 
 ## Setup release selection (review branch, not released)
 

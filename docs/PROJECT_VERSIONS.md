@@ -82,6 +82,15 @@ restore. Use the existing CLI `verify-env` against the candidate to inspect
 the same recorded identities. No tools from an untrusted setup should be
 executed. Native integration and clean-machine recovery remain unqualified.
 
+When the separately reviewed archive backend is installed, the same manager
+also offers **Archive / Restore**. Export checks the lock, requests private
+retention approval, and preserves the managed setup. Restore uses an explicitly
+trusted current Python, verifies a separately retained archive SHA-256, restores
+at the original path, and attaches only if the original project lock matches.
+The CLI and restrictions are documented in `docs/ENVIRONMENT_ARCHIVE.md`.
+Firmware comparison checks selected original/rebuilt files, not target identity.
+These actions remain hidden until the backend is bundled.
+
 ## Command-line backend for the Eclipse tools bundle
 
 The Python helper `tools/project_versions.py` has the actions

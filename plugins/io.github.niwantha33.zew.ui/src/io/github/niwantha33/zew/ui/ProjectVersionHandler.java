@@ -137,17 +137,22 @@ public final class ProjectVersionHandler extends AbstractHandler {
     }
 
     private static String chooseAction(ExecutionEvent event) {
+        boolean archive = EnvironmentArchiveActions.available();
         var dialog = new MessageDialog(HandlerUtil.getActiveShell(event),
                 "Project Environment Manager", null,
                 "Capture the original build environment, check it, or attach a matching "
                 + "installed environment. An environment lock is not a backup of tools or source.",
-                MessageDialog.INFORMATION, new String[] {"Create Lock", "Verify", "Attach Original",
-                        "Preview Upgrade", "Cancel"}, 4);
+                MessageDialog.INFORMATION, archive
+                        ? new String[] {"Create Lock", "Verify", "Attach Original",
+                                "Preview Upgrade", "Archive / Restore", "Cancel"}
+                        : new String[] {"Create Lock", "Verify", "Attach Original",
+                                "Preview Upgrade", "Cancel"}, archive ? 5 : 4);
         return switch (dialog.open()) {
             case 0 -> "snapshot";
             case 1 -> "verify";
             case 2 -> "attach";
             case 3 -> "plan";
+            case 4 -> archive ? "archive" : "";
             default -> "";
         };
     }
@@ -165,6 +170,10 @@ public final class ProjectVersionHandler extends AbstractHandler {
                 : id.endsWith(".verifyProject") ? "verify"
                 : id.endsWith(".planProjectUpgrade") ? "plan" : "";
         if (action.isEmpty()) return null;
+        if (action.equals("archive")) {
+            EnvironmentArchiveActions.open(event, project);
+            return null;
+        }
         Path candidateRoot = null;
         if (action.equals("attach")) {
             Path lock = project.getLocation().toFile().toPath().resolve(".zew/project-lock.json");
