@@ -112,6 +112,56 @@ class SetupTests(unittest.TestCase):
             with patch.object(setup.urllib.request, 'urlopen', side_effect=AssertionError('unexpected network')):
                 self.assertEqual(setup.fetch(item, Path(directory)), path)
 
+    def test_offline_cache_preflight_reports_all_missing_and_corrupt_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory)
+            content = b'valid'
+            artifacts = [dict(file=name, size=len(content), sha256=hashlib.sha256(content).hexdigest())
+                         for name in ('valid.whl', 'missing.whl', 'partial.whl', 'corrupt.whl', 'short.whl')]
+            (cache / 'valid.whl').write_bytes(content)
+            (cache / 'partial.whl.partial').write_bytes(b'v')
+            (cache / 'corrupt.whl').write_bytes(b'wrong')
+            (cache / 'short.whl').write_bytes(b'v')
+            with patch.object(setup.urllib.request, 'urlopen', side_effect=AssertionError('network forbidden')):
+                result = setup.inspect_cached_artifacts(cache, artifacts)
+            self.assertEqual(['verified', 'missing', 'interrupted', 'sha256-mismatch', 'size-mismatch'],
+                             [row['status'] for row in result])
+            self.assertTrue((cache / 'partial.whl.partial').is_file())
+
+    def test_offline_fetch_has_no_network_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory)
+            content = b'fixture'
+            artifact = dict(file='fixture.whl', size=len(content),
+                            sha256=hashlib.sha256(content).hexdigest(),
+                            url='https://files.pythonhosted.org/fixture.whl')
+            with patch.object(setup.urllib.request, 'urlopen', side_effect=AssertionError('network forbidden')):
+                with self.assertRaisesRegex(ValueError, 'Offline cache missing or invalid'):
+                    setup.fetch(artifact, cache, offline=True)
+                target = cache / artifact['file']
+                target.write_bytes(content)
+                self.assertEqual(target, setup.fetch(artifact, cache, offline=True))
+                target.write_bytes(b'bad')
+                with self.assertRaisesRegex(ValueError, 'Offline cache missing or invalid'):
+                    setup.fetch(artifact, cache, offline=True)
+
+    def test_offline_source_never_clones_missing_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(setup, 'run', side_effect=AssertionError('clone forbidden')):
+                with self.assertRaisesRegex(ValueError, 'requires the original local'):
+                    setup.ensure_source(Path(directory), 'git', self.lock(), {}, offline=True)
+
+    def test_offline_environment_does_not_inherit_pip_remotes(self):
+        host = {'Path': 'selected', 'pip_find_links': 'https://example.org/wheels',
+                'PIP_INDEX_URL': 'https://example.org/simple', 'TEMP': 'system-temp'}
+        result = setup.offline_environment(host)
+        self.assertNotIn('pip_find_links', result)
+        self.assertNotIn('PIP_INDEX_URL', result)
+        self.assertEqual('file', result['GIT_ALLOW_PROTOCOL'])
+        self.assertEqual('1', result['PIP_NO_INDEX'])
+        self.assertEqual('system-temp', result['TEMP'])
+        self.assertIn('PIP_INDEX_URL', host)
+
     def test_foreign_download_origin_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             item = {'file': 'a', 'size': 1, 'sha256': 'a' * 64, 'url': 'https://unapproved.invalid/a'}

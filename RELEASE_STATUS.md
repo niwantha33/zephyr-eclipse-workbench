@@ -11,6 +11,11 @@ Explicit managed Windows build and selected OpenOCD/Espressif runner paths now r
 
 # Evidence Engine release status — 2026-10-30
 
+### Pinned starter offline cache preflight (development)
+
+`setup.py --root ROOT --lock setup-lock.json --check-cache` reports verified, missing, interrupted, size/hash-mismatched and unsafe cache entries without downloads or file changes. `--offline` is a narrowly scoped installer mode for an already-bootstrapped managed Windows starter root with local pinned Zephyr source and all Python/SDK archives verified; acquisition fails closed, no alternate-release installation, no network fallback for package fetch or source clone. Not a clean-machine offline installer, not an offline guarantee for arbitrary build scripts, and not vendor package or source-module closure. Use only under the existing setup ownership/install-lock workflow; air-gapped native qualification and UI integration remain pending. G0 open.
+
+
 ## DTS-first Configuration Studio (2026-11-27)
 
 - Configuration Studio opens the existing DTS Topology for the selected project, board and build profile. Hardware Studio hands off the exact selected node. The normal menu and `.dts`, `.dtsi` and `.overlay` context actions share the topology view.
