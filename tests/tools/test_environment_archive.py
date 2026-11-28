@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -53,21 +54,65 @@ class EnvironmentArchiveTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.export()
         with self.assertRaises(archive.ArchiveError):
-            archive.archive_action("restore", self.output, self.root)
+            archive.archive_action("restore", self.output, self.root, expected=receipt["archive_sha256"])
         shutil.rmtree(self.root)
-        self.assertEqual("restored-bytes", archive.archive_action("restore", self.output, self.root)["status"])
+        self.assertEqual("restored-bytes", archive.archive_action("restore", self.output, self.root,
+                                                                expected=receipt["archive_sha256"])["status"])
         self.assertEqual("compiler bytes", (self.root / "sdk/compiler").read_text())
         self.assertTrue((self.root / "empty").is_dir())
         self.assertTrue((self.root / ".zew-ready").is_file())
 
     def test_interrupted_restore_never_publishes_ready_marker(self):
-        self.export()
+        receipt = self.export()
         shutil.rmtree(self.root)
         with patch.object(archive.os, "replace", side_effect=OSError("simulated interruption")):
             with self.assertRaises(OSError):
-                archive.archive_action("restore", self.output, self.root)
+                archive.archive_action("restore", self.output, self.root, expected=receipt["archive_sha256"])
         self.assertTrue(self.root.is_dir())
         self.assertFalse((self.root / ".zew-ready").exists())
+
+    def test_restore_requires_separate_digest_and_checks_disk_before_creation(self):
+        receipt = self.export()
+        shutil.rmtree(self.root)
+        with self.assertRaisesRegex(archive.ArchiveError, "retained"):
+            archive.archive_action("restore", self.output, self.root)
+        with self.assertRaisesRegex(archive.ArchiveError, "digest mismatch"):
+            archive.archive_action("restore", self.output, self.root, expected="0" * 64)
+        with patch.object(archive.shutil, "disk_usage", return_value=type("Disk", (), {"free": 0})()):
+            with self.assertRaisesRegex(archive.ArchiveError, "disk space"):
+                archive.archive_action("restore", self.output, self.root, expected=receipt["archive_sha256"])
+        self.assertFalse(self.root.exists())
+
+    def test_windows_path_and_descriptor_creation_vs_change_time(self):
+        common = dict(st_size=128, st_mtime_ns=200, st_birthtime_ns=100,
+                      st_ino=42, st_dev=7)
+        path = SimpleNamespace(**common, st_ctime_ns=100)
+        descriptor = SimpleNamespace(**common, st_ctime_ns=300)
+        with patch.object(archive.os, "name", "nt"):
+            self.assertEqual(archive.open_identity(path), archive.open_identity(descriptor))
+            # File replacement and modification still fail the open comparison.
+            replaced = SimpleNamespace(**dict(common, st_ino=43), st_ctime_ns=300)
+            modified = SimpleNamespace(**dict(common, st_mtime_ns=201), st_ctime_ns=300)
+            self.assertNotEqual(archive.open_identity(path), archive.open_identity(replaced))
+            self.assertNotEqual(archive.open_identity(path), archive.open_identity(modified))
+            # Descriptor-to-descriptor checks retain the metadata change time.
+            changed = SimpleNamespace(**common, st_ctime_ns=301)
+            self.assertNotEqual(archive.archive_stamp(descriptor), archive.archive_stamp(changed))
+        with patch.object(archive.os, "name", "posix"):
+            self.assertNotEqual(archive.open_identity(path), archive.open_identity(descriptor))
+
+    def test_archive_path_opened_once_for_retained_digest_and_payload(self):
+        receipt = self.export()
+        original_open = Path.open
+        opened = []
+        def tracked(path, *args, **kwargs):
+            if path == self.output:
+                opened.append(path)
+            return original_open(path, *args, **kwargs)
+        with patch.object(Path, "open", tracked):
+            result = archive.archive_action("verify", self.output, expected=receipt["archive_sha256"])
+        self.assertTrue(result["retained_digest_matched"])
+        self.assertEqual([self.output], opened)
 
     def test_truncated_archive_rejected(self):
         self.export()
@@ -77,10 +122,10 @@ class EnvironmentArchiveTests(unittest.TestCase):
             archive.archive_action("verify", bad)
 
     def test_wrong_destination_rejected(self):
-        self.export()
+        receipt = self.export()
         target = self.root.parent / "another"
         with self.assertRaises(archive.ArchiveError):
-            archive.archive_action("restore", self.output, target)
+            archive.archive_action("restore", self.output, target, expected=receipt["archive_sha256"])
         self.assertFalse(target.exists())
 
     def test_payload_tamper_rejected_before_restore(self):
@@ -94,7 +139,7 @@ class EnvironmentArchiveTests(unittest.TestCase):
                 new.writestr(item.filename, data)
         shutil.rmtree(self.root)
         with self.assertRaises(archive.ArchiveError):
-            archive.archive_action("restore", bad, self.root)
+            archive.archive_action("restore", bad, self.root, expected=archive.file_digest(bad))
         self.assertFalse(self.root.exists())
 
     def test_manifest_path_traversal_rejected(self):

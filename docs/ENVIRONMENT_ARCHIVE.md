@@ -66,3 +66,7 @@ environment; unavailable upstream simulation; Python/SDK external dependency
 audit; multi-image artifact identity; host/VM retention and relocation
 support. No automatic historical download, cross-host migration or release
 gate pass is claimed. No automatic archive contents are redistributed.
+
+## Retention verification and restore safety
+
+Use **Project Environment Manager > Archive / Restore > Verify Retained Archive** with the separately stored SHA-256 at periodic retention reviews (for example annually) and before migration or recovery. No extracted program runs. The CLI now requires the retained digest for restoration; digest, ZIP bounds and payloads are inspected from the same open file. Insufficient destination disk space is rejected before creation; restored files are flushed before publishing the historic ready marker. Keep the archive immutable and access-controlled during verification and restore. This does not replace independent clean-machine offline build qualification, licence and Git object completeness review, or compatible host retention. No five-year availability guarantee is implied.
