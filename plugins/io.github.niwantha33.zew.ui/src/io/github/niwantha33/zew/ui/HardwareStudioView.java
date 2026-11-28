@@ -9,6 +9,7 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
+import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
@@ -58,7 +59,7 @@ public final class HardwareStudioView extends ViewPart {
     private String boardName = "";
     private String profileName = "";
     private DtsGraphModel.Snapshot snapshot;
-    private boolean staleSnapshot = true;
+    private HardwareStudioDocument.Freshness freshness = HardwareStudioDocument.freshness(null, null);
 
     @Override
     public void createPartControl(Composite parent) {
@@ -169,7 +170,7 @@ public final class HardwareStudioView extends ViewPart {
             boardName = "";
             profileName = "";
             snapshot = null;
-            staleSnapshot = true;
+            freshness = HardwareStudioDocument.freshness(null, null);
             focus = "";
             render(DtsGraphModel.unavailable(project == null ? "Select a Zephyr project in Project Explorer."
                     : "Select a board and build profile to generate the Devicetree topology."), "");
@@ -206,7 +207,7 @@ public final class HardwareStudioView extends ViewPart {
         final org.eclipse.swt.widgets.Display uiDisplay = getSite().getShell().getDisplay();
         final String selectedFocus = focus;
         snapshot = null;
-        staleSnapshot = true;
+        freshness = HardwareStudioDocument.freshness(null, null);
         boardName = "";
         profileName = "";
         render(DtsGraphModel.unavailable("Inspecting selected generated Devicetree…"), "");
@@ -239,7 +240,7 @@ public final class HardwareStudioView extends ViewPart {
                 }
                 if (monitor.isCanceled() || generation.get() != token) return Status.CANCEL_STATUS;
                 final var result = observed;
-                final boolean resultStale = isStale(result, selected, selectedBuild);
+                final var resultFreshness = inspectFreshness(result, selected, selectedBuild, foundBoard, foundProfile);
                 final String resultBoard = foundBoard;
                 final String resultProfile = foundProfile;
                 uiDisplay.asyncExec(() -> {
@@ -247,7 +248,7 @@ public final class HardwareStudioView extends ViewPart {
                             || !selectedBuild.equals(build) || getSite().getShell().isDisposed())
                         return;
                     snapshot = result;
-                    staleSnapshot = resultStale;
+                    freshness = resultFreshness;
                     boardName = resultBoard;
                     profileName = resultProfile;
                     render(result, selectedFocus);
@@ -264,7 +265,7 @@ public final class HardwareStudioView extends ViewPart {
         generation.incrementAndGet();
         if (job != null) job.cancel();
         snapshot = observation;
-        staleSnapshot = true; // synthetic installed-smoke evidence is never a fresh real build.
+        freshness = HardwareStudioDocument.freshness(observation, null); // Synthetic smoke is never current.
         focus = selectedFocus == null ? "" : selectedFocus;
         render(snapshot, focus);
     }
@@ -280,8 +281,8 @@ public final class HardwareStudioView extends ViewPart {
         try {
             String document = HardwareStudioDocument.render(template, evidence, projectName,
                     buildName, selectedFocus,
-                    staleSnapshot && evidence != null && evidence.observed(),
-                    theme, boardName, profileName, physical);
+                    !freshness.current() && evidence != null && evidence.observed(),
+                    theme, boardName, profileName, physical, freshness);
             browser.setText(document);
         } catch (RuntimeException invalid) {
             browser.setText("<html><body><h2>DTS Topology unavailable</h2>"
@@ -290,37 +291,21 @@ public final class HardwareStudioView extends ViewPart {
         }
     }
 
-    private static boolean isStale(DtsGraphModel.Snapshot evidence,
-                                   IProject selectedProject, Path selectedBuild) {
-        if (evidence == null || !evidence.observed()) return false;
-        if (selectedProject == null || selectedBuild == null || evidence.generated() == null)
-            return true;
+    /** Reuse the same build-local provenance as Configuration Studio, off the SWT thread. */
+    private static HardwareStudioDocument.Freshness inspectFreshness(DtsGraphModel.Snapshot evidence,
+                                   IProject selectedProject, Path selectedBuild,
+                                   String board, String profile) {
+        if (evidence == null || !evidence.observed()) return HardwareStudioDocument.freshness(evidence, null);
         try {
-            Path root = selectedProject.getLocation().toFile().toPath().toRealPath();
-            Path buildRoot = selectedBuild.toRealPath();
-            Path generated = evidence.generated().toRealPath();
-            if (!generated.equals(buildRoot.resolve("zephyr/zephyr.dts"))
-                    || !Files.isRegularFile(generated) || Files.size(generated) > 4_194_304)
-                return true;
-            String actual = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(Files.readAllBytes(generated)));
-            if (!actual.equals(evidence.sha256())) return true;
-            var builtAt = Files.getLastModifiedTime(generated);
-            Path config = root.resolve("prj.conf");
-            if (Files.isRegularFile(config)
-                    && Files.getLastModifiedTime(config).compareTo(builtAt) > 0) return true;
-            int count = 0;
-            try (var overlays = Files.newDirectoryStream(root, "*.overlay")) {
-                for (Path overlay : overlays) {
-                    if (++count > 500 || Files.isSymbolicLink(overlay)
-                            || Files.getLastModifiedTime(overlay).compareTo(builtAt) > 0)
-                        return true;
-                }
-            }
-            return false;
+            Path application = selectedProject.getLocation().toFile().toPath().toRealPath();
+            Path root = selectedBuild.toRealPath();
+            if (evidence.generated() == null
+                    || !evidence.generated().toRealPath().equals(root.resolve("zephyr/zephyr.dts")))
+                return new HardwareStudioDocument.Freshness("changed", "Observed generated DTS path differs from selected build.");
+            var receipt = ConfigurationEvidenceReceipt.inspect(application, root, board, profile);
+            return HardwareStudioDocument.freshness(evidence, receipt);
         } catch (Exception unverified) {
-            // Unknown freshness is never silently promoted to verified evidence.
-            return true;
+            return HardwareStudioDocument.freshness(evidence, null);
         }
     }
 
@@ -370,6 +355,43 @@ public final class HardwareStudioView extends ViewPart {
      * and stale overlay before navigating. Never edit or guess package wiring.
      */
     private void openSource(String path) {
+        if (verifiedNode(path) == null || project == null || build == null) return;
+        final IProject selected = project;
+        final Path selectedBuild = build;
+        final var selectedSnapshot = snapshot;
+        final String selectedBoard = boardName, selectedProfile = profileName;
+        final int token = generation.get();
+        final var display = getSite().getShell().getDisplay();
+        var verify = new Job("Verify hardware evidence before source navigation") {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                HardwareStudioDocument.Freshness checked;
+                try {
+                    var settings = ProjectContext.settings(selected);
+                    if (!selectedBuild.equals(ProjectContext.buildDirectory(selected, settings).toAbsolutePath().normalize())
+                            || !selectedBoard.equals(settings.getProperty("board", ""))
+                            || !selectedProfile.equals(ProjectContext.profileIdentity(settings)))
+                        checked = new HardwareStudioDocument.Freshness("changed", "Selected board or profile changed; refresh Hardware Studio.");
+                    else checked = inspectFreshness(selectedSnapshot, selected, selectedBuild, selectedBoard, selectedProfile);
+                } catch (Exception error) {
+                    checked = HardwareStudioDocument.freshness(selectedSnapshot, null);
+                }
+                final var result = checked;
+                if (monitor.isCanceled() || generation.get() != token) return Status.CANCEL_STATUS;
+                display.asyncExec(() -> {
+                    if (generation.get() != token || project != selected || snapshot != selectedSnapshot
+                            || !selectedBuild.equals(build) || getSite().getShell().isDisposed()) return;
+                    freshness = result;
+                    if (!result.current()) render(snapshot, focus);
+                    else openVerifiedSource(path);
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        verify.setSystem(true);
+        verify.schedule();
+    }
+
+    private void openVerifiedSource(String path) {
         DtsGraphModel.Node node = verifiedNode(path);
         if (node == null || project == null || build == null || snapshot.generated() == null)
             return;
@@ -380,7 +402,7 @@ public final class HardwareStudioView extends ViewPart {
             if (!selectedBuild.startsWith(root)
                     || !source.equals(selectedBuild.resolve("zephyr/zephyr.dts"))
                     || !Files.isRegularFile(source) || Files.size(source) > 4_194_304
-                    || isStale(snapshot, project, build)) return;
+                    || !freshness.current()) return;
             byte[] content = Files.readAllBytes(source);
             if (content.length > 4_194_304) return;
             String fingerprint = HexFormat.of().formatHex(
