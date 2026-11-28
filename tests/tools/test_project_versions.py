@@ -127,6 +127,42 @@ class ProjectVersionTests(unittest.TestCase):
                                    "qemu_x86/atom", self.application, managed_root=candidate)
         self.assertEqual(0, versions.command.call_count)
 
+    def test_managed_migration_rejects_nested_setup_roots(self):
+        candidate = self.root / "candidate-setup"
+        candidate.mkdir()
+        with self.assertRaisesRegex(versions.VersionError, "non-nested managed setup roots"):
+            versions.main(self.args("plan", "--managed-root", str(self.root),
+                                    "--candidate-managed-root", str(candidate),
+                                    "--candidate-workspace", str(candidate),
+                                    "--candidate-sdk", str(self.sdk),
+                                    "--candidate-python", str(self.tools["python"]),
+                                    "--candidate-git", str(self.tools["git"]),
+                                    "--candidate-cmake", str(self.tools["cmake"]),
+                                    "--candidate-ninja", str(self.tools["ninja"])))
+        self.assertEqual(0, versions.command.call_count)
+
+    def test_two_managed_setups_have_independent_probe_environments(self):
+        roots = [self.root / name for name in ("original-setup", "candidate-setup")]
+        for root in roots:
+            root.mkdir()
+            (root / ".zew-managed").write_text("fixture")
+            workspace, sdk = root / "workspace", root / "sdk"
+            workspace.mkdir()
+            sdk.mkdir()
+            tools = {}
+            for name in ("python", "git", "cmake", "ninja"):
+                folder = root / name
+                folder.mkdir()
+                tools[name] = folder / name
+                tools[name].write_bytes(b"fixture")
+            env = versions.managed_environment(root, workspace, tools["python"],
+                                               tools["git"], sdk, tools["cmake"], tools["ninja"])
+            other = roots[1] if root == roots[0] else roots[0]
+            self.assertEqual(str(tools["git"].parent), env["PATH"].split(os.pathsep)[0])
+            self.assertNotIn(str(other), env["PATH"])
+            self.assertEqual(str(workspace / ".west/config"), env["WEST_CONFIG_LOCAL"])
+            self.assertEqual(str(sdk), env["ZEPHYR_SDK_INSTALL_DIR"])
+
     def test_managed_record_passes_selected_environment_to_every_probe(self):
         (self.root / ".zew-managed").write_text("fixture")
         versions.system_record(self.workspace, self.tools["python"], self.tools["git"],

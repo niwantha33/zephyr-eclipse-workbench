@@ -452,6 +452,11 @@ def main(argv=None):
         if args.candidate_managed_root and not all((args.candidate_python, args.candidate_git,
                                                        args.candidate_cmake, args.candidate_ninja)):
             raise VersionError("Managed candidate requires all candidate tool paths explicitly")
+        if args.managed_root and args.candidate_managed_root:
+            original_root = args.managed_root.resolve(strict=True)
+            candidate_root = args.candidate_managed_root.resolve(strict=True)
+            if original_root.is_relative_to(candidate_root) or candidate_root.is_relative_to(original_root):
+                raise VersionError("Upgrade trial requires separate, non-nested managed setup roots")
         previous = load_lock(application)
         candidate = args.candidate_workspace.resolve()
         if candidate == workspace or candidate.is_relative_to(workspace) or workspace.is_relative_to(candidate):
