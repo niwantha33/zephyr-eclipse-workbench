@@ -61,10 +61,51 @@ def check_destination(destination, current, original_setup=None):
     return destination
 
 
-def run(argv, cwd, seconds=1800, capture=False):
-    environment = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_LFS_SKIP_SMUDGE="1")
-    environment.pop("ZEPHYR_BASE", None)
-    environment.pop("WEST_TOPDIR", None)
+def source_environment(tool_root, workspace, python, git, *, network=False, host=None):
+    """Use only explicitly selected managed bootstrap tools and candidate config."""
+    root = Path(tool_root).resolve(strict=True)
+    if not root.is_dir() or not (root / ".zew-managed").is_file():
+        raise VersionError("Select a Workbench-managed tools root")
+    selected = []
+    for label, value in (("Git", git), ("Python", python)):
+        if value is None or not Path(value).is_absolute():
+            raise VersionError(label + " must be an explicit absolute executable")
+        actual = Path(value).resolve(strict=True)
+        if not actual.is_file() or not actual.is_relative_to(root):
+            raise VersionError(label + " is outside the selected managed tools root")
+        selected.append(actual)
+    directories = [item.parent for item in selected]
+    host = os.environ if host is None else host
+    blocked = ("PYTHON", "PIP_", "GIT_", "WEST_", "ZEPHYR_", "CMAKE_", "CONDA_", "VIRTUAL_ENV",
+               "GNUARMEMB_", "CROSS_COMPILE")
+    result = {key: value for key, value in host.items()
+              if key.upper() != "PATH" and not key.upper().startswith(blocked)}
+    if os.name == "nt":
+        windows = next((v for k, v in host.items() if k.upper() == "SYSTEMROOT"), "")
+        if not windows or not Path(windows).is_absolute():
+            raise VersionError("Windows SystemRoot is missing or invalid")
+        system = Path(windows).resolve(strict=True)
+        directories.extend((system / "System32", system))
+    if any(os.pathsep in str(directory) for directory in directories):
+        raise VersionError("Selected source tool search path contains a PATH delimiter")
+    result.update(PATH=os.pathsep.join(dict.fromkeys(map(str, directories))),
+                  PYTHONNOUSERSITE="1", PIP_CONFIG_FILE=os.devnull, PIP_NO_INDEX="1",
+                  GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull,
+                  GIT_TERMINAL_PROMPT="0", GIT_LFS_SKIP_SMUDGE="1",
+                  GIT_ALLOW_PROTOCOL="https:file" if network else "file",
+                  WEST_CONFIG_SYSTEM=os.devnull, WEST_CONFIG_GLOBAL=os.devnull,
+                  WEST_CONFIG_LOCAL=str(Path(workspace).resolve() / ".west/config"))
+    if not network:
+        result.update(GIT_OPTIONAL_LOCKS="0", GIT_NO_LAZY_FETCH="1")
+    return result
+
+
+def run(argv, cwd, seconds=1800, capture=False, *, env=None):
+    environment = (dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_LFS_SKIP_SMUDGE="1")
+                   if env is None else env)
+    if env is None:
+        environment.pop("ZEPHYR_BASE", None)
+        environment.pop("WEST_TOPDIR", None)
     command = list(map(str, argv))
     try:
         result = subprocess.run(command, cwd=cwd, env=environment,
@@ -90,8 +131,9 @@ def sdk_recommendation(zephyr):
     return version
 
 
-def capture_sources(workspace, python, git, release):
-    frozen, modules, origin = get_manifest(workspace, python, git)
+def capture_sources(workspace, python, git, release, *, tool_root=None):
+    env = source_environment(tool_root, workspace, python, git) if tool_root is not None else None
+    frozen, modules, origin = get_manifest(workspace, python, git, env=env)
     if origin != "west-freeze" or any(not module["installed_at_snapshot"] for module in modules):
         raise VersionError("Cannot verify all modules with west manifest --freeze; source setup is incomplete")
     encoded = frozen.encode("utf-8")
@@ -100,9 +142,9 @@ def capture_sources(workspace, python, git, release):
     version = zephyr_version(workspace)
     if version != check_release(release):
         raise VersionError("Zephyr VERSION disagrees with the selected release: " + version)
-    head = git_head(git, workspace / "zephyr")
+    head = git_head(git, workspace / "zephyr", env=env)
     ref = run([git, "-C", workspace / "zephyr", "rev-parse",
-               "refs/tags/" + release + "^{commit}"], workspace, 30, capture=True)
+               "refs/tags/" + release + "^{commit}"], workspace, 30, capture=True, env=env)
     if not SHA.fullmatch(ref) or head != ref:
         raise VersionError("Checked-out Zephyr commit does not match the requested release tag")
     return frozen, {
@@ -136,10 +178,10 @@ def write_file_once(path, text):
         output.write(text)
 
 
-def install(release, destination, current, python, git, allow_network, original_setup=None):
+def install(release, destination, current, python, git, allow_network, original_setup=None, *, tool_root=None):
     if current is None:
         raise VersionError("Specify the original West workspace")
-    return _install(release, destination, current, python, git, allow_network, original_setup)
+    return _install(release, destination, current, python, git, allow_network, original_setup, tool_root=tool_root)
 
 
 def prepare_fresh(root, release, python, git):
@@ -155,27 +197,32 @@ def prepare_fresh(root, release, python, git):
     if target.is_symlink():
         raise VersionError("Refusing a linked source destination")
     if target.exists():
-        record = verify_candidate(target, python, git)
+        record = verify_candidate(target, python, git, tool_root=root)
         if record["release"] != release:
             raise VersionError("Existing source candidate belongs to a different release")
         return record
-    return _install(release, target, None, python, git, True)
+    return _install(release, target, None, python, git, True, tool_root=root)
 
 
-def _install(release, destination, current, python, git, allow_network, original_setup=None):
+def _install(release, destination, current, python, git, allow_network, original_setup=None, *, tool_root=None):
     check_release(release)
     destination = check_destination(destination, current, original_setup)
     if not allow_network:
         raise VersionError("Installation needs explicit --allow-network permission")
     if python is None or git is None or not python.is_file() or not git.is_file():
         raise VersionError("Use the already-installed Workbench Python and Git executables")
-    stage = Path(tempfile.mkdtemp(prefix=".zew-source-stage-", dir=destination.parent))
+    # Refuse foreign tools before creating any staging directory.
+    if tool_root is not None:
+        source_environment(tool_root, destination, python, git, network=True)
+    stage = Path(tempfile.mkdtemp(prefix=".zew-source-stage-", dir=destination.parent)).resolve()
     print("Preparing isolated staging folder: " + str(stage), flush=True)
     try:
+        env = (source_environment(tool_root, stage, python, git, network=True)
+               if tool_root is not None else None)
         run([python, "-m", "west", "init", "-m", OFFICIAL_SOURCE,
-             "--mr", release, str(stage)], destination.parent, 900)
-        run([python, "-m", "west", "update"], stage, 5400)
-        frozen, record = capture_sources(stage, python, git, release)
+             "--mr", release, str(stage)], stage, 900, env=env)
+        run([python, "-m", "west", "update"], stage, 5400, env=env)
+        frozen, record = capture_sources(stage, python, git, release, tool_root=tool_root)
         evidence = stage / ".zew"
         evidence.mkdir(exist_ok=False)
         write_file_once(evidence / "source-frozen.yml", frozen)
@@ -198,7 +245,7 @@ def _install(release, destination, current, python, git, allow_network, original
         raise
 
 
-def verify_candidate(candidate, python, git):
+def verify_candidate(candidate, python, git, *, tool_root=None):
     candidate = candidate.resolve()
     lock_file = candidate / SOURCE_LOCK
     manifest_file = candidate / SOURCE_FROZEN
@@ -207,7 +254,7 @@ def verify_candidate(candidate, python, git):
     lock = json.loads(lock_file.read_text(encoding="utf-8"))
     if lock.get("schema") != 1 or lock.get("kind") != "zephyr-source-only":
         raise VersionError("Unknown source-lock format")
-    frozen, now = capture_sources(candidate, python, git, lock["release"])
+    frozen, now = capture_sources(candidate, python, git, lock["release"], tool_root=tool_root)
     if (hashlib.sha256(manifest_file.read_bytes()).hexdigest() != lock["west_manifest_sha256"]
             or frozen != manifest_file.read_text(encoding="utf-8")
             or now["zephyr_commit"] != lock["zephyr_commit"]
@@ -216,10 +263,10 @@ def verify_candidate(candidate, python, git):
     return lock
 
 
-def compare(application, candidate, python, git):
+def compare(application, candidate, python, git, *, tool_root=None):
     from project_versions import load_lock
     original = load_lock(application)
-    proposed = verify_candidate(candidate, python, git)
+    proposed = verify_candidate(candidate, python, git, tool_root=tool_root)
     old_modules = {item["name"]: item for item in original["modules"]}
     new_modules = {item["name"]: item for item in proposed["modules"]}
     differences = []
@@ -248,6 +295,7 @@ def main(argv=None):
     parser.add_argument("--python", type=Path)
     parser.add_argument("--git", type=Path)
     parser.add_argument("--allow-network", action="store_true")
+    parser.add_argument("--managed-tools-root", type=Path, help="Isolate source operations to selected managed Python/Git")
     args = parser.parse_args(argv)
     if args.action in ("plan", "install"):
         if args.original_workspace is None:
@@ -260,10 +308,11 @@ def main(argv=None):
                     "upstream": OFFICIAL_SOURCE, "network_required": True, "source_only": True,
                     "next": "Explicitly approve download before installing in the new path."}
         return install(args.release, destination, args.original_workspace,
-                       args.python, args.git, args.allow_network, args.original_setup)
+                       args.python, args.git, args.allow_network, args.original_setup, tool_root=args.managed_tools_root)
     if not args.application or not args.python or not args.git:
         raise VersionError("Source comparison needs the project and existing Python/Git executables")
-    return compare(args.application.resolve(), args.destination.resolve(), args.python, args.git)
+    return compare(args.application.resolve(), args.destination.resolve(), args.python, args.git,
+                   tool_root=args.managed_tools_root)
 
 
 if __name__ == "__main__":
