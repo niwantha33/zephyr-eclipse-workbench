@@ -160,7 +160,7 @@ public final class SetupWizard extends Wizard {
     }
     private final class ReviewPage extends WizardPage {
         Text plan;
-        Button agreement;
+        Button agreement, sourceSdk;
         ReviewPage() { super("review"); setTitle("Review and install"); setDescription("Review the selected release, tools, licences and destination before starting."); }
         @Override public void createControl(Composite parent) {
             var body = new Composite(parent, SWT.NONE); body.setLayout(new GridLayout());
@@ -173,6 +173,9 @@ public final class SetupWizard extends Wizard {
                     copyResource("tools/setup-licences.txt", notes); Program.launch(notes.toString());
                 } catch (Exception error) { setErrorMessage(error.getMessage()); }
             });
+            sourceSdk = new Button(body, SWT.CHECK);
+            sourceSdk.setText("Also provision the reviewed SDK 1.0.1 and x86 compiler if recommended by the selected release.");
+            sourceSdk.addListener(SWT.Selection, e -> { agreement.setSelection(false); setPageComplete(false); });
             agreement = new Button(body, SWT.CHECK); agreement.setText("I have reviewed the installation plan and licence records. Proceed with the selected setup.");
             agreement.addListener(SWT.Selection, e -> setPageComplete(agreement.getSelection()));
             setControl(body); setPageComplete(false);
@@ -180,13 +183,16 @@ public final class SetupWizard extends Wizard {
         @Override public void setVisible(boolean visible) {
             if (visible && plan != null) {
                 agreement.setSelection(false); setPageComplete(false);
+                sourceSdk.setSelection(false);
+                sourceSdk.setEnabled(!location.firstBuild());
                 if (!location.firstBuild()) {
                     plan.setText("Destination: " + location.folder.getText().trim()
                             + "\n\nSelected official stable Zephyr release: " + location.tag()
                             + "\n\nInstall the reviewed portable Python 3.13.7, MinGit 2.50.1 and pinned Python packages as SOURCE PREPARATION tools."
                             + "\nDownload the selected Zephyr tag and West modules, verify the source revision and record the frozen manifest."
-                            + "\n\nThis does NOT install a release-specific SDK, qualify Python dependencies for firmware, create a project or build firmware."
-                            + "\nThe selected release and its upstream modules have their own licence terms; the linked records cover the pinned bootstrap tools only."
+                            + "\n\nOptional SDK provisioning: choose the checkbox below to install reviewed SDK 1.0.1 and its x86 compiler only if the verified source recommends it. Other SDK versions are refused; sources are preserved."
+                            + "\nThis does NOT qualify Python dependencies for firmware, create a project or build firmware."
+                            + "\nThe selected release and its upstream modules have their own licence terms; review the linked bootstrap and SDK licence records (GCC runtime exceptions apply)."
                             + "\n\nNetwork required; source and modules can require several gigabytes. Existing environments remain unchanged."
                             + "\nResult: a separate source-only workspace, not a build-ready environment.");
                 } else plan.setText("Destination: " + location.folder.getText().trim()
@@ -213,6 +219,7 @@ public final class SetupWizard extends Wizard {
         String tag = location.tag();
         String marker = location.marker();
         boolean firstBuild = location.firstBuild();
+        boolean sourceSdk = !firstBuild && review.sourceSdk.getSelection();
         var console = new MessageConsole("Zephyr Beginner Setup", null); ConsolePlugin.getDefault().getConsoleManager().addConsoles(new org.eclipse.ui.console.IConsole[] {console});
         ConsolePlugin.getDefault().getConsoleManager().showConsoleView(console);
         try (var output = console.newMessageStream()) {
@@ -252,10 +259,13 @@ public final class SetupWizard extends Wizard {
                             copyResource("tools/release_sources.py", root.resolve("installer/release_sources.py"));
                             copyResource("tools/project_versions.py", root.resolve("installer/project_versions.py"));
                             command.addAll(List.of("--source-release", tag));
+                            if (sourceSdk) command.add("--source-sdk");
                         }
                         new ProcessRunner().run(command, root, Duration.ofHours(3), monitor::isCanceled, report).requireSuccess();
                         Path proof = root.resolve(firstBuild ? ".zew-ready" : "workspace/.zew-source-ready");
                         if (!Files.isRegularFile(proof)) throw new java.io.IOException("Setup did not produce the expected verification marker.");
+                        if (sourceSdk && !Files.isRegularFile(root.resolve("sdk/.zew-source-sdk.json")))
+                            throw new java.io.IOException("SDK provisioning did not produce its source receipt.");
                     }
                 } catch (java.io.InterruptedIOException error) { throw new InterruptedException("Setup cancelled. Completed downloads are preserved for retry."); }
                 catch (InterruptedException error) { throw error; }
@@ -265,7 +275,10 @@ public final class SetupWizard extends Wizard {
             if (firstBuild) importProject(root);
             else MessageDialog.openInformation(getShell(), "Zephyr sources prepared",
                     "Verified sources and West modules for " + tag + " are in:\n" + root.resolve("workspace")
-                    + "\n\nSDK selection and a successful firmware build are still required. No existing project was changed.");
+                    + (sourceSdk ? "\n\nReviewed SDK 1.0.1 and x86 compiler provisioned in " + root.resolve("sdk")
+                            + ". Release-specific dependency and firmware qualification are still required."
+                            : "\n\nSDK selection and a successful firmware build are still required.")
+                    + " No existing project was changed.");
             return true;
         } catch (InterruptedException error) { MessageDialog.openInformation(getShell(), "Setup cancelled", "Completed downloads were preserved. Open Set Up Zephyr again with the same folder to retry."); return false; }
         catch (Exception error) { Throwable cause = error.getCause() == null ? error : error.getCause(); MessageDialog.openError(getShell(), "Zephyr setup", cause.getMessage() + "\n\nSee the Zephyr Beginner Setup console. Retry the same folder to reuse verified downloads."); return false; }
