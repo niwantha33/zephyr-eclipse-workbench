@@ -170,7 +170,7 @@ public final class ZephyrTraceHandler extends AbstractHandler {
                     var serverCommand = plan.command(settings.getProperty("python"));
                     var builder = new ProcessBuilder(serverCommand);
                     builder.directory(Path.of(settings.getProperty("workspace")).toFile());
-                    builder.environment().putAll(ProjectContext.targetEnvironment(settings, serverCommand));
+                    io.github.niwantha33.zew.core.ProcessEnvironment.apply(builder.environment(), ProjectContext.targetEnvironment(settings, serverCommand));
                     builder.redirectErrorStream(true);
                     server = builder.start();
                     Process owned = server;

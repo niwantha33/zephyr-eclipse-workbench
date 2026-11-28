@@ -93,7 +93,7 @@ public final class ZephyrLaunchDelegate extends LaunchConfigurationDelegate {
                 if (monitor.isCanceled()) return;
                 var builder = new ProcessBuilder(command);
                 builder.directory(Path.of(settings.getProperty("workspace")).toFile());
-                builder.environment().putAll(ProjectContext.targetEnvironment(settings, command));
+                io.github.niwantha33.zew.core.ProcessEnvironment.apply(builder.environment(), ProjectContext.targetEnvironment(settings, command));
                 builder.redirectErrorStream(true);
                 process = builder.start();
                 if (DebugPlugin.newProcess(launch, process, "Zephyr " + action + " — " + project.getName()) == null)

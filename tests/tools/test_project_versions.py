@@ -239,6 +239,69 @@ class ProjectVersionTests(unittest.TestCase):
             versions.main(self.args("snapshot"))
         self.assertFalse((self.application / versions.LOCK).exists())
 
+    def migration_args(self, destination, *extra):
+        candidate = self.root / "candidate"
+        if not candidate.exists():
+            import shutil
+            shutil.copytree(self.workspace, candidate)
+            (candidate / "zephyr" / "VERSION").write_text(
+                "VERSION_MAJOR = 4\nVERSION_MINOR = 5\nPATCHLEVEL = 0\n")
+        return self.args("migration-copy", "--candidate-workspace", str(candidate),
+                         "--candidate-sdk", str(self.sdk),
+                         "--candidate-python", str(self.tools["python"]),
+                         "--candidate-git", str(self.tools["git"]),
+                         "--candidate-cmake", str(self.tools["cmake"]),
+                         "--candidate-ninja", str(self.tools["ninja"]),
+                         "--destination", str(destination), *extra)
+
+    def test_migration_copy_preserves_original_and_creates_new_lock(self):
+        (self.application / "prj.conf").write_text("CONFIG_GPIO=y\n")
+        versions.snapshot(self.application, *self.record())
+        original_lock = (self.application / versions.LOCK).read_bytes()
+        original_manifest = (self.application / versions.FROZEN).read_bytes()
+        (self.application / "build").mkdir()
+        (self.application / "build" / "old.bin").write_bytes(b"old")
+        destination = self.root / "trial"
+        result = versions.main(self.migration_args(destination, "--confirm-copy"))
+        self.assertEqual("migration-copy-created", result["status"])
+        self.assertEqual("not-run", result["trial_build"])
+        self.assertEqual("4.5.0", versions.load_lock(destination)["zephyr"]["version"])
+        self.assertEqual("CONFIG_GPIO=y\n", (destination / "prj.conf").read_text())
+        self.assertFalse((destination / "build").exists())
+        self.assertEqual(original_lock, (self.application / versions.LOCK).read_bytes())
+        self.assertEqual(original_manifest, (self.application / versions.FROZEN).read_bytes())
+        with self.assertRaisesRegex(versions.VersionError, "already exists"):
+            versions.main(self.migration_args(destination, "--confirm-copy"))
+
+    def test_migration_copy_rejects_unconfirmed_and_nested_destinations(self):
+        versions.snapshot(self.application, *self.record())
+        destination = self.root / "trial"
+        with self.assertRaisesRegex(versions.VersionError, "confirm-copy"):
+            versions.main(self.migration_args(destination))
+        self.assertFalse(destination.exists())
+        with self.assertRaisesRegex(versions.VersionError, "separate"):
+            versions.main(self.migration_args(self.application / "trial", "--confirm-copy"))
+
+    def test_migration_copy_rejects_original_source_drift(self):
+        versions.snapshot(self.application, *self.record())
+        (self.application / "CMakeLists.txt").write_text("modified")
+        destination = self.root / "trial"
+        with self.assertRaisesRegex(versions.VersionError, "differs from the saved lock"):
+            versions.main(self.migration_args(destination, "--confirm-copy"))
+        self.assertFalse(destination.exists())
+
+    def test_module_alias_outside_workspace_is_rejected(self):
+        module = self.workspace / "modules" / "test"
+        module.rmdir()
+        external = self.root / "external"
+        external.mkdir()
+        try:
+            module.symlink_to(external, target_is_directory=True)
+        except (NotImplementedError, OSError):
+            self.skipTest("This host disallows directory symlinks")
+        with self.assertRaisesRegex(versions.VersionError, "escapes the selected workspace"):
+            self.record()
+
     def test_json_lock_never_contains_absolute_setup_path(self):
         frozen, record = self.record()
         versions.snapshot(self.application, frozen, record)
