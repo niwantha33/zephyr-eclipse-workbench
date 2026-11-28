@@ -69,3 +69,7 @@ Before stable release, exercise malformed XML, archives, ELF, traces and evidenc
 ### Historical synthetic fixture finding
 
 The only initial Gitleaks finding was generic-api-key in tests/pytest/test_evidence_cli.py, line 53 at commit 5dbee3459aaa47baa1fa4ba4d918c09187915068. The source is a synthetic Kconfig comparison/redaction test; it does not use an API, account or external service. Current fixtures construct distinct harmless markers at runtime and still verify redaction. The exact historical fingerprint is recorded in .gitleaksignore so the full-history scan can remain enabled. This is a false-positive classification, not an exemption for live credentials or a rule/path-wide suppression. Owner review of the classification is required before merge.
+
+### Managed Python advisory remediation (2026-11-28)
+
+The initial OSV run reported eleven vulnerabilities in pip 25.2, setuptools 80.9.0, wheel 0.45.1 and cbor2 5.7.1. The lock refresh selects pip 26.2, setuptools 84.1.0, wheel 0.46.2 and cbor2 5.9.0, matching the highest fixed version reported for each package. Wheel SHA-256 values were cross-checked against the corresponding official PyPI release file metadata, then the exact distributions were downloaded and hash-verified in the PR's Linux CI to obtain byte sizes and licence-file hashes. The existing packaging pin is installed in the offline bootstrap because wheel now requires it. Exact-head OSV, regression and Windows firmware qualification remain required; this record does not certify other dependencies or a release.

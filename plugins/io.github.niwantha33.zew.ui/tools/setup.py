@@ -297,7 +297,8 @@ def install_packages(lock, root, environment):
     for package in lock['packages']:
         fetch(package, cache)
     pip = next(p for p in lock['packages'] if p['name'] == 'pip')
-    bootstrap = [p for p in lock['packages'] if p['name'] in ('pip', 'setuptools', 'wheel')]
+    # Wheel 0.46+ imports packaging; install its locked runtime dependency before building docopt.
+    bootstrap = [p for p in lock['packages'] if p['name'] in ('pip', 'setuptools', 'wheel', 'packaging')]
     requirements_file(bootstrap, cache, root / 'bootstrap-requirements.txt')
     command = [sys.executable, '-c', 'import sys,runpy;sys.path.insert(0,sys.argv.pop(1));runpy.run_module("pip",run_name="__main__")',
                str(cache / pip['file']), 'install', '--no-index', '--no-deps', '--require-hashes',

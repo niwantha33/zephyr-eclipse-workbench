@@ -6,12 +6,18 @@
   "packages": [
     {
       "name": "cbor2",
-      "version": "5.7.1",
-      "file": "cbor2-5.7.1-cp313-cp313-win_amd64.whl",
-      "url": "https://files.pythonhosted.org/packages/00/78/9b566d68cb88bb1ecebe354765625161c9d6060a16e55008006d6359f776/cbor2-5.7.1-cp313-cp313-win_amd64.whl",
-      "size": 68451,
-      "sha256": "31d511df7ebd6624fdb4cecdafb4ffb9a205f9ff8c8d98edd1bef0d27f944d74",
-      "license": "MIT"
+      "version": "5.9.0",
+      "file": "cbor2-5.9.0-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/9b/f6/89b4627e09d028c8e5fcaf7cb55f225c33ce6e037ec1844e65d02bcfa945/cbor2-5.9.0-cp313-cp313-win_amd64.whl",
+      "size": 70089,
+      "sha256": "dcf0f695873e5c94bd072d6af8698e72b8fb7f7a18f37e0bced1041b7111a6cf",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "cbor2-5.9.0.dist-info/licenses/LICENSE.txt",
+          "sha256": "2c5440ab09944b1249ce6447c27030969c22a5e212e90c2e0db45705c96324c8"
+        }
+      ]
     },
     {
       "name": "cffi",
