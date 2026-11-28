@@ -20,6 +20,8 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.dialogs.InputDialog;
+import org.eclipse.jface.window.Window;
 import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.console.ConsolePlugin;
@@ -63,6 +65,11 @@ public final class ProjectVersionHandler extends AbstractHandler {
 
     static void operate(IProject project, String action, Path candidateRoot,
                         IProgressMonitor monitor, Consumer<String> log) throws Exception {
+        operate(project, action, candidateRoot, null, monitor, log);
+    }
+
+    static void operate(IProject project, String action, Path candidateRoot, Path destination,
+                        IProgressMonitor monitor, Consumer<String> log) throws Exception {
         boolean attach = action.equals("attach");
         Properties settings = attach ? ProjectContext.settings(project, candidateRoot)
                 : ProjectContext.settings(project);
@@ -83,7 +90,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
         if (ProjectContext.isManagedWindows(settings)) {
             command.addAll(List.of("--managed-root", settings.getProperty("zew.setupRoot")));
         }
-        if (action.equals("plan")) {
+        if (action.equals("plan") || action.equals("migration-copy")) {
             if (candidateRoot == null)
                 throw new IllegalArgumentException("Select a separate, ready candidate setup.");
             // Only a completed environment is accepted, not an arbitrary Git
@@ -100,6 +107,10 @@ public final class ProjectVersionHandler extends AbstractHandler {
                     "--candidate-git", candidate.getProperty("tools.git"),
                     "--candidate-cmake", candidate.getProperty("tools.cmake"),
                     "--candidate-ninja", candidate.getProperty("tools.ninja")));
+            if (action.equals("migration-copy")) {
+                if (destination == null) throw new IOException("Select a new migration copy destination.");
+                command.addAll(List.of("--destination", destination.toString(), "--confirm-copy"));
+            }
         }
         var result = new ProcessRunner().run(command, workspace, Duration.ofMinutes(5),
                 monitor::isCanceled, log, ProjectContext.buildEnvironment(settings));
@@ -151,15 +162,16 @@ public final class ProjectVersionHandler extends AbstractHandler {
                 + "installed environment. An environment lock is not a backup of tools or source.",
                 MessageDialog.INFORMATION, archive
                         ? new String[] {"Create Lock", "Verify", "Attach Original",
-                                "Preview Upgrade", "Archive / Restore", "Cancel"}
+                                "Preview Upgrade", "Create Migration Copy", "Archive / Restore", "Cancel"}
                         : new String[] {"Create Lock", "Verify", "Attach Original",
-                                "Preview Upgrade", "Cancel"}, archive ? 5 : 4);
+                                "Preview Upgrade", "Create Migration Copy", "Cancel"}, archive ? 6 : 5);
         return switch (dialog.open()) {
             case 0 -> "snapshot";
             case 1 -> "verify";
             case 2 -> "attach";
             case 3 -> "plan";
-            case 4 -> archive ? "archive" : "";
+            case 4 -> "migration-copy";
+            case 5 -> archive ? "archive" : "";
             default -> "";
         };
     }
@@ -182,6 +194,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
             return null;
         }
         Path candidateRoot = null;
+        Path migrationDestination = null;
         if (action.equals("attach")) {
             Path lock = project.getLocation().toFile().toPath().resolve(".zew/project-lock.json");
             if (!Files.isRegularFile(lock)) {
@@ -204,7 +217,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
                     + "Preserve production artifacts separately before building.")) return null;
             candidateRoot = Path.of(selected).toAbsolutePath().normalize();
         }
-        if (action.equals("plan")) {
+        if (action.equals("plan") || action.equals("migration-copy")) {
             try {
                 Properties current = ProjectContext.settings(project);
                 Path originalRoot = Path.of(current.getProperty("zew.setupRoot")).toRealPath();
@@ -240,6 +253,30 @@ public final class ProjectVersionHandler extends AbstractHandler {
                 }
                 Properties candidate = ProjectContext.load(candidateRoot);
                 requireSeparateWorkspace(originalWorkspace, Path.of(candidate.getProperty("workspace")));
+                if (action.equals("migration-copy")) {
+                    var parentPicker = new DirectoryDialog(HandlerUtil.getActiveShell(event));
+                    parentPicker.setText("Select an existing parent for the new application copy");
+                    parentPicker.setMessage("Choose a parent outside both installed setups and the original application.");
+                    Path app = project.getLocation().toFile().toPath().toRealPath();
+                    if (app.getParent() != null) parentPicker.setFilterPath(app.getParent().toString());
+                    String parentPath = parentPicker.open();
+                    if (parentPath == null) return null;
+                    var name = new InputDialog(HandlerUtil.getActiveShell(event), "New migration application",
+                            "Enter a NEW folder name. Existing folders will never be replaced.",
+                            project.getName() + "-migration", value ->
+                                value != null && value.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,79}")
+                                    && !value.endsWith(".") ? null : "Enter a simple folder name (letters, digits, dot, dash or underscore).");
+                    if (name.open() != Window.OK) return null;
+                    migrationDestination = Path.of(parentPath).toRealPath().resolve(name.getValue());
+                    if (Files.exists(migrationDestination))
+                        throw new IOException("Migration destination already exists; select a new directory.");
+                    if (!MessageDialog.openConfirm(HandlerUtil.getActiveShell(event), "Create migration copy",
+                            "Verify the original lock and execute tools from the selected candidate setup?\n\n"
+                            + "New application: " + migrationDestination
+                            + "\n\nThe original project, build outputs and environment binding stay unchanged. "
+                            + "No automatic build or promotion occurs. Import the new application and validate it separately."))
+                        return null;
+                }
             } catch (Exception error) {
                 MessageDialog.openInformation(HandlerUtil.getActiveShell(event),
                     "Cannot preview an upgrade",
@@ -249,12 +286,13 @@ public final class ProjectVersionHandler extends AbstractHandler {
             }
         }
         Path selectedCandidate = candidateRoot;
+        Path selectedDestination = migrationDestination;
         var job = new Job("Zephyr " + action + " — " + project.getName()) {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 var console = new MessageConsole("Zephyr Project Versions — " + project.getName(), null);
                 ConsolePlugin.getDefault().getConsoleManager().addConsoles(new IConsole[] {console});
                 try (var stream = console.newMessageStream()) {
-                    operate(project, action, selectedCandidate, monitor, stream::println);
+                    operate(project, action, selectedCandidate, selectedDestination, monitor, stream::println);
                     project.refreshLocal(org.eclipse.core.resources.IResource.DEPTH_INFINITE, monitor);
                     if (!monitor.isCanceled()) Display.getDefault().asyncExec(() ->
                         MessageDialog.openInformation(Display.getDefault().getActiveShell(),
@@ -262,6 +300,8 @@ public final class ProjectVersionHandler extends AbstractHandler {
                             action.equals("snapshot") ? "The project lock has been captured. See .zew/project-lock.json."
                             : action.equals("attach") ? "The recorded environment matches and has been attached to this project. The next build regenerates its selected target output."
                             : action.equals("verify") ? "No environment drift detected. Details are in the Zephyr Project Versions console."
+                            : action.equals("migration-copy") ? "Separate application and candidate lock created at " + selectedDestination
+                                + ". Import it and select the candidate environment for a pristine trial build. Original remains available for rollback."
                             : "Upgrade comparison is available in the Zephyr Project Versions console. No project or setup files were changed."));
                     return monitor.isCanceled() ? Status.CANCEL_STATUS : Status.OK_STATUS;
                 } catch (InterruptedIOException error) {

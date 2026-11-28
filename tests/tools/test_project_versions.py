@@ -373,6 +373,23 @@ class ProjectVersionTests(unittest.TestCase):
         with self.assertRaisesRegex(versions.VersionError, "separate"):
             versions.main(self.migration_args(self.application / "trial", "--confirm-copy"))
 
+    def test_migration_destination_refuses_both_managed_roots_and_relative_paths(self):
+        original = self.root / "original-setup"
+        candidate = self.root / "candidate-setup"
+        original.mkdir(); candidate.mkdir()
+        for root in (original, candidate):
+            with self.assertRaisesRegex(versions.VersionError, "managed roots"):
+                versions.migration_destination(self.application, root / "trial", self.workspace,
+                                               self.root / "candidate", setup_roots=(original, candidate))
+        with self.assertRaisesRegex(versions.VersionError, "absolute"):
+            versions.migration_destination(self.application, Path("trial"), self.workspace,
+                                           self.root / "candidate")
+        destination = self.root / "trial"
+        self.assertEqual(destination.resolve(), versions.migration_destination(
+            self.application, destination, self.workspace, self.root / "candidate",
+            setup_roots=(original, candidate)))
+        self.assertFalse(destination.exists())
+
     def test_migration_copy_rejects_original_source_drift(self):
         versions.snapshot(self.application, *self.record())
         (self.application / "CMakeLists.txt").write_text("modified")
