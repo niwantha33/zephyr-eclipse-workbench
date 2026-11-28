@@ -48,6 +48,55 @@ def valid_cache(path, artifact):
     return path.is_file() and path.stat().st_size == artifact['size'] and digest(path) == artifact['sha256']
 
 
+def linked(path):
+    return path.is_symlink() or getattr(path, 'is_junction', lambda: False)()
+
+
+def inspect_cached_artifacts(cache, artifacts):
+    """Read-only preflight, never download, execute, repair or delete a file."""
+    if linked(cache):
+        raise ValueError('Cache directory must not be a link or junction')
+    seen = set()
+    rows = []
+    for artifact in artifacts:
+        name = artifact['file']
+        if (not name or name in ('.', '..') or any(c in name for c in '/\\:')
+                or Path(name).name != name or name.casefold() in seen):
+            raise ValueError('Invalid or duplicate cache filename')
+        seen.add(name.casefold())
+        target = cache / name
+        try:
+            if linked(target):
+                state = 'unsafe-link'
+            elif not target.exists():
+                state = 'interrupted' if target.with_name(name + '.partial').exists() else 'missing'
+            elif not target.is_file():
+                state = 'not-a-file'
+            elif target.stat().st_size != artifact['size']:
+                state = 'size-mismatch'
+            elif digest(target) != artifact['sha256']:
+                state = 'sha256-mismatch'
+            else:
+                state = 'verified'
+        except OSError:
+            state = 'unreadable'
+        rows.append({'file': name, 'status': state, 'expected_bytes': artifact['size'],
+                     'expected_sha256': artifact['sha256']})
+    return rows
+
+
+def cache_report(root, lock):
+    validate_lock(lock)
+    rows = inspect_cached_artifacts(root / 'cache', [*lock['packages'], *SDK_ASSETS])
+    complete = all(row['status'] == 'verified' for row in rows)
+    return {'status': 'verified' if complete else 'incomplete',
+            'profile': lock['profile'], 'zephyr_commit': lock['zephyr_commit'],
+            'artifacts': rows, 'scope': 'pinned starter Python and SDK archives only',
+            'source_present': (root / 'workspace/zephyr').is_dir(),
+            'bootstrap_present': (root / 'git/cmd/git.exe').is_file(),
+            'offline_build_qualified': False}
+
+
 def ci_sdk_asset_api_fetch(artifact, cache):
     """CI-only secondary route for the SAME Zephyr SDK 1.0.1 release bytes.
 
@@ -117,7 +166,7 @@ def ci_sdk_asset_api_fetch(artifact, cache):
         temporary.unlink(missing_ok=True)
 
 
-def fetch(artifact, cache):
+def fetch(artifact, cache, *, offline=False):
     """Reuse only complete verified artifacts; bound transient gateway retries."""
     url = urllib.parse.urlparse(artifact['url'])
     if url.scheme != 'https' or url.hostname not in ('files.pythonhosted.org', 'github.com') or url.username:
@@ -125,6 +174,11 @@ def fetch(artifact, cache):
     if Path(artifact['file']).name != artifact['file'] or not 0 < artifact['size'] <= 536870912:
         raise ValueError('Invalid package filename or size')
     target = cache / artifact['file']
+    if offline:
+        if inspect_cached_artifacts(cache, [artifact])[0]['status'] != 'verified':
+            raise ValueError('Offline cache missing or invalid: ' + target.name)
+        log('Using verified offline cache: ' + target.name)
+        return target
     if valid_cache(target, artifact):
         log('Using verified cache: ' + target.name)
         return target
@@ -292,10 +346,10 @@ def build_source_wheel(package, cache, environment):
     return result
 
 
-def install_packages(lock, root, environment):
+def install_packages(lock, root, environment, *, offline=False):
     cache = root / 'cache'; cache.mkdir(exist_ok=True)
     for package in lock['packages']:
-        fetch(package, cache)
+        fetch(package, cache, offline=offline)
     pip = next(p for p in lock['packages'] if p['name'] == 'pip')
     # Wheel 0.46+ imports packaging; install its locked runtime dependency before building docopt.
     bootstrap = [p for p in lock['packages'] if p['name'] in ('pip', 'setuptools', 'wheel', 'packaging')]
@@ -336,7 +390,7 @@ def safe_archive_names(entries):
             raise ValueError('SDK archive expansion exceeds limit')
 
 
-def install_sdk(root):
+def install_sdk(root, *, offline=False):
     import py7zr
     destination = root / 'sdk'
     complete = destination / '.zew-sdk-ready'
@@ -350,7 +404,7 @@ def install_sdk(root):
                          'existing SDK was preserved. Restore it or move it aside before retrying: ' + str(destination))
     if destination.exists():
         raise ValueError('Incomplete SDK destination; move it aside before retrying: ' + str(destination))
-    artifacts = [fetch(a, root / 'cache') for a in SDK_ASSETS]
+    artifacts = [fetch(a, root / 'cache', offline=offline) for a in SDK_ASSETS]
     with tempfile.TemporaryDirectory(prefix='sdk-stage-', dir=root) as temporary:
         stage = Path(temporary)
         for i, archive in enumerate(artifacts):
@@ -375,10 +429,12 @@ def install_sdk(root):
     return destination
 
 
-def ensure_source(root, git, lock, environment):
+def ensure_source(root, git, lock, environment, *, offline=False):
     workspace = root / 'workspace'; workspace.mkdir(exist_ok=True)
     source = workspace / 'zephyr'
     if not source.exists():
+        if offline:
+            raise ValueError('Offline setup requires the original local pinned Zephyr checkout')
         stage = Path(tempfile.mkdtemp(prefix='zephyr-clone-', dir=workspace)) / 'source'
         run([git, '-c', 'core.longpaths=true', '-c', 'http.sslBackend=schannel', 'clone', '--depth', '1', '--single-branch', '--branch', 'v4.4.0',
              'https://github.com/zephyrproject-rtos/zephyr.git', stage], root, environment)
@@ -519,13 +575,40 @@ def managed_environment(root, cmake, ninja, git, host, sdk=None):
     return environment
 
 
-def setup(root, lock, source_release=None):
+def offline_environment(environment):
+    # Pip's explicit --no-index is not enough if a host PIP_FIND_LINKS or
+    # config file names a remote location. Remove its inherited configuration.
+    result = {key: value for key, value in environment.items()
+              if not key.upper().startswith('PIP_')}
+    result.update(PIP_CONFIG_FILE=os.devnull, PIP_NO_INDEX='1',
+                  GIT_NO_LAZY_FETCH='1', GIT_OPTIONAL_LOCKS='0',
+                  GIT_TERMINAL_PROMPT='0', GIT_ALLOW_PROTOCOL='file')
+    return result
+
+
+def setup(root, lock, source_release=None, *, offline=False):
     validate_lock(lock)
     marker = source_profile_marker(source_release)
     if sys.platform != 'win32' or sys.maxsize <= 2**32:
         raise ValueError('This installer profile supports native Windows x64 only; use existing tools on other hosts')
     if not (root / '.zew-managed').is_file() or (root / '.zew-managed').read_text() != marker:
         raise ValueError('Setup root is not owned by the workbench')
+    if offline:
+        if source_release is not None:
+            raise ValueError('Offline setup supports only the pinned starter profile, not another release')
+        report = cache_report(root, lock)
+        if report['status'] != 'verified':
+            missing = [row['file'] + ' (' + row['status'] + ')' for row in report['artifacts']
+                       if row['status'] != 'verified']
+            raise ValueError('Offline preflight failed: ' + ', '.join(missing))
+        source = root / 'workspace/zephyr'
+        if not source.is_dir() or linked(source) or not source.resolve().is_relative_to(root.resolve()):
+            raise ValueError('Offline setup requires a local pinned Zephyr checkout inside the selected root')
+        if not report['bootstrap_present']:
+            raise ValueError('Offline setup requires the previously bootstrapped managed Git and Python')
+        if (root / '.zew-ready').exists():
+            raise ValueError('Existing ready setup preserved; offline setup is for a new or interrupted managed root')
+        log('OFFLINE CACHE PREFLIGHT VERIFIED — local source required; no installer download fallback')
     install_runtime_support(root)
     if shutil.disk_usage(root).free < 5 * 1024**3:
         raise ValueError('Setup requires at least 5 GiB free disk space')
@@ -533,8 +616,10 @@ def setup(root, lock, source_release=None):
     cmake = installed_executable(root, lock, 'cmake')
     ninja = installed_executable(root, lock, 'ninja')
     environment = managed_environment(root, cmake, ninja, git, os.environ)
+    if offline:
+        environment = offline_environment(environment)
     log('PHASE 1/5 — Installing pinned Python build packages')
-    install_packages(lock, root, environment)
+    install_packages(lock, root, environment, offline=offline)
     for executable in (cmake, ninja):
         if not executable.is_file():
             raise ValueError('Installed build executable is missing: ' + str(executable))
@@ -544,11 +629,13 @@ def setup(root, lock, source_release=None):
         log('SOURCE VERIFIED ONLY — SDK and firmware build qualification remain separate.')
         return
     log('PHASE 2/5 — Installing SDK and the x86 compiler only')
-    sdk = install_sdk(root)
+    sdk = install_sdk(root, offline=offline)
     environment = managed_environment(root, cmake, ninja, git, os.environ, sdk)
+    if offline:
+        environment = offline_environment(environment)
     environment.update(ZEPHYR_SDK_INSTALL_DIR=cmake_path(sdk), ZEPHYR_TOOLCHAIN_VARIANT='zephyr')
     log('PHASE 3/5 — Obtaining the pinned Zephyr source')
-    workspace, source = ensure_source(root, git, lock, environment)
+    workspace, source = ensure_source(root, git, lock, environment, offline=offline)
     environment['ZEPHYR_BASE'] = cmake_path(source)
     check_zephyr_scripts(source, workspace, environment)
     log('PHASE 4/5 — Creating Hello World without changing existing source')
@@ -570,9 +657,19 @@ if __name__ == '__main__':
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--lock', required=True, type=Path)
     parser.add_argument('--source-release', default=None)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--check-cache', action='store_true', help='Read-only pinned starter cache report as JSON')
+    mode.add_argument('--offline', action='store_true', help='Use only a verified cache and already-local pinned source')
     args = parser.parse_args()
     try:
-        setup(args.root.resolve(), json.loads(args.lock.read_text(encoding='utf-8')), args.source_release)
+        lock = json.loads(args.lock.read_text(encoding='utf-8'))
+        if args.check_cache:
+            if args.source_release is not None:
+                raise ValueError('Cache preflight applies only to the pinned starter profile')
+            report = cache_report(args.root.resolve(), lock)
+            print(json.dumps(report, sort_keys=True))
+            raise SystemExit(0 if report['status'] == 'verified' else 2)
+        setup(args.root.resolve(), lock, args.source_release, offline=args.offline)
     except Exception as error:
         log('FAILED — ' + str(error))
         log('Existing environments were preserved. Retry with the same folder to reuse verified downloads.')
