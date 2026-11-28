@@ -390,14 +390,24 @@ def safe_archive_names(entries):
             raise ValueError('SDK archive expansion exceeds limit')
 
 
-def install_sdk(root, *, offline=False):
+def install_sdk(root, *, offline=False, source_receipt=None):
     import py7zr
     destination = root / 'sdk'
     complete = destination / '.zew-sdk-ready'
+    if linked(destination) or linked(complete):
+        raise ValueError('Refusing linked SDK destination or marker')
     if complete.is_file():
         version = destination / 'sdk_version'
         compiler = destination / 'gnu/x86_64-zephyr-elf/bin/x86_64-zephyr-elf-gcc.exe'
         if (version.is_file() and version.read_text().strip() == '1.0.1' and compiler.is_file()):
+            if source_receipt is not None:
+                receipt = destination / '.zew-source-sdk.json'
+                if (not receipt.is_file() or linked(receipt)
+                        or receipt.stat().st_size > 16384
+                        or json.loads(receipt.read_text(encoding='utf-8')) != source_receipt
+                        or linked(version) or linked(compiler)
+                        or not compiler.resolve().is_relative_to(destination.resolve())):
+                    raise ValueError('Existing SDK has no matching source provisioning receipt; preserved')
             log('Reusing verified managed SDK')
             return destination
         raise ValueError('Managed SDK readiness marker has missing or incompatible contents; '
@@ -425,6 +435,10 @@ def install_sdk(root, *, offline=False):
         shutil.move(str(toolchain), sdk / 'gnu/x86_64-zephyr-elf')
         # Preserve upstream licences in their downloaded distribution locations.
         (sdk / '.zew-sdk-ready').write_text('SDK 1.0.1 / x86_64-zephyr-elf\n')
+        if source_receipt is not None:
+            with (sdk / '.zew-source-sdk.json').open('x', encoding='utf-8') as receipt:
+                json.dump(source_receipt, receipt, sort_keys=True, indent=2)
+                receipt.write('\n')
         sdk.rename(destination)
     return destination
 
@@ -546,6 +560,61 @@ def prepare_alternate_sources(root, git, source_release, environment):
          root, source_release, git], root, environment, 9900)
 
 
+def prepare_source_sdk(root, release):
+    """Provision only a reviewed SDK for an already reverified source-only root.
+
+    Called under the existing wizard installation lock after prepare_fresh.
+    This is not a firmware build or SDK compatibility certification.
+    """
+    root = root.resolve(strict=True)
+    marker = root / '.zew-managed'
+    if (release is None or linked(marker) or not marker.is_file()
+            or marker.read_text() != source_profile_marker(release)
+            or (root / '.zew-ready').exists() or (root / 'environment.properties').exists()
+            or linked(root / '.zew-ready') or linked(root / 'environment.properties')):
+        raise ValueError('SDK provisioning requires a separate source-only managed root')
+    workspace = root / 'workspace'
+    evidence = workspace / '.zew'
+    recommendation = workspace / 'zephyr/SDK_VERSION'
+    source_lock = evidence / 'source-lock.json'
+    ready = workspace / '.zew-source-ready'
+    for path in (workspace, evidence, workspace / 'zephyr', recommendation, source_lock, ready):
+        if linked(path) or not path.exists() or not path.resolve().is_relative_to(root):
+            raise ValueError('Missing or linked source evidence: ' + str(path))
+    if (not ready.is_file() or ready.read_text().strip() != 'SOURCE_VERIFIED_ONLY'
+            or not recommendation.is_file() or recommendation.stat().st_size > 64
+            or not source_lock.is_file() or source_lock.stat().st_size > 16 * 1024 * 1024):
+        raise ValueError('Source evidence is missing or invalid')
+    record = json.loads(source_lock.read_text(encoding='utf-8'))
+    version = recommendation.read_text(encoding='utf-8').strip()
+    if (record.get('schema') != 1 or record.get('kind') != 'zephyr-source-only'
+            or record.get('status') != 'SOURCE_VERIFIED_ONLY' or record.get('release') != release
+            or record.get('recommended_sdk_version') != version
+            or not re.fullmatch(r'[0-9a-f]{40}', str(record.get('zephyr_commit', '')))
+            or not re.fullmatch(r'[0-9a-f]{64}', str(record.get('west_manifest_sha256', '')))):
+        raise ValueError('Source release identity or SDK recommendation differs from its verified lock')
+    if version != '1.0.1':
+        raise ValueError('No reviewed Windows SDK provisioning profile for recommended SDK ' + version
+                         + '; source workspace preserved. Do not substitute another version.')
+    cache = root / 'cache'
+    if linked(cache) or not cache.is_dir():
+        raise ValueError('SDK cache must be a regular directory inside the selected root')
+    for artifact in SDK_ASSETS:
+        for name in (artifact['file'], artifact['file'] + '.partial'):
+            if linked(cache / name):
+                raise ValueError('Refusing linked SDK cache artifact: ' + name)
+    receipt = {'schema': 1, 'kind': 'source-sdk-provisioning',
+               'release': release, 'zephyr_commit': record['zephyr_commit'],
+               'west_manifest_sha256': record['west_manifest_sha256'],
+               'recommended_sdk_version': version, 'sdk_version': version,
+               'host': 'windows-x86_64', 'toolchain': 'x86_64-zephyr-elf',
+               'artifacts': [dict(artifact) for artifact in SDK_ASSETS],
+               'firmware_built': False, 'dependency_compatibility_qualified': False}
+    sdk = install_sdk(root, source_receipt=receipt)
+    log('SDK PROVISIONED — SDK 1.0.1 / x86_64-zephyr-elf; candidate remains not build-ready.')
+    return sdk
+
+
 def managed_environment(root, cmake, ninja, git, host, sdk=None):
     """Give the Windows child processes only reviewed tool search directories."""
     environment = dict(host)
@@ -586,8 +655,10 @@ def offline_environment(environment):
     return result
 
 
-def setup(root, lock, source_release=None, *, offline=False):
+def setup(root, lock, source_release=None, *, offline=False, source_sdk=False):
     validate_lock(lock)
+    if source_sdk and (source_release is None or offline):
+        raise ValueError('--source-sdk requires an alternate source release and explicit online setup')
     marker = source_profile_marker(source_release)
     if sys.platform != 'win32' or sys.maxsize <= 2**32:
         raise ValueError('This installer profile supports native Windows x64 only; use existing tools on other hosts')
@@ -631,7 +702,9 @@ def setup(root, lock, source_release=None, *, offline=False):
     if source_release is not None:
         log('Preparing exact stable source release ' + source_release + ' (no SDK or firmware build)')
         prepare_alternate_sources(root, git, source_release, environment)
-        log('SOURCE VERIFIED ONLY — SDK and firmware build qualification remain separate.')
+        if source_sdk:
+            prepare_source_sdk(root, source_release)
+        log('SOURCE VERIFIED ONLY — firmware build and dependency qualification remain separate.')
         return
     log('PHASE 2/5 — Installing SDK and the x86 compiler only')
     sdk = install_sdk(root, offline=offline)
@@ -662,6 +735,8 @@ if __name__ == '__main__':
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--lock', required=True, type=Path)
     parser.add_argument('--source-release', default=None)
+    parser.add_argument('--source-sdk', action='store_true',
+                        help='Explicitly provision the reviewed SDK matching the verified alternate source recommendation')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--check-cache', action='store_true', help='Read-only pinned starter cache report as JSON')
     mode.add_argument('--offline', action='store_true', help='Use only a verified cache and already-local pinned source')
@@ -669,12 +744,12 @@ if __name__ == '__main__':
     try:
         lock = json.loads(args.lock.read_text(encoding='utf-8'))
         if args.check_cache:
-            if args.source_release is not None:
+            if args.source_release is not None or args.source_sdk:
                 raise ValueError('Cache preflight applies only to the pinned starter profile')
             report = cache_report(args.root.resolve(), lock)
             print(json.dumps(report, sort_keys=True))
             raise SystemExit(0 if report['status'] == 'verified' else 2)
-        setup(args.root.resolve(), lock, args.source_release, offline=args.offline)
+        setup(args.root.resolve(), lock, args.source_release, offline=args.offline, source_sdk=args.source_sdk)
     except Exception as error:
         log('FAILED — ' + str(error))
         log('Existing environments were preserved. Retry with the same folder to reuse verified downloads.')

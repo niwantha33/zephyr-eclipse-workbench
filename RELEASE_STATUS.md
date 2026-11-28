@@ -950,3 +950,7 @@ Baseline d098bf4 passed main publication, its Windows firmware qualification, Co
 ## Source preparation isolation (issue #128, development)
 
 Managed source-only installation and comparison use the explicit bootstrap tool root and candidate-local West configuration. Foreign tools fail before staging; verification restricts Git to local transport. No SDK provisioning, ready marker or existing project binding changes. Exact-head CI and real cross-version qualification pending; G0 remains open.
+
+## Version-selected SDK preparation (issue #128, development)
+
+Optional fresh source-release wizard action checks the verified source SDK recommendation and provisions the existing pinned Windows SDK 1.0.1/x86 profile only when it matches. Source-bound receipt written before SDK publication; no build-ready marker or existing project binding changes. Unreviewed SDKs fail closed. Exact-head CI and actual cross-version firmware/physical qualification pending; G0 remains open.

@@ -31,6 +31,80 @@ class SetupTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 setup.source_profile_marker(bad)
 
+    def source_sdk_fixture(self, root, version="1.0.1"):
+        (root / '.zew-managed').write_text(setup.source_profile_marker('v4.5.0'))
+        (root / 'cache').mkdir()
+        workspace = root / 'workspace'
+        (workspace / 'zephyr').mkdir(parents=True)
+        (workspace / '.zew').mkdir()
+        (workspace / '.zew-source-ready').write_text('SOURCE_VERIFIED_ONLY\n')
+        (workspace / 'zephyr/SDK_VERSION').write_text(version)
+        record = {'schema': 1, 'kind': 'zephyr-source-only', 'status': 'SOURCE_VERIFIED_ONLY',
+                  'release': 'v4.5.0', 'recommended_sdk_version': version,
+                  'zephyr_commit': 'a' * 40, 'west_manifest_sha256': 'b' * 64}
+        lock = workspace / '.zew/source-lock.json'
+        lock.write_text(json.dumps(record))
+        return lock, record
+
+    def test_source_sdk_provisions_only_reviewed_recommendation_and_records_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            self.source_sdk_fixture(root)
+            with patch.object(setup, 'install_sdk', return_value=root / 'sdk') as install:
+                self.assertEqual(root / 'sdk', setup.prepare_source_sdk(root, 'v4.5.0'))
+            self.assertEqual(root, install.call_args.args[0])
+            receipt = install.call_args.kwargs['source_receipt']
+            self.assertEqual('v4.5.0', receipt['release'])
+            self.assertEqual('a' * 40, receipt['zephyr_commit'])
+            self.assertEqual(setup.SDK_ASSETS, receipt['artifacts'])
+            self.assertFalse(receipt['firmware_built'])
+            self.assertFalse((root / '.zew-ready').exists())
+            self.assertFalse((root / 'environment.properties').exists())
+
+    def test_source_sdk_refuses_unreviewed_version_before_download(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            self.source_sdk_fixture(root, '2.0.0')
+            with patch.object(setup, 'install_sdk') as install:
+                with self.assertRaisesRegex(ValueError, 'No reviewed Windows SDK'):
+                    setup.prepare_source_sdk(root, 'v4.5.0')
+                install.assert_not_called()
+            self.assertTrue((root / 'workspace/.zew-source-ready').exists())
+
+    def test_source_sdk_refuses_tampered_recommendation_and_ready_setup(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            lock, record = self.source_sdk_fixture(root)
+            record['recommended_sdk_version'] = '2.0.0'
+            lock.write_text(json.dumps(record))
+            with patch.object(setup, 'install_sdk') as install:
+                with self.assertRaisesRegex(ValueError, 'differs'):
+                    setup.prepare_source_sdk(root, 'v4.5.0')
+                (root / '.zew-ready').write_text('existing')
+                with self.assertRaisesRegex(ValueError, 'source-only'):
+                    setup.prepare_source_sdk(root, 'v4.5.0')
+                install.assert_not_called()
+            self.assertEqual('existing', (root / '.zew-ready').read_text())
+
+    def test_source_sdk_reuse_requires_matching_receipt(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            sdk = root / 'sdk'
+            compiler = sdk / 'gnu/x86_64-zephyr-elf/bin/x86_64-zephyr-elf-gcc.exe'
+            compiler.parent.mkdir(parents=True)
+            compiler.write_bytes(b'fixture')
+            (sdk / 'sdk_version').write_text('1.0.1')
+            (sdk / '.zew-sdk-ready').write_text('SDK 1.0.1 / x86_64-zephyr-elf\n')
+            receipt = {'release': 'v4.5.0'}
+            with patch.dict('sys.modules', {'py7zr': SimpleNamespace()}), patch.object(setup, 'fetch') as fetch:
+                with self.assertRaisesRegex(ValueError, 'matching source provisioning receipt'):
+                    setup.install_sdk(root, source_receipt=receipt)
+                (sdk / '.zew-source-sdk.json').write_text(json.dumps(receipt))
+                self.assertEqual(sdk, setup.install_sdk(root, source_receipt=receipt))
+                with self.assertRaisesRegex(ValueError, 'matching source provisioning receipt'):
+                    setup.install_sdk(root, source_receipt={'release': 'v4.6.0'})
+                fetch.assert_not_called()
+
     def test_windows_build_arguments_use_cmake_paths(self):
         command = setup.first_build_command(r'C:\Sandbox\Zephyr Setup Ω\python\python.exe',
                 r'C:\Sandbox\Zephyr Setup Ω\projects\hello_world',
