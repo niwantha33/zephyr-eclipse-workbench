@@ -183,6 +183,36 @@ def vendor_bus_pins(headers, paths, children, source, target):
                 yield signal, pad, value
 
 
+def reference_cells(prop_name, index, cells):
+    """Present only named specifier cells resolved by the selected edtlib.
+
+    io-channels is not necessarily an ADC. A channel or PWM period is never
+    a GPIO number, and does not establish an association with a mux pad.
+    """
+    kind = "phandle-array"
+    if prop_name == "gpios" or prop_name.endswith("-gpios"):
+        kind, names = "gpio", ("pin",)
+    elif prop_name == "io-channels" or prop_name.endswith("-io-channels"):
+        kind, names = "io-channel", ("input", "channel")
+    elif prop_name == "pwms" or prop_name.endswith("-pwms"):
+        kind, names = "pwm", ("channel", "period", "flags")
+    elif prop_name.startswith("clocks"):
+        kind, names = "clock", ()
+    elif prop_name.startswith("interrupt"):
+        kind, names = "interrupt", ()
+    elif prop_name.startswith("resets"):
+        kind, names = "reset", ()
+    else:
+        names = ()
+    detail = "[" + str(index) + "]"
+    if isinstance(cells, dict):
+        for name in names:
+            value = cells.get(name)
+            if type(value) is int and 0 <= value <= 0xffffffff:
+                detail += " " + name + "=" + str(value)
+    return kind, detail
+
+
 def board_matches(config, expected):
     """Compare the full requested board to Zephyr's pre-split cache identity."""
     if not expected or expected != expected.strip():
@@ -318,24 +348,8 @@ def observed(zephyr: Path, application: Path, build: Path, expected_board=None):
                         if spec is None or getattr(spec, "controller", None) is None:
                             continue
                         controller = spec.controller.path
-                        if prop_name == "gpios" or prop_name.endswith("-gpios"):
-                            kind = "gpio"
-                        elif prop_name.startswith("clocks"):
-                            kind = "clock"
-                        elif prop_name.startswith("interrupt"):
-                            kind = "interrupt"
-                        elif prop_name.startswith("resets"):
-                            kind = "reset"
-                        else:
-                            kind = "phandle-array"
-                        cells = getattr(spec, "data", None)
-                        # Cell names come from edtlib's selected controller binding;
-                        # never interpret undocumented vendor raw pinmux encodings.
-                        named = ""
-                        if isinstance(cells, dict) and isinstance(cells.get("pin"), int):
-                            named = "pin=" + str(cells["pin"])
-                        link(node.path, controller, kind, prop_name,
-                             "[" + str(index) + "]" + (" " + named if named else ""))
+                        kind, detail = reference_cells(prop_name, index, getattr(spec, "data", None))
+                        link(node.path, controller, kind, prop_name, detail)
                 for state_record in getattr(node, "pinctrls", []):
                     for config in getattr(state_record, "conf_nodes", []):
                         state_name = str(state_record.name)[:80]

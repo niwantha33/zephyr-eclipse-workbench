@@ -105,6 +105,43 @@ class DtsObserverTests(unittest.TestCase):
         self.assertFalse(any(edge[1] == "/soc/absent" for edge in edges))
         self.assertFalse(any(edge[3] == "numbers" for edge in edges))
 
+    def test_named_io_and_pwm_specifiers_preserve_controller_not_pad(self):
+        for prop, cells, expected in (
+                ("io-channels", {"input": 7}, ("io-channel", "[2] input=7")),
+                ("sensor-io-channels", {"channel": 3, "pin": 22}, ("io-channel", "[2] channel=3")),
+                ("pwms", {"channel": 2, "period": 20000, "flags": 1}, ("pwm", "[2] channel=2 period=20000 flags=1")),
+                ("fan-pwms", {"channel": 0, "period": 0xffffffff}, ("pwm", "[2] channel=0 period=4294967295")),
+                ("pwms", {"channel": True, "period": -1, "flags": 1 << 32}, ("pwm", "[2]")),
+                ("io-channels", {"pin": 5}, ("io-channel", "[2]")),
+                ("numbers", {"channel": 8, "pin": 3}, ("phandle-array", "[2]")),
+                ("gpios", {"pin": 22}, ("gpio", "[2] pin=22"))):
+            with self.subTest(prop=prop, cells=cells):
+                self.assertEqual(expected, graph.reference_cells(prop, 2, cells))
+
+    def test_observed_io_and_pwm_edges_use_binding_resolved_target(self):
+        class ChannelEdt:
+            def __init__(self, source, bindings):
+                target = types.SimpleNamespace(path="/soc/gpio@4000")
+                unknown = types.SimpleNamespace(path="/soc/absent")
+                def prop(*specs):
+                    return types.SimpleNamespace(type="phandle-array", val=list(specs))
+                self.nodes = [types.SimpleNamespace(path="/leds/my_red_led", pinctrls=[], props={
+                    "io-channels": prop(types.SimpleNamespace(controller=target, data={"input": 7}),
+                                        types.SimpleNamespace(controller=unknown, data={"input": 9})),
+                    "pwms": prop(None, types.SimpleNamespace(controller=target,
+                                                            data={"channel": 2, "period": 1000, "flags": 0}))})]
+        fake = types.ModuleType("devicetree")
+        fake.dtlib = types.SimpleNamespace(DT=FakeDt)
+        fake.edtlib = types.SimpleNamespace(EDT=ChannelEdt)
+        with mock.patch.dict(sys.modules, {"devicetree": fake}, clear=False):
+            state, _, _, _, edges = graph.observed(self.zephyr, self.application, self.build)
+        self.assertEqual("built", state)
+        self.assertEqual([
+            ("/leds/my_red_led", "/soc/gpio@4000", "io-channel", "io-channels", "[0] input=7"),
+            ("/leds/my_red_led", "/soc/gpio@4000", "pwm", "pwms", "[1] channel=2 period=1000 flags=0")
+        ], edges)
+        self.assertFalse(any(edge[2] in ("gpio", "pinmux") for edge in edges))
+
     def test_missing_binding_evidence_keeps_only_real_hierarchy(self):
         with self.library(edt=False):
             state, digest, reason, nodes, edges = graph.observed(

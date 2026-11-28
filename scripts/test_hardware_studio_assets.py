@@ -114,6 +114,19 @@ assert.equal(gpioPin({...e,detail:"[0] pin=31"},{compatible:"ti,mspm0-gpio",labe
 assert.equal(labelPin({kind:"pinctrl"},{labels:"uart0_tx_pa10"}),"PA10");
 assert.equal(labelPin({kind:"pinctrl"},{labels:"uart0_tx_pa10,uart0_tx_pa11"}),null);
 assert.deepEqual(collect({board:"other",observed:true,state:"built",nodes:[],edges:[]}),[]);
+const channelData={board:"lp_mspm0g3507",observed:true,state:"built",nodes:[
+ {path:"/consumer",name:"consumer",labels:"",compatible:""},
+ {path:"/adc",name:"adc",labels:"adc0",compatible:"vendor,adc"},
+ {path:"/pwm",name:"pwm",labels:"pwm0",compatible:"vendor,pwm"}],edges:[
+ {source:"/consumer",target:"/adc",kind:"io-channel",property:"io-channels",detail:"[0] input=7"},
+ {source:"/consumer",target:"/pwm",kind:"pwm",property:"pwms",detail:"[0] channel=2 period=1000 flags=0"},
+ {source:"/consumer",target:"/missing",kind:"pwm",property:"pwms",detail:"[1] channel=4"}]};
+for(const board of ["lp_mspm0g3507","nucleo_f446re","esp32s3_devkitc","nrf52840dk"]){
+ const rows=collect({...channelData,board});
+ assert.equal(rows.length,2);
+ assert.ok(rows.every(row=>row.kind==="channel"&&row.pin===""));
+}
+assert.deepEqual(collect({...channelData,state:"hierarchy-only"}),[]);
 """
             path.write_text(prefix + assertions, encoding="utf-8")
             subprocess.run([node, str(path)], check=True, timeout=45)
