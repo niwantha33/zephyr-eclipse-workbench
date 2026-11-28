@@ -11,6 +11,10 @@ Explicit managed Windows build and selected OpenOCD/Espressif runner paths now r
 
 # Evidence Engine release status — 2026-10-30
 
+## Project lock probe isolation (issue #128, development)
+
+Managed Windows snapshot, verify/attach and upgrade comparison now pass explicit setup identities to the version helper. Each selected setup builds its own probe PATH and West/Git environment, refuses tools outside its root, and preserves the original lock and external-tool workflows. Exact-head CI and real side-by-side installation/rollback qualification pending; G0 remains open.
+
 ### Pinned starter offline cache preflight (development)
 
 `setup.py --root ROOT --lock setup-lock.json --check-cache` reports verified, missing, interrupted, size/hash-mismatched and unsafe cache entries without downloads or file changes. `--offline` is a narrowly scoped installer mode for an already-bootstrapped managed Windows starter root with local pinned Zephyr source and all Python/SDK archives verified; acquisition fails closed, no alternate-release installation, no network fallback for package fetch or source clone. Not a clean-machine offline installer, not an offline guarantee for arbitrary build scripts, and not vendor package or source-module closure. Use only under the existing setup ownership/install-lock workflow; air-gapped native qualification and UI integration remain pending. G0 open.

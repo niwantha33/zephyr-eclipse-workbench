@@ -80,6 +80,9 @@ public final class ProjectVersionHandler extends AbstractHandler {
                 "--cmake", settings.getProperty("tools.cmake"),
                 "--ninja", settings.getProperty("tools.ninja"),
                 "--board", settings.getProperty("board")));
+        if (ProjectContext.isManagedWindows(settings)) {
+            command.addAll(List.of("--managed-root", settings.getProperty("zew.setupRoot")));
+        }
         if (action.equals("plan")) {
             if (candidateRoot == null)
                 throw new IllegalArgumentException("Select a separate, ready candidate setup.");
@@ -87,6 +90,10 @@ public final class ProjectVersionHandler extends AbstractHandler {
             // checkout or a guessed new-version SDK.
             Properties candidate = ProjectContext.load(candidateRoot);
             requireSeparateWorkspace(workspace, Path.of(candidate.getProperty("workspace")));
+            candidate.setProperty("zew.setupRoot", candidateRoot.toRealPath().toString());
+            if (ProjectContext.isManagedWindows(candidate)) {
+                command.addAll(List.of("--candidate-managed-root", candidate.getProperty("zew.setupRoot")));
+            }
             command.addAll(List.of("--candidate-workspace", candidate.getProperty("workspace"),
                     "--candidate-sdk", candidate.getProperty("tools.sdk"),
                     "--candidate-python", candidate.getProperty("python"),
@@ -95,7 +102,7 @@ public final class ProjectVersionHandler extends AbstractHandler {
                     "--candidate-ninja", candidate.getProperty("tools.ninja")));
         }
         var result = new ProcessRunner().run(command, workspace, Duration.ofMinutes(5),
-                monitor::isCanceled, log, ProjectContext.environment(settings));
+                monitor::isCanceled, log, ProjectContext.buildEnvironment(settings));
         friendlyResult(result, action);
         if (attach) {
             if (monitor.isCanceled()) throw new InterruptedIOException("Recovery cancelled");
