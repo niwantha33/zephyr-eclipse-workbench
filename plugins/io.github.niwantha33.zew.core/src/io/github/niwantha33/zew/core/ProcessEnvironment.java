@@ -27,6 +27,9 @@ public final class ProcessEnvironment extends LinkedHashMap<String, String> {
             "CMAKE_GENERATOR_INSTANCE", "CMAKE_MAKE_PROGRAM", "CMAKE_PROJECT_INCLUDE",
             "CMAKE_PROJECT_INCLUDE_BEFORE", "CMAKE_PROJECT_TOP_LEVEL_INCLUDES",
             "CC", "CXX", "AS", "AR", "LD", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS",
+            // OpenOCD receives the verified provider scripts via --openocd-search.
+            // Do not allow an inherited installation to add another search root.
+            "OPENOCD_SCRIPTS",
             "WEST_CONFIG_LOCAL", "WEST_CONFIG_GLOBAL", "WEST_CONFIG_SYSTEM",
             "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
             "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",

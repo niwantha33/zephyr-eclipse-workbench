@@ -11,6 +11,10 @@ Explicit managed Windows build and selected OpenOCD/Espressif runner paths now r
 
 # Evidence Engine release status — 2026-10-30
 
+## Managed OpenOCD script environment isolation (issue #128, development)
+
+Managed Windows child processes using the existing isolated policy discard inherited `OPENOCD_SCRIPTS` (case-insensitive); OpenOCD plans retain the existing verified executable and explicit matching `--openocd-search` directory for TI, Espressif and general providers. Existing-tool environments are unchanged. Headless tests cover a competing script root, external-tool compatibility and host-map non-mutation. Exact-head CI and physical flash/debug/trace qualification remain pending. This does not isolate OpenOCD's entire script search chain, change provider discovery, or complete J-Link/pyOCD isolation. G0 remains open.
+
 ## Managed GDB client process isolation (issue #128, development)
 
 Native CDT GDB launch and version probe in managed Windows setups use an explicit SDK/system search path and allowlisted OS context rather than the CDT/host tool environment. The executable and SDK must resolve inside the selected setup; a binding change before server start aborts the launch. External-tool launches and runner selection remain unchanged. Headless negative tests added; exact-head CI and physical GDB sessions across vendors remain pending. G0 stays open.

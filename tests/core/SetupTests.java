@@ -83,6 +83,25 @@ public final class SetupTests {
         check(host.size() == 10 && "unselected".equals(host.get("Path")), "host map never changes");
     }
 
+    private static void checkManagedOpenOcdScripts() {
+        var host = new java.util.LinkedHashMap<>(Map.of(
+                "OpenOcd_Scripts", "foreign-scripts", "TEMP", "system-temp", "Path", "global-tools"));
+        var managed = new io.github.niwantha33.zew.core.ProcessEnvironment(true);
+        managed.put("PATH", "selected-tools");
+        var child = new java.util.LinkedHashMap<>(host);
+        io.github.niwantha33.zew.core.ProcessEnvironment.apply(child, managed);
+        check(child.keySet().stream().noneMatch(k -> k.equalsIgnoreCase("OPENOCD_SCRIPTS"))
+                && "selected-tools".equals(child.get("Path"))
+                && "system-temp".equals(child.get("TEMP")),
+                "managed runner cannot inherit a foreign OpenOCD script search directory");
+        var external = new java.util.LinkedHashMap<>(host);
+        io.github.niwantha33.zew.core.ProcessEnvironment.apply(external,
+                new io.github.niwantha33.zew.core.ProcessEnvironment(false));
+        check(external.equals(host), "external runner keeps its configured OpenOCD script directory");
+        check("foreign-scripts".equals(host.get("OpenOcd_Scripts")),
+                "managed runner does not modify host OpenOCD settings");
+    }
+
     private static void checkManagedGdbEnvironment(Path root) throws Exception {
         Path setup = Files.createDirectory(root.resolve("managed debug"));
         Files.writeString(setup.resolve(".zew-managed"), "fixture");
@@ -147,6 +166,7 @@ public final class SetupTests {
         try {
             checkProjectToolPath(root);
             checkManagedProcessEnvironment();
+            checkManagedOpenOcdScripts();
             checkManagedGdbEnvironment(root);
             checkManagedCache(root);
             var data = root.resolve("file"); Files.writeString(data, "good");
