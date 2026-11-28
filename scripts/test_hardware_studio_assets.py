@@ -88,7 +88,7 @@ def main():
     assert "innerHTML" not in package
     parser = Inspect()
     parser.feed(package)
-    assert {"package", "top", "bottom", "left", "right", "nodes", "details"} <= parser.ids
+    assert {"package", "top", "bottom", "left", "right", "nodes", "details", "routeState", "routeRows", "routeSummary"} <= parser.ids
     if node:
         with tempfile.TemporaryDirectory(prefix="zew-package-js-") as folder:
             path = Path(folder) / "package.js"
@@ -127,6 +127,27 @@ for(const board of ["lp_mspm0g3507","nucleo_f446re","esp32s3_devkitc","nrf52840d
  assert.ok(rows.every(row=>row.kind==="channel"&&row.pin===""));
 }
 assert.deepEqual(collect({...channelData,state:"hierarchy-only"}),[]);
+const routeNode=(path,status="okay")=>({path,status,name:path.split("/").pop(),labels:"",compatible:""});
+const routeData={board:"other",observed:true,state:"built",freshness:"current",stale:false,nodes:[
+ routeNode("/"),routeNode("/soc"),routeNode("/soc/uart"),routeNode("/soc/i2c"),
+ routeNode("/soc/spi","disabled"),routeNode("/soc/can"),routeNode("/off","disabled"),
+ routeNode("/off/uart"),routeNode("/pinctrl"),routeNode("/pinctrl/group")],edges:[
+ {source:"/soc/uart",target:"/pinctrl/group",kind:"pinmux",property:"TX",detail:"default PA2 0x47"},
+ {source:"/soc/uart",target:"/pinctrl/group",kind:"pinmux",property:"TX",detail:"sleep PA2 0x47"},
+ {source:"/soc/i2c",target:"/pinctrl/group",kind:"pinmux",property:"SCL",detail:"default P0.06 0x6"},
+ {source:"/soc/spi",target:"/pinctrl/group",kind:"pinmux",property:"SCK",detail:"default GPIO43 0x2b"},
+ {source:"/soc/can",target:"/pinctrl/group",kind:"pinctrl",property:"pinctrl",detail:"custom"},
+ {source:"/off/uart",target:"/pinctrl/group",kind:"pinmux",property:"RX",detail:"default PA3 0x67"}]};
+const routes=collect(routeData);
+assert.deepEqual(routes.map(r=>r.routeState),["default","alternate","default","disabled","unknown","disabled"]);
+assert.equal(visibleRoutes(routes,"pa2","uart","default").length,1);
+assert.equal(visibleRoutes(routes,"","spi","disabled").length,1);
+assert.equal(visibleRoutes(routes,"","can","unknown").length,1);
+assert.equal(visibleRoutes(routes,"sleep","uart","alternate").length,1);
+assert.ok(collect({...routeData,stale:true}).every(r=>r.routeState==="historical"));
+assert.ok(collect({...routeData,freshness:"unverified"}).every(r=>r.routeState==="historical"));
+assert.equal(collect({...routeData,nodes:routeData.nodes.filter(n=>n.path!=="/soc")})[0].routeState,"unknown");
+assert.equal(muxRecord({kind:"pinmux",detail:"default PA2 broken"}),null);
 """
             path.write_text(prefix + assertions, encoding="utf-8")
             subprocess.run([node, str(path)], check=True, timeout=45)
