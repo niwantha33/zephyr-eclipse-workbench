@@ -915,3 +915,8 @@ EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.
 
 - Explicit headless `project_versions.py migration-copy --confirm-copy --destination NEW_PATH` uses the same required current/candidate arguments as the upgrade preview, and additionally requires all four candidate executable paths. The original project and environment must match the existing lock. Copies only fingerprinted application files to a new, non-overlapping directory and writes a candidate project lock and frozen manifest. It never copies build outputs or Git history, changes project binding, launches a trial build, or promotes a candidate.
 - Rejects workspace-escaping module aliases and linked project metadata when snapshotting. Offline mocked regression fixtures cover original preservation, source drift, explicit consent, collision and path rejection. External application inputs, executable/SDK provenance closure, candidate subprocess isolation, native UI integration, actual cross-version builds and promotion/rollback remain open. Exact-head CI and installed UI/hardware evidence pending; G0 stays open.
+
+
+## CI qualification hardening — development PR, 2026-11-27
+
+Baseline d098bf4 passed main publication, its Windows firmware qualification, CodeQL and Pages. Proposed changes add exact-input Maven caching, full qualification on main pushes, upstream CodeQL metric checks, direct workflow reference pin audit and exact-SHA Actions summaries. See [CI qualification](docs/CI_QUALIFICATION.md). Exact PR head and post-merge checks, owner branch protection, complete dependency review, performance measurements and physical hardware remain unverified. G0 remains open.

@@ -5,6 +5,8 @@ on:
   # Run on every PR, including documentation-only changes: a required check
   # must not remain pending or be bypassed by workflow path filters.
   pull_request:
+  push:
+    branches: [main]
 permissions:
   contents: read
 concurrency:
@@ -75,6 +77,15 @@ jobs:
           test -d "$JAVA_HOME_21_X64"
           echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
           echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+      - name: Cache Maven repository for the exact dependency inputs
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.m2/repository
+          key: zew-maven-v1-${{ runner.os }}-${{ runner.arch }}-jdk21-${{ hashFiles('**/pom.xml', 'releng/**/*.target', '.mvn/**') }}
+      - name: Audit CI dependency references and test evidence tooling
+        run: |
+          python3 scripts/ci_evidence.py audit
+          python3 -m unittest discover -s tests/ci -p 'test_*.py'
       - name: Install pinned test metadata dependencies
         run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3 west==1.5.0 kconfiglib==14.1.0 jsonschema==4.25.1
       - name: Exercise process and command core
@@ -229,6 +240,20 @@ jobs:
           PYTEST_RESULT: ${{ needs.evidence-pytest.result }}
           PY39_RESULT: ${{ needs.evidence-pytest39.result }}
         run: |
+          {
+            echo '## Exact-commit qualification'
+            echo "Commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo '| Check | Result |'
+            echo '| --- | --- |'
+            echo "| Package and installed Eclipse | $PACKAGE_RESULT |"
+            echo "| Windows cross-vendor firmware builds | $WINDOWS_RESULT |"
+            echo "| Python 3.11/3.13 | $PYTEST_RESULT |"
+            echo "| Python 3.9 | $PY39_RESULT |"
+            echo '| CodeQL | Separate required workflow |'
+            echo '| Physical flash/debug | Not tested by this workflow |'
+            echo '| Release publication | Separate workflow; not established by this gate |'
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "$PACKAGE_RESULT" != "success" ] || [ "$WINDOWS_RESULT" != "success" ] || [ "$PYTEST_RESULT" != "success" ] || [ "$PY39_RESULT" != "success" ]; then
             echo "Not qualified: Linux=$PACKAGE_RESULT, Windows=$WINDOWS_RESULT, Python matrix=$PYTEST_RESULT, Python 3.9=$PY39_RESULT" >&2
             exit 1
