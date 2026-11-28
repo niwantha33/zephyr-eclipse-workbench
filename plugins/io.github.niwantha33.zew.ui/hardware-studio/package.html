@@ -130,7 +130,7 @@ $("category").onchange=renderNodes;
 $("context").textContent=[DATA.project,DATA.board,DATA.profile].filter(Boolean).join(" · ")||"Select a Zephyr project";
 const known=supportsBoard(DATA.board);
 $("package").hidden=!known;
-const evidenceStatus=!DATA.observed?"Build evidence unavailable.":DATA.stale?"Stale build · references are historical.":DATA.state!=="built"?"Binding-aware references unavailable.":"Select a peripheral to view its generated DTS connections.";
+const evidenceStatus=!DATA.observed?"Build evidence unavailable.":DATA.stale?(DATA.freshness==="changed"?"Build changed · references are historical. ":"Freshness unverified · references are historical. ")+(DATA.freshnessDetail||""):DATA.state!=="built"?"Binding-aware references unavailable.":"Tracked input hashes match. Select a peripheral to inspect generated DTS connections.";
 $("notice").textContent=(known?"Reference package: TI SLASEX6C Fig. 6-2 / SLAU873E §1.4. ":"Package numbering is unavailable for this board. ")+evidenceStatus;
 if(known){addPins("top",sequence(64,16,-1));addPins("left",sequence(1,16));addPins("right",sequence(48,16,-1));addPins("bottom",sequence(17,16));}
 renderPins();renderNodes();renderDetails();

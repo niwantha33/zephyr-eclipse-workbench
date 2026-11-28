@@ -2,6 +2,7 @@
 package io.github.niwantha33.zew.ui;
 
 import java.util.List;
+import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
 
 /**
  * Pure-JDK, one-way, bounded JSON model for the locally bundled Hardware Studio
@@ -12,6 +13,28 @@ public final class HardwareStudioDocument {
     private static final String TOKEN = "__HARDWARE_STUDIO_DATA__";
 
     private HardwareStudioDocument() {}
+
+    /** Freshness is deliberately separate from the parser's observed/built state. */
+    public record Freshness(String state, String detail) {
+        public boolean current() { return "current".equals(state); }
+    }
+
+    public static Freshness freshness(DtsGraphModel.Snapshot snapshot,
+                                      ConfigurationEvidenceReceipt.Result receipt) {
+        if (snapshot == null || !snapshot.observed())
+            return new Freshness("no-build", "No observed generated Devicetree.");
+        if (receipt == null)
+            return new Freshness("unverified", "No verified build-input receipt.");
+        if (receipt.state() == ConfigurationEvidenceReceipt.State.CURRENT) {
+            if (snapshot.sha256().isBlank() || !snapshot.sha256().equals(receipt.devicetreeSha256()))
+                return new Freshness("changed", "Observed DTS differs from the build receipt. Refresh after rebuilding.");
+            return new Freshness("current", "Recorded output and tracked input hashes match. Runtime and untracked inputs are not established.");
+        }
+        if (receipt.state() == ConfigurationEvidenceReceipt.State.CHANGED
+                || receipt.state() == ConfigurationEvidenceReceipt.State.NO_BUILD)
+            return new Freshness("changed", receipt.detail());
+        return new Freshness("unverified", receipt.detail());
+    }
 
     public static String render(String template, DtsGraphModel.Snapshot observation,
                                 String project, String build, String focus, boolean stale) {
@@ -34,6 +57,16 @@ public final class HardwareStudioDocument {
     public static String render(String template, DtsGraphModel.Snapshot observation,
                                 String project, String build, String focus, boolean stale,
                                 String selectedTheme, String board, String profile, boolean physical) {
+        return render(template, observation, project, build, focus, stale, selectedTheme,
+                board, profile, physical, new Freshness(stale ? "unverified" : "legacy",
+                        "Build-input receipt was not supplied."));
+    }
+
+    public static String render(String template, DtsGraphModel.Snapshot observation,
+                                String project, String build, String focus, boolean stale,
+                                String selectedTheme, String board, String profile, boolean physical,
+                                Freshness freshness) {
+        if (freshness == null) throw new IllegalArgumentException("Missing Hardware Studio freshness");
         if (template == null || template.length() > 180_000
                 || template.indexOf(TOKEN) < 0
                 || template.indexOf(TOKEN) != template.lastIndexOf(TOKEN))
@@ -53,6 +86,8 @@ public final class HardwareStudioDocument {
         json.append(",\"sha256\":"); quote(json, snapshot.sha256());
         json.append(",\"observed\":").append(snapshot.observed());
         json.append(",\"stale\":").append(stale);
+        json.append(",\"freshness\":"); quote(json, freshness.state());
+        json.append(",\"freshnessDetail\":"); quote(json, freshness.detail());
         json.append(",\"focus\":"); quote(json, layout.focus());
         json.append(",\"message\":"); quote(json, layout.message());
         json.append(",\"limited\":").append(layout.limited());

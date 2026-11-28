@@ -134,6 +134,7 @@ function showInspector() {
   fields.forEach(pair=>{const f=element('div','field');f.append(element('span','field-name',pair[0]),element('span','field-value',pair[1]));root.append(f);});
   const edges=DATA.edges.filter(edge=>edge.source===selected && edge.kind!=='hierarchy');
   const evidence=element('div','field');evidence.append(element('span','field-name','Generated DTS SHA-256'),element('span','field-value',DATA.sha256||'Not verified'));root.append(evidence);
+  const freshness=element('div','field');freshness.append(element('span','field-name','Build freshness'),element('span','field-value',DATA.freshnessDetail||'Not verified'));root.append(freshness);
   if(!edges.length)refs.append(element('div','hint','No resolved outgoing links in this focused view. This does not prove none exist.'));
   edges.forEach(edge=>refs.append(element('div','ref',edge.kind+' · '+edge.property+' → '+edge.target+(edge.detail?' · '+edge.detail:''))));
 }
@@ -351,7 +352,8 @@ function init(){
     $('projectTitle').textContent='CI FIXTURE — DISPLAY TEST ONLY';
     $('buildTitle').textContent='No real board, profile, firmware or connected target';
   }
-  pill.textContent=fixture?'CI FIXTURE — NO HARDWARE':!DATA.observed?'NO BUILD':DATA.stale?'BUILD MAY BE STALE':DATA.state==='hierarchy-only'?'HIERARCHY ONLY':'BUILT EVIDENCE';
+  pill.textContent=fixture?'CI FIXTURE — NO HARDWARE':!DATA.observed?'NO BUILD':DATA.freshness==='changed'?'BUILD CHANGED':DATA.stale?'FRESHNESS UNVERIFIED':DATA.state==='hierarchy-only'?'HIERARCHY ONLY':'TRACKED INPUTS MATCH';
+  pill.title=DATA.freshnessDetail||'Freshness not established';
   pill.className='pill '+(fixture||DATA.stale?'warn':DATA.observed?'good':'');
   document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
     filter=button.dataset.filter;

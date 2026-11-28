@@ -3,6 +3,8 @@ import io.github.niwantha33.zew.ui.DtsGraphModel;
 import io.github.niwantha33.zew.ui.HardwareStudioDocument;
 import java.nio.file.Path;
 import java.util.List;
+import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt;
+import io.github.niwantha33.zew.core.ConfigurationEvidenceReceipt.State;
 
 /** Pure Java browser handoff contract: no SWT, browser, probe or network. */
 public final class HardwareStudioDocumentTests {
@@ -58,6 +60,24 @@ public final class HardwareStudioDocumentTests {
         check(unavailable.contains(q+"observed"+q+":false")
                 && unavailable.contains(q+"nodes"+q+": []".replace(" ",""))
                 && unavailable.contains("Build first"), "empty evidence is not fabricated");
+        var current = new ConfigurationEvidenceReceipt.Result(State.CURRENT, "matched", 4,
+                "b".repeat(64), result.sha256());
+        var mismatched = new ConfigurationEvidenceReceipt.Result(State.CURRENT, "matched", 4,
+                "b".repeat(64), "c".repeat(64));
+        check(HardwareStudioDocument.freshness(result, current).current(), "current receipt matches observed DTS");
+        check(HardwareStudioDocument.freshness(result, mismatched).state().equals("changed"),
+                "different observed SHA cannot be current");
+        check(HardwareStudioDocument.freshness(result, null).state().equals("unverified"),
+                "missing receipt cannot certify freshness");
+        for (State state : List.of(State.CHANGED, State.UNVERIFIED, State.NO_BUILD)) {
+            var receipt = new ConfigurationEvidenceReceipt.Result(state, malicious, 0, "", "");
+            var freshness = HardwareStudioDocument.freshness(result, receipt);
+            check(!freshness.current(), "non-current receipt cannot certify freshness");
+            var historical = HardwareStudioDocument.render(template, result, "project", "build", "/soc",
+                    true, "dark", "board", "debug", true, freshness);
+            check(historical.contains(q+"stale"+q+":true") && historical.contains(q+"freshness"+q)
+                    && !historical.contains(malicious), "historical state and escaped receipt detail");
+        }
         rejects(() -> HardwareStudioDocument.render("<html>missing</html>",
                 result, "", "", "", false));
         rejects(() -> HardwareStudioDocument.render(
