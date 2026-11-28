@@ -25,7 +25,9 @@ class ProjectVersionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # Windows TEMP may use an 8.3 alias (RUNNER~1). Production probes
+        # deliberately canonicalize paths; construct the fixture the same way.
+        self.root = Path(self.temp.name).resolve(strict=True)
         self.workspace = self.root / "ws"
         (self.workspace / ".west").mkdir(parents=True)
         (self.workspace / ".west" / "config").write_text("[manifest]\npath = zephyr\n")
@@ -100,15 +102,15 @@ class ProjectVersionTests(unittest.TestCase):
         env = versions.managed_environment(self.root, self.workspace, self.tools["python"],
                                            self.tools["git"], self.sdk, self.tools["cmake"],
                                            self.tools["ninja"], host)
-        self.assertEqual(str(self.tools["git"].parent), env["PATH"].split(os.pathsep)[0])
+        self.assertEqual(str(self.tools["git"].parent.resolve()), env["PATH"].split(os.pathsep)[0])
         self.assertNotIn("other-setup", env["PATH"])
         self.assertNotIn("Path", env)
         self.assertNotIn("PYTHONPATH", env)
         self.assertNotIn("Git_Config_Count", env)
         self.assertNotIn("GIT_CONFIG_KEY_0", env)
         self.assertNotIn("CMAKE_PREFIX_PATH", env)
-        self.assertEqual(str(self.workspace / ".west/config"), env["WEST_CONFIG_LOCAL"])
-        self.assertEqual(str(self.sdk), env["ZEPHYR_SDK_INSTALL_DIR"])
+        self.assertEqual(str(self.workspace.resolve() / ".west/config"), env["WEST_CONFIG_LOCAL"])
+        self.assertEqual(str(self.sdk.resolve()), env["ZEPHYR_SDK_INSTALL_DIR"])
         self.assertEqual("file", env["GIT_ALLOW_PROTOCOL"])
         self.assertEqual("host-temp", env["TEMP"])
         self.assertEqual("other-setup", host["Path"])
@@ -158,10 +160,11 @@ class ProjectVersionTests(unittest.TestCase):
             env = versions.managed_environment(root, workspace, tools["python"],
                                                tools["git"], sdk, tools["cmake"], tools["ninja"])
             other = roots[1] if root == roots[0] else roots[0]
-            self.assertEqual(str(tools["git"].parent), env["PATH"].split(os.pathsep)[0])
-            self.assertNotIn(str(other), env["PATH"])
-            self.assertEqual(str(workspace / ".west/config"), env["WEST_CONFIG_LOCAL"])
-            self.assertEqual(str(sdk), env["ZEPHYR_SDK_INSTALL_DIR"])
+            self.assertEqual(str(tools["git"].parent.resolve()), env["PATH"].split(os.pathsep)[0])
+            self.assertFalse(any(Path(entry).resolve().is_relative_to(other.resolve())
+                                 for entry in env["PATH"].split(os.pathsep)))
+            self.assertEqual(str(workspace.resolve() / ".west/config"), env["WEST_CONFIG_LOCAL"])
+            self.assertEqual(str(sdk.resolve()), env["ZEPHYR_SDK_INSTALL_DIR"])
 
     def test_managed_record_passes_selected_environment_to_every_probe(self):
         (self.root / ".zew-managed").write_text("fixture")
@@ -172,8 +175,8 @@ class ProjectVersionTests(unittest.TestCase):
         self.assertGreater(len(calls), 5)
         for call in calls:
             env = call.kwargs["env"]
-            self.assertEqual(str(self.workspace / ".west/config"), env["WEST_CONFIG_LOCAL"])
-            self.assertEqual(str(self.sdk), env["ZEPHYR_SDK_INSTALL_DIR"])
+            self.assertEqual(str(self.workspace.resolve() / ".west/config"), env["WEST_CONFIG_LOCAL"])
+            self.assertEqual(str(self.sdk.resolve()), env["ZEPHYR_SDK_INSTALL_DIR"])
         self.assertEqual(1, len({id(call.kwargs["env"]) for call in calls}))
 
     def test_first_snapshot_creates_real_frozen_manifest_and_lock(self):
