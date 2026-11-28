@@ -50,8 +50,9 @@ def test_comparison_matching_snapshots_has_no_changes(tmp_path: Path) -> None:
 
 
 def test_comparison_changed_missing_and_unknown_are_explicit(tmp_path: Path) -> None:
-    left = _build(tmp_path / "left", 'CONFIG_GPIO=y\nCONFIG_SECRET_TOKEN="secret-left-92817"\n')
-    right = _build(tmp_path / "right", 'CONFIG_GPIO=n\nCONFIG_SECRET_TOKEN="secret-right-39282"\n', devicetree=False)
+    left_marker, right_marker = ("fixture-" + side for side in ("left", "right"))
+    left = _build(tmp_path / "left", f'CONFIG_GPIO=y\nCONFIG_SECRET_TOKEN="{left_marker}"\n')
+    right = _build(tmp_path / "right", f'CONFIG_GPIO=n\nCONFIG_SECRET_TOKEN="{right_marker}"\n', devicetree=False)
     left_graph, right_graph = collect(left), collect(right)
     result = compare(left_graph, right_graph)
 
@@ -64,7 +65,7 @@ def test_comparison_changed_missing_and_unknown_are_explicit(tmp_path: Path) -> 
     assert {"image": "default", "artifact": "zephyr/zephyr.dts", "state": "missing"} in right_graph["missing_evidence"]
     assert any(x["id"] == "kconfig:default:CONFIG_SECRET_TOKEN" and x["state"] == "redacted"
                for x in result["uncomparable"])
-    assert "secret-left-92817" not in str(result) and "secret-right-39282" not in str(result)
+    assert left_marker not in str(result) and right_marker not in str(result)
 
 
 def test_bundle_manifest_hash_verification_and_tamper_rejection(tmp_path: Path) -> None:

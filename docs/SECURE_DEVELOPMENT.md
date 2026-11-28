@@ -65,3 +65,7 @@ Before stable release, exercise malformed XML, archives, ELF, traces and evidenc
 | SEC-16/17 | IDE findings and runtime monitoring | Open |
 | SEC-18/19 | Incident and governance procedures | Initial policy; rehearsal and enforcement open |
 | SEC-20 | Final qualification | Not passed |
+
+### Historical synthetic fixture finding
+
+The only initial Gitleaks finding was generic-api-key in tests/pytest/test_evidence_cli.py, line 53 at commit 5dbee3459aaa47baa1fa4ba4d918c09187915068. The source is a synthetic Kconfig comparison/redaction test; it does not use an API, account or external service. Current fixtures construct distinct harmless markers at runtime and still verify redaction. The exact historical fingerprint is recorded in .gitleaksignore so the full-history scan can remain enabled. This is a false-positive classification, not an exemption for live credentials or a rule/path-wide suppression. Owner review of the classification is required before merge.
