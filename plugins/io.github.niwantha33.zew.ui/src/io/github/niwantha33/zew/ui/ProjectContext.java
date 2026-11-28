@@ -104,8 +104,15 @@ final class ProjectContext {
     }
 
     static Map<String, String> targetEnvironment(Properties settings, List<String> command) {
-        boolean managedRunner = command.contains("--openocd") || command.contains("--esp-device");
-        return environment(settings, managedRunner && isManagedWindows(settings));
+        boolean debugServer = command.size() > 3 && "debugserver".equals(command.get(3));
+        boolean managedRunner = debugServer || command.contains("--openocd") || command.contains("--esp-device");
+        var values = environment(settings, managedRunner && isManagedWindows(settings));
+        if (managedRunner && isManagedWindows(settings)) {
+            int scripts = command.indexOf("--openocd-search");
+            if (scripts >= 0 && scripts + 1 < command.size())
+                values.put("OPENOCD_SCRIPTS", command.get(scripts + 1));
+        }
+        return values;
     }
 
     static void verifyManagedBuildCache(Properties settings, Path build) throws java.io.IOException {

@@ -16,6 +16,7 @@ public final class ProcessEnvironment extends LinkedHashMap<String, String> {
     private final boolean isolated;
     private static final Set<String> AMBIENT = Set.of(
             "PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE", "PYTHONSTARTUP",
+            "PYOCD_DAPARG",
             "VIRTUAL_ENV", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
             "ZEPHYR_BASE", "ZEPHYR_SDK_INSTALL_DIR", "ZEPHYR_TOOLCHAIN_VARIANT",
             "ZEPHYR_MODULES", "ZEPHYR_EXTRA_MODULES", "ZEPHYR_TOOLCHAIN_PATH",
