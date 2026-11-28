@@ -11,7 +11,7 @@
 </style></head><body>
 <header><div><h1>Hardware Studio</h1><small>Physical package · peripheral connections</small></div><span class="spacer"></span><span id="context"></span><button id="theme">Theme</button><button id="refresh">Refresh</button></header>
 <div class="layout"><aside class="panel"><h2>Peripherals</h2><div class="tools"><input id="search" type="search" placeholder="Search controller or pin" aria-label="Search controller or pin"><select id="category" aria-label="Peripheral type"><option value="">All peripherals</option><option>GPIO</option><option>I2C</option><option>UART</option><option>SPI</option><option>CAN</option><option>ADC</option><option>PWM</option></select></div><div id="nodes" class="nodes"></div></aside>
-<main class="panel"><h2>MCU package · top view</h2><div id="notice" class="notice"></div><div class="package-scroll"><div id="package" class="package" hidden><div class="top" id="top"></div><div class="left" id="left"></div><div class="chip"><strong>MSPM0G3507</strong><p>PM / LQFP64</p><small>Board reference package</small></div><div class="right" id="right"></div><div class="bottom" id="bottom"></div></div></div><div class="legend"><span class="green">● Current default mux / enabled GPIO reference</span><span class="amber">● Other state, historical, disabled or unresolved</span><span class="conflict-text">! Potential shared default pad</span><span>○ No observed mapping / unknown</span></div><p class="muted">No unreferenced pin is claimed free. Mappings show the generated configuration. Wiring and runtime state require on-board verification.</p><div class="route-heading"><h2>Peripheral signal routes</h2><select id="routeState" aria-label="Filter route evidence state"><option value="">All routes</option><option value="default">Default configuration</option><option value="alternate">Sleep / other state</option><option value="disabled">Disabled / reserved</option><option value="unknown">Unresolved / unknown</option><option value="historical">Historical evidence</option><option value="conflict">Potential shared pads</option></select></div><p class="muted">Logical SoC pad names, not package pin numbers. Default is a configured state, not a measurement.</p><p id="conflictSummary" class="muted" aria-live="polite"></p><p id="routeSummary" class="muted" aria-live="polite"></p><div class="route-scroll" tabindex="0" aria-label="Peripheral signal route table"><table class="route-table"><thead><tr><th>Controller</th><th>Signal / property</th><th>Pad</th><th>Pinctrl state</th><th>Evidence</th></tr></thead><tbody id="routeRows"></tbody></table></div></main>
+<main class="panel"><h2>MCU package · top view</h2><div id="notice" class="notice"></div><div class="package-scroll"><div id="package" class="package" hidden><div class="top" id="top"></div><div class="left" id="left"></div><div class="chip"><strong>MSPM0G3507</strong><p>PM / LQFP64</p><small>Board reference package</small></div><div class="right" id="right"></div><div class="bottom" id="bottom"></div></div></div><div class="legend"><span class="green">● Current default mux / enabled GPIO reference</span><span class="amber">● Other state, historical, disabled or unresolved</span><span class="conflict-text">! Potential shared pad / GPIO overlap</span><span>○ No observed mapping / unknown</span></div><p class="muted">No unreferenced pin is claimed free. Mappings show the generated configuration. Wiring and runtime state require on-board verification.</p><div class="route-heading"><h2>Peripheral signal routes</h2><select id="routeState" aria-label="Filter route evidence state"><option value="">All routes</option><option value="default">Default configuration</option><option value="alternate">Sleep / other state</option><option value="disabled">Disabled / reserved</option><option value="unknown">Unresolved / unknown</option><option value="historical">Historical evidence</option><option value="conflict">Potential shared pads</option></select></div><p class="muted">Logical SoC pad names, not package pin numbers. Default is a configured state, not a measurement.</p><p id="conflictSummary" class="muted" aria-live="polite"></p><p id="routeSummary" class="muted" aria-live="polite"></p><div class="route-scroll" tabindex="0" aria-label="Peripheral signal route table"><table class="route-table"><thead><tr><th>Controller</th><th>Signal / property</th><th>Pad</th><th>Pinctrl state</th><th>Evidence</th></tr></thead><tbody id="routeRows"></tbody></table></div></main>
 <aside class="panel inspector"><h2>Connection inspector</h2><div id="details"></div></aside></div>
 <script>
 "use strict";
@@ -98,6 +98,21 @@ function collect(data){
 }
 // The observer resolves these mux encodings at the parent pinctrl node.
  // Scope each pad to that exact controller; identical text is not a global pad ID.
+function tiGpioDomain(data,nodes){
+  // Only the existing qualified reference-board mapping is supported.
+  // Require the exact SoC and a unique TI pinctrl domain and bank label.
+  const has=(node,compatible)=>(node?.compatible||"").split(", ").includes(compatible);
+  if(!supportsBoard(data.board)||!has(nodes.get("/"),"ti,mspm0g3507"))return null;
+  const domains=[...nodes.values()].filter(n=>has(n,"ti,mspm0-pinctrl"));
+  if(domains.length!==1||configuredStatus(nodes,domains[0])!=="enabled")return null;
+  const banks=new Map();
+  for(const label of ["gpioa","gpiob"]){
+    const matches=[...nodes.values()].filter(n=>(n.labels||"").split(",").includes(label));
+    if(matches.length===1&&has(matches[0],"ti,mspm0-gpio")&&configuredStatus(nodes,matches[0])==="enabled")
+      banks.set(matches[0].path,matches[0]);
+  }
+  return {domain:domains[0].path,banks};
+}
 function sharedPadConflicts(data,links){
   const byLink=new Map(),groups=new Map();
   if(!data.observed||data.state!=="built"||data.stale||data.freshness!=="current")return {groups:[],byLink,checked:0,available:false};
@@ -125,21 +140,41 @@ function sharedPadConflicts(data,links){
     group.links.push(link);
     checked++;
   }
+  // GPIO references only extend existing decoded default mux groups. Two
+  // GPIO users alone may be intentionally shared and are not findings here.
+  const gpioDomain=tiGpioDomain(data,nodes);
+  let gpioChecked=0;
+  if(gpioDomain){
+    for(const link of links){
+      if(link.kind!=="gpio"||link.routeState!=="gpio"||!gpioDomain.banks.has(link.target.path))continue;
+      const pad=gpioPin(link.edge,link.target);
+      if(!pad||pad!==link.pin)continue;
+      const key=JSON.stringify([gpioDomain.domain,"ti,mspm0-pinctrl",pad]);
+      const group=groups.get(key);
+      if(!group)continue;
+      // A reference from the same peripheral is not a second owner.
+      if(!group.links.some(mux=>mux.kind==="mux"&&mux.source.path!==link.source.path))continue;
+      group.owners.set(link.source.path,link.source);
+      group.links.push(link);
+      gpioChecked++;
+    }
+  }
   const conflicts=[];
   for(const group of groups.values()){
     if(group.owners.size<2)continue;
+    group.mixed=group.links.some(link=>link.kind==="gpio");
     conflicts.push(group);
     for(const link of group.links)byLink.set(link,group);
   }
-  return {groups:conflicts,byLink,checked,available:true};
+  return {groups:conflicts,byLink,checked,gpioChecked,available:true};
 }
 function visibleRoutes(links,query,category,state,conflicts=new Map()){
   const q=query.trim().toLowerCase(),cat=category.toLowerCase();
   return links.filter(link=>{
-    if(!["mux","candidate","state"].includes(link.kind))return false;
+    if(!["mux","candidate","state"].includes(link.kind)&&!(state==="conflict"&&link.kind==="gpio"&&conflicts.has(link)))return false;
     if(state==="conflict"?!conflicts.has(link):state&&link.routeState!==state)return false;
     const owner=[link.source.path,link.source.name,link.source.labels,link.source.compatible].join(" ").toLowerCase();
-    if(cat&&!owner.includes(cat)&&!(cat==="uart"&&/serial|usart/.test(owner)))return false;
+    if(cat&&!owner.includes(cat)&&!(cat==="uart"&&/serial|usart/.test(owner))&&!(cat==="gpio"&&link.kind==="gpio"))return false;
     const text=[owner,link.pin,link.edge.property,link.edge.detail,link.target.path,routeLabel(link.routeState)].join(" ").toLowerCase();
     return !q||text.includes(q);
   });
@@ -176,9 +211,9 @@ function renderNodes(){
   for(const n of DATA.nodes){
     const text=[n.name,n.labels,n.compatible,n.path].join(" ").toLowerCase();
     const associated=links.filter(l=>l.source.path===n.path||l.target.path===n.path);
-    if(!peripheral.test(n.name+" "+n.compatible+" "+n.labels)&&!associated.some(l=>l.kind==="channel"))continue;
+    if(!peripheral.test(n.name+" "+n.compatible+" "+n.labels)&&!associated.some(l=>l.kind==="channel"||l.kind==="gpio"))continue;
     if(cat&&!text.includes(cat)&&!(cat==="uart"&&text.includes("serial"))
-      &&!associated.some(l=>l.kind==="channel"&&(cat==="pwm"&&l.edge.kind==="pwm"
+      &&!associated.some(l=>cat==="gpio"&&l.kind==="gpio"||l.kind==="channel"&&(cat==="pwm"&&l.edge.kind==="pwm"
         ||cat==="adc"&&l.edge.kind==="io-channel"&&/adc/i.test(l.target.name+" "+l.target.compatible+" "+l.target.labels))))continue;
     if(q&&!text.includes(q)&&!associated.some(l=>l.pin.toLowerCase().includes(q)||l.edge.property.toLowerCase().includes(q)||l.edge.detail.toLowerCase().includes(q)))continue;
     const b=action(nodeLabel(n)+" · "+n.status,()=>{focus=n.path;selectedPin="";renderPins();renderNodes();renderDetails();host("focus",n.path);});
@@ -202,7 +237,7 @@ function renderDetails(){
     if(l.kind!=="channel")row.append(el("p",routeLabel(l.routeState),l.routeState==="default"||l.routeState==="gpio"?"green":"amber"));
     const shared=conflictReport.byLink.get(l);
     if(shared){
-      row.append(el("p","Potential shared default pad "+shared.pad+" · "+shared.owners.size+" peripherals","conflict-text"));
+      row.append(el("p",(shared.mixed?"Potential GPIO / mux overlap ":"Potential shared default pad ")+shared.pad+" · "+shared.owners.size+" owners","conflict-text"));
       row.append(el("small","Pinctrl controller: "+shared.domain));
       for(const owner of [...shared.owners.values()].slice(0,12)){
         if(owner.path!==l.source.path)row.append(action("Inspect "+nodeLabel(owner),()=>host("focus",owner.path)));
@@ -225,17 +260,17 @@ function renderRoutes(){
   summary.className=count?"conflict-text":"muted";
   summary.textContent=!conflictReport.available?"Shared-pad check unavailable: current binding-aware build evidence required."
     :!conflictReport.checked?"No eligible resolved default mux routes to compare. Pin availability unknown."
-    :count?count+" potential shared default pad group(s) across "+conflictReport.checked+" eligible routes (all categories). Review the owning peripherals."
+    :count?count+" potential shared pad group(s) across "+conflictReport.checked+" default mux routes and "+conflictReport.gpioChecked+" matching GPIO references (all categories). Review the owners."
     :"No potential shared pads detected among "+conflictReport.checked+" eligible routes. This is not a pin availability or safety check.";
   const limit=200;
   $("routeSummary").textContent=matches.length?("Showing "+Math.min(limit,matches.length)+" of "+matches.length+" matching routes"+(matches.length>limit?" · narrow the search":"")):"No matching pinctrl routes in this observation. Missing mappings are unknown.";
   for(const l of matches.slice(0,limit)){
     const tr=el("tr"),controller=el("td"),record=muxRecord(l.edge);
     controller.append(action(nodeLabel(l.source),()=>host("focus",l.source.path)));
-    tr.append(controller,el("td",l.kind==="mux"?l.edge.property:"Pinctrl reference"),
-      el("td",l.kind==="mux"?l.pin:l.kind==="candidate"?l.pin+" (label only)":"Unresolved"),
-      el("td",record?record.state:l.edge.detail||"Unknown"),
-      el("td",conflictReport.byLink.has(l)?"Potential shared default pad · "+conflictReport.byLink.get(l).owners.size+" peripherals":routeLabel(l.routeState),
+    tr.append(controller,el("td",l.kind==="mux"||l.kind==="gpio"?l.edge.property:"Pinctrl reference"),
+      el("td",l.kind==="mux"||l.kind==="gpio"?l.pin:l.kind==="candidate"?l.pin+" (label only)":"Unresolved"),
+      el("td",record?record.state:l.kind==="gpio"?"GPIO reference":l.edge.detail||"Unknown"),
+      el("td",conflictReport.byLink.has(l)?(conflictReport.byLink.get(l).mixed?"Potential GPIO / mux overlap":"Potential shared default pad")+" · "+conflictReport.byLink.get(l).owners.size+" owners":routeLabel(l.routeState),
         conflictReport.byLink.has(l)?"conflict-text":l.routeState==="default"?"green":"amber"));
     root.append(tr);
   }
