@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
@@ -20,6 +21,14 @@ public final class DtsGraphLoader {
     public static DtsGraphModel.Snapshot load(Path python, Path script, Path zephyr,
                                               Path application, Path build,
                                               BooleanSupplier canceled) {
+        return load(python, script, zephyr, application, build, null, canceled);
+    }
+
+    public static DtsGraphModel.Snapshot load(Path python, Path script, Path zephyr,
+                                              Path application, Path build, String expectedBoard,
+                                              BooleanSupplier canceled) {
+        if (expectedBoard != null && expectedBoard.isBlank())
+            return DtsGraphModel.unavailable("Select an exact board, SoC and core target.");
         if (python == null || script == null || zephyr == null || application == null
                 || build == null || canceled == null)
             return DtsGraphModel.unavailable("Select an exact board, build profile and Zephyr environment.");
@@ -32,9 +41,10 @@ public final class DtsGraphLoader {
         Process process = null;
         try {
             output = Files.createTempFile("zew-dts-graph-", ".txt");
-            var command = List.of(python.toString(), "-I", "-X", "utf8", script.toString(),
+            var command = new ArrayList<>(List.of(python.toString(), "-I", "-X", "utf8", script.toString(),
                     "--zephyr", zephyr.toString(), "--application", application.toString(),
-                    "--build", build.toString());
+                    "--build", build.toString()));
+            if (expectedBoard != null) command.addAll(List.of("--board=" + expectedBoard));
             process = new ProcessBuilder(command)
                     .redirectInput(ProcessBuilder.Redirect.PIPE)
                     .redirectOutput(output.toFile())

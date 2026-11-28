@@ -57,3 +57,7 @@
 Version 0.1 is a **read-only generated-Devicetree explorer**. It does not offer editable overlay drafts, authoritative pin/package planners, runtime device readings or cross-app causal analysis. Those are HS-10, HS-11 and HS-12, gated separately after the first developer preview.
 
 No real probe measurements or commercial production release certification are implied by this document.
+
+## HS-03 exact target identity (issue #267)
+
+Hardware Studio and Classic DTS Graph now pass the selected full board identifier to the bundled observer. The observer checks Zephyr's `CACHED_BOARD` (pre-split target), then `BOARD_TARGET`, and uses `BOARD` only when it exactly equals the request. Missing, duplicate, blank or mismatched target evidence suppresses all nodes, links and pin mappings. This includes ESP32 dual-core qualifier mismatches and avoids guessing a qualified board from a base name. Existing low-level observer calls without an explicit board remain supported for backward-compatible diagnostics, not as exact-target IDE evidence. The selected build-directory/profile, checkout and application checks remain in place. This is a generated-build identity safeguard, not physical package qualification; actual Windows/Linux installed UI and real board tests remain required. No source writes, probe access or external downloads.

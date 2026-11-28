@@ -183,7 +183,28 @@ def vendor_bus_pins(headers, paths, children, source, target):
                 yield signal, pad, value
 
 
-def observed(zephyr: Path, application: Path, build: Path):
+def board_matches(config, expected):
+    """Compare the full requested board to Zephyr's pre-split cache identity."""
+    if not expected or expected != expected.strip():
+        return False
+    entries = {}
+    for key in ("CACHED_BOARD", "BOARD_TARGET", "BOARD"):
+        values = [value.strip() for value in re.findall(
+            rf"(?m)^{key}:[A-Z_]+=(.*)$", config)]
+        if len(values) > 1 or (values and not values[0]):
+            return False
+        if values:
+            entries[key] = values[0]
+    # Zephyr 4.4 records CACHED_BOARD before boards.cmake separates
+    # revision and qualifiers. BOARD_TARGET is a compatibility fallback.
+    # Do not accept a base-name fallback for an explicitly qualified board.
+    full = entries.get("CACHED_BOARD") or entries.get("BOARD_TARGET")
+    if full is not None:
+        return full == expected
+    return entries.get("BOARD") == expected
+
+
+def observed(zephyr: Path, application: Path, build: Path, expected_board=None):
     zephyr = zephyr.resolve(strict=True)
     application = application.resolve(strict=True)
     if not zephyr.is_dir() or not application.is_dir():
@@ -208,6 +229,9 @@ def observed(zephyr: Path, application: Path, build: Path):
                 Path(values[0]).resolve(strict=False) != application):
             return ("mismatch", "",
                     "Selected build and application source disagree.", [], [])
+    if expected_board is not None and not board_matches(config, expected_board):
+        return ("mismatch", "",
+                "Selected board/SoC/core target does not match verifiable build cache identity. Rebuild the selected target.", [], [])
     raw = checked(generated, MAX_DTS_BYTES)
     digest = hashlib.sha256(raw).hexdigest()
     if any(token in raw for token in FORBIDDEN):
@@ -346,11 +370,12 @@ def main() -> None:
     parser.add_argument("--zephyr", required=True, type=Path)
     parser.add_argument("--application", required=True, type=Path)
     parser.add_argument("--build", required=True, type=Path)
+    parser.add_argument("--board", help="Exact selected board including revision and qualifiers")
     args = parser.parse_args()
     print("ZEW-DTSGRAPH-1")
     try:
         state, digest, reason, nodes, edges = observed(
-            args.zephyr, args.application, args.build)
+            args.zephyr, args.application, args.build, args.board)
         # No partial success report: format and size are bounded before emit.
         records = [("S", state, digest, reason)]
         records += [("N", *row) for row in nodes]
