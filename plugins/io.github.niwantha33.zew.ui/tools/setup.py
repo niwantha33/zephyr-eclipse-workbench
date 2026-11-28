@@ -555,7 +555,11 @@ def prepare_alternate_sources(root, git, source_release, environment):
     helper = ("import sys,pathlib;sys.path.insert(0,sys.argv[1]);"
               "import release_sources as s;"
               "s.prepare_fresh(pathlib.Path(sys.argv[2]),sys.argv[3],"
-              "pathlib.Path(sys.executable),pathlib.Path(sys.argv[4]))")
+              "pathlib.Path(sys.executable),pathlib.Path(sys.argv[4]));"
+              "import json;"
+              "print('DEPENDENCY PREFLIGHT: '+json.dumps(s.inspect_base_dependencies("
+              "pathlib.Path(sys.argv[2]),sys.argv[3],pathlib.Path(sys.executable),"
+              "pathlib.Path(sys.argv[4]),pathlib.Path(sys.argv[1])/'setup-lock.json'),sort_keys=True))")
     run([sys.executable, '-c', helper, Path(__file__).resolve().parent,
          root, source_release, git], root, environment, 9900)
 

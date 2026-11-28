@@ -123,6 +123,28 @@ class ReleaseSourceTests(unittest.TestCase):
         self.assertEqual(root, capture.call_args.kwargs["tool_root"])
         self.assertTrue(self.current.is_dir())
 
+    def test_base_dependency_evaluation_is_read_only_and_fail_closed(self):
+        report = sources.evaluate_base_requirements(
+            'west>=1.0\nrequests>=2.33\npackaging\nmissing\n'
+            'pytest; python_version < "2"\n-r other.txt\n'
+            'direct @ https://example.invalid/a.whl\nthing[extra]\n',
+            {'west': ['1.5.0'], 'requests': ['2.32.0'], 'packaging': ['25.0']},
+            {'west': '1.5.0', 'requests': '2.32.0', 'packaging': '24.0'})
+        self.assertEqual('base-requirements-unresolved', report['status'])
+        self.assertEqual(['matches-reviewed-version', 'version-mismatch',
+                          'unreviewed-installed-version', 'missing', 'not-applicable',
+                          'unsupported-requirement', 'unsupported-requirement',
+                          'unsupported-requirement'], [r['status'] for r in report['requirements']])
+        self.assertFalse(report['dependency_compatibility_qualified'])
+        self.assertFalse(report['firmware_built'])
+
+    def test_base_dependency_evaluation_matches_versions_but_not_build_qualification(self):
+        result = sources.evaluate_base_requirements('West>=1.0\n', {'west': ['1.5.0']}, {'west': '1.5.0'})
+        self.assertEqual('base-versions-match', result['status'])
+        self.assertFalse(result['dependency_compatibility_qualified'])
+        result = sources.evaluate_base_requirements('west\n', {'west': ['1.5.0', '1.4.0']}, {'west': '1.5.0'})
+        self.assertEqual('ambiguous', result['requirements'][0]['status'])
+
     def test_sdk_recommendation_is_read_from_exact_checkout(self):
         zephyr = self.parent / "zephyr"
         zephyr.mkdir()

@@ -263,6 +263,95 @@ def verify_candidate(candidate, python, git, *, tool_root=None):
     return lock
 
 
+def evaluate_base_requirements(text, installed, reviewed):
+    """PEP 508 evaluation; never execute requirement directives or fetch packages."""
+    from packaging.requirements import Requirement, InvalidRequirement
+    from packaging.utils import canonicalize_name
+    from packaging.version import Version, InvalidVersion
+    rows = []
+    if len(text.encode("utf-8")) > 262144:
+        raise VersionError("Base requirements exceed inspection limit")
+    for number, raw in enumerate(text.splitlines(), 1):
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        row = {"line": number, "requirement": line[:512]}
+        try:
+            if len(line) > 512:
+                raise InvalidRequirement("oversized")
+            requirement = Requirement(line)
+            name = canonicalize_name(requirement.name)
+            if requirement.url or requirement.extras:
+                row["status"] = "unsupported-requirement"
+            elif requirement.marker and not requirement.marker.evaluate():
+                row["status"] = "not-applicable"
+            else:
+                versions = installed.get(name, [])
+                row["installed"] = versions
+                row["reviewed"] = reviewed.get(name)
+                if not versions:
+                    row["status"] = "missing"
+                elif len(versions) != 1:
+                    row["status"] = "ambiguous"
+                elif not requirement.specifier.contains(Version(versions[0]), prereleases=True):
+                    row["status"] = "version-mismatch"
+                elif reviewed.get(name) != versions[0]:
+                    row["status"] = "unreviewed-installed-version"
+                else:
+                    row["status"] = "matches-reviewed-version"
+        except (InvalidRequirement, InvalidVersion, ValueError):
+            row["status"] = "unsupported-requirement"
+        rows.append(row)
+    return {"scope": "upstream base Python requirements only",
+            "status": "base-versions-match" if rows and all(
+                row["status"] in ("matches-reviewed-version", "not-applicable") for row in rows)
+                else "base-requirements-unresolved",
+            "requirements": rows, "firmware_built": False, "dependency_compatibility_qualified": False}
+
+
+def inspect_base_dependencies(root, release, python, git, lock_path):
+    """Read only candidate-local metadata after the fresh source verification."""
+    from importlib.metadata import distributions
+    from packaging.utils import canonicalize_name
+    root = Path(root).resolve(strict=True)
+    workspace = root / "workspace"
+    record = verify_candidate(workspace, python, git, tool_root=root)
+    if record["release"] != release or Path(sys.executable).resolve() != Path(python).resolve():
+        raise VersionError("Dependency inspection must use the selected release and its own interpreter")
+    site = root / "python/Lib/site-packages"
+    if not site.is_dir() or not site.resolve().is_relative_to(root):
+        raise VersionError("Selected managed Python site-packages directory is missing or escapes setup")
+    selected = {}
+    for dist in distributions(path=[str(site)]):
+        name = dist.metadata.get("Name")
+        if name:
+            selected.setdefault(canonicalize_name(name), []).append(dist.version)
+    lock_path = Path(lock_path).resolve(strict=True)
+    if not lock_path.is_relative_to(root) or lock_path.stat().st_size > 4 * 1024 * 1024:
+        raise VersionError("Reviewed dependency lock must be inside the selected setup")
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    reviewed = {canonicalize_name(item["name"]): item["version"] for item in lock["packages"]
+                if item.get("review") == "approved-build-use"}
+    requirements = workspace / "zephyr/scripts/requirements-base.txt"
+    if (not requirements.is_file() or requirements.is_symlink()
+            or not requirements.resolve().is_relative_to(workspace.resolve())
+            or requirements.stat().st_size > 262144):
+        raise VersionError("Release base requirements unavailable or unsafe; source remains unqualified")
+    text = requirements.read_text(encoding="utf-8")
+    env = source_environment(root, workspace, python, git)
+    # Compare the file actually inspected to the committed source (normalise CRLF
+    # and final newline only). No network or pip resolver is invoked.
+    committed = run([git, "-C", workspace / "zephyr", "show",
+                     record["zephyr_commit"] + ":scripts/requirements-base.txt"],
+                    workspace, 30, capture=True, env=env)
+    if text.strip() != committed.strip():
+        raise VersionError("Base requirements differ from the verified source commit")
+    report = evaluate_base_requirements(text, selected, reviewed)
+    report.update(release=release, zephyr_commit=record["zephyr_commit"],
+                  requirements_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest())
+    return report
+
+
 def compare(application, candidate, python, git, *, tool_root=None):
     from project_versions import load_lock
     original = load_lock(application)
