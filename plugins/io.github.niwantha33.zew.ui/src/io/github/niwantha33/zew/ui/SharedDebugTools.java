@@ -11,6 +11,8 @@ final class SharedDebugTools {
     static final String GENERAL = "tools.openocd.general";
     static final String ESPRESSIF = "tools.openocd.espressif";
     static final String TI = "tools.openocd.ti";
+    static final String JLINK = "tools.debug.jlink";
+    static final String PYOCD = "tools.debug.pyocd";
 
     private SharedDebugTools() {}
 
@@ -31,7 +33,16 @@ final class SharedDebugTools {
             io.github.niwantha33.zew.core.TargetOperations.Plan plan, Properties settings)
             throws java.io.IOException {
         String yaml = java.nio.file.Files.readString(plan.buildDirectory().resolve("zephyr/runners.yaml"));
-        if (!io.github.niwantha33.zew.core.TargetOperations.usesOpenOcdDebugServer(plan, yaml)) return plan;
+        if (!io.github.niwantha33.zew.core.TargetOperations.usesOpenOcdDebugServer(plan, yaml)) {
+            if (!ProjectContext.isManagedWindows(settings)) return plan;
+            int index = plan.westArguments().indexOf("--runner");
+            String requested = index < 0 ? "" : plan.westArguments().get(index + 1);
+            String runner = io.github.niwantha33.zew.core.DebugBackend.select(yaml, requested);
+            var store = Activator.getDefault().getPreferenceStore();
+            return io.github.niwantha33.zew.core.ManagedVendorDebugTools.bind(plan, runner,
+                    store.getString(JLINK), store.getString(PYOCD),
+                    Path.of(settings.getProperty("zew.setupRoot")), Path.of(settings.getProperty("python")));
+        }
         var selected = select(plan.board(), settings)
                 .orElseThrow(() -> OpenOcdRegistry.missing(plan.board()));
         return io.github.niwantha33.zew.core.TargetOperations.withOpenOcd(plan, selected);

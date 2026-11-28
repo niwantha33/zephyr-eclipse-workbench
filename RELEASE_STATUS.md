@@ -11,6 +11,10 @@ Explicit managed Windows build and selected OpenOCD/Espressif runner paths now r
 
 # Evidence Engine release status — 2026-10-30
 
+## Managed vendor debug server isolation (issue #128, development)
+
+Managed Windows debugserver launches bind J-Link GDB Server and its matching Commander, or pyOCD from selected managed Python / explicitly selected installation, using Zephyr 4.4 runner options. Debugserver processes use the existing isolated managed PATH; ambient OpenOCD scripts and deprecated pyOCD DAP arguments are removed, with explicitly selected OpenOCD scripts restored. Existing OpenOCD discovery and external-tool workflows retained. Native Windows physical qualification and managed package provisioning remain pending; G0 remains open.
+
 ## Managed OpenOCD script environment isolation (issue #128, development)
 
 Managed Windows child processes using the existing isolated policy discard inherited `OPENOCD_SCRIPTS` (case-insensitive); OpenOCD plans retain the existing verified executable and explicit matching `--openocd-search` directory for TI, Espressif and general providers. Existing-tool environments are unchanged. Headless tests cover a competing script root, external-tool compatibility and host-map non-mutation. Exact-head CI and physical flash/debug/trace qualification remain pending. This does not isolate OpenOCD's entire script search chain, change provider discovery, or complete J-Link/pyOCD isolation. G0 remains open.
