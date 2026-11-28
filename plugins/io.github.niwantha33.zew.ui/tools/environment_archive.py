@@ -6,6 +6,7 @@ No network, execution of archived code, source rewriting or overwrite.
 An archive is byte evidence, not authentication or a clean-machine build.
 """
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -13,6 +14,7 @@ from pathlib import Path
 import platform
 import re
 import stat
+import shutil
 import struct
 import sys
 import tempfile
@@ -188,11 +190,29 @@ def export_archive(root, output):
             "original_root": str(root), "qualification": "byte archive; build not tested"}
 
 
-def bounded_zip(path):
-    """Bound the central-directory allocation before ZipFile parses it."""
-    size = regular(path).st_size
-    require(22 <= size <= MAX_ARCHIVE, "Archive size outside limits")
+def archive_stamp(info):
+    return info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_ino, info.st_dev
+
+
+def unchanged_archive(stream, stamp):
+    require(archive_stamp(os.fstat(stream.fileno())) == stamp,
+            "Archive changed during verification or restoration")
+
+
+@contextmanager
+def bounded_zip(path, expected=None):
+    """Bind the retained digest, central-directory bounds and extraction to one open file."""
+    before = regular(path)
     with path.open("rb") as stream:
+        stamp = archive_stamp(os.fstat(stream.fileno()))
+        require(stamp == archive_stamp(before), "Archive changed before opening")
+        size = stamp[0]
+        require(22 <= size <= MAX_ARCHIVE, "Archive size outside limits")
+        if expected is not None:
+            require(isinstance(expected, str) and HEX.fullmatch(expected), "Invalid retained archive SHA-256")
+            actual, _ = digest_stream(stream, expected=size, limit=MAX_ARCHIVE)
+            require(actual == expected, "Archive digest mismatch")
+            unchanged_archive(stream, stamp)
         start = max(0, size - 65557)
         stream.seek(start)
         tail = stream.read()
@@ -215,7 +235,9 @@ def bounded_zip(path):
             end = offset
         require(count == count_disk and count <= MAX_FILES + 1 and cd_size <= MAX_CENTRAL
                 and cd_offset + cd_size == end, "ZIP central directory exceeds limits or is invalid")
-    return zipfile.ZipFile(path, "r")
+        with zipfile.ZipFile(stream, "r") as z:
+            yield z, stream, stamp
+            unchanged_archive(stream, stamp)
 
 
 def unique_pairs(pairs):
@@ -276,9 +298,9 @@ def check_payload(z, name, row, target=None):
 
 
 def archive_action(action, archive, destination=None, expected=None):
-    if expected is not None:
-        require(HEX.fullmatch(expected) and file_digest(archive) == expected, "Archive digest mismatch")
-    with bounded_zip(archive) as z:
+    if action == "restore":
+        require(expected is not None, "Restore requires the separately retained archive SHA-256")
+    with bounded_zip(archive, expected) as (z, stream, stamp):
         m = manifest(z)
         if action != "inspect":
             for name, row in sorted(m["files"].items()):
@@ -293,6 +315,9 @@ def archive_action(action, archive, destination=None, expected=None):
             require(not destination.exists() and not destination.is_symlink(),
                     "Restore target already exists; never overwrite")
             regular(destination.parent, True)
+            require(shutil.disk_usage(destination.parent).free >= sum(r["size"] for r in m["files"].values()),
+                    "Insufficient free disk space for archive restore")
+            unchanged_archive(stream, stamp)
             # Reserve destination exclusively. On any failure it remains an
             # incomplete, non-ready directory for manual inspection; never
             # recursively delete files the user may have added.
@@ -305,6 +330,8 @@ def archive_action(action, archive, destination=None, expected=None):
                 path = destination / name
                 with path.open("xb") as target:
                     check_payload(z, name, row, target)
+                    target.flush()
+                    os.fsync(target.fileno())
                 path.chmod(0o600 | row["executable"])
             require_isolated(destination, ready=False)
             # Publish the historic ready marker only after all other files
@@ -323,6 +350,7 @@ def archive_action(action, archive, destination=None, expected=None):
                     target.write(ready)
                     target.flush()
                     os.fsync(target.fileno())
+                unchanged_archive(stream, stamp)
                 require(not (destination / READY).exists(), "Unexpected ready marker")
                 os.replace(marker, destination / READY)
             finally:
@@ -332,6 +360,7 @@ def archive_action(action, archive, destination=None, expected=None):
                        "restore": "restored-bytes"}[action],
             "original_root": m["root"], "platform": m["platform"], "machine": m["machine"],
             "files": len(m["files"]), "bytes": sum(r["size"] for r in m["files"].values()),
+            "retained_digest_matched": expected is not None,
             "qualification": "not authenticated; attach and run pristine firmware qualification"}
 
 

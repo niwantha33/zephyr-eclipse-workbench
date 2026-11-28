@@ -65,11 +65,12 @@ final class EnvironmentArchiveActions {
                 + "Save application source and production artifacts separately. "
                 + "Archives are private, unsigned and not automatically sanitised.",
                 MessageDialog.INFORMATION, new String[] {"Export", "Restore and Attach",
-                        "Compare Firmware", "Cancel"}, 3);
+                        "Compare Firmware", "Verify Retained Archive", "Cancel"}, 4);
         switch (menu.open()) {
             case 0 -> export(shell, project);
             case 1 -> restore(shell, project);
             case 2 -> compare(shell, project);
+            case 3 -> verify(shell, project);
             default -> { }
         }
     }
@@ -141,6 +142,26 @@ final class EnvironmentArchiveActions {
         });
     }
 
+    private static void verify(Shell shell, IProject project) {
+        Path archive = file(shell, "Select retained private archive", false, new String[] {"*.zewenv", "*.*"});
+        if (archive == null) return;
+        Path runner = trustedRunner(shell);
+        if (runner == null) return;
+        var digest = new InputDialog(shell, "Trusted archive SHA-256",
+                "Enter the digest saved separately at export. This reads all archived bytes without restoring.",
+                "", value -> value.matches("[0-9a-fA-F]{64}") ? null : "Enter the retained SHA-256.");
+        if (digest.open() != Window.OK) return;
+        String expected = digest.getValue().toLowerCase(java.util.Locale.ROOT);
+        if (!MessageDialog.openConfirm(shell, "Verify retained archive",
+                "Run the offline archive utility with trusted Python from " + runner
+                + "? No archived code will run and no environment will be restored.")) return;
+        schedule(project, "Verify retained environment archive", (monitor, stream) -> {
+            invoke(runnerSettings(runner), List.of("verify", "--archive", archive.toString(),
+                    "--expected-sha256", expected), monitor, stream, false);
+            return "Retained digest and all archived payloads match. This is byte integrity evidence, not a successful offline build.";
+        });
+    }
+
     private static void compare(Shell shell, IProject project) {
         Path original = file(shell, "Select original retained firmware", false, new String[] {"*.*"});
         if (original == null) return;
@@ -175,7 +196,7 @@ final class EnvironmentArchiveActions {
         command.addAll(arguments);
         stream.println("CLI argument vector: " + command);
         var result = new ProcessRunner().run(command, script.getParent(), Duration.ofHours(4),
-                monitor::isCanceled, stream::println, ProjectContext.environment(settings));
+                monitor::isCanceled, stream::println, ProjectContext.buildEnvironment(settings));
         if (monitor.isCanceled()) throw new InterruptedIOException("Archive operation cancelled");
         if (result.exitCode() != 0 && !(allowDifference && result.exitCode() == 1)) {
             throw new IOException("Archive operation failed. See Zephyr Environment Archive console.");
