@@ -7,11 +7,11 @@
 <style>
 :root{color-scheme:dark;--bg:#0c1422;--panel:#142235;--line:#344861;--text:#ebf3fd;--muted:#a9bad1;--accent:#68d2ed;--gpio:#56c6a0;--candidate:#e9bb6c;font:14px "Segoe UI",system-ui,sans-serif}
 :root.light{color-scheme:light;--bg:#edf2f8;--panel:#fff;--line:#aebed1;--text:#1b2c40;--muted:#43566c;--accent:#087b9c;--gpio:#147c58;--candidate:#875b0b}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 12px}p{margin:8px 0;line-height:1.45}small,.muted{color:var(--muted)}button,input,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:7px}button{cursor:pointer}button:hover,button:focus-visible{border-color:var(--accent);outline:1px solid var(--accent)}button:disabled{opacity:.45;cursor:default}.spacer{flex:1}.layout{display:grid;grid-template-columns:minmax(180px,235px) minmax(400px,1fr) minmax(210px,280px);gap:12px;padding:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}.nodes{display:flex;flex-direction:column;gap:5px;max-height:64vh;overflow:auto}.nodes button{text-align:left;overflow-wrap:anywhere}.nodes button.active{border-color:var(--accent);color:var(--accent)}.tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tools input{width:100%;min-width:0}.package-scroll{overflow:auto}.package{display:grid;grid-template-columns:118px minmax(390px,1fr) 118px;grid-template-rows:116px auto 116px;min-width:626px;gap:4px}.package[hidden]{display:none}.top,.bottom{grid-column:2;display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:2px}.top{grid-row:1}.bottom{grid-row:3}.left,.right{grid-row:2;display:grid;grid-template-rows:repeat(16,1fr);gap:2px}.left{grid-column:1}.right{grid-column:3}.chip{grid-column:2;grid-row:2;border:2px solid var(--line);border-radius:10px;display:grid;place-content:center;position:relative;text-align:center;background:var(--bg);min-height:360px}.chip:before{content:"";position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid var(--muted);top:13px;left:13px}.pin{font-size:11px;padding:3px 2px;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0}.top .pin,.bottom .pin{writing-mode:vertical-rl}.pin.gpio{border-color:var(--gpio);color:var(--gpio)}.pin.candidate{border-color:var(--candidate);color:var(--candidate)}.pin.selected{outline:2px solid var(--accent);outline-offset:-2px}.pin.related{background:var(--bg);font-weight:bold}.pin.special{color:var(--muted)}.pin.dim{opacity:.3}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-top:12px}.green{color:var(--gpio)}.amber{color:var(--candidate)}.linkrow{border-top:1px solid var(--line);padding:9px 0;overflow-wrap:anywhere}.linkrow button{margin:5px 4px 0 0}.notice{padding:10px 12px;border:1px solid var(--line);border-radius:6px;margin-bottom:12px;overflow-wrap:anywhere}@media(max-width:1050px){.layout{grid-template-columns:200px minmax(0,1fr)}.inspector{grid-column:1/-1}}@media(max-width:650px){.layout{grid-template-columns:minmax(0,1fr)}.inspector{grid-column:auto}.nodes{max-height:220px}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 12px}p{margin:8px 0;line-height:1.45}small,.muted{color:var(--muted)}button,input,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:7px}button{cursor:pointer}button:hover,button:focus-visible{border-color:var(--accent);outline:1px solid var(--accent)}button:disabled{opacity:.45;cursor:default}.spacer{flex:1}.layout{display:grid;grid-template-columns:minmax(180px,235px) minmax(400px,1fr) minmax(210px,280px);gap:12px;padding:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}.nodes{display:flex;flex-direction:column;gap:5px;max-height:64vh;overflow:auto}.nodes button{text-align:left;overflow-wrap:anywhere}.nodes button.active{border-color:var(--accent);color:var(--accent)}.tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tools input{width:100%;min-width:0}.package-scroll{overflow:auto}.package{display:grid;grid-template-columns:118px minmax(390px,1fr) 118px;grid-template-rows:116px auto 116px;min-width:626px;gap:4px}.package[hidden]{display:none}.top,.bottom{grid-column:2;display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:2px}.top{grid-row:1}.bottom{grid-row:3}.left,.right{grid-row:2;display:grid;grid-template-rows:repeat(16,1fr);gap:2px}.left{grid-column:1}.right{grid-column:3}.chip{grid-column:2;grid-row:2;border:2px solid var(--line);border-radius:10px;display:grid;place-content:center;position:relative;text-align:center;background:var(--bg);min-height:360px}.chip:before{content:"";position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid var(--muted);top:13px;left:13px}.pin{font-size:11px;padding:3px 2px;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0}.top .pin,.bottom .pin{writing-mode:vertical-rl}.pin.gpio{border-color:var(--gpio);color:var(--gpio)}.pin.candidate{border-color:var(--candidate);color:var(--candidate)}.pin.selected{outline:2px solid var(--accent);outline-offset:-2px}.pin.related{background:var(--bg);font-weight:bold}.pin.special{color:var(--muted)}.pin.dim{opacity:.3}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-top:12px}.green{color:var(--gpio)}.amber{color:var(--candidate)}.linkrow{border-top:1px solid var(--line);padding:9px 0;overflow-wrap:anywhere}.linkrow button{margin:5px 4px 0 0}.route-scroll{max-height:420px;overflow:auto;margin-top:8px}.route-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}.route-table th,.route-table td{border-bottom:1px solid var(--line);padding:7px;vertical-align:top;overflow-wrap:anywhere}.route-table th{position:sticky;top:0;background:var(--panel);z-index:1}.route-table button{padding:4px 7px;text-align:left}.route-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px}.route-heading h2{margin:0;flex:1}.notice{padding:10px 12px;border:1px solid var(--line);border-radius:6px;margin-bottom:12px;overflow-wrap:anywhere}@media(max-width:1050px){.layout{grid-template-columns:200px minmax(0,1fr)}.inspector{grid-column:1/-1}}@media(max-width:650px){.layout{grid-template-columns:minmax(0,1fr)}.inspector{grid-column:auto}.nodes{max-height:220px}}
 </style></head><body>
 <header><div><h1>Hardware Studio</h1><small>Physical package · peripheral connections</small></div><span class="spacer"></span><span id="context"></span><button id="theme">Theme</button><button id="refresh">Refresh</button></header>
 <div class="layout"><aside class="panel"><h2>Peripherals</h2><div class="tools"><input id="search" type="search" placeholder="Search controller or pin" aria-label="Search controller or pin"><select id="category" aria-label="Peripheral type"><option value="">All peripherals</option><option>GPIO</option><option>I2C</option><option>UART</option><option>SPI</option><option>CAN</option><option>ADC</option><option>PWM</option></select></div><div id="nodes" class="nodes"></div></aside>
-<main class="panel"><h2>MCU package · top view</h2><div id="notice" class="notice"></div><div class="package-scroll"><div id="package" class="package" hidden><div class="top" id="top"></div><div class="left" id="left"></div><div class="chip"><strong>MSPM0G3507</strong><p>PM / LQFP64</p><small>Board reference package</small></div><div class="right" id="right"></div><div class="bottom" id="bottom"></div></div></div><div class="legend"><span class="green">● GPIO reference / resolved pinmux</span><span class="amber">● Pinctrl label candidate</span><span>○ No observed mapping / unknown</span></div><p class="muted">No unreferenced pin is claimed free. Mappings show the generated configuration. Wiring and runtime state require on-board verification.</p></main>
+<main class="panel"><h2>MCU package · top view</h2><div id="notice" class="notice"></div><div class="package-scroll"><div id="package" class="package" hidden><div class="top" id="top"></div><div class="left" id="left"></div><div class="chip"><strong>MSPM0G3507</strong><p>PM / LQFP64</p><small>Board reference package</small></div><div class="right" id="right"></div><div class="bottom" id="bottom"></div></div></div><div class="legend"><span class="green">● Current default mux / enabled GPIO reference</span><span class="amber">● Other state, historical, disabled or unresolved</span><span>○ No observed mapping / unknown</span></div><p class="muted">No unreferenced pin is claimed free. Mappings show the generated configuration. Wiring and runtime state require on-board verification.</p><div class="route-heading"><h2>Peripheral signal routes</h2><select id="routeState" aria-label="Filter route evidence state"><option value="">All routes</option><option value="default">Default configuration</option><option value="alternate">Sleep / other state</option><option value="disabled">Disabled / reserved</option><option value="unknown">Unresolved / unknown</option><option value="historical">Historical evidence</option></select></div><p class="muted">Logical SoC pad names, not package pin numbers. Default is a configured state, not a measurement.</p><p id="routeSummary" class="muted" aria-live="polite"></p><div class="route-scroll" tabindex="0" aria-label="Peripheral signal route table"><table class="route-table"><thead><tr><th>Controller</th><th>Signal / property</th><th>Pad</th><th>Pinctrl state</th><th>Evidence</th></tr></thead><tbody id="routeRows"></tbody></table></div></main>
 <aside class="panel inspector"><h2>Connection inspector</h2><div id="details"></div></aside></div>
 <script>
 "use strict";
@@ -38,10 +38,40 @@ function labelPin(edge,target){
   }
   return candidates.size===1?[...candidates][0]:null;
 }
-function muxPin(edge){
+function muxRecord(edge){
   if(edge.kind!=="pinmux")return null;
   const match=/^([a-zA-Z0-9_-]+) ([A-Z0-9.]+) (0x[0-9a-f]+)$/.exec(edge.detail);
-  return match?match[2]:null;
+  return match?{state:match[1],pad:match[2],raw:match[3]}:null;
+}
+function muxPin(edge){return muxRecord(edge)?.pad||null;}
+function configuredStatus(nodes,node){
+  // The selected node AND its ancestors must be enabled; a child marked okay
+  // under a disabled bus is not an enabled route. Missing evidence is unknown.
+  let path=node.path, unknown=false;
+  while(path){
+    const entry=nodes.get(path);
+    if(!entry)unknown=true;
+    else if(entry.status==="disabled"||entry.status==="reserved"||/^fail(?:-|$)/.test(entry.status||""))return "disabled";
+    else if(entry.status!=="okay"&&entry.status!=="okay (default)"&&entry.status!=="ok")unknown=true;
+    if(path==="/")break;
+    path=path.slice(0,path.lastIndexOf("/"))||"/";
+  }
+  return unknown?"unknown":"enabled";
+}
+function routeState(data,nodes,link){
+  if(data.stale||data.freshness!=="current")return "historical";
+  const source=configuredStatus(nodes,link.source),target=configuredStatus(nodes,link.target);
+  if(source==="disabled"||target==="disabled")return "disabled";
+  if(source!=="enabled"||target!=="enabled")return "unknown";
+  if(link.kind==="mux"){
+    const record=muxRecord(link.edge);
+    return !record?"unknown":record.state==="default"?"default":"alternate";
+  }
+  if(link.kind==="gpio")return "gpio";
+  return "unknown";
+}
+function routeLabel(state){
+  return {default:"Configured default",alternate:"Alternate state",disabled:"Disabled / reserved",unknown:"Unresolved / unknown",historical:"Historical",gpio:"Enabled GPIO reference"}[state]||"Unknown";
 }
 function collect(data){
   const nodes=new Map(data.nodes.map(n=>[n.path,n]));
@@ -58,10 +88,24 @@ function collect(data){
     const mux=muxPin(e),unresolved=e.kind==="pinctrl"&&!resolved.has(linkKey(e,e.detail));
     const candidate=known&&unresolved?labelPin(e,target):null;
     const channel=e.kind==="io-channel"||e.kind==="pwm";
-    if(gpio||mux||unresolved||channel)
-      links.push({pin:gpio||mux||candidate||"",kind:channel?"channel":gpio?"gpio":mux?"mux":candidate?"candidate":"state",edge:e,source,target});
+    if(gpio||mux||unresolved||channel){
+      const link={pin:gpio||mux||candidate||"",kind:channel?"channel":gpio?"gpio":mux?"mux":candidate?"candidate":"state",edge:e,source,target};
+      link.routeState=routeState(data,nodes,link);
+      links.push(link);
+    }
   }
   return links;
+}
+function visibleRoutes(links,query,category,state){
+  const q=query.trim().toLowerCase(),cat=category.toLowerCase();
+  return links.filter(link=>{
+    if(!["mux","candidate","state"].includes(link.kind))return false;
+    if(state&&link.routeState!==state)return false;
+    const owner=[link.source.path,link.source.name,link.source.labels,link.source.compatible].join(" ").toLowerCase();
+    if(cat&&!owner.includes(cat)&&!(cat==="uart"&&/serial|usart/.test(owner)))return false;
+    const text=[owner,link.pin,link.edge.property,link.edge.detail,link.target.path,routeLabel(link.routeState)].join(" ").toLowerCase();
+    return !q||text.includes(q);
+  });
 }
 // DOM rendering below; data is inserted only using textContent.
 const $=id=>document.getElementById(id);
@@ -78,7 +122,7 @@ function renderPins(){
   const query=$("search").value.trim().toUpperCase();
   for(const [name,button] of pinButtons){
     const all=links.filter(l=>l.pin===name);
-    button.className="pin"+(all.some(l=>l.kind!=="candidate")?" gpio":all.length?" candidate":!/^P[AB]\d+$/.test(name)?" special":"");
+    button.className="pin"+(all.some(l=>l.routeState==="default"||l.routeState==="gpio")?" gpio":all.length?" candidate":!/^P[AB]\d+$/.test(name)?" special":"");
     if(name===selectedPin)button.classList.add("selected");
     if(all.some(related))button.classList.add("related");
     if(query&&/^P[AB]\d+$/.test(query)&&name!==query)button.classList.add("dim");
@@ -112,9 +156,10 @@ function renderDetails(){
   for(const l of selected){
     const row=el("div","","linkrow");
     const mapping=l.kind==="channel"?(l.edge.kind==="pwm"?"PWM controller channel":"I/O controller channel")+" · logical reference, pad not established":l.kind==="gpio"?"GPIO reference":l.kind==="mux"?l.edge.property+" · resolved pinmux":l.kind==="candidate"?"Label candidate · mux unverified":"Pinctrl state · pad unresolved";
-    row.append(el("strong",(l.pin?l.pin+" · ":"")+mapping,l.kind==="candidate"||l.kind==="state"||l.kind==="channel"?"amber":"green"));
+    row.append(el("strong",(l.pin?l.pin+" · ":"")+mapping,l.routeState==="default"||l.routeState==="gpio"?"green":"amber"));
     row.append(el("p",nodeLabel(l.source)+" → "+nodeLabel(l.target)));
     row.append(el("small",l.edge.property+" · "+l.edge.detail+" · "+l.source.status));
+    if(l.kind!=="channel")row.append(el("p",routeLabel(l.routeState),l.routeState==="default"||l.routeState==="gpio"?"green":"amber"));
     row.append(action("Configuration Studio",()=>host("topology",l.source.path)),
       action("Source",()=>host("source",l.source.path)));
     if(l.kind==="channel"&&l.target.path!==focus)
@@ -123,6 +168,21 @@ function renderDetails(){
   }
   if(focus){root.append(action("Open selected node in Configuration Studio",()=>host("topology",focus)));}
 }
+function renderRoutes(){
+  const root=$("routeRows");root.replaceChildren();
+  const matches=visibleRoutes(links,$("search").value,$("category").value,$("routeState").value);
+  const limit=200;
+  $("routeSummary").textContent=matches.length?("Showing "+Math.min(limit,matches.length)+" of "+matches.length+" matching routes"+(matches.length>limit?" · narrow the search":"")):"No matching pinctrl routes in this observation. Missing mappings are unknown.";
+  for(const l of matches.slice(0,limit)){
+    const tr=el("tr"),controller=el("td"),record=muxRecord(l.edge);
+    controller.append(action(nodeLabel(l.source),()=>host("focus",l.source.path)));
+    tr.append(controller,el("td",l.kind==="mux"?l.edge.property:"Pinctrl reference"),
+      el("td",l.kind==="mux"?l.pin:l.kind==="candidate"?l.pin+" (label only)":"Unresolved"),
+      el("td",record?record.state:l.edge.detail||"Unknown"),
+      el("td",routeLabel(l.routeState),l.routeState==="default"?"green":"amber"));
+    root.append(tr);
+  }
+}
 function addPins(id,numbers){
   for(const n of numbers){const name=PIN_NAMES[n-1],b=action(n+" "+name,()=>{selectedPin=name;renderPins();renderDetails();});b.title="Physical pin "+n+" · "+name;b.setAttribute("aria-label",b.title);pinButtons.set(name,b);$(id).append(b);}
 }
@@ -130,13 +190,14 @@ const sequence=(start,count,step=1)=>Array.from({length:count},(_,i)=>start+i*st
 document.documentElement.classList.toggle("light",DATA.theme==="light");
 $("theme").onclick=()=>{const light=document.documentElement.classList.toggle("light");host("theme",light?"light":"dark");};
 $("refresh").onclick=()=>host("refresh");
-$("search").oninput=()=>{renderNodes();renderPins();};
-$("category").onchange=renderNodes;
+$("search").oninput=()=>{renderNodes();renderPins();renderRoutes();};
+$("category").onchange=()=>{renderNodes();renderRoutes();};
+$("routeState").onchange=renderRoutes;
 $("context").textContent=[DATA.project,DATA.board,DATA.profile].filter(Boolean).join(" · ")||"Select a Zephyr project";
 const known=supportsBoard(DATA.board);
 $("package").hidden=!known;
 const evidenceStatus=!DATA.observed?"Build evidence unavailable.":DATA.stale?(DATA.freshness==="changed"?"Build changed · references are historical. ":"Freshness unverified · references are historical. ")+(DATA.freshnessDetail||""):DATA.state!=="built"?"Binding-aware references unavailable.":"Tracked input hashes match. Select a peripheral to inspect generated DTS connections.";
 $("notice").textContent=(known?"Reference package: TI SLASEX6C Fig. 6-2 / SLAU873E §1.4. ":"Package numbering is unavailable for this board. ")+evidenceStatus;
 if(known){addPins("top",sequence(64,16,-1));addPins("left",sequence(1,16));addPins("right",sequence(48,16,-1));addPins("bottom",sequence(17,16));}
-renderPins();renderNodes();renderDetails();
+renderPins();renderNodes();renderDetails();renderRoutes();
 </script></body></html>
