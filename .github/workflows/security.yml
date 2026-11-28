@@ -29,7 +29,22 @@ jobs:
       - name: Scan history with redacted output
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/gitleaks" git --redact=100 --no-banner --log-opts="--all" .
+          report="$RUNNER_TEMP/gitleaks-redacted.json"
+          trap 'rm -f "$report"' EXIT
+          status=0
+          "$RUNNER_TEMP/gitleaks" git --redact=100 --no-banner --log-opts="--all" --report-format=json --report-path="$report" . || status=$?
+          if [ -s "$report" ]; then
+            python3 - "$report" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding="utf-8") as source:
+              for finding in json.load(source) or []:
+                  # Never print Secret, Match, commit message or author fields.
+                  print(json.dumps({key: finding.get(key) for key in
+                                    ("RuleID", "File", "StartLine", "Commit", "Fingerprint")}, ensure_ascii=True))
+          PY
+          fi
+          exit "$status"
   dependencies:
     name: Managed Python dependency scan (OSV)
     runs-on: ubuntu-24.04

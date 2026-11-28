@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Export pinned managed Python wheel identities for vulnerability scanning only."""
+"""Export pinned managed Python distribution identities for vulnerability scanning only."""
 import argparse
 import json
 from pathlib import Path
@@ -31,11 +31,15 @@ def inventory(document):
             raise ValueError("Missing package SHA-256")
         url = row.get("url")
         if not isinstance(url, str):
-            raise ValueError("Missing wheel URL")
+            raise ValueError("Missing package URL")
         parsed = urlsplit(url)
         if (parsed.scheme != "https" or parsed.netloc != "files.pythonhosted.org"
-                or parsed.query or parsed.fragment or not parsed.path.endswith(".whl")):
-            raise ValueError("Unexpected wheel origin")
+                or parsed.query or parsed.fragment
+                or not re.fullmatch(r"/packages/[A-Za-z0-9._/-]+", parsed.path)
+                or any(part in ("", ".", "..") for part in parsed.path[1:].split("/"))
+                or not parsed.path.endswith((".whl", ".tar.gz", ".zip"))
+                or parsed.path.rsplit("/", 1)[-1] != row.get("file")):
+            raise ValueError("Unexpected package origin or filename")
         normalized = re.sub(r"[-_.]+", "-", name).lower()
         if normalized in result:
             raise ValueError("Duplicate package in lock")

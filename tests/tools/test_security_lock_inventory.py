@@ -13,7 +13,7 @@ spec.loader.exec_module(module)
 
 def row(**changes):
     return dict(name="Example_Pkg", version="1.2.3", sha256="a" * 64,
-                url="https://files.pythonhosted.org/packages/example.whl") | changes
+                url="https://files.pythonhosted.org/packages/example.whl", file="example.whl") | changes
 
 
 class SecurityInventoryTests(unittest.TestCase):
@@ -25,6 +25,20 @@ class SecurityInventoryTests(unittest.TestCase):
         for changes in ({"name": "pkg\nother"}, {"version": ">=1"}, {"sha256": "bad"},
                         {"url": "https://files.pythonhosted.org@evil.example/p.whl"},
                         {"url": "http://files.pythonhosted.org/p.whl"}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                module.inventory({"schema": 1, "packages": [row(**changes)]})
+
+    def test_pinned_source_archive_accepted(self):
+        for suffix in (".tar.gz", ".zip"):
+            filename = "example-1.2.3" + suffix
+            entry = row(file=filename, url="https://files.pythonhosted.org/packages/" + filename)
+            self.assertEqual(module.inventory({"schema": 1, "packages": [entry]}),
+                             [("example-pkg", "1.2.3")])
+
+    def test_filename_mismatch_and_traversal_rejected(self):
+        for changes in ({"file": "other.whl"},
+                        {"url": "https://files.pythonhosted.org/packages/../example.whl"},
+                        {"url": "https://files.pythonhosted.org/packages/example.whl?x=1"}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 module.inventory({"schema": 1, "packages": [row(**changes)]})
 
