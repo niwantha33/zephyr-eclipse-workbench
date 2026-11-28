@@ -183,3 +183,7 @@ competing server and access remains denied, inspect the JTAG interface driver
 and permissions. UART flashing success does not validate the JTAG interface.
 PyUSB import warnings from the unrelated rtsflash runner and OpenOCD deprecation
 notices do not explain a physical JTAG access-denied error.
+
+## Managed Windows GDB client environment (issue #128)
+
+The native delegate uses CDT's `createGdbLaunch` extension and overrides the host `getLaunchEnvironment` for managed Windows only, rather than changing inferior environment attributes. GDB and its version probe receive only SDK debugger/support directories, Windows system directories and an allowlisted set of OS context variables. The selected SDK and executable must resolve inside the managed setup; a change of binding before server startup is rejected. No arbitrary host environment is saved in `.launch` files. External tool launches, explicit shared server selection and existing source/breakpoint/termination logic are unchanged. This is not an OS sandbox or a qualification of GDB initialization scripts, vendor server children, DLL loading or physical hardware. Real installed Windows CDT sessions remain to be tested.

@@ -20,6 +20,9 @@ import java.util.regex.Pattern;
 import org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants;
 import org.eclipse.cdt.dsf.gdb.IGDBLaunchConfigurationConstants;
 import org.eclipse.cdt.dsf.gdb.launching.GdbLaunchDelegate;
+import org.eclipse.cdt.dsf.gdb.launching.GdbLaunch;
+import org.eclipse.debug.core.model.ISourceLocator;
+import io.github.niwantha33.zew.core.ManagedGdbEnvironment;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -152,6 +155,53 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         return launch;
     }
 
+    // CDT's inferior environment attributes do not control the host GDB process.
+    // Use its launch extension point for both the version probe and the DSF backend.
+    // Never store the host environment in the saved .launch configuration.
+    @Override protected GdbLaunch createGdbLaunch(ILaunchConfiguration configuration, String mode,
+                                                 ISourceLocator locator) throws CoreException {
+        try {
+            String name = configuration.getAttribute(ZephyrLaunchDelegate.PROJECT, "");
+            var project = ResourcesPlugin.getWorkspace().getRoot().getProject(name);
+            var settings = ProjectContext.settings(project);
+            if (!ProjectContext.isManagedWindows(settings))
+                return super.createGdbLaunch(configuration, mode, locator);
+            Path root = Path.of(settings.getProperty("zew.setupRoot")).toRealPath();
+            Path sdk = Path.of(settings.getProperty("tools.sdk")).toRealPath();
+            Path gdb = Path.of(configuration.getAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUG_NAME, ""));
+            String[] environment = ManagedGdbEnvironment.create(root, sdk, gdb, System.getenv());
+            return new ManagedClientLaunch(configuration, mode, locator, root, sdk, gdb.toRealPath(), environment);
+        } catch (CoreException error) {
+            throw error;
+        } catch (Exception error) {
+            throw failure("Cannot isolate managed GDB client: " + error.getMessage(), error);
+        }
+    }
+
+    private static final class ManagedClientLaunch extends GdbLaunch {
+        private final Path root, sdk, debugger;
+        private final String[] environment;
+
+        ManagedClientLaunch(ILaunchConfiguration configuration, String mode, ISourceLocator locator,
+                            Path root, Path sdk, Path debugger, String[] environment) {
+            super(configuration, mode, locator);
+            this.root = root;
+            this.sdk = sdk;
+            this.debugger = debugger;
+            this.environment = environment.clone();
+        }
+
+        @Override public String[] getLaunchEnvironment() {
+            return environment.clone();
+        }
+
+        boolean matches(Parameters params) throws IOException {
+            return root.equals(Path.of(params.settings().getProperty("zew.setupRoot")).toRealPath())
+                    && sdk.equals(Path.of(params.settings().getProperty("tools.sdk")).toRealPath())
+                    && debugger.equals(Path.of(params.gdb()).toRealPath());
+        }
+    }
+
     /** Configure CDT's own bidirectional source mapping before DSF adapters and breakpoint tracking start. */
     static void configureSourceMappings(ILaunch launch,
             List<io.github.niwantha33.zew.core.DebugSourcePaths.Mapping> mappings) throws CoreException {
@@ -226,6 +276,14 @@ public final class ZephyrNativeDebugDelegate extends GdbLaunchDelegate {
         ManagedServer session = null;
         try {
             if (monitor.isCanceled()) return;
+            // The selected project binding may have changed between getLaunch
+            // and launch. Refuse before starting any target/server operation.
+            if (ProjectContext.isManagedWindows(params.settings())) {
+                if (!(launch instanceof ManagedClientLaunch client) || !client.matches(params))
+                    throw new IOException("Managed debug setup changed before launch. Retry Debug.");
+            } else if (launch instanceof ManagedClientLaunch) {
+                throw new IOException("Managed debug setup changed before launch. Retry Debug.");
+            }
             lease = TargetOperationGuard.acquire("debugserver");
             if (portOccupied(params.port()))
                 throw new IOException("GDB TCP port " + params.port() + " is already in use. "

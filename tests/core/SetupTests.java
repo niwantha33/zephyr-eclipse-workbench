@@ -83,6 +83,43 @@ public final class SetupTests {
         check(host.size() == 10 && "unselected".equals(host.get("Path")), "host map never changes");
     }
 
+    private static void checkManagedGdbEnvironment(Path root) throws Exception {
+        Path setup = Files.createDirectory(root.resolve("managed debug"));
+        Files.writeString(setup.resolve(".zew-managed"), "fixture");
+        Path sdk = Files.createDirectory(setup.resolve("sdk"));
+        Path gdb = Files.createFile(Files.createDirectories(sdk.resolve("arm/bin")).resolve("gdb.exe"));
+        Path support = Files.createDirectories(sdk.resolve("hosttools/bin"));
+        Path windows = Files.createDirectories(root.resolve("Windows system/System32")).getParent();
+        Path foreign = Files.createFile(root.resolve("global-gdb.exe"));
+        var host = Map.of("Path", root.resolve("global tools").toString(),
+                "SYSTEMROOT", windows.toString(), "TEMP", root.toString(),
+                "PYTHONHOME", "foreign python", "GDB_DATA_DIRECTORY", "foreign gdb",
+                "CMAKE_TOOLCHAIN_FILE", "foreign cmake", "HOST_PRIVATE_VALUE", "fixture");
+        var env = new java.util.HashMap<String, String>();
+        for (String entry : io.github.niwantha33.zew.core.ManagedGdbEnvironment.create(setup, sdk, gdb, host)) {
+            int equals = entry.indexOf('=');
+            env.put(entry.substring(0, equals), entry.substring(equals + 1));
+        }
+        var paths = List.of(env.get("PATH").split(Pattern.quote(File.pathSeparator), -1));
+        Path canonicalWindows = windows.toRealPath();
+        check(paths.equals(List.of(gdb.toRealPath().getParent(), support.toRealPath(),
+                canonicalWindows.resolve("System32"), canonicalWindows).stream().map(Path::toString).toList()),
+                "managed GDB PATH contains only selected SDK and system directories");
+        check(!env.containsKey("PYTHONHOME") && !env.containsKey("GDB_DATA_DIRECTORY")
+                && !env.containsKey("CMAKE_TOOLCHAIN_FILE") && !env.containsKey("HOST_PRIVATE_VALUE")
+                && root.toString().equals(env.get("TEMP")) && "1".equals(env.get("PYTHONNOUSERSITE")),
+                "GDB environment excludes inherited tool overrides and arbitrary host data");
+        check(host.size() == 7 && host.containsKey("Path"), "managed GDB leaves parent environment unchanged");
+        rejects(() -> io.github.niwantha33.zew.core.ManagedGdbEnvironment.create(setup, sdk, foreign, host),
+                "managed GDB rejects an executable outside its SDK");
+        rejects(() -> io.github.niwantha33.zew.core.ManagedGdbEnvironment.create(setup, sdk, gdb, Map.of()),
+                "managed GDB rejects missing Windows system root");
+        Path anotherSdk = Files.createDirectory(root.resolve("other sdk"));
+        Path anotherGdb = Files.createFile(anotherSdk.resolve("gdb.exe"));
+        rejects(() -> io.github.niwantha33.zew.core.ManagedGdbEnvironment.create(setup, anotherSdk, anotherGdb, host),
+                "managed GDB rejects an SDK outside selected setup");
+    }
+
     private static void checkManagedCache(Path root) throws Exception {
         Path build = Files.createDirectory(root.resolve("configured-build"));
         Path python = Files.createFile(root.resolve("selected-python.exe"));
@@ -110,6 +147,7 @@ public final class SetupTests {
         try {
             checkProjectToolPath(root);
             checkManagedProcessEnvironment();
+            checkManagedGdbEnvironment(root);
             checkManagedCache(root);
             var data = root.resolve("file"); Files.writeString(data, "good");
             String hash = "770e607624d689265ca6c44884d0807d9b054d23c473c106c72be9de08b7376c";

@@ -11,6 +11,10 @@ Explicit managed Windows build and selected OpenOCD/Espressif runner paths now r
 
 # Evidence Engine release status — 2026-10-30
 
+## Managed GDB client process isolation (issue #128, development)
+
+Native CDT GDB launch and version probe in managed Windows setups use an explicit SDK/system search path and allowlisted OS context rather than the CDT/host tool environment. The executable and SDK must resolve inside the selected setup; a binding change before server start aborts the launch. External-tool launches and runner selection remain unchanged. Headless negative tests added; exact-head CI and physical GDB sessions across vendors remain pending. G0 stays open.
+
 ## Project lock probe isolation (issue #128, development)
 
 Managed Windows snapshot, verify/attach and upgrade comparison now pass explicit setup identities to the version helper. Each selected setup builds its own probe PATH and West/Git environment, refuses tools outside its root, and preserves the original lock and external-tool workflows. Exact-head CI and real side-by-side installation/rollback qualification pending; G0 remains open.
