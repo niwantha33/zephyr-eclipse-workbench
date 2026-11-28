@@ -88,7 +88,7 @@ def main():
     assert "innerHTML" not in package
     parser = Inspect()
     parser.feed(package)
-    assert {"package", "top", "bottom", "left", "right", "nodes", "details", "routeState", "routeRows", "routeSummary"} <= parser.ids
+    assert {"package", "top", "bottom", "left", "right", "nodes", "details", "routeState", "routeRows", "routeSummary", "conflictSummary"} <= parser.ids
     if node:
         with tempfile.TemporaryDirectory(prefix="zew-package-js-") as folder:
             path = Path(folder) / "package.js"
@@ -148,6 +148,39 @@ assert.ok(collect({...routeData,stale:true}).every(r=>r.routeState==="historical
 assert.ok(collect({...routeData,freshness:"unverified"}).every(r=>r.routeState==="historical"));
 assert.equal(collect({...routeData,nodes:routeData.nodes.filter(n=>n.path!=="/soc")})[0].routeState,"unknown");
 assert.equal(muxRecord({kind:"pinmux",detail:"default PA2 broken"}),null);
+const muxEdge=(source,target,detail,property="TX")=>({source,target,kind:"pinmux",property,detail});
+for(const [compatible,pad] of [["ti,mspm0-pinctrl","PA10"],["st,stm32-pinctrl","PA2"],
+ ["nordic,nrf-pinctrl","P0.06"],["espressif,esp32-pinctrl","GPIO43"]]){
+ const domain={...routeNode("/pinctrl"),compatible};
+ const second={...routeNode("/pinctrl2"),compatible};
+ const fixture={...routeData,nodes:[...routeData.nodes.filter(n=>n.path!=="/pinctrl"),
+   domain,second,routeNode("/pinctrl2/group"),routeNode("/pinctrl/other")],edges:[
+   muxEdge("/soc/uart","/pinctrl/group","default "+pad+" 0x1"),
+   muxEdge("/soc/i2c","/pinctrl/other","default "+pad+" 0x2","SCL"),
+   muxEdge("/soc/uart","/pinctrl/other","default "+pad+" 0x1"),
+   muxEdge("/soc/can","/pinctrl/group","sleep "+pad+" 0x3"),
+   muxEdge("/soc/spi","/pinctrl/group","default "+pad+" 0x4"),
+   muxEdge("/off/uart","/pinctrl/group","default "+pad+" 0x5"),
+   muxEdge("/soc/can","/pinctrl2/group","default "+pad+" 0x6"),
+   {source:"/soc/can",target:"/pinctrl/group",kind:"gpio",property:"gpios",detail:"[0] pin=10"}]};
+ const rows=collect(fixture),report=sharedPadConflicts(fixture,rows);
+ assert.equal(report.groups.length,1);
+ assert.equal(report.groups[0].domain,"/pinctrl");
+ assert.equal(report.groups[0].owners.size,2);
+ assert.equal(report.byLink.size,3);
+ assert.equal(report.checked,4);
+ assert.equal(visibleRoutes(rows,"","uart","conflict",report.byLink).length,2);
+ assert.equal(visibleRoutes(rows,"","can","conflict",report.byLink).length,0);
+ const solo={...fixture,edges:fixture.edges.filter(e=>e.source!=="/soc/i2c")};
+ assert.equal(sharedPadConflicts(solo,collect(solo)).groups.length,0);
+ const unknown={...fixture,nodes:fixture.nodes.map(n=>n.path==="/pinctrl"?{...n,compatible:"other,pinctrl"}:n)};
+ assert.equal(sharedPadConflicts(unknown,collect(unknown)).groups.length,0);
+ for(const changes of [{stale:true},{freshness:"unverified"},{state:"hierarchy-only"},{observed:false}]){
+   const stale={...fixture,...changes};
+   assert.equal(sharedPadConflicts(stale,collect(stale)).available,false);
+   assert.equal(sharedPadConflicts(stale,collect(stale)).groups.length,0);
+ }
+}
 """
             path.write_text(prefix + assertions, encoding="utf-8")
             subprocess.run([node, str(path)], check=True, timeout=45)

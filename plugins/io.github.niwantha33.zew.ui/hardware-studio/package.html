@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hardware Studio — Package &amp; signals</title>
 <style>
-:root{color-scheme:dark;--bg:#0c1422;--panel:#142235;--line:#344861;--text:#ebf3fd;--muted:#a9bad1;--accent:#68d2ed;--gpio:#56c6a0;--candidate:#e9bb6c;font:14px "Segoe UI",system-ui,sans-serif}
-:root.light{color-scheme:light;--bg:#edf2f8;--panel:#fff;--line:#aebed1;--text:#1b2c40;--muted:#43566c;--accent:#087b9c;--gpio:#147c58;--candidate:#875b0b}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 12px}p{margin:8px 0;line-height:1.45}small,.muted{color:var(--muted)}button,input,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:7px}button{cursor:pointer}button:hover,button:focus-visible{border-color:var(--accent);outline:1px solid var(--accent)}button:disabled{opacity:.45;cursor:default}.spacer{flex:1}.layout{display:grid;grid-template-columns:minmax(180px,235px) minmax(400px,1fr) minmax(210px,280px);gap:12px;padding:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}.nodes{display:flex;flex-direction:column;gap:5px;max-height:64vh;overflow:auto}.nodes button{text-align:left;overflow-wrap:anywhere}.nodes button.active{border-color:var(--accent);color:var(--accent)}.tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tools input{width:100%;min-width:0}.package-scroll{overflow:auto}.package{display:grid;grid-template-columns:118px minmax(390px,1fr) 118px;grid-template-rows:116px auto 116px;min-width:626px;gap:4px}.package[hidden]{display:none}.top,.bottom{grid-column:2;display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:2px}.top{grid-row:1}.bottom{grid-row:3}.left,.right{grid-row:2;display:grid;grid-template-rows:repeat(16,1fr);gap:2px}.left{grid-column:1}.right{grid-column:3}.chip{grid-column:2;grid-row:2;border:2px solid var(--line);border-radius:10px;display:grid;place-content:center;position:relative;text-align:center;background:var(--bg);min-height:360px}.chip:before{content:"";position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid var(--muted);top:13px;left:13px}.pin{font-size:11px;padding:3px 2px;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0}.top .pin,.bottom .pin{writing-mode:vertical-rl}.pin.gpio{border-color:var(--gpio);color:var(--gpio)}.pin.candidate{border-color:var(--candidate);color:var(--candidate)}.pin.selected{outline:2px solid var(--accent);outline-offset:-2px}.pin.related{background:var(--bg);font-weight:bold}.pin.special{color:var(--muted)}.pin.dim{opacity:.3}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-top:12px}.green{color:var(--gpio)}.amber{color:var(--candidate)}.linkrow{border-top:1px solid var(--line);padding:9px 0;overflow-wrap:anywhere}.linkrow button{margin:5px 4px 0 0}.route-scroll{max-height:420px;overflow:auto;margin-top:8px}.route-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}.route-table th,.route-table td{border-bottom:1px solid var(--line);padding:7px;vertical-align:top;overflow-wrap:anywhere}.route-table th{position:sticky;top:0;background:var(--panel);z-index:1}.route-table button{padding:4px 7px;text-align:left}.route-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px}.route-heading h2{margin:0;flex:1}.notice{padding:10px 12px;border:1px solid var(--line);border-radius:6px;margin-bottom:12px;overflow-wrap:anywhere}@media(max-width:1050px){.layout{grid-template-columns:200px minmax(0,1fr)}.inspector{grid-column:1/-1}}@media(max-width:650px){.layout{grid-template-columns:minmax(0,1fr)}.inspector{grid-column:auto}.nodes{max-height:220px}}
+:root{color-scheme:dark;--bg:#0c1422;--panel:#142235;--line:#344861;--text:#ebf3fd;--muted:#a9bad1;--accent:#68d2ed;--gpio:#56c6a0;--candidate:#e9bb6c;--conflict:#ff9d9d;font:14px "Segoe UI",system-ui,sans-serif}
+:root.light{color-scheme:light;--bg:#edf2f8;--panel:#fff;--line:#aebed1;--text:#1b2c40;--muted:#43566c;--accent:#087b9c;--gpio:#147c58;--candidate:#875b0b;--conflict:#a12235}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 12px}p{margin:8px 0;line-height:1.45}small,.muted{color:var(--muted)}button,input,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:7px}button{cursor:pointer}button:hover,button:focus-visible{border-color:var(--accent);outline:1px solid var(--accent)}button:disabled{opacity:.45;cursor:default}.spacer{flex:1}.layout{display:grid;grid-template-columns:minmax(180px,235px) minmax(400px,1fr) minmax(210px,280px);gap:12px;padding:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}.nodes{display:flex;flex-direction:column;gap:5px;max-height:64vh;overflow:auto}.nodes button{text-align:left;overflow-wrap:anywhere}.nodes button.active{border-color:var(--accent);color:var(--accent)}.tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tools input{width:100%;min-width:0}.package-scroll{overflow:auto}.package{display:grid;grid-template-columns:118px minmax(390px,1fr) 118px;grid-template-rows:116px auto 116px;min-width:626px;gap:4px}.package[hidden]{display:none}.top,.bottom{grid-column:2;display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:2px}.top{grid-row:1}.bottom{grid-row:3}.left,.right{grid-row:2;display:grid;grid-template-rows:repeat(16,1fr);gap:2px}.left{grid-column:1}.right{grid-column:3}.chip{grid-column:2;grid-row:2;border:2px solid var(--line);border-radius:10px;display:grid;place-content:center;position:relative;text-align:center;background:var(--bg);min-height:360px}.chip:before{content:"";position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid var(--muted);top:13px;left:13px}.pin{font-size:11px;padding:3px 2px;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0}.top .pin,.bottom .pin{writing-mode:vertical-rl}.pin.gpio{border-color:var(--gpio);color:var(--gpio)}.pin.candidate{border-color:var(--candidate);color:var(--candidate)}.pin.conflict{border-color:var(--conflict);color:var(--conflict);font-weight:bold}.conflict-text{color:var(--conflict);font-weight:600}.pin.selected{outline:2px solid var(--accent);outline-offset:-2px}.pin.related{background:var(--bg);font-weight:bold}.pin.special{color:var(--muted)}.pin.dim{opacity:.3}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-top:12px}.green{color:var(--gpio)}.amber{color:var(--candidate)}.linkrow{border-top:1px solid var(--line);padding:9px 0;overflow-wrap:anywhere}.linkrow button{margin:5px 4px 0 0}.route-scroll{max-height:420px;overflow:auto;margin-top:8px}.route-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}.route-table th,.route-table td{border-bottom:1px solid var(--line);padding:7px;vertical-align:top;overflow-wrap:anywhere}.route-table th{position:sticky;top:0;background:var(--panel);z-index:1}.route-table button{padding:4px 7px;text-align:left}.route-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px}.route-heading h2{margin:0;flex:1}.notice{padding:10px 12px;border:1px solid var(--line);border-radius:6px;margin-bottom:12px;overflow-wrap:anywhere}@media(max-width:1050px){.layout{grid-template-columns:200px minmax(0,1fr)}.inspector{grid-column:1/-1}}@media(max-width:650px){.layout{grid-template-columns:minmax(0,1fr)}.inspector{grid-column:auto}.nodes{max-height:220px}}
 </style></head><body>
 <header><div><h1>Hardware Studio</h1><small>Physical package · peripheral connections</small></div><span class="spacer"></span><span id="context"></span><button id="theme">Theme</button><button id="refresh">Refresh</button></header>
 <div class="layout"><aside class="panel"><h2>Peripherals</h2><div class="tools"><input id="search" type="search" placeholder="Search controller or pin" aria-label="Search controller or pin"><select id="category" aria-label="Peripheral type"><option value="">All peripherals</option><option>GPIO</option><option>I2C</option><option>UART</option><option>SPI</option><option>CAN</option><option>ADC</option><option>PWM</option></select></div><div id="nodes" class="nodes"></div></aside>
-<main class="panel"><h2>MCU package · top view</h2><div id="notice" class="notice"></div><div class="package-scroll"><div id="package" class="package" hidden><div class="top" id="top"></div><div class="left" id="left"></div><div class="chip"><strong>MSPM0G3507</strong><p>PM / LQFP64</p><small>Board reference package</small></div><div class="right" id="right"></div><div class="bottom" id="bottom"></div></div></div><div class="legend"><span class="green">● Current default mux / enabled GPIO reference</span><span class="amber">● Other state, historical, disabled or unresolved</span><span>○ No observed mapping / unknown</span></div><p class="muted">No unreferenced pin is claimed free. Mappings show the generated configuration. Wiring and runtime state require on-board verification.</p><div class="route-heading"><h2>Peripheral signal routes</h2><select id="routeState" aria-label="Filter route evidence state"><option value="">All routes</option><option value="default">Default configuration</option><option value="alternate">Sleep / other state</option><option value="disabled">Disabled / reserved</option><option value="unknown">Unresolved / unknown</option><option value="historical">Historical evidence</option></select></div><p class="muted">Logical SoC pad names, not package pin numbers. Default is a configured state, not a measurement.</p><p id="routeSummary" class="muted" aria-live="polite"></p><div class="route-scroll" tabindex="0" aria-label="Peripheral signal route table"><table class="route-table"><thead><tr><th>Controller</th><th>Signal / property</th><th>Pad</th><th>Pinctrl state</th><th>Evidence</th></tr></thead><tbody id="routeRows"></tbody></table></div></main>
+<main class="panel"><h2>MCU package · top view</h2><div id="notice" class="notice"></div><div class="package-scroll"><div id="package" class="package" hidden><div class="top" id="top"></div><div class="left" id="left"></div><div class="chip"><strong>MSPM0G3507</strong><p>PM / LQFP64</p><small>Board reference package</small></div><div class="right" id="right"></div><div class="bottom" id="bottom"></div></div></div><div class="legend"><span class="green">● Current default mux / enabled GPIO reference</span><span class="amber">● Other state, historical, disabled or unresolved</span><span class="conflict-text">! Potential shared default pad</span><span>○ No observed mapping / unknown</span></div><p class="muted">No unreferenced pin is claimed free. Mappings show the generated configuration. Wiring and runtime state require on-board verification.</p><div class="route-heading"><h2>Peripheral signal routes</h2><select id="routeState" aria-label="Filter route evidence state"><option value="">All routes</option><option value="default">Default configuration</option><option value="alternate">Sleep / other state</option><option value="disabled">Disabled / reserved</option><option value="unknown">Unresolved / unknown</option><option value="historical">Historical evidence</option><option value="conflict">Potential shared pads</option></select></div><p class="muted">Logical SoC pad names, not package pin numbers. Default is a configured state, not a measurement.</p><p id="conflictSummary" class="muted" aria-live="polite"></p><p id="routeSummary" class="muted" aria-live="polite"></p><div class="route-scroll" tabindex="0" aria-label="Peripheral signal route table"><table class="route-table"><thead><tr><th>Controller</th><th>Signal / property</th><th>Pad</th><th>Pinctrl state</th><th>Evidence</th></tr></thead><tbody id="routeRows"></tbody></table></div></main>
 <aside class="panel inspector"><h2>Connection inspector</h2><div id="details"></div></aside></div>
 <script>
 "use strict";
@@ -96,11 +96,48 @@ function collect(data){
   }
   return links;
 }
-function visibleRoutes(links,query,category,state){
+// The observer resolves these mux encodings at the parent pinctrl node.
+ // Scope each pad to that exact controller; identical text is not a global pad ID.
+function sharedPadConflicts(data,links){
+  const byLink=new Map(),groups=new Map();
+  if(!data.observed||data.state!=="built"||data.stale||data.freshness!=="current")return {groups:[],byLink,checked:0,available:false};
+  const nodes=new Map(data.nodes.map(n=>[n.path,n]));
+  const formats=new Map([
+    ["ti,mspm0-pinctrl",/^P[AB](?:0|[1-9][0-9]?)$/],
+    ["st,stm32-pinctrl",/^P[A-QZ](?:0|[1-9]|1[0-5])$/],
+    ["nordic,nrf-pinctrl",/^P(?:0|[1-9][0-9]*)\.(?:0[0-9]|[12][0-9]|3[01])$/],
+    ["espressif,esp32-pinctrl",/^GPIO(?:0|[1-9][0-9]*)$/]
+  ]);
+  let checked=0;
+  for(const link of links){
+    if(link.kind!=="mux"||link.routeState!=="default")continue;
+    const record=muxRecord(link.edge);
+    if(!record||record.state!=="default"||record.pad!==link.pin)continue;
+    const domain=link.target.path.slice(0,link.target.path.lastIndexOf("/"))||"/";
+    const parent=nodes.get(domain);
+    if(!parent)continue;
+    const supported=(parent.compatible||"").split(", ").filter(c=>formats.has(c));
+    if(supported.length!==1||!formats.get(supported[0]).test(record.pad))continue;
+    const key=JSON.stringify([domain,supported[0],record.pad]);
+    let group=groups.get(key);
+    if(!group){group={domain,pad:record.pad,compatible:supported[0],owners:new Map(),links:[]};groups.set(key,group);}
+    if(!group.owners.has(link.source.path))group.owners.set(link.source.path,link.source);
+    group.links.push(link);
+    checked++;
+  }
+  const conflicts=[];
+  for(const group of groups.values()){
+    if(group.owners.size<2)continue;
+    conflicts.push(group);
+    for(const link of group.links)byLink.set(link,group);
+  }
+  return {groups:conflicts,byLink,checked,available:true};
+}
+function visibleRoutes(links,query,category,state,conflicts=new Map()){
   const q=query.trim().toLowerCase(),cat=category.toLowerCase();
   return links.filter(link=>{
     if(!["mux","candidate","state"].includes(link.kind))return false;
-    if(state&&link.routeState!==state)return false;
+    if(state==="conflict"?!conflicts.has(link):state&&link.routeState!==state)return false;
     const owner=[link.source.path,link.source.name,link.source.labels,link.source.compatible].join(" ").toLowerCase();
     if(cat&&!owner.includes(cat)&&!(cat==="uart"&&/serial|usart/.test(owner)))return false;
     const text=[owner,link.pin,link.edge.property,link.edge.detail,link.target.path,routeLabel(link.routeState)].join(" ").toLowerCase();
@@ -111,6 +148,7 @@ function visibleRoutes(links,query,category,state){
 const $=id=>document.getElementById(id);
 const nodes=new Map(DATA.nodes.map(n=>[n.path,n]));
 const links=collect(DATA);
+const conflictReport=sharedPadConflicts(DATA,links);
 let selectedPin="",focus=nodes.has(DATA.focus)?DATA.focus:"";
 const pinButtons=new Map();
 function host(action,value=""){if(typeof zewHardwareAction==="function")zewHardwareAction(action,value);}
@@ -122,7 +160,9 @@ function renderPins(){
   const query=$("search").value.trim().toUpperCase();
   for(const [name,button] of pinButtons){
     const all=links.filter(l=>l.pin===name);
-    button.className="pin"+(all.some(l=>l.routeState==="default"||l.routeState==="gpio")?" gpio":all.length?" candidate":!/^P[AB]\d+$/.test(name)?" special":"");
+    const shared=all.some(l=>conflictReport.byLink.has(l)&&l.pin===name&&conflictReport.byLink.get(l).compatible==="ti,mspm0-pinctrl");
+    button.className="pin"+(shared?" conflict":all.some(l=>l.routeState==="default"||l.routeState==="gpio")?" gpio":all.length?" candidate":!/^P[AB]\d+$/.test(name)?" special":"");
+    button.setAttribute("aria-label",button.title+(shared?" · potential shared default pad":""));
     if(name===selectedPin)button.classList.add("selected");
     if(all.some(related))button.classList.add("related");
     if(query&&/^P[AB]\d+$/.test(query)&&name!==query)button.classList.add("dim");
@@ -160,6 +200,15 @@ function renderDetails(){
     row.append(el("p",nodeLabel(l.source)+" → "+nodeLabel(l.target)));
     row.append(el("small",l.edge.property+" · "+l.edge.detail+" · "+l.source.status));
     if(l.kind!=="channel")row.append(el("p",routeLabel(l.routeState),l.routeState==="default"||l.routeState==="gpio"?"green":"amber"));
+    const shared=conflictReport.byLink.get(l);
+    if(shared){
+      row.append(el("p","Potential shared default pad "+shared.pad+" · "+shared.owners.size+" peripherals","conflict-text"));
+      row.append(el("small","Pinctrl controller: "+shared.domain));
+      for(const owner of [...shared.owners.values()].slice(0,12)){
+        if(owner.path!==l.source.path)row.append(action("Inspect "+nodeLabel(owner),()=>host("focus",owner.path)));
+      }
+      if(shared.owners.size>12)row.append(el("small","Additional owners: use the potential shared pads route filter."));
+    }
     row.append(action("Configuration Studio",()=>host("topology",l.source.path)),
       action("Source",()=>host("source",l.source.path)));
     if(l.kind==="channel"&&l.target.path!==focus)
@@ -170,7 +219,14 @@ function renderDetails(){
 }
 function renderRoutes(){
   const root=$("routeRows");root.replaceChildren();
-  const matches=visibleRoutes(links,$("search").value,$("category").value,$("routeState").value);
+  const matches=visibleRoutes(links,$("search").value,$("category").value,$("routeState").value,conflictReport.byLink);
+  const summary=$("conflictSummary");
+  const count=conflictReport.groups.length;
+  summary.className=count?"conflict-text":"muted";
+  summary.textContent=!conflictReport.available?"Shared-pad check unavailable: current binding-aware build evidence required."
+    :!conflictReport.checked?"No eligible resolved default mux routes to compare. Pin availability unknown."
+    :count?count+" potential shared default pad group(s) across "+conflictReport.checked+" eligible routes (all categories). Review the owning peripherals."
+    :"No potential shared pads detected among "+conflictReport.checked+" eligible routes. This is not a pin availability or safety check.";
   const limit=200;
   $("routeSummary").textContent=matches.length?("Showing "+Math.min(limit,matches.length)+" of "+matches.length+" matching routes"+(matches.length>limit?" · narrow the search":"")):"No matching pinctrl routes in this observation. Missing mappings are unknown.";
   for(const l of matches.slice(0,limit)){
@@ -179,7 +235,8 @@ function renderRoutes(){
     tr.append(controller,el("td",l.kind==="mux"?l.edge.property:"Pinctrl reference"),
       el("td",l.kind==="mux"?l.pin:l.kind==="candidate"?l.pin+" (label only)":"Unresolved"),
       el("td",record?record.state:l.edge.detail||"Unknown"),
-      el("td",routeLabel(l.routeState),l.routeState==="default"?"green":"amber"));
+      el("td",conflictReport.byLink.has(l)?"Potential shared default pad · "+conflictReport.byLink.get(l).owners.size+" peripherals":routeLabel(l.routeState),
+        conflictReport.byLink.has(l)?"conflict-text":l.routeState==="default"?"green":"amber"));
     root.append(tr);
   }
 }
