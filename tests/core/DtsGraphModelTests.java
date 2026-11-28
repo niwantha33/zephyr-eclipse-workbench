@@ -76,6 +76,13 @@ public final class DtsGraphModelTests {
         check(!DtsGraphModel.parse(fixture() + line("N", "/soc", "soc", "okay",
                 "", "", "4"), source).observed(),
                 "duplicate node paths reject inconsistent snapshots");
+        var channelSnapshot = DtsGraphModel.parse(fixture()
+                + line("E", "/leds/my_red_led", "/soc/gpio@4000", "io-channel", "io-channels", "[0] input=7")
+                + line("E", "/leds/my_red_led", "/soc/gpio@4000", "pwm", "pwms", "[0] channel=2 period=1000 flags=0"), source);
+        check(channelSnapshot.observed() && channelSnapshot.edges().size() == 3
+                && channelSnapshot.edges().stream().anyMatch(e -> e.kind().equals("io-channel"))
+                && channelSnapshot.edges().stream().anyMatch(e -> e.kind().equals("pwm")),
+                "typed logical controller references survive the graph protocol");
         var noBuild = DtsGraphModel.parse("ZEW-DTSGRAPH-1\n"
                 + line("S", "no-build", "", "Build required"), source);
         check(!noBuild.observed() && DtsGraphModel.focus(noBuild, "/").cards().isEmpty(),
