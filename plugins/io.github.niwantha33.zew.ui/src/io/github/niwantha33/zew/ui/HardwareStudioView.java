@@ -232,7 +232,7 @@ public final class HardwareStudioView extends ViewPart {
                     observed = DtsGraphLoader.load(Path.of(python), script,
                             Path.of(workspace, "zephyr"),
                             selected.getLocation().toFile().toPath(), selectedBuild,
-                            monitor::isCanceled);
+                            foundBoard, monitor::isCanceled);
                 } catch (Exception unavailable) {
                     observed = DtsGraphModel.unavailable(
                             "Devicetree inspection unavailable: " + unavailable.getClass().getSimpleName());

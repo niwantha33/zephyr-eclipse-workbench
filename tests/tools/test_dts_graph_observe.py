@@ -187,6 +187,35 @@ class DtsObserverTests(unittest.TestCase):
         self.assertIn(("/leds/my_red_led", "/soc/gpio@4000", "gpio", "gpios",
                        "[0] pin=22"), edges)
 
+    def test_exact_board_cache_rejects_other_vendor_core_and_missing_identity(self):
+        for expected, cache, matches in (
+            ("lp_mspm0g3507/mspm0g3507", "CACHED_BOARD:STRING=lp_mspm0g3507/mspm0g3507\nBOARD:STRING=lp_mspm0g3507", True),
+            ("esp32s3_devkitc/esp32s3/appcpu", "CACHED_BOARD:STRING=esp32s3_devkitc/esp32s3/procpu", False),
+            ("nucleo_f446re/stm32f446xx", "BOARD:STRING=nucleo_f446re", False),
+            ("nrf52840dk/nrf52840", "BOARD_TARGET:STRING=nrf52840dk/nrf52840", True),
+            ("qemu_x86/atom", "BOARD:STRING=qemu_x86/atom", True),
+            ("qemu_x86/atom", "CACHED_BOARD:STRING=qemu_x86/atom\nCACHED_BOARD:STRING=qemu_x86/atom", False),
+            ("qemu_x86/atom", "CACHED_BOARD:STRING=other\nBOARD_TARGET:STRING=qemu_x86/atom", False),
+            ("lp_mspm0g3507", "BOARD:STRING=lp_mspm0g3507", True),
+            ("qemu_x86/atom", "", False),
+            ("qemu_x86/atom", "CACHED_BOARD:STRING=\nBOARD:STRING=qemu_x86/atom", False),
+        ):
+            with self.subTest(expected=expected, cache=cache):
+                (self.build / "CMakeCache.txt").write_bytes(
+                    ("ZEPHYR_BASE:PATH=" + str(self.zephyr) + "\n" + cache + "\n")
+                    .replace("\n", "\r\n").encode("utf-8"))
+                with self.library():
+                    state, digest, reason, nodes, edges = graph.observed(
+                        self.zephyr, self.application, self.build, expected)
+                if matches:
+                    self.assertEqual("built", state)
+                    self.assertTrue(nodes)
+                    self.assertTrue(edges)
+                else:
+                    self.assertEqual("mismatch", state)
+                    self.assertEqual("", digest)
+                    self.assertEqual(([], []), (nodes, edges))
+
     def test_wrong_checkout_does_not_show_other_board(self):
         (self.build / "CMakeCache.txt").write_text(
             "ZEPHYR_BASE:PATH=/other/checkout\n")

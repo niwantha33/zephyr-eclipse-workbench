@@ -163,7 +163,8 @@ public final class DtsGraphView extends ViewPart {
                     if (entry == null) throw new java.io.IOException("DTS graph observer is not packaged.");
                     Path script = Path.of(FileLocator.toFileURL(entry).toURI());
                     result = DtsGraphLoader.load(Path.of(settings.getProperty("python")),
-                            script, zephyr, selectedProject.getLocation().toFile().toPath(), selectedBuild);
+                            script, zephyr, selectedProject.getLocation().toFile().toPath(), selectedBuild,
+                            settings.getProperty("board", ""), monitor::isCanceled);
                 } catch (Exception unavailable) {
                     result = DtsGraphModel.unavailable("Graph inspection is unavailable: "
                             + unavailable.getClass().getSimpleName());
