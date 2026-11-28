@@ -10,6 +10,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -43,11 +44,64 @@ def file_hash(path):
     return h.hexdigest()
 
 
-def command(args, cwd, timeout=120):
+def managed_environment(root, workspace, python, git, sdk, cmake, ninja, host=None):
+    """Build a fresh read-only probe environment for ONE explicitly selected setup."""
+    root = Path(root).resolve(strict=True)
+    if not root.is_dir() or not (root / ".zew-managed").is_file():
+        raise VersionError("Select a Workbench-managed setup root")
+    paths = {}
+    for label, value, directory in (
+            ("workspace", workspace, True), ("sdk", sdk, True),
+            ("python", python, False), ("git", git, False),
+            ("cmake", cmake, False), ("ninja", ninja, False)):
+        supplied = Path(value)
+        if not supplied.is_absolute():
+            raise VersionError("Managed " + label + " requires an absolute path")
+        selected = supplied.resolve(strict=True)
+        if (not selected.is_relative_to(root) or selected == root
+                or not (selected.is_dir() if directory else selected.is_file())):
+            raise VersionError("Managed " + label + " is outside its setup or has the wrong type")
+        paths[label] = selected
+    # West launches Git by name. Place the explicitly selected Git directory
+    # first; never append the caller's PATH (which may belong to another setup).
+    directories = [paths[name].parent for name in ("git", "python", "cmake", "ninja")]
+    for location in (paths["python"].parent / "Scripts",
+                     paths["sdk"] / "hosttools/bin", paths["sdk"] / "hosttools/usr/bin"):
+        actual = location.resolve()
+        if not actual.is_relative_to(root):
+            raise VersionError("Managed search directory escapes its setup")
+        directories.append(actual)
+    host = os.environ if host is None else host
+    prefixes = ("PYTHON", "PIP_", "GIT_", "WEST_", "ZEPHYR_", "CMAKE_",
+                "CONDA_", "VIRTUAL_ENV", "GNUARMEMB_", "CROSS_COMPILE")
+    blocked = {"PATH", "BOARD", "BOARD_ROOT", "SOC_ROOT", "DTS_ROOT", "ARCH_ROOT",
+               "CONF_FILE", "EXTRA_CONF_FILE", "DTC_OVERLAY_FILE", "EXTRA_DTC_OVERLAY_FILE",
+               "CC", "CXX", "AS", "AR", "LD", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS"}
+    result = {k: v for k, v in host.items()
+              if k.upper() not in blocked and not k.upper().startswith(prefixes)}
+    if os.name == "nt":
+        system_root = next((v for k, v in host.items() if k.upper() == "SYSTEMROOT"), "")
+        if not system_root or not Path(system_root).is_absolute():
+            raise VersionError("Windows SystemRoot is missing or invalid")
+        windows = Path(system_root)
+        directories.extend((windows / "System32", windows))
+    result.update(PATH=os.pathsep.join(dict.fromkeys(map(str, directories))),
+                  PYTHONNOUSERSITE="1", PIP_CONFIG_FILE=os.devnull, PIP_NO_INDEX="1",
+                  GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
+                  GIT_CONFIG_SYSTEM=os.devnull, GIT_OPTIONAL_LOCKS="0",
+                  GIT_NO_LAZY_FETCH="1", GIT_TERMINAL_PROMPT="0", GIT_ALLOW_PROTOCOL="file",
+                  WEST_CONFIG_SYSTEM=os.devnull, WEST_CONFIG_GLOBAL=os.devnull,
+                  WEST_CONFIG_LOCAL=str(paths["workspace"] / ".west/config"),
+                  ZEPHYR_BASE=str(paths["workspace"] / "zephyr"),
+                  ZEPHYR_SDK_INSTALL_DIR=str(paths["sdk"]), ZEPHYR_TOOLCHAIN_VARIANT="zephyr")
+    return result
+
+
+def command(args, cwd, timeout=120, *, env=None):
     try:
         result = subprocess.run(list(map(str, args)), cwd=cwd, check=True, capture_output=True,
                                 text=True, errors="replace", stdin=subprocess.DEVNULL,
-                                timeout=timeout, shell=False)
+                                timeout=timeout, shell=False, env=env)
         return result.stdout.strip()
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         message = getattr(error, "stderr", "") or str(error)
@@ -61,16 +115,16 @@ def relative_path(value):
     return path
 
 
-def git_head(git, directory):
-    sha = command([git, "-C", directory, "rev-parse", "HEAD"], directory)
+def git_head(git, directory, *, env=None):
+    sha = command([git, "-C", directory, "rev-parse", "HEAD"], directory, env=env)
     if not HEX40.fullmatch(sha):
         raise VersionError("Git did not return a full 40-character commit SHA: " + str(directory))
     return sha
 
 
-def require_clean(git, directory):
+def require_clean(git, directory, *, env=None):
     dirty = command([git, "-C", directory, "status", "--porcelain",
-                     "--untracked-files=normal"], directory)
+                     "--untracked-files=normal"], directory, env=env)
     if dirty:
         raise VersionError("Source checkout has uncommitted files; preserve them in Git before freezing: "
                            + str(directory) + " (" + dirty.splitlines()[0][:120] + ")")
@@ -123,16 +177,16 @@ def sdk_info(sdk):
             "sdk_version_sha256": file_hash(path), "full_sdk_archive_attested": False}
 
 
-def tool_info(executable, args, cwd):
+def tool_info(executable, args, cwd, *, env=None):
     exe = Path(executable).resolve()
     if not exe.is_file():
         raise VersionError("Selected tool is not a file: " + str(exe))
-    version = command([exe, *args], cwd, 30).splitlines()
+    version = command([exe, *args], cwd, 30, env=env).splitlines()
     return {"version": version[0][:240] if version else "unknown",
             "executable_sha256": file_hash(exe)}
 
 
-def get_manifest(workspace, python, git, preferred_origin=None):
+def get_manifest(workspace, python, git, preferred_origin=None, *, env=None):
     if not (workspace / ".west" / "config").is_file():
         raise VersionError("Select an initialized West workspace containing .west/config")
     if preferred_origin not in (None, "west-freeze", "west-resolve-all-sha"):
@@ -140,7 +194,7 @@ def get_manifest(workspace, python, git, preferred_origin=None):
     try:
         if preferred_origin == "west-resolve-all-sha":
             raise VersionError("Saved manifest used West's SHA-only resolver")
-        frozen = command([python, "-m", "west", "manifest", "--freeze"], workspace, 180) + "\n"
+        frozen = command([python, "-m", "west", "manifest", "--freeze"], workspace, 180, env=env) + "\n"
         origin = "west-freeze"
     except VersionError:
         if preferred_origin == "west-freeze":
@@ -148,7 +202,7 @@ def get_manifest(workspace, python, git, preferred_origin=None):
         # Optimized managed setups may intentionally omit *unused* modules.
         # Zephyr's own resolver is authoritative; do not resolve revisions
         # ourselves. Accept fallback only if ALL resolved revisions are SHAs.
-        frozen = command([python, "-m", "west", "manifest", "--resolve"], workspace, 180) + "\n"
+        frozen = command([python, "-m", "west", "manifest", "--resolve"], workspace, 180, env=env) + "\n"
         origin = "west-resolve-all-sha"
     try:
         # Preserve numeric-looking Git SHAs as strings, not YAML integers.
@@ -173,11 +227,11 @@ def get_manifest(workspace, python, git, preferred_origin=None):
             raise VersionError("West module path escapes the selected workspace: " + str(relative))
         present = directory.is_dir()
         if present:
-            actual = git_head(git, directory)
+            actual = git_head(git, directory, env=env)
             if actual != revision:
                 raise VersionError("Module " + name + " is at " + actual +
                                    ", but resolved manifest expects " + revision)
-            require_clean(git, directory)
+            require_clean(git, directory, env=env)
         url = project.get("url", "")
         # Never copy access credentials into a lock committed to Git.
         if isinstance(url, str) and "://" in url:
@@ -191,17 +245,19 @@ def get_manifest(workspace, python, git, preferred_origin=None):
     zephyr = workspace / "zephyr"
     if not zephyr.resolve().is_relative_to(workspace.resolve()):
         raise VersionError("Zephyr source path escapes the selected workspace")
-    require_clean(git, zephyr)
+    require_clean(git, zephyr, env=env)
     return frozen, sorted(resolved, key=lambda item: item["name"]), origin
 
 
 def system_record(workspace, python, git, sdk, cmake, ninja, board, application,
-                  preferred_origin=None):
-    frozen, modules, origin = get_manifest(workspace, python, git, preferred_origin)
+                  preferred_origin=None, *, managed_root=None):
+    env = (managed_environment(managed_root, workspace, python, git, sdk, cmake, ninja)
+           if managed_root is not None else None)
+    frozen, modules, origin = get_manifest(workspace, python, git, preferred_origin, env=env)
     data = {
         "schema": SCHEMA,
         "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "zephyr": {"version": zephyr_version(workspace), "commit": git_head(git, workspace / "zephyr")},
+        "zephyr": {"version": zephyr_version(workspace), "commit": git_head(git, workspace / "zephyr", env=env)},
         "board": board,
         "west_manifest_sha256": sha256(frozen.encode("utf-8")),
         "manifest_origin": origin,
@@ -209,11 +265,11 @@ def system_record(workspace, python, git, sdk, cmake, ninja, board, application,
         "modules_not_installed": [p["name"] for p in modules if not p["installed_at_snapshot"]],
         "sdk": sdk_info(sdk),
         "tools": {
-            "python": tool_info(python, ["--version"], workspace),
-            "west": {"version": command([python, "-m", "west", "--version"], workspace, 30)},
-            "git": tool_info(git, ["--version"], workspace),
-            "cmake": tool_info(cmake, ["--version"], workspace),
-            "ninja": tool_info(ninja, ["--version"], workspace),
+            "python": tool_info(python, ["--version"], workspace, env=env),
+            "west": {"version": command([python, "-m", "west", "--version"], workspace, 30, env=env)},
+            "git": tool_info(git, ["--version"], workspace, env=env),
+            "cmake": tool_info(cmake, ["--version"], workspace, env=env),
+            "ninja": tool_info(ninja, ["--version"], workspace, env=env),
         },
         "application_files": project_sources(application),
         "notes": ["Application files must also be saved in source control or backup.",
@@ -373,6 +429,8 @@ def main(argv=None):
     parser.add_argument("--cmake", required=True, type=Path)
     parser.add_argument("--ninja", required=True, type=Path)
     parser.add_argument("--board", required=True)
+    parser.add_argument("--managed-root", type=Path, help="Isolate probes to this managed setup")
+    parser.add_argument("--candidate-managed-root", type=Path, help="Isolate candidate probes separately")
     parser.add_argument("--candidate-workspace", type=Path)
     parser.add_argument("--candidate-sdk", type=Path)
     parser.add_argument("--candidate-python", type=Path)
@@ -391,6 +449,9 @@ def main(argv=None):
     if args.action in ("plan", "migration-copy"):
         if not args.candidate_workspace or not args.candidate_sdk:
             raise VersionError("Select a separate, installed candidate West workspace and SDK")
+        if args.candidate_managed_root and not all((args.candidate_python, args.candidate_git,
+                                                       args.candidate_cmake, args.candidate_ninja)):
+            raise VersionError("Managed candidate requires all candidate tool paths explicitly")
         previous = load_lock(application)
         candidate = args.candidate_workspace.resolve()
         if candidate == workspace or candidate.is_relative_to(workspace) or workspace.is_relative_to(candidate):
@@ -405,13 +466,14 @@ def main(argv=None):
                 raise VersionError("Frozen west manifest missing or changed")
             _, original = system_record(workspace, args.python, args.git, args.sdk.resolve(),
                                         args.cmake, args.ninja, args.board, application,
-                                        previous.get("manifest_origin"))
+                                        previous.get("manifest_origin"), managed_root=args.managed_root)
             if compare(previous, original) or original["west_manifest_sha256"] != previous["west_manifest_sha256"]:
                 raise VersionError("Original project or environment differs from the saved lock")
         frozen, new = system_record(candidate, args.candidate_python or args.python,
                                args.candidate_git or args.git, args.candidate_sdk.resolve(),
                                args.candidate_cmake or args.cmake,
-                               args.candidate_ninja or args.ninja, args.board, application)
+                               args.candidate_ninja or args.ninja, args.board, application,
+                               managed_root=args.candidate_managed_root)
         if args.action == "migration-copy":
             return migration_copy(application, args.destination, workspace, candidate, frozen, new, previous)
         return {"status": "preview-only", "old": previous["zephyr"],
@@ -424,7 +486,7 @@ def main(argv=None):
             raise VersionError("Frozen west manifest missing or changed")
         _, current = system_record(workspace, args.python, args.git, args.sdk.resolve(),
                                    args.cmake, args.ninja, args.board, application,
-                                   previous.get("manifest_origin"))
+                                   previous.get("manifest_origin"), managed_root=args.managed_root)
         changes = compare(previous, current)
         if args.action == "verify-env":
             changes = [item for item in changes if not item["item"].startswith("source:")]
@@ -435,7 +497,7 @@ def main(argv=None):
     old = load_lock(application) if (application / LOCK).exists() else None
     frozen, record = system_record(workspace, args.python, args.git, args.sdk.resolve(),
                                    args.cmake, args.ninja, args.board, application,
-                                   old.get("manifest_origin") if old else None)
+                                   old.get("manifest_origin") if old else None, managed_root=args.managed_root)
     return snapshot(application, frozen, record)
 
 

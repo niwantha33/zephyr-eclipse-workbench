@@ -235,3 +235,7 @@ modules, drivers or application ABI are compatible.
 Metadata reads are bounded, timeout-limited and restricted to official upstream
 hosts, exact stable tags and allowlisted paths. No permission to install,
 execute downloaded code, change tools or modify manifests is implied.
+
+## Managed probe isolation (issue #128)
+
+Native Windows managed project snapshot, verification, attachment and upgrade preview pass an explicit `--managed-root` to the Python helper; managed candidates independently pass `--candidate-managed-root` with every candidate tool path. The helper verifies that the workspace, SDK, Python, Git, CMake and Ninja resolve inside that setup, rejects escaping tool/search-directory links, constructs a separate PATH with selected Git first, removes ambient Python/Git/West/CMake and Zephyr inputs, and uses the selected local West configuration. External-tool environments retain their existing policy unless explicitly opting into a managed root. No lock schema changes or automatic migration are introduced. This is process environment isolation, not a sandbox: trusted workspace/local Git configuration and installed binaries remain required. The real two-version Windows/Linux and physical qualification is still outstanding.
