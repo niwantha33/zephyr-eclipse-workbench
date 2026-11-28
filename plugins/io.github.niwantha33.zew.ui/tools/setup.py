@@ -608,6 +608,11 @@ def setup(root, lock, source_release=None, *, offline=False):
             raise ValueError('Offline setup requires the previously bootstrapped managed Git and Python')
         if (root / '.zew-ready').exists():
             raise ValueError('Existing ready setup preserved; offline setup is for a new or interrupted managed root')
+        selected_python = root / 'python/python.exe'
+        if (not selected_python.is_file() or linked(selected_python)
+                or Path(sys.executable).resolve() != selected_python.resolve()
+                or not selected_python.resolve().is_relative_to(root.resolve())):
+            raise ValueError('Run offline setup using the selected root python/python.exe; global Python is forbidden')
         log('OFFLINE CACHE PREFLIGHT VERIFIED — local source required; no installer download fallback')
     install_runtime_support(root)
     if shutil.disk_usage(root).free < 5 * 1024**3:
