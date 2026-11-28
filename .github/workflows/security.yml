@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Secure development checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '37 5 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  secrets:
+    name: Secret scan (Gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download pinned scanner
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --fail --silent --show-error --location --retry 3 --max-time 120 -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz' | sha256sum --check
+          tar -xzf gitleaks.tar.gz gitleaks
+      - name: Scan history with redacted output
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/gitleaks-redacted.json"
+          trap 'rm -f "$report"' EXIT
+          status=0
+          "$RUNNER_TEMP/gitleaks" git --redact=100 --no-banner --log-opts="--all" --report-format=json --report-path="$report" . || status=$?
+          if [ -s "$report" ]; then
+            python3 - "$report" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding="utf-8") as source:
+              for finding in json.load(source) or []:
+                  # Never print Secret, Match, commit message or author fields.
+                  print(json.dumps({key: finding.get(key) for key in
+                                    ("RuleID", "File", "StartLine", "Commit", "Fingerprint")}, ensure_ascii=True))
+          PY
+          fi
+          exit "$status"
+  dependencies:
+    name: Managed Python dependency scan (OSV)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate and export exact versions
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/tools -p test_security_lock_inventory.py
+          python3 scripts/security_lock_inventory.py "$RUNNER_TEMP/zew-locks"
+      - name: Download pinned scanner
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --fail --silent --show-error --location --retry 3 --max-time 120 -o osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64
+          echo 'fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8  osv-scanner' | sha256sum --check
+          chmod +x osv-scanner
+      - name: Scan all three inventories
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/osv-scanner" scan source \
+            --lockfile "requirements.txt:$RUNNER_TEMP/zew-locks/setup-lock-requirements.txt" \
+            --lockfile "requirements.txt:$RUNNER_TEMP/zew-locks/esp32s3-python-lock-requirements.txt" \
+            --lockfile "requirements.txt:$RUNNER_TEMP/zew-locks/mcuboot-python-lock-requirements.txt"
+  regressions:
+    name: Security regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Run hostile-input and publishing regressions
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/tools -p test_evidence_io_security.py
+          python3 -m unittest discover -s tests/tools -p test_security_publishing.py
+          python3 -m unittest discover -s tests/tools -p test_security_lock_inventory.py
+  codeql-python:
+    name: CodeQL (Python)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea
+        with:
+          languages: python
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea
+        with:
+          category: /language:python
+  security-gate:
+    name: Security qualification gate
+    if: ${{ always() }}
+    needs: [secrets, dependencies, regressions, codeql-python]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Fail closed if any check failed or was skipped
+        env:
+          SECRETS: ${{ needs.secrets.result }}
+          DEPENDENCIES: ${{ needs.dependencies.result }}
+          REGRESSIONS: ${{ needs.regressions.result }}
+          CODEQL: ${{ needs.codeql-python.result }}
+        run: |
+          set -euo pipefail
+          for result in "$SECRETS" "$DEPENDENCIES" "$REGRESSIONS" "$CODEQL"; do
+            test "$result" = success || { echo "Security check not successful: $result"; exit 1; }
+          done
+          echo "Security workflow completed; review code-scanning alerts separately."

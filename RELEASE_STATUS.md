@@ -1,5 +1,10 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
+## Secure development foundation — review candidate, not qualified
+
+Proposed separate security workflow: pinned Gitleaks and OSV-Scanner, managed Python lock inventory, Python CodeQL and explicit security regressions. Threat register, privacy/review policy and SEC-01–20 evidence register in docs/SECURE_DEVELOPMENT.md. Exact-head CI, administrator ruleset activation, independent review, full dependency coverage, runtime hardening and authenticated release qualification remain open. No G0 or stable-release gate is passed by this change.
+
+
 ## Managed child environment inheritance — development, unqualified
 
 Explicit managed Windows build and selected OpenOCD/Espressif runner paths now remove ambient Python, Git, CMake, compiler and Zephyr inputs before applying selected tool settings. External-tool workflows retain their inherited configuration. Headless map regression added; exact-head CI and native Windows matrix pending. This is not complete ENV-01/02: other managed actions, candidate lock subprocesses, vendor runners and CDT GDB child environments still need audit. G0 remains open.

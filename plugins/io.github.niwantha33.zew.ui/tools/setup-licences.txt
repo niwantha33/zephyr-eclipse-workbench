@@ -1,4 +1,4 @@
-Pinned Windows x64 first-build profile — 2026-10-23
+Pinned Windows x64 first-build profile — 2026-10-23; security wheel refresh 2026-11-28
 
 Approval scope: external build use from original upstream downloads; not redistribution of tool bundles or a certification of arbitrary firmware licences.
 Python: PSF-2.0 and its recorded third-party notices. MinGit: GPL-2.0 and included component notices. Windows OS system/runtime requirements are a platform boundary; this workbench does not relicense Windows.
@@ -20,7 +20,7 @@ jsonschema-specifications 2025.9.1 — MIT — https://pypi.org/project/jsonsche
 multivolumefile 0.2.3 — GNU Lesser General Public License v2 or later (LGPLv2+) — https://pypi.org/project/multivolumefile/0.2.3/
 ninja 1.13.2 — Apache-2.0 — https://pypi.org/project/ninja/1.13.2/
 packaging 25.0 — Apache Software License; BSD License — https://pypi.org/project/packaging/25.0/
-pip 25.2 — MIT — https://pypi.org/project/pip/25.2/
+pip 26.2 — MIT — https://pypi.org/project/pip/26.2/
 psutil 7.2.2 — BSD-3-Clause — https://pypi.org/project/psutil/7.2.2/
 py7zr 1.1.4 — LGPL-2.1-or-later — https://pypi.org/project/py7zr/1.1.4/
 pybcj 1.0.8 — LGPL-2.1-or-later — https://pypi.org/project/pybcj/1.0.8/
@@ -33,13 +33,13 @@ pyyaml 6.0.3 — MIT License — https://pypi.org/project/pyyaml/6.0.3/
 referencing 0.37.0 — MIT — https://pypi.org/project/referencing/0.37.0/
 rpds-py 2026.9.1 — MIT — https://pypi.org/project/rpds-py/2026.9.1/
 ruamel-yaml 0.17.21 — MIT License — https://pypi.org/project/ruamel-yaml/0.17.21/
-setuptools 80.9.0 — MIT — https://pypi.org/project/setuptools/80.9.0/
+setuptools 84.1.0 — MIT — https://pypi.org/project/setuptools/84.1.0/
 six 1.17.0 — MIT License — https://pypi.org/project/six/1.17.0/
 texttable 1.7.2 — MIT License — https://pypi.org/project/texttable/1.7.2/
 typing-extensions 4.16.0 — PSF-2.0 — https://pypi.org/project/typing-extensions/4.16.0/
 tzdata 2026.5 — Apache-2.0 — https://pypi.org/project/tzdata/2026.5/
 west 1.5.0 — Apache Software License — https://pypi.org/project/west/1.5.0/
-wheel 0.45.1 — MIT License — https://pypi.org/project/wheel/0.45.1/
+wheel 0.46.2 — MIT License — https://pypi.org/project/wheel/0.46.2/
 
 External artifact licence records:
 python-3.13.7-embed-amd64.zip — 1 preserved licence/notice files; SHA-256 f6cca216a359be84797cabb54149ce5e062afb16cc7567eb7fc51cacb2d86b65
