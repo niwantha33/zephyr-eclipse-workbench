@@ -439,24 +439,26 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                     monitor.beginTask("Download and verify separate Zephyr source", IProgressMonitor.UNKNOWN);
                     Path script = Path.of(FileLocator.toFileURL(
                             Activator.getDefault().getBundle().getEntry(SCRIPT)).toURI());
-                    var common = List.of("--destination", destination.toString(),
+                    var common = new ArrayList<>(List.of("--destination", destination.toString(),
                             "--original-workspace", currentWorkspace.toString(),
                             "--original-setup", originalSetup.toString(),
                             "--release", release, "--python", settings.getProperty("python"),
-                            "--git", settings.getProperty("tools.git"));
+                            "--git", settings.getProperty("tools.git")));
+                    if (ProjectContext.isManagedWindows(settings))
+                        common.addAll(List.of("--managed-tools-root", originalSetup.toString()));
                     var plan = new ArrayList<String>(List.of(settings.getProperty("python"),
                             script.toString(), "plan"));
                     plan.addAll(common);
                     var runner = new ProcessRunner();
                     Path runIn = currentWorkspace;
                     runner.run(plan, runIn, Duration.ofSeconds(30), monitor::isCanceled,
-                            stream::println, ProjectContext.environment(settings)).requireSuccess();
+                            stream::println, ProjectContext.buildEnvironment(settings)).requireSuccess();
 
                     var install = new ArrayList<String>(List.of(settings.getProperty("python"),
                             script.toString(), "install", "--allow-network"));
                     install.addAll(common);
                     runner.run(install, runIn, Duration.ofHours(2), monitor::isCanceled,
-                            stream::println, ProjectContext.environment(settings)).requireSuccess();
+                            stream::println, ProjectContext.buildEnvironment(settings)).requireSuccess();
 
                     if (Files.isRegularFile(project.getLocation().toFile().toPath()
                             .resolve(".zew/project-lock.json"))) {
@@ -466,10 +468,12 @@ public final class ParallelSourceSetupHandler extends AbstractHandler {
                                 "--destination", destination.toString(),
                                 "--python", settings.getProperty("python"),
                                 "--git", settings.getProperty("tools.git")));
+                        if (ProjectContext.isManagedWindows(settings))
+                            compare.addAll(List.of("--managed-tools-root", originalSetup.toString()));
                         stream.println("Comparing candidate source SHAs to the application's saved lock...");
                         try {
                             runner.run(compare, runIn, Duration.ofMinutes(3), monitor::isCanceled,
-                                    stream::println, ProjectContext.environment(settings)).requireSuccess();
+                                    stream::println, ProjectContext.buildEnvironment(settings)).requireSuccess();
                         } catch (java.io.InterruptedIOException cancelled) {
                             return Status.CANCEL_STATUS;
                         } catch (java.io.IOException comparisonError) {

@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -26,7 +27,7 @@ class ReleaseSourceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.parent = Path(self.temp.name)
+        self.parent = Path(self.temp.name).resolve()
         self.current = self.parent / "installed-4.4" / "workspace"
         self.current.mkdir(parents=True)
         self.target = self.parent / "zephyr-4.5-sources"
@@ -55,18 +56,72 @@ class ReleaseSourceTests(unittest.TestCase):
         root = self.parent / "fresh"; root.mkdir()
         marker = root / ".zew-managed"
         marker.write_text("source-only-win-x64-v1:v4.5.0\n")
+        python = root / "python.exe"; python.write_bytes(b"fixture")
+        git = root / "git.exe"; git.write_bytes(b"fixture")
         with patch.object(sources, "run"), patch.object(
                 sources, "capture_sources", return_value=(self.manifest, self.record)):
-            result = sources.prepare_fresh(root, "v4.5.0", self.python, self.git)
+            result = sources.prepare_fresh(root, "v4.5.0", python, git)
         self.assertFalse(result["build_ready"])
         self.assertTrue((root / "workspace/.zew-source-ready").is_file())
         self.assertFalse((root / ".zew-ready").exists())
         self.assertFalse((root / "environment.properties").exists())
         with self.assertRaises(sources.VersionError):
-            sources.prepare_fresh(root, "v4.3.0", self.python, self.git)
+            sources.prepare_fresh(root, "v4.3.0", python, git)
         with patch.object(sources, "verify_candidate", return_value=self.record) as verify:
-            self.assertEqual(self.record, sources.prepare_fresh(root, "v4.5.0", self.python, self.git))
+            self.assertEqual(self.record, sources.prepare_fresh(root, "v4.5.0", python, git))
             verify.assert_called_once()
+
+    def test_managed_source_environment_excludes_original_workspace_configuration(self):
+        root = self.current.parent
+        (root / ".zew-managed").write_text("fixture")
+        python = root / "python.exe"; python.write_bytes(b"fixture")
+        git = root / "git.exe"; git.write_bytes(b"fixture")
+        host = {"Path": "foreign-tools", "PYTHONPATH": "foreign-python",
+                "GIT_DIR": str(self.current), "Git_Config_Count": "1",
+                "WEST_CONFIG_LOCAL": str(self.current / ".west/config"),
+                "ZEPHYR_BASE": str(self.current / "zephyr"), "TEMP": "keep"}
+        if os.name == "nt":
+            host["SystemRoot"] = os.environ["SystemRoot"]
+        env = sources.source_environment(root, self.target, python, git, network=True, host=host)
+        self.assertEqual(str(git.parent.resolve()), env["PATH"].split(os.pathsep)[0])
+        for key in ("Path", "PYTHONPATH", "GIT_DIR", "Git_Config_Count", "ZEPHYR_BASE"):
+            self.assertNotIn(key, env)
+        self.assertEqual(str(self.target / ".west/config"), env["WEST_CONFIG_LOCAL"])
+        self.assertEqual("https:file", env["GIT_ALLOW_PROTOCOL"])
+        self.assertEqual("keep", env["TEMP"])
+        self.assertEqual("foreign-tools", host["Path"])
+        offline = sources.source_environment(root, self.target, python, git, host=host)
+        self.assertEqual("file", offline["GIT_ALLOW_PROTOCOL"])
+        self.assertEqual("1", offline["GIT_NO_LAZY_FETCH"])
+
+    def test_foreign_managed_tool_is_rejected_before_staging(self):
+        root = self.current.parent
+        (root / ".zew-managed").write_text("fixture")
+        with patch.object(sources, "run") as run:
+            with self.assertRaisesRegex(sources.VersionError, "outside"):
+                sources.install("v4.5.0", self.target, self.current, self.python,
+                                self.git, True, root, tool_root=root)
+            run.assert_not_called()
+        self.assertFalse(self.target.exists())
+        self.assertEqual([], list(self.parent.glob(".zew-source-stage-*")))
+
+    def test_managed_install_uses_candidate_config_for_both_network_commands(self):
+        root = self.current.parent
+        (root / ".zew-managed").write_text("fixture")
+        python = root / "python.exe"; python.write_bytes(b"fixture")
+        git = root / "git.exe"; git.write_bytes(b"fixture")
+        with patch.object(sources, "run") as run, patch.object(
+                sources, "capture_sources", return_value=(self.manifest, self.record)) as capture:
+            sources.install("v4.5.0", self.target, self.current, python, git, True,
+                            root, tool_root=root)
+        self.assertEqual(2, run.call_count)
+        for call in run.call_args_list:
+            stage = Path(call.args[1])
+            self.assertTrue(stage.name.startswith(".zew-source-stage-"))
+            self.assertEqual(str(stage / ".west/config"), call.kwargs["env"]["WEST_CONFIG_LOCAL"])
+            self.assertEqual("https:file", call.kwargs["env"]["GIT_ALLOW_PROTOCOL"])
+        self.assertEqual(root, capture.call_args.kwargs["tool_root"])
+        self.assertTrue(self.current.is_dir())
 
     def test_sdk_recommendation_is_read_from_exact_checkout(self):
         zephyr = self.parent / "zephyr"
@@ -134,7 +189,7 @@ class ReleaseSourceTests(unittest.TestCase):
 
     def test_installs_sibling_sources_without_claiming_build_ready(self):
         executed = []
-        def fake_run(argv, cwd, seconds=1800, capture=False):
+        def fake_run(argv, cwd, seconds=1800, capture=False, *, env=None):
             executed.append(list(map(str, argv)))
             return ""
         with patch.object(sources, "run", side_effect=fake_run), patch.object(

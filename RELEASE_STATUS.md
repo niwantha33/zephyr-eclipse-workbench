@@ -946,3 +946,7 @@ EmbeddedHub analytics, monetisation or remote-lab functionality is enabled.
 ## CI qualification hardening — development PR, 2026-11-27
 
 Baseline d098bf4 passed main publication, its Windows firmware qualification, CodeQL and Pages. Proposed changes add exact-input Maven caching, full qualification on main pushes, upstream CodeQL metric checks, direct workflow reference pin audit and exact-SHA Actions summaries. See [CI qualification](docs/CI_QUALIFICATION.md). Exact PR head and post-merge checks, owner branch protection, complete dependency review, performance measurements and physical hardware remain unverified. G0 remains open.
+
+## Source preparation isolation (issue #128, development)
+
+Managed source-only installation and comparison use the explicit bootstrap tool root and candidate-local West configuration. Foreign tools fail before staging; verification restricts Git to local transport. No SDK provisioning, ready marker or existing project binding changes. Exact-head CI and real cross-version qualification pending; G0 remains open.
