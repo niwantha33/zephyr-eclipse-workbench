@@ -194,6 +194,16 @@ def archive_stamp(info):
     return info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_ino, info.st_dev
 
 
+def open_identity(info):
+    # On CPython 3.12+ Windows path stat still exposes creation time in
+    # st_ctime, but fstat exposes metadata change time. Compare the shared
+    # birthtime field instead at the path-to-descriptor boundary. Retain the
+    # full descriptor stamp (including change time) for subsequent checks.
+    time_ns = (getattr(info, "st_birthtime_ns", info.st_ctime_ns)
+               if os.name == "nt" else info.st_ctime_ns)
+    return info.st_size, info.st_mtime_ns, time_ns, info.st_ino, info.st_dev
+
+
 def unchanged_archive(stream, stamp):
     require(archive_stamp(os.fstat(stream.fileno())) == stamp,
             "Archive changed during verification or restoration")
@@ -204,8 +214,12 @@ def bounded_zip(path, expected=None):
     """Bind the retained digest, central-directory bounds and extraction to one open file."""
     before = regular(path)
     with path.open("rb") as stream:
-        stamp = archive_stamp(os.fstat(stream.fileno()))
-        require(stamp == archive_stamp(before), "Archive changed before opening")
+        opened = os.fstat(stream.fileno())
+        require(stat.S_ISREG(opened.st_mode)
+                and not (getattr(opened, "st_file_attributes", 0) & 0x400)
+                and open_identity(opened) == open_identity(before),
+                "Archive changed before opening")
+        stamp = archive_stamp(opened)
         size = stamp[0]
         require(22 <= size <= MAX_ARCHIVE, "Archive size outside limits")
         if expected is not None:

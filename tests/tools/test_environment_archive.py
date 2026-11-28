@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -81,6 +82,24 @@ class EnvironmentArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(archive.ArchiveError, "disk space"):
                 archive.archive_action("restore", self.output, self.root, expected=receipt["archive_sha256"])
         self.assertFalse(self.root.exists())
+
+    def test_windows_path_and_descriptor_creation_vs_change_time(self):
+        common = dict(st_size=128, st_mtime_ns=200, st_birthtime_ns=100,
+                      st_ino=42, st_dev=7)
+        path = SimpleNamespace(**common, st_ctime_ns=100)
+        descriptor = SimpleNamespace(**common, st_ctime_ns=300)
+        with patch.object(archive.os, "name", "nt"):
+            self.assertEqual(archive.open_identity(path), archive.open_identity(descriptor))
+            # File replacement and modification still fail the open comparison.
+            replaced = SimpleNamespace(**dict(common, st_ino=43), st_ctime_ns=300)
+            modified = SimpleNamespace(**dict(common, st_mtime_ns=201), st_ctime_ns=300)
+            self.assertNotEqual(archive.open_identity(path), archive.open_identity(replaced))
+            self.assertNotEqual(archive.open_identity(path), archive.open_identity(modified))
+            # Descriptor-to-descriptor checks retain the metadata change time.
+            changed = SimpleNamespace(**common, st_ctime_ns=301)
+            self.assertNotEqual(archive.archive_stamp(descriptor), archive.archive_stamp(changed))
+        with patch.object(archive.os, "name", "posix"):
+            self.assertNotEqual(archive.open_identity(path), archive.open_identity(descriptor))
 
     def test_archive_path_opened_once_for_retained_digest_and_payload(self):
         receipt = self.export()

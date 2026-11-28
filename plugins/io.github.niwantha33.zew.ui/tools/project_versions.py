@@ -368,17 +368,26 @@ def snapshot(application, frozen, record):
             "zephyr": record["zephyr"], "modules_not_installed": record["modules_not_installed"]}
 
 
-def migration_copy(application, destination, workspace, candidate, frozen, record, previous):
-    """Copy only the fingerprinted application files, without Git or build state."""
+def migration_destination(application, destination, workspace, candidate, *, setup_roots=()):
+    """Reject unsafe destinations before probing or writing anything."""
+    if not destination.is_absolute() or is_link(destination):
+        raise VersionError("Migration destination must be a new absolute, unlinked directory")
     destination = destination.resolve()
-    application = application.resolve()
-    for protected in (application, workspace.resolve(), candidate.resolve()):
+    for protected in (application.resolve(), workspace.resolve(), candidate.resolve(),
+                      *(root.resolve() for root in setup_roots)):
         if destination.is_relative_to(protected) or protected.is_relative_to(destination):
-            raise VersionError("Migration destination must be separate from the application and both workspaces")
-    if destination.exists():
+            raise VersionError("Migration destination must be separate from the application, both workspaces and managed roots")
+    if destination.exists() or is_link(destination):
         raise VersionError("Migration destination already exists; select a new directory")
     if not destination.parent.is_dir():
         raise VersionError("Migration destination parent does not exist")
+    return destination
+
+
+def migration_copy(application, destination, workspace, candidate, frozen, record, previous, *, setup_roots=()):
+    """Copy only the fingerprinted application files, without Git or build state."""
+    destination = migration_destination(application, destination, workspace, candidate, setup_roots=setup_roots)
+    application = application.resolve()
     expected = previous["application_files"]
     if record["application_files"] != expected or project_sources(application) != expected:
         raise VersionError("Application differs from the saved lock; preserve the original revision before migration")
@@ -466,6 +475,8 @@ def main(argv=None):
                 raise VersionError("Migration copy requires --destination and --confirm-copy")
             if not all((args.candidate_python, args.candidate_git, args.candidate_cmake, args.candidate_ninja)):
                 raise VersionError("Migration copy requires all candidate tool paths explicitly")
+            setup_roots = tuple(root for root in (args.managed_root, args.candidate_managed_root) if root is not None)
+            migration_destination(application, args.destination, workspace, candidate, setup_roots=setup_roots)
             original_frozen = application / FROZEN
             if not original_frozen.is_file() or file_hash(original_frozen) != previous["west_manifest_sha256"]:
                 raise VersionError("Frozen west manifest missing or changed")
@@ -480,7 +491,8 @@ def main(argv=None):
                                args.candidate_ninja or args.ninja, args.board, application,
                                managed_root=args.candidate_managed_root)
         if args.action == "migration-copy":
-            return migration_copy(application, args.destination, workspace, candidate, frozen, new, previous)
+            return migration_copy(application, args.destination, workspace, candidate, frozen, new, previous,
+                                  setup_roots=setup_roots)
         return {"status": "preview-only", "old": previous["zephyr"],
                 "candidate": new["zephyr"], "differences": compare(previous, new),
                 "next": "Copy the application, bind it to the new setup, and run a pristine trial build. No files were modified."}
