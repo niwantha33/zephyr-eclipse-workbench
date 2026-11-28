@@ -181,6 +181,39 @@ for(const [compatible,pad] of [["ti,mspm0-pinctrl","PA10"],["st,stm32-pinctrl","
    assert.equal(sharedPadConflicts(stale,collect(stale)).groups.length,0);
  }
 }
+const gpioFixture={...routeData,board:"lp_mspm0g3507/mspm0g3507",nodes:[
+ ...routeData.nodes.filter(n=>n.path!=="/"&&n.path!=="/pinctrl"),
+ {...routeNode("/"),compatible:"ti,mspm0g3507"},
+ {...routeNode("/pinctrl"),compatible:"ti,mspm0-pinctrl"},
+ {...routeNode("/soc/gpioa"),compatible:"ti,mspm0-gpio",labels:"gpioa"},
+ {...routeNode("/soc/gpiob"),compatible:"ti,mspm0-gpio",labels:"gpiob"},
+ routeNode("/leds"),routeNode("/leds/led0"),routeNode("/leds/led1")],edges:[
+ muxEdge("/soc/uart","/pinctrl/group","default PA10 0x140002"),
+ {source:"/leds/led0",target:"/soc/gpioa",kind:"gpio",property:"gpios",detail:"[0] pin=10"},
+ {source:"/leds/led1",target:"/soc/gpiob",kind:"gpio",property:"gpios",detail:"[0] pin=10"}]};
+const gpioRows=collect(gpioFixture),gpioReport=sharedPadConflicts(gpioFixture,gpioRows);
+assert.equal(gpioReport.groups.length,1);
+assert.equal(gpioReport.groups[0].pad,"PA10");
+assert.equal(gpioReport.groups[0].mixed,true);
+assert.equal(gpioReport.groups[0].owners.size,2);
+assert.equal(gpioReport.gpioChecked,1);
+assert.equal(gpioReport.byLink.size,2);
+assert.equal(visibleRoutes(gpioRows,"","gpio","conflict",gpioReport.byLink).length,1);
+assert.equal(visibleRoutes(gpioRows,"","uart","conflict",gpioReport.byLink).length,1);
+for(const negative of [
+ {...gpioFixture,board:"other"},
+ {...gpioFixture,nodes:gpioFixture.nodes.map(n=>n.path==="/"?{...n,compatible:"other,soc"}:n)},
+ {...gpioFixture,nodes:gpioFixture.nodes.map(n=>n.path==="/soc/gpioa"?{...n,status:"disabled"}:n)},
+ {...gpioFixture,nodes:gpioFixture.nodes.map(n=>n.path==="/leds"?{...n,status:"disabled"}:n)},
+ {...gpioFixture,nodes:gpioFixture.nodes.map(n=>n.path==="/soc/gpioa"?{...n,compatible:"other,gpio"}:n)},
+ {...gpioFixture,nodes:[...gpioFixture.nodes,{...routeNode("/pinctrl2"),compatible:"ti,mspm0-pinctrl"}]},
+ {...gpioFixture,nodes:[...gpioFixture.nodes,{...routeNode("/duplicate"),labels:"gpioa"}]},
+ {...gpioFixture,edges:gpioFixture.edges.slice(1)},
+ {...gpioFixture,edges:gpioFixture.edges.map(e=>e.kind==="pinmux"?{...e,detail:"sleep PA10 0x140002"}:e)},
+ {...gpioFixture,edges:gpioFixture.edges.map(e=>e.source==="/leds/led0"?{...e,source:"/soc/uart"}:e)},
+ {...gpioFixture,stale:true}
+])assert.equal(sharedPadConflicts(negative,collect(negative)).groups.length,0);
+
 """
             path.write_text(prefix + assertions, encoding="utf-8")
             subprocess.run([node, str(path)], check=True, timeout=45)
